@@ -1,0 +1,8 @@
+[package]
+name = "karna"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sdl2 = { version = "0.37.0", features = ["image", "ttf", "unsafe_textures"] }
+spin_sleep = "1.2.1"
