@@ -97,12 +97,11 @@ impl Update for Game {
 
 impl Render for Game {
     fn render(&mut self, renderer: &mut Renderer) {
-        renderer.fill_text(format!("fps: {}", fps()), (10, 10), Color::White);
-
-        renderer.fill_text(format!("ups: {}", ups()), (10, 30), Color::White);
+        renderer.fill_text((10, 10), format!("fps: {}", fps()), Color::White);
+        renderer.fill_text((10, 30), format!("ups: {}", ups()), Color::White);
 
         for (c, x, y) in &self.chars_to_draw {
-            renderer.fill_text(c.to_string(), (*x, *y), self.color);
+            renderer.fill_text((*x, *y), c, self.color);
         }
 
         // Set the background color to black
@@ -111,7 +110,9 @@ impl Render for Game {
 }
 
 fn main() {
-    let mut game_loop = EventLoop::new("spinning donut", 1280, 720);
+    let mut game_loop = EventLoop::new();
+
+    game_loop.create_window("donut", 1280, 720).unwrap();
 
     let game = Game {
         a: 0.0,

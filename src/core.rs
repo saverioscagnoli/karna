@@ -1,88 +1,74 @@
 use crate::{
-    input, perf,
+    perf::{render_step, set_fps, set_ups, update_step},
     render::{self, Renderer},
+    throw,
     traits::{Load, Render, Update},
-    window,
+    window::{self, window},
+    Error,
 };
-use sdl2::{event::Event, EventPump};
+use atomic_float::AtomicF32;
+use sdl2::{event::Event, EventPump, Sdl};
+use std::thread;
 use std::time::{Duration, Instant};
+use std::{
+    cell::OnceCell,
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
+};
 
 pub struct EventLoop {
-    sdl: sdl2::Sdl,
+    sdl: OnceCell<Sdl>,
     running: bool,
-    renderer: Renderer,
 }
 
 impl EventLoop {
-    pub fn new(title: impl ToString, width: u32, height: u32) -> Self {
-        input::init();
-        render::init();
+    /// Creates a new event loop.
+    /// The event loop is the main structure that drives the app logic.
+    /// It is responsible for handling window events, updating the app state,
+    /// rendering the app, etc.
+    pub fn new() -> Self {
+        Self {
+            sdl: OnceCell::new(),
+            running: false,
+        }
+    }
 
-        let sdl = sdl2::init().unwrap();
-        let video = sdl.video().unwrap();
-        let window = video
+    pub fn create_window(
+        &mut self,
+        title: impl ToString,
+        width: u32,
+        height: u32,
+    ) -> Result<(), Error> {
+        let sdl = self.sdl.get_or_init(|| {
+            sdl2::init()
+                .map_err(|_| Error::Sdl("Failed to initialize SDL.".to_string()))
+                .map_err(|e| {
+                    throw!(e);
+                })
+                .unwrap()
+        });
+
+        let video_subsys = sdl
+            .video()
+            .map_err(|_| Error::Sdl("Failed to initialize SDL.".to_string()))?;
+
+        let window = video_subsys
             .window(&title.to_string(), width, height)
             .position_centered()
             .build()
-            .unwrap();
+            .map_err(|_| Error::Window("Failed to create window.".to_string()))?;
 
-        let window_clone = window.clone();
+        window::init(window);
 
-        unsafe {
-            _ = window::WINDOW.set(window);
-        }
-
-        let canvas = window_clone.into_canvas().accelerated().build().unwrap();
-        let renderer = Renderer::new(canvas);
-
-        Self {
-            sdl,
-            renderer,
-            running: true,
-        }
+        Ok(())
     }
 
     fn handle_events(&mut self, event_pump: &mut EventPump) {
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => self.running = false,
-                Event::KeyDown {
-                    keycode: Some(key),
-                    repeat,
-                    ..
-                } => unsafe {
-                    input::KEYS.get_mut().unwrap().insert(key);
-                    input::KEYS_SINGLE_WITH_REPEAT
-                        .get_mut()
-                        .unwrap()
-                        .insert(key);
-
-                    if !repeat {
-                        input::KEYS_SINGLE.get_mut().unwrap().insert(key);
-                    }
-                },
-
-                Event::KeyUp {
-                    keycode: Some(key), ..
-                } => unsafe {
-                    input::KEYS.get_mut().unwrap().remove(&key);
-                },
-
-                Event::MouseMotion { x, y, .. } => unsafe {
-                    input::MOUSE_POSITION.get_mut().unwrap().set(x, y);
-                },
-
-                Event::MouseButtonDown { mouse_btn, .. } => unsafe {
-                    input::MOUSE_BUTTONS.get_mut().unwrap().insert(mouse_btn);
-                    input::MOUSE_BUTTONS_SINGLE
-                        .get_mut()
-                        .unwrap()
-                        .insert(mouse_btn);
-                },
-
-                Event::MouseButtonUp { mouse_btn, .. } => unsafe {
-                    input::MOUSE_BUTTONS.get_mut().unwrap().remove(&mouse_btn);
-                },
                 _ => {}
             }
         }
@@ -92,52 +78,83 @@ impl EventLoop {
     where
         G: Load + Update + Render,
     {
-        let mut event_pump = self.sdl.event_pump().unwrap();
+        let sdl = self.sdl.get();
 
+        if sdl.is_none() {
+            throw!(crate::Error::Sdl(
+                "You need to create a window before running the event loop.".to_string()
+            ));
+        }
+
+        let sdl = sdl.unwrap();
+
+        self.running = true;
+
+        let mut event_pump = sdl.event_pump().unwrap();
         let mut t0 = Instant::now();
 
         let mut acc = 0.0;
-        let mut updates = 0;
 
-        let mut perf_timer = Instant::now();
+        let dt = Arc::new(AtomicF32::new(0.0));
+        let ups = Arc::new(AtomicU32::new(0));
 
-        state.load(&mut self.renderer);
+        let dt_clone = Arc::clone(&dt);
+        let ups_clone = Arc::clone(&ups);
+
+        thread::spawn(move || loop {
+            thread::sleep(Duration::from_secs(1));
+
+            let fps = (1.0 / dt_clone.load(Ordering::Relaxed)).round();
+            let ups = ups_clone.load(Ordering::Relaxed);
+
+            set_fps(fps);
+            set_ups(ups);
+
+            ups_clone.store(0, Ordering::Relaxed);
+        });
+
+        let canvas = window()
+            .clone()
+            .into_canvas()
+            .accelerated()
+            .build()
+            .unwrap();
+
+        render::init(canvas.texture_creator());
+
+        let mut renderer = Renderer::new(canvas);
+
+        state.load(&mut renderer);
 
         while self.running {
             let t1 = Instant::now();
-            let dt = t1.duration_since(t0).as_secs_f32();
+            let delta = t1.duration_since(t0).as_secs_f32();
 
-            acc += dt;
+            dt.store(delta, Ordering::Relaxed);
+
+            acc += delta;
             t0 = t1;
 
             self.handle_events(&mut event_pump);
 
-            while acc > perf::update_step() {
-                // Fixed update with target ups. see `perf::set_target_ups`. Default is 60.
-                state.update(perf::update_step());
+            let us = update_step();
+            let rs = render_step();
 
-                acc -= perf::update_step();
-                updates += 1;
+            while acc > us {
+                state.update(us);
+
+                acc -= us;
+                ups.fetch_add(1, Ordering::Relaxed);
             }
 
-            if perf_timer.elapsed().as_secs_f32() >= 1.0 {
-                unsafe {
-                    perf::FPS = (1.0 / dt).round() as u32;
-                    perf::UPS = updates;
-                };
+            renderer.clear();
 
-                updates = 0;
-                perf_timer = Instant::now();
-            }
+            state.render(&mut renderer);
 
-            self.renderer.clear();
+            renderer.present();
 
-            state.render(&mut self.renderer);
-
-            self.renderer.present();
-
-            let t2 = t1.elapsed().as_secs_f32();
-            let remaining = perf::frame_step() - t2;
+            let frame_time = t1.elapsed().as_secs_f32();
+            let remaining = rs - frame_time;
 
             if remaining > 0.0 {
                 spin_sleep::sleep(Duration::from_secs_f32(remaining));

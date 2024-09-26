@@ -5,7 +5,7 @@ pub trait Load {
 }
 
 pub trait Update {
-    fn update(&mut self, dt: f32);
+    fn update(&mut self, step: f32);
 }
 
 pub trait Render {
