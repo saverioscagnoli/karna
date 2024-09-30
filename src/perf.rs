@@ -7,6 +7,9 @@ static UPDATE_STEP: AtomicF32 = AtomicF32::new(1.0 / 60.0);
 static FPS: AtomicU32 = AtomicU32::new(0);
 static UPS: AtomicU32 = AtomicU32::new(0);
 
+static CPU: AtomicF32 = AtomicF32::new(0.0);
+static MEM: AtomicF32 = AtomicF32::new(0.0);
+
 pub fn set_target_fps<T>(target: T)
 where
     T: ToF32,
@@ -49,6 +52,48 @@ where
 
 pub fn ups() -> u32 {
     UPS.load(atomic::Ordering::Relaxed)
+}
+
+pub(crate) fn set_cpu<T>(cpu: T)
+where
+    T: ToF32,
+{
+    CPU.store(cpu.to_f32(), atomic::Ordering::Relaxed);
+}
+
+pub fn cpu() -> f32 {
+    CPU.load(atomic::Ordering::Relaxed)
+}
+
+pub(crate) fn set_mem<T>(mem: T)
+where
+    T: ToF32,
+{
+    MEM.store(mem.to_f32(), atomic::Ordering::Relaxed);
+}
+
+pub enum MemUnit {
+    B,
+    KB,
+    MB,
+    GB,
+}
+
+impl Default for MemUnit {
+    fn default() -> Self {
+        MemUnit::MB
+    }
+}
+
+pub fn mem(unit: MemUnit) -> f32 {
+    let mem = MEM.load(atomic::Ordering::Relaxed);
+
+    match unit {
+        MemUnit::B => mem,
+        MemUnit::KB => mem / 1024.0,
+        MemUnit::MB => mem / 1024.0 / 1024.0,
+        MemUnit::GB => mem / 1024.0 / 1024.0 / 1024.0,
+    }
 }
 
 // static mut RENDER_STEP: f32 = 1.0 / 60.0;

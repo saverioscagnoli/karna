@@ -42,6 +42,19 @@ impl Vector2 {
         self.x = x.to_f32();
         self.y = y.to_f32();
     }
+
+    pub fn length(&self) -> f32 {
+        (self.x * self.x + self.y * self.y).sqrt()
+    }
+
+    pub fn normalize(&self) -> Self {
+        let length = self.length();
+
+        Self {
+            x: self.x / length,
+            y: self.y / length,
+        }
+    }
 }
 
 impl<T> From<(T, T)> for Vector2
@@ -158,6 +171,13 @@ impl MulAssign<Vector2> for Vector2 {
     fn mul_assign(&mut self, rhs: Self) {
         self.x *= rhs.x;
         self.y *= rhs.y;
+    }
+}
+
+impl MulAssign<f32> for Vector2 {
+    fn mul_assign(&mut self, rhs: f32) {
+        self.x *= rhs;
+        self.y *= rhs;
     }
 }
 

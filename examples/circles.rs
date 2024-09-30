@@ -1,10 +1,10 @@
 use karna::{
     core::EventLoop,
     math::{rng, Vector2},
-    perf::{fps, ups},
+    perf::{cpu, fps, mem, ups, MemUnit},
     render::{load_font, Color, Renderer},
     traits::{Load, Render, Update},
-    window,
+    window::{self, load_cursor, set_cursor},
 };
 
 struct Game {
@@ -15,6 +15,9 @@ impl Load for Game {
     fn load(&mut self, renderer: &mut Renderer) {
         load_font("default", "assets/font.ttf", 16);
         renderer.set_font("default");
+
+        load_cursor("default", "assets/cursor.png");
+        set_cursor("default");
     }
 }
 
@@ -24,8 +27,6 @@ impl Update for Game {
 
 impl Render for Game {
     fn render(&mut self, renderer: &mut karna::render::Renderer) {
-        renderer.set_color(Color::Red);
-
         for (pos, r, color) in &self.circles {
             renderer.set_color(*color);
             renderer.fill_circle(*pos, *r);
@@ -33,6 +34,12 @@ impl Render for Game {
 
         renderer.fill_text((10, 10), format!("fps: {}", fps()), Color::White);
         renderer.fill_text((10, 30), format!("ups: {}", ups()), Color::White);
+        renderer.fill_text((10, 50), format!("cpu: {:.1}%", cpu()), Color::White);
+        renderer.fill_text(
+            (10, 70),
+            format!("mem: {:.1} mb", mem(MemUnit::MB)),
+            Color::White,
+        );
 
         renderer.set_color(Color::Black);
     }
@@ -54,7 +61,7 @@ fn main() {
 
         let color = Color::RGB(rng(0, 255), rng(0, 255), rng(0, 255));
 
-        circles.push((Vector2::new(x, y), r, color));
+        circles.push(((x, y).into(), r, color));
     }
 
     let game = Game { circles };

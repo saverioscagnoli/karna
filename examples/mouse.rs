@@ -1,6 +1,7 @@
 use karna::{
     core::EventLoop,
-    perf::{fps, ups},
+    input,
+    perf::fps,
     render::{load_font, Color, Renderer},
     traits::{Load, Render, Update},
     window::{load_cursor, set_cursor},
@@ -19,15 +20,16 @@ impl Load for Game {
 }
 
 impl Update for Game {
-    fn update(&mut self, step: f32) {
-        println!("fps: {}, ups: {}, step: {step}", fps(), ups());
-    }
+    fn update(&mut self, _step: f32) {}
 }
 
 impl Render for Game {
     fn render(&mut self, renderer: &mut karna::render::Renderer) {
         renderer.set_color(Color::Red);
-        renderer.draw_rect((300, 100), (50, 50));
+
+        let pos = input::mouse_position() - 25;
+
+        renderer.fill_rect(pos, (50, 50));
 
         renderer.fill_text((10, 10), fps(), Color::White);
 

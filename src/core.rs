@@ -1,5 +1,6 @@
 use crate::{
-    perf::{render_step, set_fps, set_ups, update_step},
+    input::{self, keys, keys_pressed, keys_pressed_with_repeat, set_mouse_position},
+    perf::{render_step, set_cpu, set_fps, set_mem, set_ups, update_step},
     render::{self, Renderer},
     throw,
     traits::{Load, Render, Update},
@@ -17,6 +18,7 @@ use std::{
         Arc,
     },
 };
+use sysinfo::{CpuRefreshKind, MemoryRefreshKind, ProcessesToUpdate, RefreshKind, System};
 
 pub struct EventLoop {
     sdl: OnceCell<Sdl>,
@@ -61,6 +63,7 @@ impl EventLoop {
             .map_err(|_| Error::Window("Failed to create window.".to_string()))?;
 
         window::init(window);
+        input::init();
 
         Ok(())
     }
@@ -69,6 +72,29 @@ impl EventLoop {
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => self.running = false,
+                Event::KeyDown {
+                    keycode: Some(key),
+                    repeat,
+                    ..
+                } => {
+                    keys().insert(key);
+                    keys_pressed_with_repeat().insert(key);
+
+                    if !repeat {
+                        keys_pressed().insert(key);
+                    }
+                }
+
+                Event::KeyUp {
+                    keycode: Some(key), ..
+                } => {
+                    keys().remove(&key);
+                }
+
+                Event::MouseMotion { x, y, .. } => {
+                    set_mouse_position(x, y);
+                }
+
                 _ => {}
             }
         }
@@ -101,16 +127,36 @@ impl EventLoop {
         let dt_clone = Arc::clone(&dt);
         let ups_clone = Arc::clone(&ups);
 
-        thread::spawn(move || loop {
-            thread::sleep(Duration::from_secs(1));
+        thread::spawn(move || {
+            let mut sys = System::new_with_specifics(
+                RefreshKind::new()
+                    .with_cpu(CpuRefreshKind::new().with_cpu_usage())
+                    .with_memory(MemoryRefreshKind::new().with_ram()),
+            );
 
-            let fps = (1.0 / dt_clone.load(Ordering::Relaxed)).round();
-            let ups = ups_clone.load(Ordering::Relaxed);
+            let pid = sysinfo::get_current_pid().unwrap();
+            sys.refresh_processes(ProcessesToUpdate::Some(&[pid]));
 
-            set_fps(fps);
-            set_ups(ups);
+            loop {
+                thread::sleep(Duration::from_secs(1));
 
-            ups_clone.store(0, Ordering::Relaxed);
+                let fps = (1.0 / dt_clone.load(Ordering::Relaxed)).round();
+                let ups = ups_clone.load(Ordering::Relaxed);
+
+                // Refresh process
+                sys.refresh_processes(ProcessesToUpdate::Some(&[pid]));
+                let process = sys.process(pid).unwrap();
+
+                let cpu = process.cpu_usage();
+                let mem = process.memory();
+
+                set_fps(fps);
+                set_ups(ups);
+                set_cpu(cpu);
+                set_mem(mem as f32);
+
+                ups_clone.store(0, Ordering::Relaxed);
+            }
         });
 
         let canvas = window()

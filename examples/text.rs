@@ -1,26 +1,24 @@
 use karna::{
     core::EventLoop,
-    perf::{fps, ups},
+    perf::fps,
     render::{load_font, Color, Renderer},
     traits::{Load, Render, Update},
-    window::{load_cursor, set_cursor},
 };
 
-struct Game;
+struct Game {
+    angle: f32,
+}
 
 impl Load for Game {
     fn load(&mut self, renderer: &mut Renderer) {
         load_font("default", "assets/font.ttf", 16);
         renderer.set_font("default");
-
-        load_cursor("default", "assets/cursor.png");
-        set_cursor("default");
     }
 }
 
 impl Update for Game {
     fn update(&mut self, step: f32) {
-        println!("fps: {}, ups: {}, step: {step}", fps(), ups());
+        self.angle += step * 10.0;
     }
 }
 
@@ -30,6 +28,15 @@ impl Render for Game {
         renderer.draw_rect((300, 100), (50, 50));
 
         renderer.fill_text((10, 10), fps(), Color::White);
+        renderer.fill_text_ex(
+            (300, 300),
+            "Hello, world!",
+            Color::Cyan,
+            Some(self.angle),
+            None,
+            false,
+            false,
+        );
 
         renderer.set_color(Color::Black);
     }
@@ -40,7 +47,7 @@ fn main() {
 
     event_loop.create_window("basic window", 800, 600).unwrap();
 
-    let game = Game;
+    let game = Game { angle: 0.0 };
 
     event_loop.run(game);
 }

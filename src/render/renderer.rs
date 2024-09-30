@@ -1,12 +1,3 @@
-use sdl2::{
-    pixels::PixelFormatEnum,
-    rect::FRect,
-    render::{BlendMode, Canvas, TextureCreator},
-    ttf::{Font, Sdl2TtfContext},
-    video::{Window, WindowContext},
-};
-use std::{cell::OnceCell, collections::HashMap, path::Path};
-
 use super::{
     cache::{TextureCache, TextureType},
     Color,
@@ -15,6 +6,14 @@ use crate::{
     math::{self, Size, ToU32, Vector2},
     throw,
 };
+use sdl2::{
+    pixels::PixelFormatEnum,
+    rect::{FPoint, FRect},
+    render::{BlendMode, Canvas, TextureCreator},
+    ttf::{Font, Sdl2TtfContext},
+    video::{Window, WindowContext},
+};
+use std::{cell::OnceCell, collections::HashMap, path::Path};
 
 static mut TTF_CTX: OnceCell<sdl2::ttf::Sdl2TtfContext> = OnceCell::new();
 static mut FONTS: OnceCell<HashMap<String, Font>> = OnceCell::new();
@@ -303,5 +302,62 @@ impl Renderer {
 
             pos.x += width as f32;
         }
+    }
+
+    pub fn fill_text_ex<P, T>(
+        &mut self,
+        pos: P,
+        text: T,
+        color: Color,
+        angle: Option<f32>,
+        center: Option<(f32, f32)>,
+        flip_horizontal: bool,
+        flip_vertical: bool,
+    ) where
+        P: Into<Vector2>,
+        T: ToString,
+    {
+        let pos = pos.into();
+        let color: sdl2::pixels::Color = color.into();
+        let angle = angle.unwrap_or(0.0);
+        let center = center.map(|(x, y)| FPoint::new(x, y));
+
+        let font = fonts()
+            .get(&self.font)
+            .or_else(|| {
+                if self.font == "" {
+                    throw!(crate::Error::Render(
+                        "No font set. Did you forget to call `renderer.set_font()`?".to_string()
+                    ));
+                } else {
+                    throw!(crate::Error::Render(format!(
+                        "Font with label '{}' not found.",
+                        self.font
+                    )))
+                }
+            })
+            .unwrap();
+
+        let surface = font.render(&text.to_string()).blended(color).unwrap();
+
+        let texture = cache_mut().get_or_insert(TextureType::Text(text.to_string(), color), || {
+            texture_creator()
+                .create_texture_from_surface(&surface)
+                .unwrap()
+        });
+
+        let (width, height) = font.size_of(&text.to_string()).unwrap();
+
+        self.canvas
+            .copy_ex_f(
+                texture,
+                None,
+                Some(FRect::new(pos.x, pos.y, width as f32, height as f32)),
+                angle as f64,
+                center,
+                flip_horizontal,
+                flip_vertical,
+            )
+            .unwrap();
     }
 }

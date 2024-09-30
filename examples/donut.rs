@@ -26,11 +26,11 @@ impl Load for Game {
 }
 
 impl Update for Game {
-    fn update(&mut self, dt: f32) {
+    fn update(&mut self, step: f32) {
         self.chars_to_draw.clear();
 
-        self.a += 1.0 * dt;
-        self.b += 0.5 * dt;
+        self.a += 1.0 * step;
+        self.b += 0.5 * step;
 
         let r = ((self.a * 2.0).sin() * 127.0 + 128.0).clamp(0.0, 255.0) as u8;
         let g = ((self.b * 2.0).sin() * 127.0 + 128.0).clamp(0.0, 255.0) as u8;
