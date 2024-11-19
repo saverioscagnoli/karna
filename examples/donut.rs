@@ -108,7 +108,7 @@ impl Render for Game {
         ctx.render.fill_text(ctx.time.fps(), (10, 10), Color::WHITE);
 
         for (c, x, y) in &self.chars_to_draw {
-            ctx.render.fill_text(c, (*x, *y), self.color);
+            ctx.render.fill_text(c, (*x, *y), Color::WHITE);
         }
 
         // Set the background color to black

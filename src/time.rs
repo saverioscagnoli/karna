@@ -1,9 +1,15 @@
+use std::sync::atomic::{AtomicU32, Ordering};
+
+use crate::utils::AtomicF32;
+
+pub(crate) static FPS: AtomicU32 = AtomicU32::new(0);
+pub(crate) static TPS: AtomicU32 = AtomicU32::new(0);
+pub(crate) static DELTA: AtomicF32 = AtomicF32::new(0.0);
+
+#[derive(Debug, Clone, Copy)]
 pub struct Time {
     pub(crate) tick_step: f32,
     pub(crate) render_step: f32,
-    pub(crate) delta: f32,
-    pub(crate) tps: u32,
-    pub(crate) fps: u32,
 }
 
 impl Time {
@@ -11,14 +17,11 @@ impl Time {
         Self {
             tick_step: 1.0 / 60.0,
             render_step: 1.0 / 60.0,
-            delta: 0.0,
-            tps: 0,
-            fps: 0,
         }
     }
 
     pub fn delta(&self) -> f32 {
-        self.delta
+        DELTA.load(Ordering::Relaxed)
     }
 
     pub fn step(&self) -> f32 {
@@ -34,10 +37,13 @@ impl Time {
     }
 
     pub fn tps(&self) -> u32 {
-        self.tps
+        TPS.load(Ordering::Relaxed)
     }
 
     pub fn fps(&self) -> u32 {
-        self.fps
+        FPS.load(Ordering::Relaxed)
     }
 }
+
+// unsafe impl Send for Time {}
+// unsafe impl Sync for Time {}

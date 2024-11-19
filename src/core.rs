@@ -3,13 +3,20 @@ use crate::{
     flags::LoopFlag,
     info,
     math::Size,
+    time::{DELTA, FPS, TPS},
     traits::{Load, Render, ToU32, Update},
+    utils::AtomicF32,
     warn,
 };
 use anyhow::anyhow;
 use sdl2::event::Event;
 use std::{
     collections::HashSet,
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
+    thread,
     time::{Duration, Instant},
 };
 
@@ -85,25 +92,25 @@ impl App {
         let mut t0 = Instant::now();
         let mut acc = 0.0;
 
-        let mut ticks = 0;
-        let mut sec_timer = Instant::now();
+        let ticks = Arc::new(AtomicU32::new(0));
+        let ticks_clone = ticks.clone();
+
+        thread::spawn(move || loop {
+            let dt = DELTA.load(Ordering::Relaxed);
+
+            FPS.store((1.0 / dt).round() as u32, Ordering::Relaxed);
+            TPS.store(ticks_clone.swap(0, Ordering::Relaxed), Ordering::Relaxed);
+
+            thread::sleep(Duration::from_millis(100));
+        });
 
         while ctx.running {
             let t1 = Instant::now();
             let dt = t1.duration_since(t0).as_secs_f32();
+            let dt = DELTA.swap(dt, Ordering::Relaxed);
 
             t0 = t1;
             acc += dt;
-
-            ctx.time.delta = dt;
-
-            if sec_timer.elapsed().as_secs_f32() >= 1.0 {
-                ctx.time.tps = ticks;
-                ctx.time.fps = (1.0 / dt).round().to_u32();
-
-                ticks = 0;
-                sec_timer = Instant::now();
-            }
 
             Self::handle_events(ctx, &mut self.sdl.event_pump);
 
@@ -111,7 +118,7 @@ impl App {
                 state.fixed_update(ctx);
                 acc -= ctx.time.tick_step;
 
-                ticks += 1;
+                ticks.fetch_add(1, Ordering::Relaxed);
             }
 
             state.update(ctx);
@@ -134,7 +141,6 @@ impl App {
             }
         }
     }
-
     fn handle_events(ctx: &mut Context, event_pump: &mut sdl2::EventPump) {
         for event in event_pump.poll_iter() {
             match event {

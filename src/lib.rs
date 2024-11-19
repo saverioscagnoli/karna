@@ -9,3 +9,4 @@ pub mod traits;
 pub mod window;
 
 pub(crate) mod log;
+pub(crate) mod utils;
