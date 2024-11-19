@@ -4,10 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-atomic_float = "1.1.0"
+anyhow = "1.0.93"
 chrono = "0.4.38"
 colored = "2.1.0"
+lfu_cache = "1.3.0"
 rand = "0.8.5"
-sdl2 = { version = "0.37.0", features = ["image", "ttf", "unsafe_textures"] }
+sdl2 = { version = "0.37.0", features = ["ttf"] }
 spin_sleep = "1.2.1"
-sysinfo = "0.31.4"
+

@@ -21,6 +21,11 @@ where
     rand.gen_range(min..max)
 }
 
+/// Flip a coin with a certain chance of success.
+pub fn coin_flip(chance: u32) -> bool {
+    rng(0, 100) < chance
+}
+
 /// Pick a random item from a slice.
 /// The return type is a reference to the item.
 ///
@@ -35,6 +40,5 @@ where
 /// println!("You should eat a {}", food);
 /// ```
 pub fn pick<T>(items: &[T]) -> &T {
-    let index = rng(0, items.len());
-    &items[index]
+    &items[rng(0, items.len())]
 }

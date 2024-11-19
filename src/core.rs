@@ -1,209 +1,175 @@
 use crate::{
-    input::{self, keys, keys_pressed, keys_pressed_with_repeat, set_mouse_position},
-    perf::{render_step, set_cpu, set_fps, set_mem, set_ups, update_step},
-    render::{self, Renderer},
-    throw,
-    traits::{Load, Render, Update},
-    window::{self, window},
-    Error,
+    context::Context,
+    flags::LoopFlag,
+    info,
+    math::Size,
+    traits::{Load, Render, ToU32, Update},
+    warn,
 };
-use atomic_float::AtomicF32;
-use sdl2::{event::Event, EventPump, Sdl};
-use std::thread;
-use std::time::{Duration, Instant};
+use anyhow::anyhow;
+use sdl2::event::Event;
 use std::{
-    cell::OnceCell,
-    sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc,
-    },
+    collections::HashSet,
+    time::{Duration, Instant},
 };
-use sysinfo::{CpuRefreshKind, MemoryRefreshKind, ProcessesToUpdate, RefreshKind, System};
 
-pub struct EventLoop {
-    sdl: OnceCell<Sdl>,
-    running: bool,
+struct Sdl {
+    _sdl: sdl2::Sdl,
+    video: sdl2::VideoSubsystem,
+    event_pump: sdl2::EventPump,
 }
 
-impl EventLoop {
-    /// Creates a new event loop.
-    /// The event loop is the main structure that drives the app logic.
-    /// It is responsible for handling window events, updating the app state,
-    /// rendering the app, etc.
-    pub fn new() -> Self {
-        Self {
-            sdl: OnceCell::new(),
-            running: false,
+impl Sdl {
+    fn new() -> anyhow::Result<Self> {
+        let sdl = sdl2::init().map_err(|e| anyhow!(e))?;
+        let video = sdl.video().map_err(|e| anyhow!(e))?;
+        let event_pump = sdl.event_pump().map_err(|e| anyhow!(e))?;
+
+        info!(
+            "SDL version: {}, Karna version: {}",
+            sdl2::version::version(),
+            env!("CARGO_PKG_VERSION")
+        );
+
+        Ok(Self {
+            _sdl: sdl,
+            video,
+            event_pump,
+        })
+    }
+}
+
+pub struct App {
+    sdl: Sdl,
+    ctx: Option<Context>,
+    flags: HashSet<LoopFlag>,
+}
+
+impl App {
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(Self {
+            sdl: Sdl::new()?,
+            ctx: None,
+            flags: HashSet::new(),
+        })
+    }
+
+    pub fn flags(mut self, flags: &[LoopFlag]) -> Self {
+        self.flags = flags.iter().cloned().collect();
+
+        self
+    }
+
+    pub fn window<T: ToString, S: Into<Size>>(mut self, title: T, size: S) -> Self {
+        let size = size.into();
+        let Size { width, height } = size;
+
+        let window = crate::window::Window::new(title.to_string(), width, height, &self.sdl.video);
+        let ctx = Context::new(window, &self.flags);
+
+        self.ctx = Some(ctx);
+
+        self
+    }
+
+    pub fn run<S: Load + Update + Render>(&mut self, state: &mut S) {
+        let ctx = self.ctx.as_mut().unwrap();
+
+        ctx.running = true;
+
+        state.load(ctx);
+
+        // Show the window after loading, so the changes arent displayed in the making.
+        ctx.window.show();
+
+        let mut t0 = Instant::now();
+        let mut acc = 0.0;
+
+        let mut ticks = 0;
+        let mut sec_timer = Instant::now();
+
+        while ctx.running {
+            let t1 = Instant::now();
+            let dt = t1.duration_since(t0).as_secs_f32();
+
+            t0 = t1;
+            acc += dt;
+
+            ctx.time.delta = dt;
+
+            if sec_timer.elapsed().as_secs_f32() >= 1.0 {
+                ctx.time.tps = ticks;
+                ctx.time.fps = (1.0 / dt).round().to_u32();
+
+                ticks = 0;
+                sec_timer = Instant::now();
+            }
+
+            Self::handle_events(ctx, &mut self.sdl.event_pump);
+
+            while acc >= ctx.time.tick_step {
+                state.fixed_update(ctx);
+                acc -= ctx.time.tick_step;
+
+                ticks += 1;
+            }
+
+            state.update(ctx);
+
+            ctx.render.clear();
+
+            state.render(ctx);
+
+            ctx.render.present();
+
+            ctx.input.flush();
+
+            if !self.flags.contains(&LoopFlag::VSync) {
+                let elapsed = t0.elapsed().as_secs_f32();
+                let remaining = ctx.time.render_step - elapsed;
+
+                if remaining > 0.0 {
+                    spin_sleep::sleep(Duration::from_secs_f32(remaining));
+                }
+            }
         }
     }
 
-    pub fn create_window(
-        &mut self,
-        title: impl ToString,
-        width: u32,
-        height: u32,
-    ) -> Result<(), Error> {
-        let sdl = self.sdl.get_or_init(|| {
-            sdl2::init()
-                .map_err(|_| Error::Sdl("Failed to initialize SDL.".to_string()))
-                .map_err(|e| {
-                    throw!(e);
-                })
-                .unwrap()
-        });
-
-        let video_subsys = sdl
-            .video()
-            .map_err(|_| Error::Sdl("Failed to initialize SDL.".to_string()))?;
-
-        let window = video_subsys
-            .window(&title.to_string(), width, height)
-            .position_centered()
-            .build()
-            .map_err(|_| Error::Window("Failed to create window.".to_string()))?;
-
-        window::init(window);
-        input::init();
-
-        Ok(())
-    }
-
-    fn handle_events(&mut self, event_pump: &mut EventPump) {
+    fn handle_events(ctx: &mut Context, event_pump: &mut sdl2::EventPump) {
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit { .. } => self.running = false,
-                Event::KeyDown {
-                    keycode: Some(key),
-                    repeat,
-                    ..
-                } => {
-                    keys().insert(key);
-                    keys_pressed_with_repeat().insert(key);
+                Event::Quit { .. } => {
+                    warn!("Received quit event. Closing.");
+                    ctx.running = false;
+                }
 
-                    if !repeat {
-                        keys_pressed().insert(key);
-                    }
+                Event::KeyDown {
+                    keycode: Some(key), ..
+                } => {
+                    ctx.input.keys.insert(key);
+                    ctx.input.keys_pressed.insert(key);
                 }
 
                 Event::KeyUp {
                     keycode: Some(key), ..
                 } => {
-                    keys().remove(&key);
+                    ctx.input.keys.remove(&key);
                 }
 
                 Event::MouseMotion { x, y, .. } => {
-                    set_mouse_position(x, y);
+                    ctx.input.mouse_position.set(x, y);
+                }
+
+                Event::MouseButtonDown { mouse_btn, .. } => {
+                    ctx.input.mouse_buttons.insert(mouse_btn);
+                    ctx.input.mouse_buttons_pressed.insert(mouse_btn);
+                }
+
+                Event::MouseButtonUp { mouse_btn, .. } => {
+                    ctx.input.mouse_buttons.remove(&mouse_btn);
                 }
 
                 _ => {}
-            }
-        }
-    }
-
-    pub fn run<G>(&mut self, mut state: G)
-    where
-        G: Load + Update + Render,
-    {
-        let sdl = self.sdl.get();
-
-        if sdl.is_none() {
-            throw!(crate::Error::Sdl(
-                "You need to create a window before running the event loop.".to_string()
-            ));
-        }
-
-        let sdl = sdl.unwrap();
-
-        self.running = true;
-
-        let mut event_pump = sdl.event_pump().unwrap();
-        let mut t0 = Instant::now();
-
-        let mut acc = 0.0;
-
-        let dt = Arc::new(AtomicF32::new(0.0));
-        let ups = Arc::new(AtomicU32::new(0));
-
-        let dt_clone = Arc::clone(&dt);
-        let ups_clone = Arc::clone(&ups);
-
-        thread::spawn(move || {
-            let mut sys = System::new_with_specifics(
-                RefreshKind::new()
-                    .with_cpu(CpuRefreshKind::new().with_cpu_usage())
-                    .with_memory(MemoryRefreshKind::new().with_ram()),
-            );
-
-            let pid = sysinfo::get_current_pid().unwrap();
-            sys.refresh_processes(ProcessesToUpdate::Some(&[pid]));
-
-            loop {
-                thread::sleep(Duration::from_secs(1));
-
-                let fps = (1.0 / dt_clone.load(Ordering::Relaxed)).round();
-                let ups = ups_clone.load(Ordering::Relaxed);
-
-                // Refresh process
-                sys.refresh_processes(ProcessesToUpdate::Some(&[pid]));
-                let process = sys.process(pid).unwrap();
-
-                let cpu = process.cpu_usage();
-                let mem = process.memory();
-
-                set_fps(fps);
-                set_ups(ups);
-                set_cpu(cpu);
-                set_mem(mem as f32);
-
-                ups_clone.store(0, Ordering::Relaxed);
-            }
-        });
-
-        let canvas = window()
-            .clone()
-            .into_canvas()
-            .accelerated()
-            .build()
-            .unwrap();
-
-        render::init(canvas.texture_creator());
-
-        let mut renderer = Renderer::new(canvas);
-
-        state.load(&mut renderer);
-
-        while self.running {
-            let t1 = Instant::now();
-            let delta = t1.duration_since(t0).as_secs_f32();
-
-            dt.store(delta, Ordering::Relaxed);
-
-            acc += delta;
-            t0 = t1;
-
-            self.handle_events(&mut event_pump);
-
-            let us = update_step();
-            let rs = render_step();
-
-            while acc > us {
-                state.update(us);
-
-                acc -= us;
-                ups.fetch_add(1, Ordering::Relaxed);
-            }
-
-            renderer.clear();
-
-            state.render(&mut renderer);
-
-            renderer.present();
-
-            let frame_time = t1.elapsed().as_secs_f32();
-            let remaining = rs - frame_time;
-
-            if remaining > 0.0 {
-                spin_sleep::sleep(Duration::from_secs_f32(remaining));
             }
         }
     }

@@ -1,101 +1,191 @@
-use crate::{math::Size, throw, Error};
+use anyhow::anyhow;
+use sdl2::video::{FullscreenType, Window as SdlWindow, WindowPos};
 
-use std::{cell::OnceCell, collections::HashMap, sync::OnceLock};
+use crate::{
+    math::{Size, Vec2},
+    traits::ToU32,
+};
 
-pub use sdl2::mouse::SystemCursor as Cursor;
-use sdl2::{image::LoadSurface, mouse::Cursor as SdlCursor, surface::Surface, video::Window};
+#[derive(Clone)]
+pub struct Window(pub(crate) SdlWindow);
 
-static mut WINDOW: OnceLock<Window> = OnceLock::new();
-static mut CURSORS: OnceCell<HashMap<String, SdlCursor>> = OnceCell::new();
-
-pub fn init(window: Window) {
-    unsafe {
-        WINDOW
-            .set(window)
-            .map_err(|_| Error::Window("Failed to initialize window".to_string()))
+impl Window {
+    pub(crate) fn new(
+        title: String,
+        width: u32,
+        height: u32,
+        video: &sdl2::VideoSubsystem,
+    ) -> Self {
+        // Sets up the inital window configuration.
+        // It's hidden by default, and it's shown after the `load` function from
+        // the `Load` trait is fired, so the user can set things up as they want before the window is shown.
+        //
+        // Example: if this wasnt the case, if the user wanted to have a borderless window,
+        // it would first show the window with borders and then remove them, which would be a bad experience.
+        let window = video
+            .window(title.as_str(), width.to_u32(), height.to_u32())
+            .position_centered()
+            .hidden()
+            .build()
             .unwrap();
 
-        CURSORS
-            .set(HashMap::new())
-            .map_err(|_| Error::Window("Failed to initialize cursors".to_string()))
-            .unwrap();
+        Self(window)
     }
-}
 
-pub(crate) fn window() -> &'static Window {
-    unsafe {
-        match WINDOW.get() {
-            Some(window) => window,
-            None => throw!(Error::Window(
-                "Window not initialized! Did you forget to call `crate_window`?".to_string(),
-            )),
+    /// Returns the size of the window.
+    /// Uses a [`Size`] struct to represent the size.
+    pub fn size(&self) -> Size {
+        self.0.size().into()
+    }
+
+    /// Sets the size of the window.
+    /// Uses a [`Size`] struct to represent the size.
+    pub fn set_size<S: Into<Size>>(&mut self, size: S) -> anyhow::Result<()> {
+        let size = size.into();
+
+        self.0
+            .set_size(size.width, size.height)
+            .map_err(|e| anyhow!(e))
+    }
+
+    /// Returns the minimum size of the window.
+    /// Uses a [`Size`] struct to represent the size.
+    ///
+    /// The window cannot be resized to a size smaller than this.
+    pub fn min_size(&self) -> Size {
+        self.0.minimum_size().into()
+    }
+
+    /// Sets the minimum size of the window.
+    /// Uses a [`Size`] struct to represent the size.
+    pub fn set_min_size<S: Into<Size>>(&mut self, size: S) -> anyhow::Result<()> {
+        let size = size.into();
+
+        self.0
+            .set_minimum_size(size.width, size.height)
+            .map_err(|e| anyhow!(e))
+    }
+
+    /// Returns the maximum size of the window.
+    /// Uses a [`Size`] struct to represent the size.
+    ///
+    /// The window cannot be resized to a size larger than this.
+    pub fn max_size(&self) -> Size {
+        self.0.maximum_size().into()
+    }
+
+    /// Sets the maximum size of the window.
+    /// Uses a [`Size`] struct to represent the size.
+    pub fn set_max_size<S: Into<Size>>(&mut self, size: S) -> anyhow::Result<()> {
+        let size = size.into();
+
+        self.0
+            .set_maximum_size(size.width, size.height)
+            .map_err(|e| anyhow!(e))
+    }
+
+    /// Returns the title of the window.
+    pub fn title(&self) -> &str {
+        self.0.title()
+    }
+
+    /// Sets the title of the window.
+    pub fn set_title<T: ToString>(&mut self, title: T) -> anyhow::Result<()> {
+        self.0.set_title(&title.to_string()).map_err(|e| anyhow!(e))
+    }
+
+    /// Returns the position of the window.
+    /// The position is represented as a [`Vec2`].
+    pub fn position(&self) -> Vec2 {
+        self.0.position().into()
+    }
+
+    /// Sets the position of the window.
+    /// Uses a [`Vec2`] to represent the position.
+    pub fn set_position<P: Into<Vec2>>(&mut self, pos: P) {
+        let pos = pos.into();
+
+        self.0.set_position(
+            WindowPos::Positioned(pos.x as i32),
+            WindowPos::Positioned(pos.y as i32),
+        );
+    }
+
+    /// Centers the window on the screen.
+    pub fn center(&mut self) {
+        self.0
+            .set_position(WindowPos::Centered, WindowPos::Centered);
+    }
+
+    /// Sets whether the window can be resized by the user.
+    pub fn set_resizable(&mut self, v: bool) {
+        self.0.set_resizable(v);
+    }
+
+    /// Sets the window to fullscreen mode.
+    pub fn fullscren(&mut self) -> anyhow::Result<()> {
+        self.0
+            .set_fullscreen(FullscreenType::Desktop)
+            .map_err(|e| anyhow!(e))
+    }
+
+    /// Sets the window to windowed mode.
+    pub fn windowed(&mut self) -> anyhow::Result<()> {
+        self.0
+            .set_fullscreen(FullscreenType::Off)
+            .map_err(|e| anyhow!(e))
+    }
+
+    /// Returns a boolean indicating whether the window is in fullscreen mode.
+    pub fn is_fullscreen(&self) -> bool {
+        self.0.fullscreen_state() == FullscreenType::Desktop
+    }
+
+    /// Toggles between fullscreen and windowed mode.
+    pub fn toggle_fullscreen(&mut self) -> anyhow::Result<()> {
+        if self.is_fullscreen() {
+            self.windowed()
+        } else {
+            self.fullscren()
         }
     }
-}
 
-fn window_mut() -> &'static mut Window {
-    unsafe {
-        match WINDOW.get_mut() {
-            Some(window) => window,
-            None => throw!(Error::Window(
-                "Window not initialized! Did you forget to call `crate_window`?".to_string(),
-            )),
-        }
+    /// Shows the window.
+    pub fn show(&mut self) {
+        self.0.show();
     }
-}
 
-fn cursors_mut() -> &'static mut HashMap<String, SdlCursor> {
-    unsafe { CURSORS.get_mut().unwrap() }
-}
+    /// Hides the window.
+    pub fn hide(&mut self) {
+        self.0.hide();
+    }
 
-pub fn load_cursor<L, P>(label: L, path: P)
-where
-    L: Into<String>,
-    P: Into<String>,
-{
-    let label = label.into();
-    let path = path.into();
-    let surface = Surface::from_file(&path).unwrap();
-    let cursor = SdlCursor::from_surface(surface, 0, 0).unwrap();
+    /// Returns a boolean indicating whether the window is always on top.
+    pub fn is_always_on_top(&self) -> bool {
+        self.0.is_always_on_top()
+    }
 
-    cursors_mut().insert(label, cursor);
-}
+    /// Sets the window to be always on top or not.
+    pub fn set_always_on_top(&mut self, v: bool) {
+        self.0.set_always_on_top(v);
+    }
 
-pub fn load_system_cursor<L>(label: L, cursor: Cursor)
-where
-    L: Into<String>,
-{
-    let label = label.into();
-    let cursor = SdlCursor::from_system(cursor).unwrap();
-    cursors_mut().insert(label, cursor);
-}
+    /// Gets the opacity of the window.
+    /// Only works on platforms that support it.
+    pub fn opacity(&self) -> anyhow::Result<f32> {
+        self.0.opacity().map_err(|e| anyhow!(e))
+    }
 
-pub fn set_cursor(label: impl ToString) {
-    let label = label.to_string();
-    let cursor = cursors_mut().get(&label).unwrap();
-    cursor.set();
-}
+    /// Sets the opacity of the window.
+    /// Only works on platforms that support it.
+    ///
+    /// The value should be between 0.0 (fully transparent) and 1.0 (fully opaque).
+    pub fn set_opacity(&mut self, v: f32) -> anyhow::Result<()> {
+        self.0.set_opacity(v).map_err(|e| anyhow!(e))
+    }
 
-pub fn title() -> String {
-    window().title().to_string()
-}
-
-pub fn set_title(title: impl ToString) -> Result<(), Error> {
-    window_mut()
-        .set_title(&title.to_string())
-        .map_err(|_| Error::Window("Failed to set title.".to_string()))
-}
-
-pub fn size() -> Size {
-    window().size().into()
-}
-
-pub fn set_size(size: Size) -> Result<(), Error> {
-    window_mut()
-        .set_size(size.width, size.height)
-        .map_err(|_| Error::Window("Failed to set size.".to_string()))
-}
-
-pub fn position() -> Size {
-    window().position().into()
+    /// Sets the window to be borderless or not.
+    pub fn set_decorations(&mut self, v: bool) {
+        self.0.set_bordered(v);
+    }
 }

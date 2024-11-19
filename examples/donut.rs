@@ -1,9 +1,10 @@
+#![windows_subsystem = "windows"]
+
 use karna::{
-    core::EventLoop,
-    perf::{fps, ups},
-    render::{load_font, Color, Renderer},
+    context::Context,
+    core::App,
+    render::Color,
     traits::{Load, Render, Update},
-    window,
 };
 use std::{char, vec};
 
@@ -18,19 +19,24 @@ const CHARS: [&str; 13] = [
     " ", ".", ",", "-", "~", ":", ";", "=", "!", "*", "#", "$", "@",
 ];
 
+const FONT_DATA: &[u8] = include_bytes!("./assets/font.ttf");
+
 impl Load for Game {
-    fn load(&mut self, renderer: &mut Renderer) {
-        load_font("default", "assets/font.ttf", 16);
-        renderer.set_font("default");
+    fn load(&mut self, ctx: &mut Context) {
+        ctx.render.include_font("default", &FONT_DATA, 20);
+        ctx.render.set_font("default");
+        ctx.time.set_target_fps(144);
     }
 }
 
 impl Update for Game {
-    fn update(&mut self, step: f32) {
+    fn update(&mut self, ctx: &mut Context) {
         self.chars_to_draw.clear();
 
-        self.a += 1.0 * step;
-        self.b += 0.5 * step;
+        let dt = ctx.time.delta();
+
+        self.a += 1.0 * dt;
+        self.b += 0.5 * dt;
 
         let r = ((self.a * 2.0).sin() * 127.0 + 128.0).clamp(0.0, 255.0) as u8;
         let g = ((self.b * 2.0).sin() * 127.0 + 128.0).clamp(0.0, 255.0) as u8;
@@ -41,14 +47,14 @@ impl Update for Game {
         let x_sep = 10.0;
         let y_sep = 20.0;
 
-        let size = window::size();
+        let size = ctx.window.size();
 
-        let rows = size.height as f32 / y_sep;
-        let cols = size.width as f32 / x_sep;
+        let rows = size.height / y_sep as u32;
+        let cols = size.width / x_sep as u32;
         let screen_size = rows * cols;
 
-        let x_offset = cols / 2.0;
-        let y_offset = rows / 2.0;
+        let x_offset = cols / 2;
+        let y_offset = rows / 2;
 
         let mut z = vec![0.0; screen_size as usize];
         let mut b = vec![" "; screen_size as usize];
@@ -66,12 +72,12 @@ impl Update for Game {
                 let m = self.b.cos();
                 let n = self.b.sin();
                 let t = c * h * g - f * e;
-                let x = (x_offset + 40.0 * dd * (l * h * m - t * n)) as usize;
-                let y = (y_offset + 20.0 * dd * (l * h * n + t * m)) as usize;
-                let o = (x as f32 + cols * y as f32) as usize;
+                let x = ((x_offset as f32) + 40.0 * dd * (l * h * m - t * n)) as usize;
+                let y = ((y_offset as f32) + 20.0 * dd * (l * h * n + t * m)) as usize;
+                let o = (x as f32 + cols as f32 * y as f32) as usize;
                 let nn = 8.0 * ((f * e - c * d * g) * m - c * d * e - f * g - l * d * n);
 
-                if rows > y as f32 && y > 0 && x > 0 && cols > x as f32 && dd > z[o] {
+                if rows > y as u32 && y > 0 && x > 0 && cols > x as u32 && dd > z[o] {
                     z[o] = dd;
                     b[o] = &CHARS[(nn as f64).max(0.0).min(11.0) as usize];
                 }
@@ -93,33 +99,31 @@ impl Update for Game {
             x_start += x_sep;
         }
     }
+
+    fn fixed_update(&mut self, _ctx: &mut Context) {}
 }
 
 impl Render for Game {
-    fn render(&mut self, renderer: &mut Renderer) {
-        renderer.fill_text((10, 10), format!("fps: {}", fps()), Color::White);
-        renderer.fill_text((10, 30), format!("ups: {}", ups()), Color::White);
+    fn render(&mut self, ctx: &mut Context) {
+        ctx.render.fill_text(ctx.time.fps(), (10, 10), Color::WHITE);
 
         for (c, x, y) in &self.chars_to_draw {
-            renderer.fill_text((*x, *y), c, self.color);
+            ctx.render.fill_text(c, (*x, *y), self.color);
         }
 
         // Set the background color to black
-        renderer.set_color(Color::Black);
+        ctx.render.set_color(Color::BLACK);
     }
 }
 
 fn main() {
-    let mut game_loop = EventLoop::new();
-
-    game_loop.create_window("donut", 1280, 720).unwrap();
-
-    let game = Game {
-        a: 0.0,
-        b: 0.0,
-        chars_to_draw: vec![],
-        color: Color::White,
-    };
-
-    game_loop.run(game);
+    App::new()
+        .unwrap()
+        .window("donut", (1280, 720))
+        .run(&mut Game {
+            a: 0.0,
+            b: 0.0,
+            chars_to_draw: vec![],
+            color: Color::WHITE,
+        });
 }
