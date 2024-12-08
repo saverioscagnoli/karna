@@ -1,5 +1,5 @@
-mod cache;
-mod renderer;
+pub(crate) mod atlas;
 
-pub use renderer::Renderer;
+pub mod renderer;
+
 pub use sdl2::pixels::Color;

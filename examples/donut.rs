@@ -1,10 +1,7 @@
-#![windows_subsystem = "windows"]
-
 use karna::{
-    context::Context,
-    core::App,
     render::Color,
-    traits::{Load, Render, Update},
+    traits::{Draw, Load, Update},
+    App, Context,
 };
 use std::{char, vec};
 
@@ -19,14 +16,8 @@ const CHARS: [&str; 13] = [
     " ", ".", ",", "-", "~", ":", ";", "=", "!", "*", "#", "$", "@",
 ];
 
-const FONT_DATA: &[u8] = include_bytes!("./assets/font.ttf");
-
 impl Load for Game {
-    fn load(&mut self, ctx: &mut Context) {
-        ctx.render.include_font("default", &FONT_DATA, 20);
-        ctx.render.set_font("default");
-        ctx.time.set_target_fps(144);
-    }
+    fn load(&mut self, _ctx: &mut Context) {}
 }
 
 impl Update for Game {
@@ -103,27 +94,23 @@ impl Update for Game {
     fn fixed_update(&mut self, _ctx: &mut Context) {}
 }
 
-impl Render for Game {
-    fn render(&mut self, ctx: &mut Context) {
+impl Draw for Game {
+    fn draw(&mut self, ctx: &mut Context) {
         ctx.render.fill_text(ctx.time.fps(), (10, 10), Color::WHITE);
 
         for (c, x, y) in &self.chars_to_draw {
-            ctx.render.fill_text(c, (*x, *y), Color::WHITE);
+            ctx.render.fill_text(c, (*x, *y), self.color);
         }
 
-        // Set the background color to black
         ctx.render.set_color(Color::BLACK);
     }
 }
 
 fn main() {
-    App::new()
-        .unwrap()
-        .window("donut", (1280, 720))
-        .run(&mut Game {
-            a: 0.0,
-            b: 0.0,
-            chars_to_draw: vec![],
-            color: Color::WHITE,
-        });
+    App::new("donut", (1280, 720)).unwrap().run(&mut Game {
+        a: 0.0,
+        b: 0.0,
+        chars_to_draw: vec![],
+        color: Color::WHITE,
+    });
 }
