@@ -1,4 +1,4 @@
-use super::atlas::{Atlas, Font};
+use super::{atlas::Atlas, font::Font};
 use crate::math::{Size, Vec2};
 use fontdue::layout::TextStyle;
 use image::GenericImageView;
@@ -8,7 +8,7 @@ use sdl2::{
     render::{Canvas, Texture, TextureCreator},
     video::{Window, WindowContext},
 };
-use std::{collections::HashMap, ops::Deref, path::Path, rc::Rc, sync::OnceLock};
+use std::{collections::HashMap, ops::Deref, path::Path, sync::OnceLock};
 
 struct TextureCreatorWrapper(TextureCreator<WindowContext>);
 
@@ -60,16 +60,7 @@ impl Renderer {
         let font = fontdue::Font::from_bytes(bytes.as_slice(), Default::default())
             .expect("Failed to load font");
 
-        self.atlas.fonts.insert(
-            label,
-            (
-                Font {
-                    inner: Rc::new(font),
-                    size,
-                },
-                HashMap::new(),
-            ),
-        );
+        self.atlas.fonts.insert(label, Font::new(font, size));
     }
 
     pub fn load_image<L: ToString, P: AsRef<Path>>(&mut self, label: L, path: P) {
@@ -115,9 +106,12 @@ impl Renderer {
     }
 
     pub fn draw_pixels<P: Into<Vec2>, I: IntoIterator<Item = P>>(&mut self, pixels: I) {
-        for pixel in pixels {
-            self.draw_pixel(pixel);
-        }
+        let pixels = pixels
+            .into_iter()
+            .map(|pos| FPoint::from(pos.into()))
+            .collect::<Vec<_>>();
+
+        self.canvas.draw_fpoints(&*pixels).unwrap();
     }
 
     pub fn draw_line<P: Into<Vec2>, Q: Into<Vec2>>(&mut self, start: P, end: Q) {
@@ -126,13 +120,13 @@ impl Renderer {
             .unwrap();
     }
 
-    pub fn draw_lines<P: Into<Vec2>, Q: Into<Vec2>, I: IntoIterator<Item = (P, Q)>>(
-        &mut self,
-        lines: I,
-    ) {
-        for (start, end) in lines {
-            self.draw_line(start, end);
-        }
+    pub fn draw_lines<P: Into<Vec2>, I: IntoIterator<Item = P>>(&mut self, lines: I) {
+        let lines = lines
+            .into_iter()
+            .map(|pos| FPoint::from(pos.into()))
+            .collect::<Vec<_>>();
+
+        self.canvas.draw_flines(&*lines).unwrap();
     }
 
     pub fn draw_rect<P: Into<Vec2>, S: Into<Size>>(&mut self, pos: P, size: S) {
@@ -153,9 +147,17 @@ impl Renderer {
         &mut self,
         rects: I,
     ) {
-        for (pos, size) in rects {
-            self.draw_rect(pos, size);
-        }
+        let rects: Vec<FRect> = rects
+            .into_iter()
+            .map(|(pos, size)| {
+                let pos: Vec2 = pos.into();
+                let size: Size = size.into();
+
+                FRect::new(pos.x, pos.y, size.width as f32, size.height as f32)
+            })
+            .collect();
+
+        self.canvas.draw_frects(&rects).unwrap();
     }
 
     pub fn fill_rect<P: Into<Vec2>, S: Into<Size>>(&mut self, pos: P, size: S) {
@@ -176,9 +178,17 @@ impl Renderer {
         &mut self,
         rects: I,
     ) {
-        for (pos, size) in rects {
-            self.fill_rect(pos, size);
-        }
+        let rects: Vec<FRect> = rects
+            .into_iter()
+            .map(|(pos, size)| {
+                let pos: Vec2 = pos.into();
+                let size: Size = size.into();
+
+                FRect::new(pos.x, pos.y, size.width as f32, size.height as f32)
+            })
+            .collect();
+
+        self.canvas.fill_frects(&rects).unwrap();
     }
 
     pub fn draw_image<L: ToString, P: Into<Vec2>>(&mut self, label: L, pos: P) {
@@ -195,29 +205,35 @@ impl Renderer {
 
     pub fn fill_text<T: ToString, P: Into<Vec2>>(&mut self, text: T, pos: P, color: Color) {
         let text = text.to_string();
-        let pos: Vec2 = pos.into();
 
+        let pos: Vec2 = pos.into();
         let (r, g, b) = (color.r, color.g, color.b);
 
-        let (font, _) = self.atlas.fonts.get(&self.atlas.current_font).unwrap();
+        let glyphs = {
+            let font = self.atlas.fonts.get_mut(&self.atlas.current_font).unwrap();
 
-        self.atlas.layout.append(
-            &[font.inner.clone()],
-            &TextStyle::new(text.as_str(), font.size as f32, 0),
-        );
+            font.layout.append(
+                &[font.inner.clone()],
+                &TextStyle::new(text.as_str(), font.size as f32, 0),
+            );
 
-        let glyphs: Vec<_> = text
-            .chars()
-            .into_iter()
-            .zip(
-                self.atlas
-                    .layout
-                    .glyphs()
-                    .into_iter()
-                    .map(|g| (g.x, g.y, g.width, g.height)),
-            )
-            .collect();
+            let glyphs = text
+                .chars()
+                .into_iter()
+                .zip(
+                    font.layout
+                        .glyphs()
+                        .into_iter()
+                        .map(|g| (g.x, g.y, g.width, g.height)),
+                )
+                .collect::<Vec<_>>();
 
+            font.layout.clear();
+
+            glyphs
+        };
+
+        // Process glyphs after font borrow is dropped
         for (ch, (x, y, width, height)) in glyphs {
             if ch.is_whitespace() {
                 continue;
@@ -232,13 +248,53 @@ impl Renderer {
                 );
 
                 texture.set_color_mod(r, g, b);
-
                 self.canvas.copy_f(texture, None, dest).unwrap();
             } else {
                 self.atlas.insert_glyph(ch);
             }
         }
+    }
 
-        self.atlas.layout.clear();
+    pub fn text_size<T: ToString>(&mut self, text: T) -> Size {
+        let text = text.to_string();
+
+        let font = self.atlas.fonts.get_mut(&self.atlas.current_font).unwrap();
+
+        font.layout.append(
+            &[font.inner.clone()],
+            &TextStyle::new(text.as_str(), font.size as f32, 0),
+        );
+
+        let mut min_left = 0.0;
+        let mut min_top = 0.0;
+        let mut max_right = 0.0;
+        let mut max_bottom = 0.0;
+
+        for glyph in font.layout.glyphs() {
+            let left = glyph.x;
+            let top = glyph.y;
+            let right = glyph.x + glyph.width as f32;
+            let bottom = glyph.y + glyph.height as f32;
+
+            if left < min_left {
+                min_left = left;
+            }
+            if top < min_top {
+                min_top = top;
+            }
+            if right > max_right {
+                max_right = right;
+            }
+            if bottom > max_bottom {
+                max_bottom = bottom;
+            }
+        }
+
+        font.layout.clear();
+
+        let width = (max_right - min_left) as u32;
+        let height = (max_bottom - min_top) as u32;
+
+        (width, height).into()
     }
 }

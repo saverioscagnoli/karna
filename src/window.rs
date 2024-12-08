@@ -1,4 +1,4 @@
-use crate::math::{Size, Vec2};
+use crate::math::{Size, ToF32, Vec2};
 use sdl2::video::WindowPos;
 
 pub struct Window(sdl2::video::Window);
@@ -35,6 +35,11 @@ impl Window {
 
     pub fn position(&self) -> Vec2 {
         self.0.position().into()
+    }
+
+    pub fn center_position(&self) -> Vec2 {
+        let size = self.size();
+        Vec2::new(size.width.to_f32() / 2.0, size.height.to_f32() / 2.0)
     }
 
     pub fn set_position<P: Into<Vec2>>(&mut self, pos: P) {

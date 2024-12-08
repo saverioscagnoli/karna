@@ -3,8 +3,11 @@ use crate::{
     traits::{Draw, Load, Update},
     Context,
 };
-use sdl2::{event::Event, keyboard::Keycode};
-use std::time::{Duration, Instant};
+use sdl2::event::Event;
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 
 pub struct App {
     ctx: Context,
@@ -29,9 +32,7 @@ impl App {
         let mut t0 = Instant::now();
         let mut acc = 0.0;
 
-        let mut times = Vec::new();
-
-        let mut a = false;
+        let mut times = VecDeque::new();
 
         while self.ctx.running {
             let t1 = Instant::now();
@@ -43,10 +44,10 @@ impl App {
             self.ctx.time.delta = dt;
 
             while times.len() > 0 && times[0] <= t1 - Duration::from_millis(1000) {
-                times.remove(0);
+                times.pop_front();
             }
 
-            times.push(t1);
+            times.push_back(t1);
 
             self.ctx.time.fps = times.len() as u32;
 
@@ -59,19 +60,11 @@ impl App {
 
             state.update(&mut self.ctx);
 
-            if self.ctx.input.key_pressed(Keycode::Space) {
-                a = !a;
-            }
-
             self.ctx.render.clear();
-            if a {
-            } else {
-                state.draw(&mut self.ctx);
-            }
+            state.draw(&mut self.ctx);
             self.ctx.render.present();
 
             self.ctx.input.flush();
-            //self.ctx.render.atlas.reset_color_mod();
 
             let t2 = t1.elapsed().as_secs_f32();
             let remaining = self.ctx.time.render_step - t2;
@@ -112,7 +105,7 @@ impl App {
 
                 // Mouse events
                 Event::MouseButtonDown { mouse_btn, .. } => {
-                    if ctx.input.mouse_down(mouse_btn) {
+                    if !ctx.input.mouse_down(mouse_btn) {
                         ctx.input.mouse_buttons.push(mouse_btn);
                     }
 

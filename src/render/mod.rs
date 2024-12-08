@@ -1,4 +1,5 @@
 pub(crate) mod atlas;
+pub(crate) mod font;
 
 pub mod renderer;
 

@@ -1,29 +1,14 @@
-use super::renderer::texture_creator;
-use fontdue::layout::{CoordinateSystem, Layout};
+use super::{font::Font, renderer::texture_creator};
 use sdl2::{
     pixels::{Color, PixelFormatEnum},
     render::{BlendMode, Texture},
     surface::Surface,
 };
-use std::{collections::HashMap, ops::Deref, rc::Rc};
-
-pub(crate) struct Font {
-    pub(crate) inner: Rc<fontdue::Font>,
-    pub(crate) size: f32,
-}
-
-impl Deref for Font {
-    type Target = fontdue::Font;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
+use std::collections::HashMap;
 
 pub(crate) struct Atlas {
-    pub(crate) fonts: HashMap<String, (Font, HashMap<char, Texture<'static>>)>,
+    pub(crate) fonts: HashMap<String, Font>,
     pub(crate) current_font: String,
-    pub(crate) layout: Layout,
 }
 
 impl Atlas {
@@ -36,26 +21,16 @@ impl Atlas {
 
         let mut fonts = HashMap::new();
 
-        fonts.insert(
-            "default".to_string(),
-            (
-                Font {
-                    inner: Rc::new(font),
-                    size: 18.0,
-                },
-                HashMap::new(),
-            ),
-        );
+        fonts.insert("default".to_string(), Font::new(font, 18.0));
 
-        Atlas {
+        Self {
             fonts,
             current_font: "default".to_string(),
-            layout: Layout::new(CoordinateSystem::PositiveYDown),
         }
     }
 
     pub fn insert_glyph(&mut self, glyph: char) {
-        let (font, char_cache) = self.fonts.get_mut(&self.current_font).unwrap();
+        let font = self.fonts.get_mut(&self.current_font).unwrap();
 
         let (metrics, bitmap) = font.rasterize(glyph, font.size as f32);
         let (width, height) = (metrics.width as u32, metrics.height as u32);
@@ -86,11 +61,11 @@ impl Atlas {
             .unwrap();
 
         texture.set_blend_mode(BlendMode::Blend);
-        char_cache.insert(glyph, texture);
+        font.char_cache.insert(glyph, texture);
     }
 
     pub(crate) fn get_glyph(&mut self, glyph: char) -> Option<&mut Texture<'static>> {
-        let (_, char_cache) = self.fonts.get_mut(&self.current_font).unwrap();
-        char_cache.get_mut(&glyph)
+        let font = self.fonts.get_mut(&self.current_font).unwrap();
+        font.char_cache.get_mut(&glyph)
     }
 }

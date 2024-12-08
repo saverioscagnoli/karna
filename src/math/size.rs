@@ -1,4 +1,6 @@
-use super::ToU32;
+use std::ops::Div;
+
+use super::{ToF32, ToU32};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Size {
@@ -36,5 +38,16 @@ impl<T: ToU32> From<(T, T)> for Size {
 impl From<Size> for (u32, u32) {
     fn from(size: Size) -> Self {
         (size.width, size.height)
+    }
+}
+
+impl<F: ToF32> Div<F> for Size {
+    type Output = Self;
+
+    fn div(self, rhs: F) -> Self::Output {
+        Self {
+            width: (self.width as f32 / rhs.to_f32()) as u32,
+            height: (self.height as f32 / rhs.to_f32()) as u32,
+        }
     }
 }

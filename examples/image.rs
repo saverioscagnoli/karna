@@ -1,4 +1,5 @@
 use karna::{
+    render::Color,
     traits::{Draw, Load, Update},
     App, Context,
 };
@@ -19,10 +20,14 @@ impl Update for Game {
 
 impl Draw for Game {
     fn draw(&mut self, ctx: &mut Context) {
+        ctx.render.set_color(Color::RED);
+
+        ctx.render.fill_rect((50, 100), (50, 50));
+        ctx.render.set_color(Color::BLACK);
         ctx.render.draw_image("cat", (0, 0));
     }
 }
 
 fn main() {
-    App::new("basic window", (800, 600)).unwrap().run(&mut Game);
+    App::new("meow", (800, 600)).unwrap().run(&mut Game);
 }

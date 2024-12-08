@@ -1,5 +1,6 @@
 use karna::{
     input::Key,
+    math::ToF32,
     traits::{Draw, Load, Update},
     App, Context,
 };
@@ -26,11 +27,18 @@ impl Update for Game {
 
 impl Draw for Game {
     fn draw(&mut self, ctx: &mut Context) {
+        let text = "Press SPACE to play the audio!";
+        let center = ctx.window.center_position();
+        let text_size = ctx.render.text_size(text);
+
+        let x = center.x - text_size.width.to_f32() / 2.0;
+        let y = center.y - text_size.height.to_f32() / 2.0;
+
         ctx.render
-            .fill_text("Hello world!", (10, 10), Color::WHITE);
+            .fill_text(text, (x.round(), y.round()), Color::WHITE);
     }
 }
 
 fn main() {
-    App::new("basic window", (800, 600)).unwrap().run(&mut Game);
+    App::new("GET OUT", (800, 600)).unwrap().run(&mut Game);
 }
