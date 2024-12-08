@@ -51,7 +51,7 @@ impl Draw for Game {
         ctx.render.fill_text(
             format!("pos: ({:.1}, {:.1})", self.pos.x, self.pos.y),
             (10, 10),
-            Color::CYAN,
+            Color::WHITE,
         );
 
         ctx.render.fill_text(
@@ -63,7 +63,7 @@ impl Draw for Game {
 }
 
 fn main() {
-    App::new("basic window", (800, 600))
+    App::new("Press WASD to move!", (800, 600))
         .unwrap()
         .run(&mut Game {
             pos: Vec2::new(100, 100),

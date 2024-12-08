@@ -1,10 +1,10 @@
 use karna::{
     input::Key,
     math::ToF32,
+    render::Color,
     traits::{Draw, Load, Update},
     App, Context,
 };
-use sdl2::pixels::Color;
 
 struct Game;
 
