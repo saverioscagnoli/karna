@@ -1,11 +1,11 @@
 use super::{atlas::Atlas, font::Font};
-use crate::math::{Size, Vec2};
+use crate::math::{Size, ToU32, Vec2};
 use fontdue::layout::TextStyle;
 use image::GenericImageView;
 use sdl2::{
     pixels::{Color, PixelFormatEnum},
     rect::{FPoint, FRect},
-    render::{Canvas, Texture, TextureCreator},
+    render::{BlendMode, Canvas, Texture, TextureCreator},
     video::{Window, WindowContext},
 };
 use std::{collections::HashMap, ops::Deref, path::Path, sync::OnceLock};
@@ -51,6 +51,39 @@ impl Renderer {
             images: HashMap::new(),
             atlas,
         }
+    }
+
+    fn set_pixel_color(buffer: &mut [u8], i: usize, color: Color) {
+        #[cfg(target_endian = "big")]
+        {
+            buffer[i] = color.r;
+            buffer[i + 1] = color.g;
+            buffer[i + 2] = color.b;
+            buffer[i + 3] = color.a;
+        }
+
+        #[cfg(target_endian = "little")]
+        {
+            buffer[i] = color.a;
+            buffer[i + 1] = color.b;
+            buffer[i + 2] = color.g;
+            buffer[i + 3] = color.r;
+        }
+    }
+
+    fn blend_pixel_color(buffer: &mut [u8], index: usize, color: Color, alpha: f32) {
+        let inv_alpha = 1.0 - alpha;
+
+        Self::set_pixel_color(
+            buffer,
+            index,
+            Color {
+                r: (color.r as f32 * alpha + buffer[index] as f32 * inv_alpha) as u8,
+                g: (color.g as f32 * alpha + buffer[index + 1] as f32 * inv_alpha) as u8,
+                b: (color.b as f32 * alpha + buffer[index + 2] as f32 * inv_alpha) as u8,
+                a: (color.a as f32 * alpha + buffer[index + 3] as f32 * inv_alpha) as u8,
+            },
+        );
     }
 
     pub fn load_font<L: ToString, P: AsRef<Path>>(&mut self, label: L, path: P, size: f32) {
@@ -189,6 +222,229 @@ impl Renderer {
             .collect();
 
         self.canvas.fill_frects(&rects).unwrap();
+    }
+
+    pub fn draw_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
+        let center = center.into();
+        let radius = radius.to_u32();
+        let diameter = radius * 2 + 1;
+        let color = self.color();
+
+        let texture = {
+            if let Some(texture) = self.atlas.circles.get_mut(&radius) {
+                texture
+            } else {
+                let mut texture = texture_creator()
+                    .create_texture_streaming(PixelFormatEnum::RGBA32, diameter, diameter)
+                    .unwrap();
+
+                texture.set_blend_mode(BlendMode::Blend);
+
+                texture
+                    .with_lock(None, |buffer, _| {
+                        let mut t1 = (radius / 16) as i32;
+                        let mut t2;
+                        let mut x = radius as i32;
+                        let mut y = 0 as i32;
+
+                        let center = radius as i32;
+
+                        while x >= y {
+                            let points = [
+                                (x, y),
+                                (y, x),
+                                (-y, x),
+                                (-x, y),
+                                (-x, -y),
+                                (-y, -x),
+                                (y, -x),
+                                (x, -y),
+                            ];
+
+                            for (x, y) in points.iter() {
+                                let dx = center + x;
+                                let dy = center + y;
+
+                                let i = (dy * diameter as i32 + dx) as usize * 4;
+
+                                Self::set_pixel_color(buffer, i, Color::WHITE);
+                            }
+
+                            y += 1;
+                            t1 += y;
+                            t2 = t1 - x;
+
+                            if t2 >= 0 {
+                                t1 = t2;
+                                x -= 1;
+                            }
+                        }
+                    })
+                    .unwrap();
+
+                self.atlas.circles.insert(radius, texture);
+                self.atlas.circles.get_mut(&radius).unwrap()
+            }
+        };
+
+        texture.set_color_mod(color.r, color.g, color.b);
+
+        let dst = FRect::new(
+            center.x - radius as f32,
+            center.y - radius as f32,
+            diameter as f32,
+            diameter as f32,
+        );
+
+        self.canvas.copy_f(texture, None, dst).unwrap();
+    }
+
+    pub fn fill_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
+        let center = center.into();
+        let radius = radius.to_u32();
+        let diameter = radius * 2 + 1;
+        let color = self.color();
+
+        let texture = {
+            if let Some(texture) = self.atlas.filled_circles.get_mut(&radius) {
+                texture
+            } else {
+                let mut texture = texture_creator()
+                    .create_texture_streaming(PixelFormatEnum::RGBA32, diameter, diameter)
+                    .unwrap();
+
+                texture.set_blend_mode(BlendMode::Blend);
+
+                texture
+                    .with_lock(None, |buffer, _| {
+                        let mut t1 = (radius / 16) as i32;
+                        let mut t2;
+                        let mut x = radius as i32;
+                        let mut y = 0 as i32;
+
+                        let center = radius as i32;
+
+                        while x >= y {
+                            for dy in -y..y {
+                                let x1 = center - x;
+                                let x2 = center + x;
+
+                                for dx in x1..x2 {
+                                    let i = (dy + center) * diameter as i32 + dx;
+                                    Self::set_pixel_color(buffer, i as usize * 4, Color::WHITE);
+                                }
+                            }
+
+                            for dy in -x..x {
+                                let y1 = center - y;
+                                let y2 = center + y;
+
+                                for dx in y1..y2 {
+                                    let nx = dx;
+                                    let ny = center + dy;
+
+                                    let i = ny * diameter as i32 + nx;
+                                    Self::set_pixel_color(buffer, i as usize * 4, Color::WHITE);
+                                }
+                            }
+
+                            y += 1;
+                            t1 += y;
+                            t2 = t1 - x;
+
+                            if t2 >= 0 {
+                                t1 = t2;
+                                x -= 1;
+                            }
+                        }
+                    })
+                    .unwrap();
+
+                self.atlas.filled_circles.insert(radius, texture);
+                self.atlas.filled_circles.get_mut(&radius).unwrap()
+            }
+        };
+
+        texture.set_color_mod(color.r, color.g, color.b);
+
+        let dst = FRect::new(
+            center.x - radius as f32,
+            center.y - radius as f32,
+            diameter as f32,
+            diameter as f32,
+        );
+
+        self.canvas.copy_f(texture, None, dst).unwrap();
+    }
+
+    pub fn fill_aa_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
+        let center: Vec2 = center.into();
+        let radius: u32 = radius.to_u32();
+        let diameter = radius * 2 + 1;
+        let color = self.color();
+
+        let texture = if let Some(texture) = self.atlas.aa_filled_circles.get_mut(&radius) {
+            texture
+        } else {
+            let mut texture = texture_creator()
+                .create_texture_streaming(PixelFormatEnum::RGBA8888, diameter, diameter)
+                .unwrap();
+
+            texture.set_blend_mode(BlendMode::Blend);
+
+            texture
+                .with_lock(None, |buffer, _| {
+                    let center = radius as i32;
+                    let samples = 4;
+
+                    for y in 0..diameter {
+                        for x in 0..diameter {
+                            let mut alpha_sum = 0.0;
+
+                            for sy in 0..samples {
+                                for sx in 0..samples {
+                                    let sub_x = x as f32 + (sx as f32 + 0.5) / samples as f32;
+                                    let sub_y = y as f32 + (sy as f32 + 0.5) / samples as f32;
+                                    let dx = sub_x - center as f32;
+                                    let dy = sub_y - center as f32;
+                                    let distance = (dx * dx + dy * dy).sqrt();
+
+                                    let alpha = if distance < radius as f32 {
+                                        1.0
+                                    } else if distance < radius as f32 + 1.0 {
+                                        1.0 - (distance - radius as f32)
+                                    } else {
+                                        0.0
+                                    };
+                                    alpha_sum += alpha;
+                                }
+                            }
+
+                            let alpha = alpha_sum / (samples * samples) as f32;
+
+                            if alpha > 0.0 {
+                                let i = ((y as u32 * diameter + x as u32) * 4) as usize;
+                                Self::blend_pixel_color(buffer, i, color, alpha);
+                            }
+                        }
+                    }
+                })
+                .unwrap();
+
+            self.atlas.aa_filled_circles.insert(radius, texture);
+            self.atlas.aa_filled_circles.get_mut(&radius).unwrap()
+        };
+
+        texture.set_color_mod(color.r, color.g, color.b);
+
+        let dst = FRect::new(
+            center.x - radius as f32,
+            center.y - radius as f32,
+            diameter as f32,
+            diameter as f32,
+        );
+
+        self.canvas.copy_f(texture, None, dst).unwrap();
     }
 
     pub fn draw_image<L: ToString, P: Into<Vec2>>(&mut self, label: L, pos: P) {

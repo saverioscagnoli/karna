@@ -9,6 +9,10 @@ use std::collections::HashMap;
 pub(crate) struct Atlas {
     pub(crate) fonts: HashMap<String, Font>,
     pub(crate) current_font: String,
+
+    pub(crate) circles: HashMap<u32, Texture<'static>>,
+    pub(crate) filled_circles: HashMap<u32, Texture<'static>>,
+    pub(crate) aa_filled_circles: HashMap<u32, Texture<'static>>,
 }
 
 impl Atlas {
@@ -26,6 +30,9 @@ impl Atlas {
         Self {
             fonts,
             current_font: "default".to_string(),
+            circles: HashMap::new(),
+            filled_circles: HashMap::new(),
+            aa_filled_circles: HashMap::new(),
         }
     }
 
