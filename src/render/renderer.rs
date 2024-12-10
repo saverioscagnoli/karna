@@ -1,11 +1,14 @@
 use super::{atlas::Atlas, font::Font};
-use crate::math::{Size, ToU32, Vec2};
+use crate::{
+    math::{Size, ToU32, Vec2},
+    traits::LoadSurface,
+};
 use fontdue::layout::TextStyle;
-use image::GenericImageView;
 use sdl2::{
     pixels::{Color, PixelFormatEnum},
     rect::{FPoint, FRect},
     render::{BlendMode, Canvas, Texture, TextureCreator},
+    surface::Surface,
     video::{Window, WindowContext},
 };
 use std::{collections::HashMap, ops::Deref, path::Path, sync::OnceLock};
@@ -97,17 +100,11 @@ impl Renderer {
     }
 
     pub fn load_image<L: ToString, P: AsRef<Path>>(&mut self, label: L, path: P) {
-        let img = image::open(&path).expect("Failed to load image");
-        let (width, height) = img.dimensions();
-        let img = img.to_rgba8();
+        let surface = Surface::from_file(path);
 
         let mut texture = texture_creator()
-            .create_texture_target(PixelFormatEnum::RGBA32, width, height)
-            .expect("Failed to create texture");
-
-        texture
-            .update(None, &img, (width * 4) as usize)
-            .expect("Failed to update texture");
+            .create_texture_from_surface(surface)
+            .unwrap();
 
         texture.set_blend_mode(sdl2::render::BlendMode::Blend);
 

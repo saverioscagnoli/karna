@@ -1,5 +1,10 @@
-use crate::math::{Size, ToF32, Vec2};
-use sdl2::video::WindowPos;
+use std::path::Path;
+
+use crate::{
+    math::{Size, ToF32, Vec2},
+    traits::LoadSurface,
+};
+use sdl2::{surface::Surface, video::WindowPos};
 
 pub struct Window(sdl2::video::Window);
 
@@ -69,5 +74,10 @@ impl Window {
 
     pub fn set_decorations(&mut self, val: bool) {
         self.0.set_bordered(val);
+    }
+
+    pub fn set_icon<P: AsRef<Path>>(&mut self, path: P) {
+        let surface = Surface::from_file(path);
+        self.0.set_icon(surface)
     }
 }

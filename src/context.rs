@@ -26,6 +26,8 @@ impl Context {
         info!("SDL Version: {}", sdl2::version::version());
         info!("Karna Version: {}", env!("CARGO_PKG_VERSION"));
 
+        sdl2::hint::set("SDL_HINT_JOYSTICK_RAWINPUT", "0");
+
         let size = size.into();
         let window = video
             .window(title.to_string().as_str(), size.width, size.height)
@@ -44,7 +46,7 @@ impl Context {
         let render = Renderer::new(canvas);
         let window = Window::new(window);
         let time = Time::new();
-        let input = Input::new();
+        let input = Input::new(&sys);
         let audio = Audio::new();
 
         Ok(Self {
