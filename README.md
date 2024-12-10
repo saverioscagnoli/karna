@@ -1,7 +1,8 @@
 # Karna
 
-Karna is a modern framework to build 2d games.
-Built entirely in Rust, aims to be the rust replacement for love2D, for high performace 2D (and maybe 3D) games!
+Karna is a modern framework made for you to build amazing games.
+
+Built entirely in Rust, aims to be the rust replacement for the amazing [`love2D`](https://github.com/love2d/love), for high performace 2D (and maybe 3D) games!
 
 <p align="center">
   <img src="./docs/logo.png" alt="logo">
@@ -19,8 +20,8 @@ Built entirely in Rust, aims to be the rust replacement for love2D, for high per
 - [ ] 3D space and rendering
 
 ## ⚠️⚠️
-Karna is its VERY EARLY stage of development, so many breaking changes and rewrites WILL occur.
 
+Karna is in its VERY EARLY stage of development, so many breaking changes and rewrites WILL occur.
 
 ## Dependencies
 
@@ -28,7 +29,6 @@ Karna is its VERY EARLY stage of development, so many breaking changes and rewri
 - fontdue
 - rodio
 - image
-
 
 ## Contributing
 
