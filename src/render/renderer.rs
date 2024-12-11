@@ -1,4 +1,7 @@
-use super::{atlas::Atlas, font::Font};
+use super::{
+    atlas::{Atlas, TextureKind},
+    font::Font,
+};
 use crate::{
     math::{Size, ToU32, Vec2},
     traits::LoadSurface,
@@ -221,14 +224,113 @@ impl Renderer {
         self.canvas.fill_frects(&rects).unwrap();
     }
 
+    pub fn draw_arc<P: Into<Vec2>, U: ToU32>(
+        &mut self,
+        center: P,
+        radius: U,
+        start_angle: f32,
+        end_angle: f32,
+    ) {
+        let center = center.into();
+        let radius = radius.to_u32();
+        let diameter = radius * 2 + 1;
+        let color = self.color();
+
+        let kind = TextureKind::Arc(radius, start_angle as i32, end_angle as i32);
+
+        let texture = {
+            if let Some(texture) = self.atlas.get_texture(kind) {
+                texture
+            } else {
+                let mut texture = texture_creator()
+                    .create_texture_streaming(PixelFormatEnum::RGBA32, diameter, diameter)
+                    .unwrap();
+
+                texture.set_blend_mode(BlendMode::Blend);
+
+                texture
+                    .with_lock(None, |buffer, _| {
+                        let mut t1 = (radius / 16) as i32;
+                        let mut t2;
+                        let mut x = radius as i32;
+                        let mut y = 0 as i32;
+
+                        let center = radius as i32;
+
+                        let start_angle = start_angle.to_radians();
+                        let end_angle = end_angle.to_radians();
+
+                        while x >= y {
+                            let points = [
+                                (x, y),
+                                (y, x),
+                                (-y, x),
+                                (-x, y),
+                                (-x, -y),
+                                (-y, -x),
+                                (y, -x),
+                                (x, -y),
+                            ];
+
+                            for &(px, py) in points.iter() {
+                                let dx = center + px;
+                                let dy = center + py;
+
+                                // Calculate angle of the point
+                                let angle = (py as f32).atan2(px as f32);
+                                let normalized_angle = if angle < 0.0 {
+                                    angle + 2.0 * std::f32::consts::PI
+                                } else {
+                                    angle
+                                };
+
+                                // Check if the angle is within the range
+                                if normalized_angle >= start_angle && normalized_angle <= end_angle
+                                {
+                                    let i = (dy * diameter as i32 + dx) as usize * 4;
+                                    Self::set_pixel_color(buffer, i, Color::WHITE);
+                                }
+                            }
+
+                            y += 1;
+                            t1 += y;
+                            t2 = t1 - x;
+
+                            if t2 >= 0 {
+                                t1 = t2;
+                                x -= 1;
+                            }
+                        }
+                    })
+                    .unwrap();
+
+                self.atlas.insert_texture(kind, texture);
+                self.atlas.get_texture(kind).unwrap()
+            }
+        };
+
+        texture.set_color_mod(color.r, color.g, color.b);
+
+        let dst = FRect::new(
+            center.x - radius as f32,
+            center.y - radius as f32,
+            diameter as f32,
+            diameter as f32,
+        );
+
+        self.canvas.copy_f(texture, None, dst).unwrap();
+    }
+
     pub fn draw_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
         let center = center.into();
         let radius = radius.to_u32();
         let diameter = radius * 2 + 1;
         let color = self.color();
 
+        let kind = TextureKind::Circle(radius);
+
         let texture = {
-            if let Some(texture) = self.atlas.circles.get_mut(&radius) {
+            if let Some(texture) = self.atlas.get_texture(kind) {
                 texture
             } else {
                 let mut texture = texture_creator()
@@ -279,8 +381,86 @@ impl Renderer {
                     })
                     .unwrap();
 
-                self.atlas.circles.insert(radius, texture);
-                self.atlas.circles.get_mut(&radius).unwrap()
+                self.atlas.insert_texture(kind, texture);
+                self.atlas.get_texture(kind).unwrap()
+            }
+        };
+
+        texture.set_color_mod(color.r, color.g, color.b);
+
+        let dst = FRect::new(
+            center.x - radius as f32,
+            center.y - radius as f32,
+            diameter as f32,
+            diameter as f32,
+        );
+
+        self.canvas.copy_f(texture, None, dst).unwrap();
+    }
+
+    pub fn draw_aa_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
+        let center = center.into();
+        let radius = radius.to_u32();
+        let diameter = radius * 2 + 1;
+        let color = self.color();
+
+        let kind = TextureKind::AACircle(radius);
+
+        let texture = {
+            if let Some(texture) = self.atlas.get_texture(kind) {
+                texture
+            } else {
+                let mut texture = texture_creator()
+                    .create_texture_streaming(PixelFormatEnum::RGBA32, diameter, diameter)
+                    .unwrap();
+
+                texture.set_blend_mode(BlendMode::Blend);
+
+                texture
+                    .with_lock(None, |buffer, _| {
+                        let outline_thickness = 4.0f32;
+                        let center = radius as f32;
+                        let samples = 4;
+
+                        for y in 0..diameter {
+                            for x in 0..diameter {
+                                let mut alpha_sum = 0.0;
+
+                                for sy in 0..samples {
+                                    for sx in 0..samples {
+                                        let sub_x = x as f32 + (sx as f32 + 0.5) / samples as f32;
+                                        let sub_y = y as f32 + (sy as f32 + 0.5) / samples as f32;
+                                        let dx = sub_x - center;
+                                        let dy = sub_y - center;
+                                        let distance = (dx * dx + dy * dy).sqrt();
+
+                                        let inner_edge = radius as f32 - outline_thickness / 2.0;
+                                        let outer_edge = radius as f32 + outline_thickness / 2.0;
+
+                                        let alpha =
+                                            if distance >= inner_edge && distance <= outer_edge {
+                                                1.0 - ((distance - radius as f32).abs()
+                                                    / (outline_thickness / 2.0))
+                                            } else {
+                                                0.0
+                                            };
+                                        alpha_sum += alpha;
+                                    }
+                                }
+
+                                let alpha = alpha_sum / (samples * samples) as f32;
+
+                                if alpha > 0.0 {
+                                    let i = ((y as u32 * diameter + x as u32) * 4) as usize;
+                                    Self::blend_pixel_color(buffer, i, color, alpha);
+                                }
+                            }
+                        }
+                    })
+                    .unwrap();
+
+                self.atlas.insert_texture(kind, texture);
+                self.atlas.get_texture(kind).unwrap()
             }
         };
 
@@ -302,8 +482,10 @@ impl Renderer {
         let diameter = radius * 2 + 1;
         let color = self.color();
 
+        let kind = TextureKind::FilledCircle(radius);
+
         let texture = {
-            if let Some(texture) = self.atlas.filled_circles.get_mut(&radius) {
+            if let Some(texture) = self.atlas.get_texture(kind) {
                 texture
             } else {
                 let mut texture = texture_creator()
@@ -357,8 +539,8 @@ impl Renderer {
                     })
                     .unwrap();
 
-                self.atlas.filled_circles.insert(radius, texture);
-                self.atlas.filled_circles.get_mut(&radius).unwrap()
+                self.atlas.insert_texture(kind, texture);
+                self.atlas.get_texture(kind).unwrap()
             }
         };
 
@@ -380,7 +562,9 @@ impl Renderer {
         let diameter = radius * 2 + 1;
         let color = self.color();
 
-        let texture = if let Some(texture) = self.atlas.aa_filled_circles.get_mut(&radius) {
+        let kind = TextureKind::AAFilledCircle(radius);
+
+        let texture = if let Some(texture) = self.atlas.get_texture(kind) {
             texture
         } else {
             let mut texture = texture_creator()
@@ -428,8 +612,8 @@ impl Renderer {
                 })
                 .unwrap();
 
-            self.atlas.aa_filled_circles.insert(radius, texture);
-            self.atlas.aa_filled_circles.get_mut(&radius).unwrap()
+            self.atlas.insert_texture(kind, texture);
+            self.atlas.get_texture(kind).unwrap()
         };
 
         texture.set_color_mod(color.r, color.g, color.b);

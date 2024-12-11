@@ -25,6 +25,8 @@ impl Draw for Game {
 
         ctx.render.set_color(Color::RED);
 
+        ctx.render.draw_aa_circle((500, 300), 100);
+
         ctx.render.draw_circle((200, 200), 50);
 
         ctx.render.set_color(Color::BLUE);
