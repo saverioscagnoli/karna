@@ -3,7 +3,8 @@ use crate::{
     traits::{Draw, Load, Update},
     Context,
 };
-use sdl2::event::Event;
+use rodio::Sample;
+use sdl2::{controller::Axis, event::Event};
 use std::{
     collections::VecDeque,
     time::{Duration, Instant},
@@ -120,6 +121,90 @@ impl App {
 
                 Event::MouseMotion { x, y, .. } => {
                     ctx.input.mouse_position.set(x, y);
+                }
+
+                // Rescan controllers every time a controller is added or removed
+                Event::ControllerDeviceAdded { .. } => ctx.input.scan_controllers(),
+                Event::ControllerDeviceRemoved { .. } => ctx.input.scan_controllers(),
+
+                // Controller events
+                Event::ControllerAxisMotion { axis, value, .. } => {
+                    let mut value = value.to_f32();
+
+                    // These small corrections are necessary because the controller
+                    // reports values slightly above 1.0 and slightly below 0.0
+                    // idk if this is due to sdl2 or not, but i checked the cotroller
+                    // values and they are fine, so i think it's sdl2
+                    match axis {
+                        Axis::LeftX => {
+                            if value > 0.99 {
+                                value = 1.0;
+                            }
+
+                            ctx.input.left_stick.x = value;
+                        }
+                        Axis::LeftY => {
+                            if value > 0.99 {
+                                value = 1.0;
+                            }
+
+                            if value > -0.01 && value < 0.0 {
+                                value = 0.0;
+                            }
+
+                            ctx.input.left_stick.y = value;
+                        }
+                        Axis::RightX => {
+                            if value > 0.99 {
+                                value = 1.0;
+                            }
+
+                            ctx.input.right_stick.x = value;
+                        }
+                        Axis::RightY => {
+                            if value > 0.99 {
+                                value = 1.0;
+                            }
+
+                            if value > -0.01 && value < 0.0 {
+                                value = 0.0;
+                            }
+
+                            ctx.input.right_stick.y = value;
+                        }
+                        Axis::TriggerLeft => {
+                            ctx.input.left_trigger = {
+                                if value > 0.99 {
+                                    1.0
+                                } else {
+                                    value
+                                }
+                            }
+                        }
+                        Axis::TriggerRight => {
+                            ctx.input.right_trigger = {
+                                if value > 0.99 {
+                                    1.0
+                                } else {
+                                    value
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Event::ControllerButtonDown { button, .. } => {
+                    if !ctx.input.button_down(button) {
+                        ctx.input.buttons.push(button);
+                    }
+
+                    if !ctx.input.button_pressed(button) {
+                        ctx.input.pressed_buttons.push(button);
+                    }
+                }
+
+                Event::ControllerButtonUp { button, .. } => {
+                    ctx.input.buttons.retain(|&b| b != button);
                 }
 
                 _ => {}

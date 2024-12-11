@@ -1,26 +1,78 @@
+use std::time::Duration;
+
+pub use sdl2::controller::Button;
+use sdl2::controller::GameController;
 pub use sdl2::keyboard::Keycode as Key;
 pub use sdl2::mouse::MouseButton as Mouse;
+use sdl2::{GameControllerSubsystem, Sdl};
 
-use crate::math::Vec2;
+use crate::{error, info, math::Vec2, warn};
 
 pub struct Input {
+    controller_sys: GameControllerSubsystem,
+
     pub(crate) keys: Vec<Key>,
     pub(crate) pressed_keys: Vec<Key>,
 
     pub(crate) mouse_buttons: Vec<Mouse>,
     pub(crate) clicked_mouse_buttons: Vec<Mouse>,
     pub(crate) mouse_position: Vec2,
+
+    controller: Option<GameController>,
+    pub(crate) left_stick: Vec2,
+    pub(crate) right_stick: Vec2,
+    pub(crate) left_trigger: f32,
+    pub(crate) right_trigger: f32,
+    pub(crate) buttons: Vec<Button>,
+    pub(crate) pressed_buttons: Vec<Button>,
 }
 
 impl Input {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(sdl: &Sdl) -> Self {
+        let controller_sys = sdl.game_controller().unwrap();
+
         Self {
+            controller_sys,
             keys: Vec::new(),
             pressed_keys: Vec::new(),
             mouse_buttons: Vec::new(),
             clicked_mouse_buttons: Vec::new(),
             mouse_position: Vec2::zero(),
+            controller: None,
+            left_stick: Vec2::zero(),
+            right_stick: Vec2::zero(),
+            left_trigger: 0.0,
+            right_trigger: 0.0,
+            buttons: Vec::new(),
+            pressed_buttons: Vec::new(),
         }
+    }
+
+    pub(crate) fn scan_controllers(&mut self) {
+        let n = self.controller_sys.num_joysticks().unwrap();
+
+        let controller = (0..n).find_map(|i| {
+            if !self.controller_sys.is_game_controller(i) {
+                return None;
+            }
+
+            match self.controller_sys.open(i) {
+                Ok(c) => {
+                    info!("Found controller: {}", c.name());
+                    Some(c)
+                }
+                Err(e) => {
+                    error!("Failed to open controller {}: {}", i, e);
+                    None
+                }
+            }
+        });
+
+        if controller.is_none() {
+            warn!("No controller found.");
+        }
+
+        self.controller = controller;
     }
 
     pub fn key_down(&self, key: Key) -> bool {
@@ -43,7 +95,48 @@ impl Input {
         self.mouse_position
     }
 
+    pub fn left_stick(&self) -> Vec2 {
+        self.left_stick
+    }
+
+    pub fn right_stick(&self) -> Vec2 {
+        self.right_stick
+    }
+
+    pub fn left_trigger(&self) -> f32 {
+        self.left_trigger
+    }
+
+    pub fn right_trigger(&self) -> f32 {
+        self.right_trigger
+    }
+
+    pub fn button_down(&self, button: Button) -> bool {
+        self.buttons.contains(&button)
+    }
+
+    pub fn button_pressed(&self, button: Button) -> bool {
+        self.pressed_buttons.contains(&button)
+    }
+
+    pub fn rumble(&mut self, left: f32, right: f32, duration: Duration) {
+        let left = left.clamp(0.0, 1.0);
+        let right = right.clamp(0.0, 1.0);
+
+        // Map the range [0.0, 1.0] to [0, u16::MAX]
+        let left_mapped = (left * u16::MAX as f32) as u16;
+        let right_mapped = (right * u16::MAX as f32) as u16;
+
+        if let Some(controller) = &mut self.controller {
+            controller
+                .set_rumble(left_mapped, right_mapped, duration.as_millis() as u32)
+                .unwrap();
+        }
+    }
+
     pub(crate) fn flush(&mut self) {
         self.pressed_keys.clear();
+        self.clicked_mouse_buttons.clear();
+        self.pressed_buttons.clear();
     }
 }

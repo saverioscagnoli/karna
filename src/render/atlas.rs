@@ -6,13 +6,29 @@ use sdl2::{
 };
 use std::collections::HashMap;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum TextureKind {
+    // (radius, start angle, end angle)
+    Arc(u32, i32, i32),
+    // (radius)
+    Circle(u32),
+    // (radius)
+    AACircle(u32),
+    // (radius)
+    FilledCircle(u32),
+    // (radius)
+    AAFilledCircle(u32),
+}
+
 pub(crate) struct Atlas {
     pub(crate) fonts: HashMap<String, Font>,
     pub(crate) current_font: String,
 
-    pub(crate) circles: HashMap<u32, Texture<'static>>,
-    pub(crate) filled_circles: HashMap<u32, Texture<'static>>,
-    pub(crate) aa_filled_circles: HashMap<u32, Texture<'static>>,
+    pub(crate) arcs: HashMap<TextureKind, Texture<'static>>,
+    pub(crate) circles: HashMap<TextureKind, Texture<'static>>,
+    pub(crate) aa_circles: HashMap<TextureKind, Texture<'static>>,
+    pub(crate) filled_circles: HashMap<TextureKind, Texture<'static>>,
+    pub(crate) aa_filled_circles: HashMap<TextureKind, Texture<'static>>,
 }
 
 impl Atlas {
@@ -30,7 +46,9 @@ impl Atlas {
         Self {
             fonts,
             current_font: "default".to_string(),
+            arcs: HashMap::new(),
             circles: HashMap::new(),
+            aa_circles: HashMap::new(),
             filled_circles: HashMap::new(),
             aa_filled_circles: HashMap::new(),
         }
@@ -74,5 +92,41 @@ impl Atlas {
     pub(crate) fn get_glyph(&mut self, glyph: char) -> Option<&mut Texture<'static>> {
         let font = self.fonts.get_mut(&self.current_font).unwrap();
         font.char_cache.get_mut(&glyph)
+    }
+
+    pub(crate) fn insert_texture(&mut self, kind: TextureKind, texture: Texture<'static>) {
+        match kind {
+            TextureKind::Arc(r, start, end) => {
+                self.arcs.insert(TextureKind::Arc(r, start, end), texture);
+            }
+            TextureKind::Circle(r) => {
+                self.circles.insert(TextureKind::Circle(r), texture);
+            }
+            TextureKind::AACircle(r) => {
+                self.aa_circles.insert(TextureKind::AACircle(r), texture);
+            }
+            TextureKind::FilledCircle(r) => {
+                self.filled_circles
+                    .insert(TextureKind::FilledCircle(r), texture);
+            }
+            TextureKind::AAFilledCircle(r) => {
+                self.aa_filled_circles
+                    .insert(TextureKind::AAFilledCircle(r), texture);
+            }
+        }
+    }
+
+    pub(crate) fn get_texture(&mut self, kind: TextureKind) -> Option<&mut Texture<'static>> {
+        match kind {
+            TextureKind::Arc(r, start, end) => self.arcs.get_mut(&TextureKind::Arc(r, start, end)),
+            TextureKind::Circle(r) => self.circles.get_mut(&TextureKind::Circle(r)),
+            TextureKind::AACircle(r) => self.aa_circles.get_mut(&TextureKind::AACircle(r)),
+            TextureKind::FilledCircle(r) => {
+                self.filled_circles.get_mut(&TextureKind::FilledCircle(r))
+            }
+            TextureKind::AAFilledCircle(r) => self
+                .aa_filled_circles
+                .get_mut(&TextureKind::AAFilledCircle(r)),
+        }
     }
 }
