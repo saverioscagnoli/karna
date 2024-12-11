@@ -419,7 +419,8 @@ impl Renderer {
                 texture
                     .with_lock(None, |buffer, _| {
                         let outline_thickness = 4.0f32;
-                        let center = radius as f32;
+                        // Move the center otherwise the circle will be cut off
+                        let center = radius as f32 + 0.5;
                         let samples = 4;
 
                         for y in 0..diameter {
