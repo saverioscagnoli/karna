@@ -2,6 +2,8 @@ mod random;
 mod size;
 mod vec2;
 
+pub(crate) mod circles;
+
 pub use random::{coin_flip, pick, rng};
 pub use size::Size;
 pub use vec2::Vec2;

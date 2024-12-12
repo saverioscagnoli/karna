@@ -3,14 +3,17 @@ use super::{
     font::Font,
 };
 use crate::{
-    math::{Size, ToU32, Vec2},
+    math::{
+        circles::{CircleFill, CircleOutline},
+        Size, ToU32, Vec2,
+    },
     traits::LoadSurface,
 };
 use fontdue::layout::TextStyle;
 use sdl2::{
-    pixels::{Color, PixelFormatEnum},
+    pixels::Color,
     rect::{FPoint, FRect},
-    render::{BlendMode, Canvas, Texture, TextureCreator},
+    render::{Canvas, Texture, TextureCreator},
     surface::Surface,
     video::{Window, WindowContext},
 };
@@ -57,39 +60,6 @@ impl Renderer {
             images: HashMap::new(),
             atlas,
         }
-    }
-
-    fn set_pixel_color(buffer: &mut [u8], i: usize, color: Color) {
-        #[cfg(target_endian = "big")]
-        {
-            buffer[i] = color.r;
-            buffer[i + 1] = color.g;
-            buffer[i + 2] = color.b;
-            buffer[i + 3] = color.a;
-        }
-
-        #[cfg(target_endian = "little")]
-        {
-            buffer[i] = color.a;
-            buffer[i + 1] = color.b;
-            buffer[i + 2] = color.g;
-            buffer[i + 3] = color.r;
-        }
-    }
-
-    fn blend_pixel_color(buffer: &mut [u8], index: usize, color: Color, alpha: f32) {
-        let inv_alpha = 1.0 - alpha;
-
-        Self::set_pixel_color(
-            buffer,
-            index,
-            Color {
-                r: (color.r as f32 * alpha + buffer[index] as f32 * inv_alpha) as u8,
-                g: (color.g as f32 * alpha + buffer[index + 1] as f32 * inv_alpha) as u8,
-                b: (color.b as f32 * alpha + buffer[index + 2] as f32 * inv_alpha) as u8,
-                a: (color.a as f32 * alpha + buffer[index + 3] as f32 * inv_alpha) as u8,
-            },
-        );
     }
 
     pub fn load_font<L: ToString, P: AsRef<Path>>(&mut self, label: L, path: P, size: f32) {
@@ -242,67 +212,7 @@ impl Renderer {
             if let Some(texture) = self.atlas.get_texture(kind) {
                 texture
             } else {
-                let mut texture = texture_creator()
-                    .create_texture_streaming(PixelFormatEnum::RGBA32, diameter, diameter)
-                    .unwrap();
-
-                texture.set_blend_mode(BlendMode::Blend);
-
-                texture
-                    .with_lock(None, |buffer, _| {
-                        let mut t1 = (radius / 16) as i32;
-                        let mut t2;
-                        let mut x = radius as i32;
-                        let mut y = 0 as i32;
-
-                        let center = radius as i32;
-
-                        let start_angle = start_angle.to_radians();
-                        let end_angle = end_angle.to_radians();
-
-                        while x >= y {
-                            let points = [
-                                (x, y),
-                                (y, x),
-                                (-y, x),
-                                (-x, y),
-                                (-x, -y),
-                                (-y, -x),
-                                (y, -x),
-                                (x, -y),
-                            ];
-
-                            for &(px, py) in points.iter() {
-                                let dx = center + px;
-                                let dy = center + py;
-
-                                // Calculate angle of the point
-                                let angle = (py as f32).atan2(px as f32);
-                                let normalized_angle = if angle < 0.0 {
-                                    angle + 2.0 * std::f32::consts::PI
-                                } else {
-                                    angle
-                                };
-
-                                // Check if the angle is within the range
-                                if normalized_angle >= start_angle && normalized_angle <= end_angle
-                                {
-                                    let i = (dy * diameter as i32 + dx) as usize * 4;
-                                    Self::set_pixel_color(buffer, i, Color::WHITE);
-                                }
-                            }
-
-                            y += 1;
-                            t1 += y;
-                            t2 = t1 - x;
-
-                            if t2 >= 0 {
-                                t1 = t2;
-                                x -= 1;
-                            }
-                        }
-                    })
-                    .unwrap();
+                let texture = Texture::arc(texture_creator(), radius, start_angle, end_angle);
 
                 self.atlas.insert_texture(kind, texture);
                 self.atlas.get_texture(kind).unwrap()
@@ -324,7 +234,7 @@ impl Renderer {
     pub fn draw_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
         let center = center.into();
         let radius = radius.to_u32();
-        let diameter = radius * 2 + 1;
+        let diameter = radius * 2;
         let color = self.color();
 
         let kind = TextureKind::Circle(radius);
@@ -333,53 +243,7 @@ impl Renderer {
             if let Some(texture) = self.atlas.get_texture(kind) {
                 texture
             } else {
-                let mut texture = texture_creator()
-                    .create_texture_streaming(PixelFormatEnum::RGBA32, diameter, diameter)
-                    .unwrap();
-
-                texture.set_blend_mode(BlendMode::Blend);
-
-                texture
-                    .with_lock(None, |buffer, _| {
-                        let mut t1 = (radius / 16) as i32;
-                        let mut t2;
-                        let mut x = radius as i32;
-                        let mut y = 0 as i32;
-
-                        let center = radius as i32;
-
-                        while x >= y {
-                            let points = [
-                                (x, y),
-                                (y, x),
-                                (-y, x),
-                                (-x, y),
-                                (-x, -y),
-                                (-y, -x),
-                                (y, -x),
-                                (x, -y),
-                            ];
-
-                            for (x, y) in points.iter() {
-                                let dx = center + x;
-                                let dy = center + y;
-
-                                let i = (dy * diameter as i32 + dx) as usize * 4;
-
-                                Self::set_pixel_color(buffer, i, Color::WHITE);
-                            }
-
-                            y += 1;
-                            t1 += y;
-                            t2 = t1 - x;
-
-                            if t2 >= 0 {
-                                t1 = t2;
-                                x -= 1;
-                            }
-                        }
-                    })
-                    .unwrap();
+                let texture = Texture::circle_outline(texture_creator(), radius);
 
                 self.atlas.insert_texture(kind, texture);
                 self.atlas.get_texture(kind).unwrap()
@@ -401,7 +265,7 @@ impl Renderer {
     pub fn draw_aa_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
         let center = center.into();
         let radius = radius.to_u32();
-        let diameter = radius * 2 + 1;
+        let diameter = radius * 2;
         let color = self.color();
 
         let kind = TextureKind::AACircle(radius);
@@ -410,56 +274,7 @@ impl Renderer {
             if let Some(texture) = self.atlas.get_texture(kind) {
                 texture
             } else {
-                let mut texture = texture_creator()
-                    .create_texture_streaming(PixelFormatEnum::RGBA32, diameter, diameter)
-                    .unwrap();
-
-                texture.set_blend_mode(BlendMode::Blend);
-
-                texture
-                    .with_lock(None, |buffer, _| {
-                        let outline_thickness = 4.0f32;
-                        // Move the center otherwise the circle will be cut off
-                        let center = radius as f32 + 0.5;
-                        let samples = 4;
-
-                        for y in 0..diameter {
-                            for x in 0..diameter {
-                                let mut alpha_sum = 0.0;
-
-                                for sy in 0..samples {
-                                    for sx in 0..samples {
-                                        let sub_x = x as f32 + (sx as f32 + 0.5) / samples as f32;
-                                        let sub_y = y as f32 + (sy as f32 + 0.5) / samples as f32;
-                                        let dx = sub_x - center;
-                                        let dy = sub_y - center;
-                                        let distance = (dx * dx + dy * dy).sqrt();
-
-                                        let inner_edge = radius as f32 - outline_thickness / 2.0;
-                                        let outer_edge = radius as f32 + outline_thickness / 2.0;
-
-                                        let alpha =
-                                            if distance >= inner_edge && distance <= outer_edge {
-                                                1.0 - ((distance - radius as f32).abs()
-                                                    / (outline_thickness / 2.0))
-                                            } else {
-                                                0.0
-                                            };
-                                        alpha_sum += alpha;
-                                    }
-                                }
-
-                                let alpha = alpha_sum / (samples * samples) as f32;
-
-                                if alpha > 0.0 {
-                                    let i = ((y as u32 * diameter + x as u32) * 4) as usize;
-                                    Self::blend_pixel_color(buffer, i, color, alpha);
-                                }
-                            }
-                        }
-                    })
-                    .unwrap();
-
+                let texture = Texture::aa_circle_outline(texture_creator(), radius);
                 self.atlas.insert_texture(kind, texture);
                 self.atlas.get_texture(kind).unwrap()
             }
@@ -489,56 +304,7 @@ impl Renderer {
             if let Some(texture) = self.atlas.get_texture(kind) {
                 texture
             } else {
-                let mut texture = texture_creator()
-                    .create_texture_streaming(PixelFormatEnum::RGBA32, diameter, diameter)
-                    .unwrap();
-
-                texture.set_blend_mode(BlendMode::Blend);
-
-                texture
-                    .with_lock(None, |buffer, _| {
-                        let mut t1 = (radius / 16) as i32;
-                        let mut t2;
-                        let mut x = radius as i32;
-                        let mut y = 0 as i32;
-
-                        let center = radius as i32;
-
-                        while x >= y {
-                            for dy in -y..y {
-                                let x1 = center - x;
-                                let x2 = center + x;
-
-                                for dx in x1..x2 {
-                                    let i = (dy + center) * diameter as i32 + dx;
-                                    Self::set_pixel_color(buffer, i as usize * 4, Color::WHITE);
-                                }
-                            }
-
-                            for dy in -x..x {
-                                let y1 = center - y;
-                                let y2 = center + y;
-
-                                for dx in y1..y2 {
-                                    let nx = dx;
-                                    let ny = center + dy;
-
-                                    let i = ny * diameter as i32 + nx;
-                                    Self::set_pixel_color(buffer, i as usize * 4, Color::WHITE);
-                                }
-                            }
-
-                            y += 1;
-                            t1 += y;
-                            t2 = t1 - x;
-
-                            if t2 >= 0 {
-                                t1 = t2;
-                                x -= 1;
-                            }
-                        }
-                    })
-                    .unwrap();
+                let texture = Texture::circle_fill(texture_creator(), radius);
 
                 self.atlas.insert_texture(kind, texture);
                 self.atlas.get_texture(kind).unwrap()
@@ -568,50 +334,7 @@ impl Renderer {
         let texture = if let Some(texture) = self.atlas.get_texture(kind) {
             texture
         } else {
-            let mut texture = texture_creator()
-                .create_texture_streaming(PixelFormatEnum::RGBA8888, diameter, diameter)
-                .unwrap();
-
-            texture.set_blend_mode(BlendMode::Blend);
-
-            texture
-                .with_lock(None, |buffer, _| {
-                    let center = radius as i32;
-                    let samples = 4;
-
-                    for y in 0..diameter {
-                        for x in 0..diameter {
-                            let mut alpha_sum = 0.0;
-
-                            for sy in 0..samples {
-                                for sx in 0..samples {
-                                    let sub_x = x as f32 + (sx as f32 + 0.5) / samples as f32;
-                                    let sub_y = y as f32 + (sy as f32 + 0.5) / samples as f32;
-                                    let dx = sub_x - center as f32;
-                                    let dy = sub_y - center as f32;
-                                    let distance = (dx * dx + dy * dy).sqrt();
-
-                                    let alpha = if distance < radius as f32 {
-                                        1.0
-                                    } else if distance < radius as f32 + 1.0 {
-                                        1.0 - (distance - radius as f32)
-                                    } else {
-                                        0.0
-                                    };
-                                    alpha_sum += alpha;
-                                }
-                            }
-
-                            let alpha = alpha_sum / (samples * samples) as f32;
-
-                            if alpha > 0.0 {
-                                let i = ((y as u32 * diameter + x as u32) * 4) as usize;
-                                Self::blend_pixel_color(buffer, i, color, alpha);
-                            }
-                        }
-                    }
-                })
-                .unwrap();
+            let texture = Texture::aa_circle_fill(texture_creator(), radius);
 
             self.atlas.insert_texture(kind, texture);
             self.atlas.get_texture(kind).unwrap()
