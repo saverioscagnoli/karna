@@ -30,34 +30,34 @@ impl Draw for Game {
         ctx.render.set_color(Color::GREEN);
 
         if ctx.input.button_down(Button::A) {
-            ctx.render.fill_circle((620, 360), 15);
+            ctx.render.fill_aa_circle((620, 360), 15);
         } else {
-            ctx.render.draw_circle((620, 360), 15);
+            ctx.render.draw_aa_circle((620, 360), 15);
         }
 
         ctx.render.set_color(Color::RED);
 
         if ctx.input.button_down(Button::B) {
-            ctx.render.fill_circle((650, 330), 15);
+            ctx.render.fill_aa_circle((650, 330), 15);
         } else {
-            ctx.render.draw_circle((650, 330), 15);
+            ctx.render.draw_aa_circle((650, 330), 15);
         }
 
         // Orange
         ctx.render.set_color(Color::RGB(255, 165, 0));
 
         if ctx.input.button_down(Button::Y) {
-            ctx.render.fill_circle((620, 300), 15);
+            ctx.render.fill_aa_circle((620, 300), 15);
         } else {
-            ctx.render.draw_circle((620, 300), 15);
+            ctx.render.draw_aa_circle((620, 300), 15);
         }
 
         ctx.render.set_color(Color::BLUE);
 
         if ctx.input.button_down(Button::X) {
-            ctx.render.fill_circle((590, 330), 15);
+            ctx.render.fill_aa_circle((590, 330), 15);
         } else {
-            ctx.render.draw_circle((590, 330), 15);
+            ctx.render.draw_aa_circle((590, 330), 15);
         }
 
         ctx.render.set_color(Color::WHITE);
@@ -91,7 +91,7 @@ impl Draw for Game {
         let ls_center = Vec2::new(250, 450);
         let actual_ls = ls_center + ls * 50;
 
-        ctx.render.draw_circle(ls_center, 50);
+        ctx.render.draw_aa_circle(ls_center, 50);
         ctx.render.draw_line(ls_center, actual_ls);
         ctx.render.fill_aa_circle(actual_ls, 5);
 
@@ -103,7 +103,7 @@ impl Draw for Game {
 
         ctx.render.set_color(Color::WHITE);
 
-        ctx.render.draw_circle(rs_center, 50);
+        ctx.render.draw_aa_circle(rs_center, 50);
         ctx.render.draw_line(rs_center, actual_rs);
         ctx.render.fill_aa_circle(actual_rs, 5);
 

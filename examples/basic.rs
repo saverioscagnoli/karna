@@ -24,6 +24,8 @@ impl Draw for Game {
     fn draw(&mut self, ctx: &mut Context) {
         ctx.render
             .fill_text("Hello, world!", (10.0, 10.0), Color::WHITE);
+
+        ctx.render.set_color(Color::BLACK);
     }
 }
 

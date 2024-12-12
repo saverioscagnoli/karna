@@ -21,13 +21,16 @@ impl Update for Game {
 impl Draw for Game {
     fn draw(&mut self, ctx: &mut Context) {
         ctx.render.set_color(Color::GREEN);
+
+        ctx.render.draw_arc((100, 400), 40, 45.0, 180.0);
+
         ctx.render.draw_circle((100, 100), 50);
 
         ctx.render.set_color(Color::RED);
 
         ctx.render.draw_aa_circle((500, 300), 100);
 
-        ctx.render.draw_circle((200, 200), 50);
+        ctx.render.draw_circle((200, 200), 75);
 
         ctx.render.set_color(Color::BLUE);
 
