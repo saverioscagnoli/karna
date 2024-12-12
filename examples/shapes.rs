@@ -7,9 +7,7 @@ use karna::{
 struct Game;
 
 impl Load for Game {
-    fn load(&mut self, _ctx: &mut Context) {
-        println!("Game loaded!");
-    }
+    fn load(&mut self, _ctx: &mut Context) {}
 }
 
 impl Update for Game {

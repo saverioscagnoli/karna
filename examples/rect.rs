@@ -1,5 +1,5 @@
 use karna::{
-    input::Key,
+    input::{Button, Key},
     math::Vec2,
     render::Color,
     traits::{Draw, Load, Update},
@@ -34,6 +34,10 @@ impl Update for Game {
         if ctx.input.key_down(Key::D) {
             self.vel.x = speed;
         }
+
+        let left_stick = ctx.input.left_stick();
+
+        self.vel = Vec2::new(left_stick.x, left_stick.y) * speed;
 
         self.vel *= 0.9;
         self.pos += self.vel * ctx.time.delta();
