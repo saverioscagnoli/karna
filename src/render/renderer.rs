@@ -203,7 +203,7 @@ impl Renderer {
     ) {
         let center = center.into();
         let radius = radius.to_u32();
-        let diameter = radius * 2 + 1;
+        let diameter = radius * 2;
         let color = self.color();
 
         let kind = TextureKind::Arc(radius, start_angle as i32, end_angle as i32);
@@ -295,7 +295,7 @@ impl Renderer {
     pub fn fill_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
         let center = center.into();
         let radius = radius.to_u32();
-        let diameter = radius * 2 + 1;
+        let diameter = radius * 2;
         let color = self.color();
 
         let kind = TextureKind::FilledCircle(radius);
@@ -326,7 +326,7 @@ impl Renderer {
     pub fn fill_aa_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
         let center: Vec2 = center.into();
         let radius: u32 = radius.to_u32();
-        let diameter = radius * 2 + 1;
+        let diameter = radius * 2;
         let color = self.color();
 
         let kind = TextureKind::AAFilledCircle(radius);
