@@ -9,6 +9,7 @@ use karna::{
 struct Game {
     pos: Vec2,
     vel: Vec2,
+    using_keyboard: bool,
 }
 
 impl Load for Game {
@@ -21,23 +22,31 @@ impl Update for Game {
 
         if ctx.input.key_down(Key::W) {
             self.vel.y = -speed;
+            self.using_keyboard = true;
         }
 
         if ctx.input.key_down(Key::S) {
             self.vel.y = speed;
+            self.using_keyboard = true;
         }
 
         if ctx.input.key_down(Key::A) {
             self.vel.x = -speed;
+            self.using_keyboard = true;
         }
 
         if ctx.input.key_down(Key::D) {
             self.vel.x = speed;
+            self.using_keyboard = true;
         }
 
-        let left_stick = ctx.input.left_stick();
+        if !self.using_keyboard {
+            let left_stick = ctx.input.left_stick();
 
-        self.vel = Vec2::new(left_stick.x, left_stick.y) * speed;
+            self.vel = Vec2::new(left_stick.x, left_stick.y) * speed;
+        }
+
+        self.using_keyboard = false;
 
         self.vel *= 0.9;
         self.pos += self.vel * ctx.time.delta();
@@ -72,5 +81,6 @@ fn main() {
         .run(&mut Game {
             pos: Vec2::new(100, 100),
             vel: Vec2::zero(),
+            using_keyboard: false,
         });
 }
