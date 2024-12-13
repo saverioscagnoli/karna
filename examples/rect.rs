@@ -1,5 +1,5 @@
 use karna::{
-    input::{Button, Key},
+    input::Key,
     math::Vec2,
     render::Color,
     traits::{Draw, Load, Update},
