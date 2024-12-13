@@ -71,6 +71,7 @@ pub enum Easing {
     OutBounce,
     InOutBounce,
     Custom(fn(f32) -> f32),
+    CubicBezier(f32, f32, f32, f32),
 }
 
 impl Easing {
@@ -230,6 +231,13 @@ impl Easing {
                 }
             }
             Self::Custom(f) => f(t),
+
+            Self::CubicBezier(p0, p1, p2, p3) => {
+                p0 * (1.0 - t).powi(3)
+                    + 3.0 * p1 * t * (1.0 - t).powi(2)
+                    + 3.0 * p2 * t.powi(2) * (1.0 - t)
+                    + p3 * t.powi(3)
+            }
         }
     }
 
@@ -267,6 +275,9 @@ impl Easing {
             Self::OutBounce => "OutBounce".to_string(),
             Self::InOutBounce => "InOutBounce".to_string(),
             Self::Custom(_) => "Custom".to_string(),
+            Self::CubicBezier(p0, p1, p2, p3) => {
+                format!("CubicBezier({}, {}, {}, {})", p0, p1, p2, p3)
+            }
         }
     }
 
@@ -313,26 +324,40 @@ pub struct Tween<T: Interpolate + Clone> {
     duration: Duration,
     elapsed: f32,
     easing: Easing,
+    paused: bool,
 
     original_start: T,
 }
 
-impl<T: Interpolate + Clone> Tween<T> {
+impl<T: Interpolate + Copy> Tween<T> {
     pub fn new(start: T, end: T, duration: Duration, easing: Easing) -> Self {
-        let original_start = start.clone();
-
         Self {
             start,
             end,
             duration,
+            paused: true,
             elapsed: 0.0,
             easing,
-            original_start,
+            original_start: start,
         }
     }
 
+    pub fn paused(&self) -> bool {
+        self.paused
+    }
+
+    pub fn pause(&mut self) {
+        self.paused = true;
+    }
+
+    pub fn start(&mut self) {
+        self.paused = false;
+    }
+
     pub fn update(&mut self, dt: f32) -> T {
-        self.elapsed += dt;
+        if !self.paused {
+            self.elapsed += dt;
+        }
 
         let dur = self.duration.as_secs_f32();
 
@@ -356,18 +381,22 @@ impl<T: Interpolate + Clone> Tween<T> {
         self.easing
     }
 
+    pub fn target(&self) -> T {
+        self.end
+    }
+
     pub fn set_target(&mut self, target: T) {
         self.end = target;
     }
 
     pub fn reset(&mut self) {
         self.elapsed = 0.0;
-        self.start = self.original_start.clone();
+        self.start = self.original_start
     }
 
     pub fn reverse(&mut self) {
-        let temp = self.start.clone();
-        self.start = self.end.clone();
+        let temp = self.start;
+        self.start = self.end;
         self.end = temp;
         self.elapsed = 0.0;
     }

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use karna::{
+    input::Key,
     math::{pick, rng, Easing, Tween, Vec2},
     render::Color,
     traits::{Draw, Load, Update},
@@ -16,6 +17,7 @@ struct Game {
 impl Load for Game {
     fn load(&mut self, ctx: &mut Context) {
         ctx.window.set_resizable(true);
+        ctx.time.set_target_fps(144);
     }
 }
 
@@ -25,8 +27,8 @@ impl Update for Game {
 
         if self.tween.finished() {
             let size = ctx.window.size();
-            let x = rng(0, size.width);
-            let y = rng(0, size.height);
+            let x = rng(25..=size.width - 25);
+            let y = rng(25..=size.height - 25);
 
             let target = (x, y).into();
 
@@ -37,7 +39,17 @@ impl Update for Game {
                 *pick(&Easing::all()),
             );
 
+            self.tween.start();
+
             self.target = target;
+        }
+
+        if ctx.input.key_pressed(Key::Space) {
+            if self.tween.paused() {
+                self.tween.start();
+            } else {
+                self.tween.pause();
+            }
         }
     }
 
@@ -54,34 +66,42 @@ impl Draw for Game {
 
         ctx.render.set_color(Color::BLACK);
 
+        ctx.render
+            .fill_text(format!("FPS: {}", ctx.time.fps()), (10, 10), Color::WHITE);
+
         ctx.render.fill_text(
             format!("Current easing: {}", self.tween.easing().name()),
-            (10.0, 10.0),
+            (10, 30),
             Color::WHITE,
         );
+
         ctx.render.fill_text(
             format!(
                 "{:.1}s / {:.1}s",
                 self.tween.elapsed(),
                 self.tween.duration().as_secs_f32()
             ),
-            (10.0, 30.0),
+            (10, 50),
             Color::WHITE,
         );
     }
 }
 
 fn main() {
+    let mut initial_tween = Tween::new(
+        Vec2::zero(),
+        (500, 500).into(),
+        Duration::from_secs_f32(2.0),
+        Easing::CubicBezier(0.17, 0.67, 0.83, 0.67),
+    );
+
+    initial_tween.start();
+
     App::new("Tweeeeeeeeeeeeeeens", (800, 600))
         .unwrap()
         .run(&mut Game {
             pos: Vec2::zero(),
-            tween: Tween::new(
-                Vec2::zero(),
-                (500, 500).into(),
-                Duration::from_secs_f32(2.0),
-                Easing::InOutBack,
-            ),
+            tween: initial_tween,
             target: (500, 500).into(),
         });
 }
