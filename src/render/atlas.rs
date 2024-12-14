@@ -1,13 +1,16 @@
+use std::rc::Rc;
+
 use super::{font::Font, renderer::texture_creator};
+use hashbrown::HashMap;
 use sdl2::{
     pixels::{Color, PixelFormatEnum},
     render::{BlendMode, Texture},
     surface::Surface,
 };
-use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum TextureKind {
+    Image(Rc<str>),
     // (radius, start angle, end angle)
     Arc(u32, i32, i32),
     // (radius)
@@ -24,6 +27,7 @@ pub(crate) struct Atlas {
     pub(crate) fonts: HashMap<String, Font>,
     pub(crate) current_font: String,
 
+    pub(crate) images: HashMap<TextureKind, Texture<'static>>,
     pub(crate) arcs: HashMap<TextureKind, Texture<'static>>,
     pub(crate) circles: HashMap<TextureKind, Texture<'static>>,
     pub(crate) aa_circles: HashMap<TextureKind, Texture<'static>>,
@@ -46,6 +50,7 @@ impl Atlas {
         Self {
             fonts,
             current_font: "default".to_string(),
+            images: HashMap::new(),
             arcs: HashMap::new(),
             circles: HashMap::new(),
             aa_circles: HashMap::new(),
@@ -94,39 +99,47 @@ impl Atlas {
         font.char_cache.get_mut(&glyph)
     }
 
-    pub(crate) fn insert_texture(&mut self, kind: TextureKind, texture: Texture<'static>) {
+    pub(crate) fn insert_texture(&mut self, kind: &TextureKind, texture: Texture<'static>) {
         match kind {
+            TextureKind::Image(label) => {
+                self.images
+                    .insert(TextureKind::Image(label.clone()), texture);
+            }
             TextureKind::Arc(r, start, end) => {
-                self.arcs.insert(TextureKind::Arc(r, start, end), texture);
+                self.arcs
+                    .insert(TextureKind::Arc(*r, *start, *end), texture);
             }
             TextureKind::Circle(r) => {
-                self.circles.insert(TextureKind::Circle(r), texture);
+                self.circles.insert(TextureKind::Circle(*r), texture);
             }
             TextureKind::AACircle(r) => {
-                self.aa_circles.insert(TextureKind::AACircle(r), texture);
+                self.aa_circles.insert(TextureKind::AACircle(*r), texture);
             }
             TextureKind::FilledCircle(r) => {
                 self.filled_circles
-                    .insert(TextureKind::FilledCircle(r), texture);
+                    .insert(TextureKind::FilledCircle(*r), texture);
             }
             TextureKind::AAFilledCircle(r) => {
                 self.aa_filled_circles
-                    .insert(TextureKind::AAFilledCircle(r), texture);
+                    .insert(TextureKind::AAFilledCircle(*r), texture);
             }
         }
     }
 
-    pub(crate) fn get_texture(&mut self, kind: TextureKind) -> Option<&mut Texture<'static>> {
+    pub(crate) fn get_texture(&mut self, kind: &TextureKind) -> Option<&mut Texture<'static>> {
         match kind {
-            TextureKind::Arc(r, start, end) => self.arcs.get_mut(&TextureKind::Arc(r, start, end)),
-            TextureKind::Circle(r) => self.circles.get_mut(&TextureKind::Circle(r)),
-            TextureKind::AACircle(r) => self.aa_circles.get_mut(&TextureKind::AACircle(r)),
+            TextureKind::Image(path) => self.images.get_mut(&TextureKind::Image(path.clone())),
+            TextureKind::Arc(r, start, end) => {
+                self.arcs.get_mut(&TextureKind::Arc(*r, *start, *end))
+            }
+            TextureKind::Circle(r) => self.circles.get_mut(&TextureKind::Circle(*r)),
+            TextureKind::AACircle(r) => self.aa_circles.get_mut(&TextureKind::AACircle(*r)),
             TextureKind::FilledCircle(r) => {
-                self.filled_circles.get_mut(&TextureKind::FilledCircle(r))
+                self.filled_circles.get_mut(&TextureKind::FilledCircle(*r))
             }
             TextureKind::AAFilledCircle(r) => self
                 .aa_filled_circles
-                .get_mut(&TextureKind::AAFilledCircle(r)),
+                .get_mut(&TextureKind::AAFilledCircle(*r)),
         }
     }
 }

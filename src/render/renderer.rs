@@ -17,7 +17,7 @@ use sdl2::{
     surface::Surface,
     video::{Window, WindowContext},
 };
-use std::{collections::HashMap, ops::Deref, path::Path, sync::OnceLock};
+use std::{ops::Deref, path::Path, sync::OnceLock};
 
 struct TextureCreatorWrapper(TextureCreator<WindowContext>);
 
@@ -40,7 +40,6 @@ pub(crate) fn texture_creator() -> &'static TextureCreator<WindowContext> {
 
 pub struct Renderer {
     pub(crate) canvas: Canvas<Window>,
-    pub(crate) images: HashMap<String, Texture<'static>>,
     pub(crate) atlas: Atlas,
 }
 
@@ -55,11 +54,7 @@ impl Renderer {
 
         let atlas = Atlas::new();
 
-        Self {
-            canvas,
-            images: HashMap::new(),
-            atlas,
-        }
+        Self { canvas, atlas }
     }
 
     pub fn load_font<L: ToString, P: AsRef<Path>>(&mut self, label: L, path: P, size: f32) {
@@ -73,6 +68,7 @@ impl Renderer {
     }
 
     pub fn load_image<L: ToString, P: AsRef<Path>>(&mut self, label: L, path: P) {
+        let label = label.to_string();
         let surface = Surface::from_file(path);
 
         let mut texture = texture_creator()
@@ -81,7 +77,8 @@ impl Renderer {
 
         texture.set_blend_mode(sdl2::render::BlendMode::Blend);
 
-        self.images.insert(label.to_string(), texture);
+        self.atlas
+            .insert_texture(&TextureKind::Image(label.into()), texture);
     }
 
     pub fn set_font<L: ToString>(&mut self, label: L) {
@@ -209,13 +206,13 @@ impl Renderer {
         let kind = TextureKind::Arc(radius, start_angle as i32, end_angle as i32);
 
         let texture = {
-            if let Some(texture) = self.atlas.get_texture(kind) {
+            if let Some(texture) = self.atlas.get_texture(&kind) {
                 texture
             } else {
                 let texture = Texture::arc(texture_creator(), radius, start_angle, end_angle);
 
-                self.atlas.insert_texture(kind, texture);
-                self.atlas.get_texture(kind).unwrap()
+                self.atlas.insert_texture(&kind, texture);
+                self.atlas.get_texture(&kind).unwrap()
             }
         };
 
@@ -240,13 +237,13 @@ impl Renderer {
         let kind = TextureKind::Circle(radius);
 
         let texture = {
-            if let Some(texture) = self.atlas.get_texture(kind) {
+            if let Some(texture) = self.atlas.get_texture(&kind) {
                 texture
             } else {
                 let texture = Texture::circle_outline(texture_creator(), radius);
 
-                self.atlas.insert_texture(kind, texture);
-                self.atlas.get_texture(kind).unwrap()
+                self.atlas.insert_texture(&kind, texture);
+                self.atlas.get_texture(&kind).unwrap()
             }
         };
 
@@ -271,12 +268,12 @@ impl Renderer {
         let kind = TextureKind::AACircle(radius);
 
         let texture = {
-            if let Some(texture) = self.atlas.get_texture(kind) {
+            if let Some(texture) = self.atlas.get_texture(&kind) {
                 texture
             } else {
                 let texture = Texture::aa_circle_outline(texture_creator(), radius);
-                self.atlas.insert_texture(kind, texture);
-                self.atlas.get_texture(kind).unwrap()
+                self.atlas.insert_texture(&kind, texture);
+                self.atlas.get_texture(&kind).unwrap()
             }
         };
 
@@ -301,13 +298,13 @@ impl Renderer {
         let kind = TextureKind::FilledCircle(radius);
 
         let texture = {
-            if let Some(texture) = self.atlas.get_texture(kind) {
+            if let Some(texture) = self.atlas.get_texture(&kind) {
                 texture
             } else {
                 let texture = Texture::circle_fill(texture_creator(), radius);
 
-                self.atlas.insert_texture(kind, texture);
-                self.atlas.get_texture(kind).unwrap()
+                self.atlas.insert_texture(&kind, texture);
+                self.atlas.get_texture(&kind).unwrap()
             }
         };
 
@@ -331,13 +328,13 @@ impl Renderer {
 
         let kind = TextureKind::AAFilledCircle(radius);
 
-        let texture = if let Some(texture) = self.atlas.get_texture(kind) {
+        let texture = if let Some(texture) = self.atlas.get_texture(&kind) {
             texture
         } else {
             let texture = Texture::aa_circle_fill(texture_creator(), radius);
 
-            self.atlas.insert_texture(kind, texture);
-            self.atlas.get_texture(kind).unwrap()
+            self.atlas.insert_texture(&kind, texture);
+            self.atlas.get_texture(&kind).unwrap()
         };
 
         texture.set_color_mod(color.r, color.g, color.b);
@@ -356,7 +353,9 @@ impl Renderer {
         let label = label.to_string();
         let pos: Vec2 = pos.into();
 
-        if let Some(texture) = self.images.get(&label) {
+        let kind = TextureKind::Image(label.into());
+
+        if let Some(texture) = self.atlas.get_texture(&kind) {
             let query = texture.query();
             let dest = FRect::new(pos.x, pos.y, query.width as f32, query.height as f32);
 

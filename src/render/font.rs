@@ -1,6 +1,7 @@
 use fontdue::layout::{CoordinateSystem, Layout};
+use hashbrown::HashMap;
 use sdl2::render::Texture;
-use std::{collections::HashMap, ops::Deref, rc::Rc};
+use std::{ops::Deref, rc::Rc};
 
 pub(crate) struct Font {
     // Need to make it an rc because when we pass it to the layout,
