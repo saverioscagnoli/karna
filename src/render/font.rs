@@ -13,7 +13,7 @@ pub(crate) struct Font {
 }
 
 impl Font {
-    pub fn new(fontdue_font: fontdue::Font, size: f32) -> Self {
+    pub(crate) fn new(fontdue_font: fontdue::Font, size: f32) -> Self {
         Self {
             inner: Rc::new(fontdue_font),
             size,

@@ -19,6 +19,12 @@ use sdl2::{
 };
 use std::{ops::Deref, path::Path, sync::OnceLock};
 
+/// Little bit of a hack to get around the lifetime issues with the texture creator
+/// This is a wrapper that impements Send and Sync, so we can store it as a static
+/// OnceLock, so all the textures created with it can be stored as 'static.
+///
+/// Safe as long as the texture creator is only used in the main thread,
+/// but the compiler doesnt allow it, we're so gucci
 struct TextureCreatorWrapper(TextureCreator<WindowContext>);
 
 impl Deref for TextureCreatorWrapper {
@@ -29,21 +35,36 @@ impl Deref for TextureCreatorWrapper {
     }
 }
 
+/// :3
 unsafe impl Send for TextureCreatorWrapper {}
 unsafe impl Sync for TextureCreatorWrapper {}
 
+/// Static texture creator
+/// All textures created with it are 'static
 static TEXTURE_CREATOR: OnceLock<TextureCreatorWrapper> = OnceLock::new();
 
+/// Helper function so we dont have to unwrap the texture creator every time
 pub(crate) fn texture_creator() -> &'static TextureCreator<WindowContext> {
     &TEXTURE_CREATOR.get().unwrap()
 }
 
+/// Renderer
+///
+/// The renderer is the main struct that you will interact with to draw things on the screen.
+/// It has methods to draw pixels, lines, rectangles, circles, images and text.
+///
+/// All the textures are stored in the atlas, so they can be cached and reused,
+/// saving cpu and gpu time.
 pub struct Renderer {
+    /// Internal sdl2 canvas
     pub(crate) canvas: Canvas<Window>,
+    /// Texture atlas
     pub(crate) atlas: Atlas,
 }
 
 impl Renderer {
+    /// Creates a new renderer
+    /// Only one renderer is allowed per window
     pub(crate) fn new(canvas: Canvas<Window>) -> Self {
         let tc = canvas.texture_creator();
 
@@ -57,6 +78,8 @@ impl Renderer {
         Self { canvas, atlas }
     }
 
+    /// Loads a font from a .ttf file.
+    /// The font is stored in the atlas with the given label.
     pub fn load_font<L: ToString, P: AsRef<Path>>(&mut self, label: L, path: P, size: f32) {
         let label = label.to_string();
 
@@ -67,6 +90,8 @@ impl Renderer {
         self.atlas.fonts.insert(label, Font::new(font, size));
     }
 
+    /// Loads an image from a file.
+    /// The image is stored in the atlas with the given label.
     pub fn load_image<L: ToString, P: AsRef<Path>>(&mut self, label: L, path: P) {
         let label = label.to_string();
         let surface = Surface::from_file(path);
@@ -81,30 +106,39 @@ impl Renderer {
             .insert_texture(&TextureKind::Image(label.into()), texture);
     }
 
+    /// Sets the current font to be used when drawing text.
     pub fn set_font<L: ToString>(&mut self, label: L) {
         self.atlas.current_font = label.to_string();
     }
 
+    /// Clears everything on the screen
     pub fn clear(&mut self) {
         self.canvas.clear();
     }
 
+    /// Internal function to say that we're finished drawing for this frame
     pub(crate) fn present(&mut self) {
         self.canvas.present();
     }
 
+    /// Returns the current drawing color
     pub fn color(&mut self) -> Color {
         self.canvas.draw_color()
     }
 
+    /// Sets the drawing color
+    /// Everything drawn after this will be in this color
     pub fn set_color(&mut self, color: Color) {
         self.canvas.set_draw_color(color);
     }
 
+    /// Draws a pixel at the given position
     pub fn draw_pixel<P: Into<Vec2>>(&mut self, pos: P) {
         self.canvas.draw_fpoint(FPoint::from(pos.into())).unwrap();
     }
 
+    /// Draws multiple pixels at the given positions
+    /// Saves time by batching the draw calls
     pub fn draw_pixels<P: Into<Vec2>, I: IntoIterator<Item = P>>(&mut self, pixels: I) {
         let pixels = pixels
             .into_iter()
@@ -114,12 +148,16 @@ impl Renderer {
         self.canvas.draw_fpoints(&*pixels).unwrap();
     }
 
+    /// Draws a line from start to end
     pub fn draw_line<P: Into<Vec2>, Q: Into<Vec2>>(&mut self, start: P, end: Q) {
         self.canvas
             .draw_fline(FPoint::from(start.into()), FPoint::from(end.into()))
             .unwrap();
     }
 
+    /// Draws multiple lines
+    /// They are all connected, so the first point of the next line is the last point of the previous line
+    /// Saves time by batching the draw calls
     pub fn draw_lines<P: Into<Vec2>, I: IntoIterator<Item = P>>(&mut self, lines: I) {
         let lines = lines
             .into_iter()
@@ -129,6 +167,7 @@ impl Renderer {
         self.canvas.draw_flines(&*lines).unwrap();
     }
 
+    /// Draws the outline of a rectangle
     pub fn draw_rect<P: Into<Vec2>, S: Into<Size>>(&mut self, pos: P, size: S) {
         let pos: Vec2 = pos.into();
         let size: Size = size.into();
@@ -143,6 +182,8 @@ impl Renderer {
             .unwrap();
     }
 
+    /// Draws multiple rectangles
+    /// Saves time by batching the draw calls
     pub fn draw_rects<P: Into<Vec2>, S: Into<Size>, I: IntoIterator<Item = (P, S)>>(
         &mut self,
         rects: I,
@@ -160,6 +201,7 @@ impl Renderer {
         self.canvas.draw_frects(&rects).unwrap();
     }
 
+    /// Draws a filled rectangle
     pub fn fill_rect<P: Into<Vec2>, S: Into<Size>>(&mut self, pos: P, size: S) {
         let pos: Vec2 = pos.into();
         let size: Size = size.into();
@@ -174,6 +216,8 @@ impl Renderer {
             .unwrap();
     }
 
+    /// Draws multiple filled rectangles
+    /// Saves time by batching the draw calls
     pub fn fill_rects<P: Into<Vec2>, S: Into<Size>, I: IntoIterator<Item = (P, S)>>(
         &mut self,
         rects: I,
@@ -191,6 +235,8 @@ impl Renderer {
         self.canvas.fill_frects(&rects).unwrap();
     }
 
+    /// Draws an arc
+    /// The arc is drawn from start_angle to end_angle
     pub fn draw_arc<P: Into<Vec2>, U: ToU32>(
         &mut self,
         center: P,
@@ -228,6 +274,7 @@ impl Renderer {
         self.canvas.copy_f(texture, None, dst).unwrap();
     }
 
+    /// Draws a pixelated circle outline
     pub fn draw_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
         let center = center.into();
         let radius = radius.to_u32();
@@ -259,6 +306,7 @@ impl Renderer {
         self.canvas.copy_f(texture, None, dst).unwrap();
     }
 
+    /// Draws an anti-aliased (smooth) circle outline
     pub fn draw_aa_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
         let center = center.into();
         let radius = radius.to_u32();
@@ -289,6 +337,7 @@ impl Renderer {
         self.canvas.copy_f(texture, None, dst).unwrap();
     }
 
+    /// Draws a filled pixelated circle
     pub fn fill_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
         let center = center.into();
         let radius = radius.to_u32();
@@ -320,6 +369,7 @@ impl Renderer {
         self.canvas.copy_f(texture, None, dst).unwrap();
     }
 
+    /// Draws a filled anti-aliased (smooth) circle
     pub fn fill_aa_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
         let center: Vec2 = center.into();
         let radius: u32 = radius.to_u32();
@@ -349,6 +399,10 @@ impl Renderer {
         self.canvas.copy_f(texture, None, dst).unwrap();
     }
 
+    /// Draws an image at the given position
+    /// The label is the name of the image that was loaded with `load_image`
+    ///
+    /// If not found, it does nothing
     pub fn draw_image<L: ToString, P: Into<Vec2>>(&mut self, label: L, pos: P) {
         let label = label.to_string();
         let pos: Vec2 = pos.into();
@@ -363,6 +417,7 @@ impl Renderer {
         }
     }
 
+    /// Draws text at the given position
     pub fn fill_text<T: ToString, P: Into<Vec2>>(&mut self, text: T, pos: P, color: Color) {
         let text = text.to_string();
 
@@ -415,6 +470,7 @@ impl Renderer {
         }
     }
 
+    /// Returns the size of the given text
     pub fn text_size<T: ToString>(&mut self, text: T) -> Size {
         let text = text.to_string();
 

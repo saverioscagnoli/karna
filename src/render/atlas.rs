@@ -23,6 +23,13 @@ pub(crate) enum TextureKind {
     AAFilledCircle(u32),
 }
 
+/// Atlas is a struct that holds all the textures and fonts used in the game.
+/// It is used to store the textures and fonts as 'static, so they can be used
+/// in the renderer, avoiding to load them every frame.
+///
+/// All the textures are stored as white, and colored in the renderer, with the
+/// `set_color_mod` method, so that we dont have to store the same texture with
+/// different colors.
 pub(crate) struct Atlas {
     pub(crate) fonts: HashMap<String, Font>,
     pub(crate) current_font: String,
@@ -36,7 +43,7 @@ pub(crate) struct Atlas {
 }
 
 impl Atlas {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let font = fontdue::Font::from_bytes(
             include_bytes!("../../examples/assets/font.ttf") as &[u8],
             Default::default(),
@@ -59,7 +66,7 @@ impl Atlas {
         }
     }
 
-    pub fn insert_glyph(&mut self, glyph: char) {
+    pub(crate) fn insert_glyph(&mut self, glyph: char) {
         let font = self.fonts.get_mut(&self.current_font).unwrap();
 
         let (metrics, bitmap) = font.rasterize(glyph, font.size as f32);
