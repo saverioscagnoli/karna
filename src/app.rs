@@ -10,6 +10,23 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// App flow:
+///
+/// 1. App::new gets called with a title and a size
+/// 2. Context is created
+///   - Sdl is initialized
+///   - Video subsystem is initialized
+///   - Window is created
+///   - Renderer is created
+///       - Set the oncelock with the texture creator, to store textures as 'static
+///       - Texture atlas is created and stored in the renderer
+///   - Time helper is created
+///   - Input helper is created
+///   - Audio helper is created
+/// 3. App::run is called by the user
+///   - Game loop starts
+///   - Listens for events
+
 pub struct App {
     ctx: Context,
 }

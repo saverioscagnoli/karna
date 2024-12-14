@@ -1,10 +1,30 @@
-use super::Vec2;
+use sdl2::pixels::Color;
 
+use super::Vec2;
 use std::{
     ops::{Add, Mul, Sub},
     time::Duration,
 };
 
+/// Linearly interpolates between two values.
+/// Useful for creating smooth transitions between values.
+///
+/// The type `T` must implement the `Add`, `Sub` and `Mul<f32>` traits.
+/// basically it must be a type that can be added, subtracted and multiplied by a float.
+/// Works with numbers, vectors, colors, etc.
+///
+/// # Examples
+///
+/// ```no_run
+/// use karna::math::lerp;
+///
+/// let a = 0.0;
+/// let b = 10.0;
+///
+/// let result = lerp(a, b, 0.5);
+///
+/// assert_eq!(result, 5.0);
+/// ```
 pub fn lerp<T>(a: T, b: T, t: f32) -> T
 where
     T: Add<Output = T> + Sub<Output = T> + Mul<f32, Output = T> + Copy,
@@ -12,6 +32,9 @@ where
     a + (b - a) * t
 }
 
+/// A trait that allows a type to be interpolated between two values.
+/// This is useful for creating smooth transitions between values.
+/// Must be implemented to create a Tween.
 pub trait Interpolate {
     fn interpolate(&self, other: &Self, t: f32) -> Self;
 }
@@ -37,6 +60,23 @@ impl Interpolate for Vec2 {
     }
 }
 
+impl Interpolate for Color {
+    fn interpolate(&self, other: &Self, t: f32) -> Self {
+        Color {
+            r: lerp(self.r as f32, other.r as f32, t).clamp(0.0, 255.0) as u8,
+            g: lerp(self.g as f32, other.g as f32, t).clamp(0.0, 255.0) as u8,
+            b: lerp(self.b as f32, other.b as f32, t).clamp(0.0, 255.0) as u8,
+            a: lerp(self.a as f32, other.a as f32, t).clamp(0.0, 255.0) as u8,
+        }
+    }
+}
+
+/// A list of easing functions that can be used to interpolate values.
+/// Basically a function that takes a value between 0.0 and 1.0 and returns
+/// a value following the easing function's curve.
+///
+/// # References
+/// - [Easing functions](https://easings.net/)
 #[derive(Clone, Copy)]
 pub enum Easing {
     Linear,
@@ -318,44 +358,79 @@ impl Easing {
     }
 }
 
-pub struct Tween<T: Interpolate + Clone> {
+/// A structs that takes in a value and interpolates it
+/// to another value over a certain duration.
+/// This means that you can change a value from one to another
+/// while respecting a certain easing function.
+///
+/// This is very useful for animations and transitions,
+/// like the opening of a menu, or the rotation of a sprite.
+pub struct Tween<T: Interpolate + Copy> {
+    /// The value at the start of the tween
     start: T,
+    /// The target value, meaning the start value will interpolate to this value
     end: T,
+    /// The duration of the tween
     duration: Duration,
+    /// The time elapsed since the tween started
     elapsed: f32,
+    /// The easing function to use
     easing: Easing,
-    paused: bool,
+    /// Internal flag to know if the tween is running or not
+    running: bool,
 
+    /// A value needed to reset / reverse the tween
     original_start: T,
 }
 
 impl<T: Interpolate + Copy> Tween<T> {
+    /// Creates a new tween with the given start and end values.
+    /// It will not start automatically, you need to call `start` to start it.
     pub fn new(start: T, end: T, duration: Duration, easing: Easing) -> Self {
         Self {
             start,
             end,
             duration,
-            paused: true,
+            running: false,
             elapsed: 0.0,
             easing,
             original_start: start,
         }
     }
 
+    /// Creates a new tween with the given start and end values.
+    /// It will start automatically.
+    pub fn new_and_start(start: T, end: T, duration: Duration, easing: Easing) -> Self {
+        Self {
+            start,
+            end,
+            duration,
+            running: true,
+            elapsed: 0.0,
+            easing,
+            original_start: start,
+        }
+    }
+
+    /// Returns true if the tween is running, false otherwise.
     pub fn paused(&self) -> bool {
-        self.paused
+        !self.running
     }
 
+    /// Pauses the tween.
     pub fn pause(&mut self) {
-        self.paused = true;
+        self.running = false;
     }
 
+    /// Starts / resumes the tween.
     pub fn start(&mut self) {
-        self.paused = false;
+        self.running = true;
     }
 
+    /// A function that returns the value of the tween at the current time.
+    /// This function should be called every frame to update the tween.
     pub fn update(&mut self, dt: f32) -> T {
-        if !self.paused {
+        if self.running {
             self.elapsed += dt;
         }
 
@@ -369,38 +444,67 @@ impl<T: Interpolate + Copy> Tween<T> {
             .interpolate(&self.end, self.easing.apply(self.elapsed / dur))
     }
 
+    /// Returns the duration of the tween.
     pub fn duration(&self) -> Duration {
         self.duration
     }
 
+    /// Returns the time elapsed since the tween started.
     pub fn elapsed(&self) -> f32 {
         self.elapsed
     }
 
+    /// Returns the easing function of the tween.
     pub fn easing(&self) -> Easing {
         self.easing
     }
 
+    /// Returns the end value of the tween.
     pub fn target(&self) -> T {
         self.end
     }
 
+    /// Sets the end value of the tween.
+    /// Useful for changing the target value while running.
     pub fn set_target(&mut self, target: T) {
         self.end = target;
     }
 
+    /// Resets the tween to its original state.
+    /// Does not start the tween.
     pub fn reset(&mut self) {
         self.elapsed = 0.0;
-        self.start = self.original_start
+        self.start = self.original_start;
+        self.pause();
     }
 
+    /// Resets the tween to its original state and starts it.
+    pub fn restart(&mut self) {
+        self.elapsed = 0.0;
+        self.start = self.original_start;
+        self.start();
+    }
+
+    /// Reverses the tween.
+    /// Does not start the tween.
     pub fn reverse(&mut self) {
         let temp = self.start;
         self.start = self.end;
         self.end = temp;
         self.elapsed = 0.0;
+        self.pause();
     }
 
+    /// Reverse the tween and starts it.
+    pub fn reverse_and_start(&mut self) {
+        let temp = self.start;
+        self.start = self.end;
+        self.end = temp;
+        self.elapsed = 0.0;
+        self.start();
+    }
+
+    /// Returns true if the tween is finished, false otherwise.
     pub fn finished(&self) -> bool {
         self.elapsed >= self.duration.as_secs_f32()
     }

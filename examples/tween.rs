@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use karna::{
     input::Key,
     math::{pick, rng, Easing, Tween, Vec2},
@@ -7,6 +5,7 @@ use karna::{
     traits::{Draw, Load, Update},
     App, Context,
 };
+use std::time::Duration;
 
 struct Game {
     pos: Vec2,
@@ -17,7 +16,6 @@ struct Game {
 impl Load for Game {
     fn load(&mut self, ctx: &mut Context) {
         ctx.window.set_resizable(true);
-        ctx.time.set_target_fps(144);
     }
 }
 
@@ -32,14 +30,12 @@ impl Update for Game {
 
             let target = (x, y).into();
 
-            self.tween = Tween::new(
+            self.tween = Tween::new_and_start(
                 self.pos,
                 target,
                 Duration::from_secs(2),
                 *pick(&Easing::all()),
             );
-
-            self.tween.start();
 
             self.target = target;
         }
@@ -88,20 +84,16 @@ impl Draw for Game {
 }
 
 fn main() {
-    let mut initial_tween = Tween::new(
-        Vec2::zero(),
-        (500, 500).into(),
-        Duration::from_secs_f32(2.0),
-        Easing::CubicBezier(0.17, 0.67, 0.83, 0.67),
-    );
-
-    initial_tween.start();
-
     App::new("Tweeeeeeeeeeeeeeens", (800, 600))
         .unwrap()
         .run(&mut Game {
             pos: Vec2::zero(),
-            tween: initial_tween,
+            tween: Tween::new_and_start(
+                Vec2::zero(),
+                (500, 500).into(),
+                Duration::from_secs_f32(2.0),
+                Easing::CubicBezier(0.17, 0.67, 0.83, 0.67),
+            ),
             target: (500, 500).into(),
         });
 }

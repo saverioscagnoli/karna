@@ -40,6 +40,7 @@ impl Context {
 
         let canvas = window_clone
             .into_canvas()
+            .accelerated()
             .build()
             .map_err(|e| e.to_string())?;
 

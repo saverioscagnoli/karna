@@ -1,6 +1,5 @@
-use std::{collections::HashMap, io::Cursor, path::Path};
-
 use rodio::{source::Buffered, Decoder, OutputStream, OutputStreamHandle, Source};
+use std::{collections::HashMap, io::Cursor, path::Path};
 
 pub struct Audio {
     _stream: OutputStream,
