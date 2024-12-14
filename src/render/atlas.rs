@@ -45,7 +45,7 @@ pub(crate) struct Atlas {
 impl Atlas {
     pub(crate) fn new() -> Self {
         let font = fontdue::Font::from_bytes(
-            include_bytes!("../../examples/assets/font.ttf") as &[u8],
+            include_bytes!("../../assets/default.ttf") as &[u8],
             Default::default(),
         )
         .unwrap();
