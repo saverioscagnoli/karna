@@ -38,6 +38,10 @@ impl Window {
         self.0.set_title(title.to_string().as_str()).unwrap();
     }
 
+    pub fn set_resizable(&mut self, val: bool) {
+        self.0.set_resizable(val);
+    }
+
     pub fn position(&self) -> Vec2 {
         self.0.position().into()
     }

@@ -1,10 +1,12 @@
+mod interpolation;
 mod random;
 mod size;
 mod vec2;
 
 pub(crate) mod circles;
 
-pub use random::{coin_flip, pick, rng};
+pub use interpolation::{Easing, Interpolate, Tween};
+pub use random::{coin_flip, pick, pick_mut, rng};
 pub use size::Size;
 pub use vec2::Vec2;
 
