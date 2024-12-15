@@ -13,6 +13,12 @@ pub(crate) enum TextureKind {
     Image(Rc<str>),
     // (radius, start angle, end angle)
     Arc(u32, i32, i32),
+    // (radius, start angle, end angle)
+    AAArc(u32, i32, i32),
+    // (radius, start angle, end angle)
+    FilledArc(u32, i32, i32),
+    // (radius, start angle, end angle)
+    AAFilledArc(u32, i32, i32),
     // (radius)
     Circle(u32),
     // (radius)
@@ -116,6 +122,18 @@ impl Atlas {
                 self.arcs
                     .insert(TextureKind::Arc(*r, *start, *end), texture);
             }
+            TextureKind::AAArc(r, start, end) => {
+                self.arcs
+                    .insert(TextureKind::AAArc(*r, *start, *end), texture);
+            }
+            TextureKind::FilledArc(r, start, end) => {
+                self.arcs
+                    .insert(TextureKind::FilledArc(*r, *start, *end), texture);
+            }
+            TextureKind::AAFilledArc(r, start, end) => {
+                self.arcs
+                    .insert(TextureKind::AAFilledArc(*r, *start, *end), texture);
+            }
             TextureKind::Circle(r) => {
                 self.circles.insert(TextureKind::Circle(*r), texture);
             }
@@ -139,6 +157,15 @@ impl Atlas {
             TextureKind::Arc(r, start, end) => {
                 self.arcs.get_mut(&TextureKind::Arc(*r, *start, *end))
             }
+            TextureKind::AAArc(r, start, end) => {
+                self.arcs.get_mut(&TextureKind::AAArc(*r, *start, *end))
+            }
+            TextureKind::FilledArc(r, start, end) => {
+                self.arcs.get_mut(&TextureKind::FilledArc(*r, *start, *end))
+            }
+            TextureKind::AAFilledArc(r, start, end) => self
+                .arcs
+                .get_mut(&TextureKind::AAFilledArc(*r, *start, *end)),
             TextureKind::Circle(r) => self.circles.get_mut(&TextureKind::Circle(*r)),
             TextureKind::AACircle(r) => self.aa_circles.get_mut(&TextureKind::AACircle(*r)),
             TextureKind::FilledCircle(r) => {

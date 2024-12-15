@@ -12,6 +12,13 @@ pub(crate) trait CircleOutline<'a> {
         end_angle: f32,
     ) -> Texture<'a>;
 
+    fn aa_arc(
+        texture_creator: &'a TextureCreator<WindowContext>,
+        radius: u32,
+        start_angle: f32,
+        end_angle: f32,
+    ) -> Texture<'a>;
+
     fn circle_outline(
         texture_creator: &'a TextureCreator<WindowContext>,
         radius: u32,
@@ -84,6 +91,55 @@ impl<'a> CircleOutline<'a> for Texture<'a> {
                     if t2 >= 0 {
                         t1 = t2;
                         x -= 1;
+                    }
+                }
+            })
+            .unwrap();
+
+        texture
+    }
+
+    fn aa_arc(
+        texture_creator: &'a TextureCreator<WindowContext>,
+        radius: u32,
+        start_angle: f32,
+        end_angle: f32,
+    ) -> Texture<'a> {
+        let d = radius * 2;
+        let mut texture = texture_creator
+            .create_texture_streaming(PixelFormatEnum::RGBA32, d + 1, d + 1)
+            .unwrap();
+
+        texture.set_blend_mode(BlendMode::Blend);
+
+        texture
+            .with_lock(None, |buffer, pitch| {
+                let center = radius as f32;
+                let start_angle = start_angle.to_radians();
+                let end_angle = end_angle.to_radians();
+
+                for y in 0..=d {
+                    for x in 0..=d {
+                        let dx = x as f32 - center;
+                        let dy = y as f32 - center;
+                        let angle = dy.atan2(dx);
+                        let normalized_angle = if angle < 0.0 {
+                            angle + 2.0 * std::f32::consts::PI
+                        } else {
+                            angle
+                        };
+
+                        let distance = (dx * dx + dy * dy).sqrt();
+                        let coverage = 1.0 - (distance - radius as f32).abs().min(1.0);
+
+                        if normalized_angle >= start_angle
+                            && normalized_angle <= end_angle
+                            && coverage > 0.0
+                        {
+                            let alpha = (255.0 * coverage) as u8;
+                            let color = Color::RGBA(255, 255, 255, alpha);
+                            set_pixel(buffer, pitch, x as i32, y as i32, color);
+                        }
                     }
                 }
             })
@@ -174,6 +230,20 @@ impl<'a> CircleOutline<'a> for Texture<'a> {
 }
 
 pub(crate) trait CircleFill<'a> {
+    fn arc_fill(
+        texture_creator: &'a TextureCreator<WindowContext>,
+        radius: u32,
+        start_angle: f32,
+        end_angle: f32,
+    ) -> Texture<'a>;
+
+    fn aa_arc_fill(
+        texture_creator: &'a TextureCreator<WindowContext>,
+        radius: u32,
+        start_angle: f32,
+        end_angle: f32,
+    ) -> Texture<'a>;
+
     fn circle_fill(texture_creator: &'a TextureCreator<WindowContext>, radius: u32) -> Texture<'a>;
 
     fn aa_circle_fill(
@@ -183,6 +253,109 @@ pub(crate) trait CircleFill<'a> {
 }
 
 impl<'a> CircleFill<'a> for Texture<'a> {
+    fn arc_fill(
+        texture_creator: &'a TextureCreator<WindowContext>,
+        radius: u32,
+        start_angle: f32,
+        end_angle: f32,
+    ) -> Texture<'a> {
+        let d = radius * 2;
+        let mut texture = texture_creator
+            .create_texture_streaming(PixelFormatEnum::RGBA32, d + 1, d + 1)
+            .unwrap();
+
+        texture.set_blend_mode(BlendMode::Blend);
+
+        texture
+            .with_lock(None, |buffer, pitch| {
+                let center = radius as f32;
+                let start_angle = start_angle.to_radians();
+                let end_angle = end_angle.to_radians();
+
+                for y in 0..=d {
+                    for x in 0..=d {
+                        let dx = x as f32 - center;
+                        let dy = y as f32 - center;
+                        let angle = dy.atan2(dx);
+                        let normalized_angle = if angle < 0.0 {
+                            angle + 2.0 * std::f32::consts::PI
+                        } else {
+                            angle
+                        };
+
+                        let distance = (dx * dx + dy * dy).sqrt();
+
+                        if normalized_angle >= start_angle
+                            && normalized_angle <= end_angle
+                            && distance <= radius as f32
+                        {
+                            let alpha = 255;
+                            let color = Color::RGBA(255, 255, 255, alpha);
+                            set_pixel(buffer, pitch, x as i32, y as i32, color);
+                        }
+                    }
+                }
+            })
+            .unwrap();
+
+        texture
+    }
+
+    fn aa_arc_fill(
+        texture_creator: &'a TextureCreator<WindowContext>,
+        radius: u32,
+        start_angle: f32,
+        end_angle: f32,
+    ) -> Texture<'a> {
+        let d = radius * 2;
+        let mut texture = texture_creator
+            .create_texture_streaming(PixelFormatEnum::RGBA32, d + 1, d + 1)
+            .unwrap();
+
+        texture.set_blend_mode(BlendMode::Blend);
+
+        texture
+            .with_lock(None, |buffer, pitch| {
+                let center = radius as f32;
+                let start_angle = start_angle.to_radians();
+                let end_angle = end_angle.to_radians();
+
+                for y in 0..=d {
+                    for x in 0..=d {
+                        let dx = x as f32 - center;
+                        let dy = y as f32 - center;
+                        let angle = dy.atan2(dx);
+                        let normalized_angle = if angle < 0.0 {
+                            angle + 2.0 * std::f32::consts::PI
+                        } else {
+                            angle
+                        };
+
+                        let distance = (dx * dx + dy * dy).sqrt();
+                        let coverage = 1.0 - (distance - radius as f32).abs().min(1.0);
+
+                        if normalized_angle >= start_angle && normalized_angle <= end_angle {
+                            // Fill interior pixels with full alpha
+                            if distance <= radius as f32 {
+                                let alpha = 255; // Fully opaque
+                                let color = Color::RGBA(255, 255, 255, alpha);
+                                set_pixel(buffer, pitch, x as i32, y as i32, color);
+                            }
+                            // Anti-alias edge pixels
+                            else if coverage > 0.0 {
+                                let alpha = (255.0 * coverage) as u8;
+                                let color = Color::RGBA(255, 255, 255, alpha);
+                                set_pixel(buffer, pitch, x as i32, y as i32, color);
+                            }
+                        }
+                    }
+                }
+            })
+            .unwrap();
+
+        texture
+    }
+
     fn circle_fill(texture_creator: &'a TextureCreator<WindowContext>, radius: u32) -> Texture<'a> {
         let d = radius * 2;
         let color = Color::WHITE;
