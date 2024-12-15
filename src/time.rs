@@ -4,6 +4,7 @@ pub struct Time {
     pub(crate) render_step: f32,
 
     pub(crate) fps: u32,
+    pub(crate) tps: u32,
 }
 
 impl Time {
@@ -13,6 +14,7 @@ impl Time {
             tick_step: 1.0 / 60.0,
             render_step: 1.0 / 60.0,
             fps: 0,
+            tps: 0,
         }
     }
 
@@ -31,5 +33,9 @@ impl Time {
 
     pub fn fps(&self) -> u32 {
         self.fps
+    }
+
+    pub fn tps(&self) -> u32 {
+        self.tps
     }
 }

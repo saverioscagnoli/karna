@@ -97,6 +97,7 @@ impl Update for Game {
 impl Draw for Game {
     fn draw(&mut self, ctx: &mut Context) {
         ctx.render.fill_text(ctx.time.fps(), (10, 10), Color::WHITE);
+        ctx.render.fill_text(ctx.time.tps(), (10, 30), Color::WHITE);
 
         for (c, x, y) in &self.chars_to_draw {
             ctx.render.fill_text(c, (*x, *y), self.color);

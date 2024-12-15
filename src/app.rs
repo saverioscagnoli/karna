@@ -54,6 +54,7 @@ impl App {
         let mut acc = 0.0;
 
         let mut times = VecDeque::new();
+        let mut ticks = VecDeque::new();
 
         while self.ctx.running {
             let t1 = Instant::now();
@@ -64,31 +65,36 @@ impl App {
 
             self.ctx.time.delta = dt;
 
-            while times.len() > 0 && times[0] <= t1 - ONE_SEC {
-                times.pop_front();
-            }
-
             times.push_back(t1);
-
-            self.ctx.time.fps = times.len() as u32;
 
             self.handle_events(&mut event_pump);
 
             while acc >= self.ctx.time.tick_step {
                 state.fixed_update(&mut self.ctx);
+
+                ticks.push_back(Instant::now());
+
                 acc -= self.ctx.time.tick_step;
+            }
+
+            while times.len() > 0 && times[0] <= t1 - ONE_SEC {
+                times.pop_front();
+            }
+
+            while ticks.len() > 0 && ticks[0] <= t1 - ONE_SEC {
+                ticks.pop_front();
             }
 
             state.update(&mut self.ctx);
 
             self.ctx.render.clear();
             state.draw(&mut self.ctx);
-
-            self.ctx.render.set_color(Color::BLACK);
-
             self.ctx.render.present();
 
             self.ctx.input.flush();
+
+            self.ctx.time.fps = times.len() as u32;
+            self.ctx.time.tps = ticks.len() as u32;
 
             let t2 = t1.elapsed().as_secs_f32();
             let remaining = self.ctx.time.render_step - t2;
