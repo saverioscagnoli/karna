@@ -22,6 +22,14 @@ impl Draw for Game {
 
         ctx.render.draw_arc((100, 400), 40, 45.0, 180.0);
 
+        ctx.render.draw_aa_arc((350, 250), 50, 0.0, 80.0);
+
+        ctx.render.set_color(Color::YELLOW);
+        
+        ctx.render.fill_arc((550, 400), 70, 20.0, 110.0);
+
+        ctx.render.fill_aa_arc((500, 100), 100, 0.0, 180.0);
+
         ctx.render.draw_circle((100, 100), 50);
 
         ctx.render.set_color(Color::RED);

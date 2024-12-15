@@ -4,11 +4,13 @@ use crate::{
     Context,
 };
 use rodio::Sample;
-use sdl2::{controller::Axis, event::Event};
+use sdl2::{controller::Axis, event::Event, pixels::Color};
 use std::{
     collections::VecDeque,
     time::{Duration, Instant},
 };
+
+const ONE_SEC: Duration = Duration::from_secs(1);
 
 /// App flow:
 ///
@@ -23,6 +25,7 @@ use std::{
 ///   - Time helper is created
 ///   - Input helper is created
 ///   - Audio helper is created
+///   - Ui helper is created
 /// 3. App::run is called by the user
 ///   - Game loop starts
 ///   - Listens for events
@@ -61,7 +64,7 @@ impl App {
 
             self.ctx.time.delta = dt;
 
-            while times.len() > 0 && times[0] <= t1 - Duration::from_millis(1000) {
+            while times.len() > 0 && times[0] <= t1 - ONE_SEC {
                 times.pop_front();
             }
 
@@ -80,6 +83,9 @@ impl App {
 
             self.ctx.render.clear();
             state.draw(&mut self.ctx);
+
+            self.ctx.render.set_color(Color::BLACK);
+
             self.ctx.render.present();
 
             self.ctx.input.flush();

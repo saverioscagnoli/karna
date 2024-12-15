@@ -274,6 +274,45 @@ impl Renderer {
         self.canvas.copy_f(texture, None, dst).unwrap();
     }
 
+    /// Draws an anti-aliased (smooth) arc
+    /// The arc is drawn from start_angle to end_angle
+    pub fn draw_aa_arc<P: Into<Vec2>, U: ToU32>(
+        &mut self,
+        center: P,
+        radius: U,
+        start_angle: f32,
+        end_angle: f32,
+    ) {
+        let center = center.into();
+        let radius = radius.to_u32();
+        let diameter = radius * 2;
+        let color = self.color();
+
+        let kind = TextureKind::AAArc(radius, start_angle as i32, end_angle as i32);
+
+        let texture = {
+            if let Some(texture) = self.atlas.get_texture(&kind) {
+                texture
+            } else {
+                let texture = Texture::aa_arc(texture_creator(), radius, start_angle, end_angle);
+
+                self.atlas.insert_texture(&kind, texture);
+                self.atlas.get_texture(&kind).unwrap()
+            }
+        };
+
+        texture.set_color_mod(color.r, color.g, color.b);
+
+        let dst = FRect::new(
+            center.x - radius as f32,
+            center.y - radius as f32,
+            diameter as f32,
+            diameter as f32,
+        );
+
+        self.canvas.copy_f(texture, None, dst).unwrap();
+    }
+
     /// Draws a pixelated circle outline
     pub fn draw_circle<P: Into<Vec2>, U: ToU32>(&mut self, center: P, radius: U) {
         let center = center.into();
@@ -320,6 +359,81 @@ impl Renderer {
                 texture
             } else {
                 let texture = Texture::aa_circle_outline(texture_creator(), radius);
+                self.atlas.insert_texture(&kind, texture);
+                self.atlas.get_texture(&kind).unwrap()
+            }
+        };
+
+        texture.set_color_mod(color.r, color.g, color.b);
+
+        let dst = FRect::new(
+            center.x - radius as f32,
+            center.y - radius as f32,
+            diameter as f32,
+            diameter as f32,
+        );
+
+        self.canvas.copy_f(texture, None, dst).unwrap();
+    }
+
+    pub fn fill_arc<P: Into<Vec2>, U: ToU32>(
+        &mut self,
+        center: P,
+        radius: U,
+        start_angle: f32,
+        end_angle: f32,
+    ) {
+        let center = center.into();
+        let radius = radius.to_u32();
+        let diameter = radius * 2;
+        let color = self.color();
+
+        let kind = TextureKind::FilledArc(radius, start_angle as i32, end_angle as i32);
+
+        let texture = {
+            if let Some(texture) = self.atlas.get_texture(&kind) {
+                texture
+            } else {
+                let texture = Texture::arc_fill(texture_creator(), radius, start_angle, end_angle);
+
+                self.atlas.insert_texture(&kind, texture);
+                self.atlas.get_texture(&kind).unwrap()
+            }
+        };
+
+        texture.set_color_mod(color.r, color.g, color.b);
+
+        let dst = FRect::new(
+            center.x - radius as f32,
+            center.y - radius as f32,
+            diameter as f32,
+            diameter as f32,
+        );
+
+        self.canvas.copy_f(texture, None, dst).unwrap();
+    }
+
+    pub fn fill_aa_arc<P: Into<Vec2>, U: ToU32>(
+        &mut self,
+        center: P,
+        radius: U,
+        start_angle: f32,
+        end_angle: f32,
+    ) {
+        let center = center.into();
+        let radius = radius.to_u32();
+        let diameter = radius * 2;
+        let color = self.color();
+
+        let kind = TextureKind::AAFilledArc(radius, start_angle as i32, end_angle as i32);
+
+        let texture = {
+            if let Some(texture) = self.atlas.get_texture(&kind) {
+                texture
+            } else {
+                let texture =
+                    Texture::aa_arc_fill(texture_creator(), radius, start_angle, end_angle);
+
                 self.atlas.insert_texture(&kind, texture);
                 self.atlas.get_texture(&kind).unwrap()
             }
