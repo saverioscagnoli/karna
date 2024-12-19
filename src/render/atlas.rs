@@ -1,12 +1,11 @@
-use std::rc::Rc;
-
 use super::{font::Font, renderer::texture_creator};
 use hashbrown::HashMap;
 use sdl2::{
-    pixels::{Color, PixelFormatEnum},
+    pixels::PixelFormatEnum,
     render::{BlendMode, Texture},
     surface::Surface,
 };
+use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum TextureKind {
@@ -72,6 +71,10 @@ impl Atlas {
         }
     }
 
+    pub(crate) fn get_current_font(&mut self) -> &mut Font {
+        self.fonts.get_mut(&self.current_font).unwrap()
+    }
+
     pub(crate) fn insert_glyph(&mut self, glyph: char) {
         let font = self.fonts.get_mut(&self.current_font).unwrap();
 
@@ -88,13 +91,12 @@ impl Atlas {
             for x in 0..width {
                 let i = (y * width + x) as usize;
                 let alpha = bitmap[i];
-                let pixel = Color::RGBA(255, 255, 255, alpha);
                 surface.with_lock_mut(|pixels| {
                     let offset = (y * width + x) as usize * 4;
-                    pixels[offset] = pixel.r;
-                    pixels[offset + 1] = pixel.g;
-                    pixels[offset + 2] = pixel.b;
-                    pixels[offset + 3] = pixel.a;
+                    pixels[offset] = 255;
+                    pixels[offset + 1] = 255;
+                    pixels[offset + 2] = 255;
+                    pixels[offset + 3] = alpha;
                 });
             }
         }

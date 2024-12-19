@@ -50,6 +50,12 @@ impl ToF32 for u64 {
     }
 }
 
+impl ToF32 for usize {
+    fn to_f32(&self) -> f32 {
+        *self as f32
+    }
+}
+
 pub trait ToU32 {
     fn to_u32(&self) -> u32;
 }
@@ -85,6 +91,12 @@ impl ToU32 for u32 {
 }
 
 impl ToU32 for u64 {
+    fn to_u32(&self) -> u32 {
+        *self as u32
+    }
+}
+
+impl ToU32 for usize {
     fn to_u32(&self) -> u32 {
         *self as u32
     }

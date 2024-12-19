@@ -1,10 +1,8 @@
-use crate::{
-    math::Size,
-    traits::{Draw, Load, Update},
-    Context,
-};
+use crate::{math::Size, traits::Scene, Context};
+use gl::types::{GLint, GLsizei, GLsizeiptr};
+use hashbrown::HashMap;
 use rodio::Sample;
-use sdl2::{controller::Axis, event::Event, pixels::Color};
+use sdl2::{controller::Axis, event::Event};
 use std::{
     collections::VecDeque,
     time::{Duration, Instant},
@@ -12,68 +10,135 @@ use std::{
 
 const ONE_SEC: Duration = Duration::from_secs(1);
 
-/// App flow:
-///
-/// 1. App::new gets called with a title and a size
-/// 2. Context is created
-///   - Sdl is initialized
-///   - Video subsystem is initialized
-///   - Window is created
-///   - Renderer is created
-///       - Set the oncelock with the texture creator, to store textures as 'static
-///       - Texture atlas is created and stored in the renderer
-///   - Time helper is created
-///   - Input helper is created
-///   - Audio helper is created
-///   - Ui helper is created
-/// 3. App::run is called by the user
-///   - Game loop starts
-///   - Listens for events
-
 pub struct App {
     ctx: Context,
+    scenes: HashMap<String, Box<dyn Scene>>,
 }
 
 impl App {
-    pub fn new<T: ToString, S: Into<Size>>(title: T, size: S) -> Result<Self, String> {
-        let ctx = Context::new(title, size)?;
+    pub fn window<T: ToString, S: Into<Size>>(title: T, size: S) -> Self {
+        let size: Size = size.into();
 
-        Ok(Self { ctx })
+        Self {
+            ctx: Context::new(&title.to_string(), size.width, size.height),
+            scenes: HashMap::new(),
+        }
     }
 
-    pub fn run<S: Load + Update + Draw>(&mut self, state: &mut S) {
+    fn setup_buffers(&mut self) -> ([f32; 16], [u32; 6], (u32, u32, u32)) {
+        let vertices: [f32; 16] = [
+            // Positions    // Texture Coords
+            -1.0, -1.0, 0.0, 1.0, // Bottom-left
+            1.0, -1.0, 1.0, 1.0, // Bottom-right
+            1.0, 1.0, 1.0, 0.0, // Top-right
+            -1.0, 1.0, 0.0, 0.0, // Top-left
+        ];
+
+        let indices: [u32; 6] = [
+            0, 1, 2, // First triangle
+            2, 3, 0, // Second triangle
+        ];
+
+        let vs = include_str!("../assets/vs.glsl");
+        let fs = include_str!("../assets/fs.glsl");
+
+        self.ctx.render.load_shader("default", vs, fs);
+
+        let (vbo, vao, ebo) = (0, 0, 0);
+
+        (vertices, indices, (vbo, vao, ebo))
+    }
+
+    pub fn run<S: Scene + 'static>(&mut self, first_scene: S) {
         self.ctx.start();
+        let (vertices, indices, (mut vbo, mut vao, mut ebo)) = self.setup_buffers();
 
-        state.load(&mut self.ctx);
+        unsafe {
+            // Generate and bind Vertex Array Object
+            gl::GenVertexArrays(1, &mut vao);
+            gl::BindVertexArray(vao);
 
-        self.ctx.window.show();
+            // Generate and bind Vertex Buffer Object
+            gl::GenBuffers(1, &mut vbo);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+            gl::BufferData(
+                gl::ARRAY_BUFFER,
+                (vertices.len() * std::mem::size_of::<f32>()) as GLsizeiptr,
+                vertices.as_ptr() as *const _,
+                gl::STATIC_DRAW,
+            );
 
-        let mut event_pump = self.ctx.sdl.sys.event_pump().unwrap();
+            // Generate and bind Element Buffer Object
+            gl::GenBuffers(1, &mut ebo);
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
+            gl::BufferData(
+                gl::ELEMENT_ARRAY_BUFFER,
+                (indices.len() * std::mem::size_of::<u32>()) as GLsizeiptr,
+                indices.as_ptr() as *const _,
+                gl::STATIC_DRAW,
+            );
+
+            // Position attribute
+            gl::VertexAttribPointer(
+                0,
+                2,
+                gl::FLOAT,
+                gl::FALSE,
+                4 * std::mem::size_of::<f32>() as GLsizei,
+                0 as *const _,
+            );
+            gl::EnableVertexAttribArray(0);
+
+            // Texture coordinate attribute
+            gl::VertexAttribPointer(
+                1,
+                2,
+                gl::FLOAT,
+                gl::FALSE,
+                4 * std::mem::size_of::<f32>() as GLsizei,
+                (2 * std::mem::size_of::<f32>()) as *const _,
+            );
+            gl::EnableVertexAttribArray(1);
+
+            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+            gl::BindVertexArray(0);
+        }
+
+        unsafe {
+            gl::GenTextures(1, &mut self.ctx.render.texture_id);
+            gl::BindTexture(gl::TEXTURE_2D, self.ctx.render.texture_id);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as GLint);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as GLint);
+        }
+
+        self.scenes
+            .insert("first".to_string(), Box::new(first_scene));
+
+        self.ctx.render.set_shader("default");
+
+        let first_scene = self.scenes.get_mut("first").unwrap();
+
+        first_scene.load(&mut self.ctx);
 
         let mut t0 = Instant::now();
         let mut acc = 0.0;
 
         let mut times = VecDeque::new();
-        let mut ticks = VecDeque::new();
 
         while self.ctx.running {
             let t1 = Instant::now();
             let dt = t1.duration_since(t0).as_secs_f32();
-            t0 = t1;
-
-            acc += dt;
 
             self.ctx.time.delta = dt;
 
-            times.push_back(t1);
+            t0 = t1;
+            acc += dt;
 
-            self.handle_events(&mut event_pump);
+            times.push_back(t1);
+            Self::handle_events(&mut self.ctx);
 
             while acc >= self.ctx.time.tick_step {
-                state.fixed_update(&mut self.ctx);
-
-                ticks.push_back(Instant::now());
-
+                first_scene.fixed_update(&mut self.ctx);
                 acc -= self.ctx.time.tick_step;
             }
 
@@ -81,20 +146,18 @@ impl App {
                 times.pop_front();
             }
 
-            while ticks.len() > 0 && ticks[0] <= t1 - ONE_SEC {
-                ticks.pop_front();
-            }
+            self.ctx.time.fps = times.len() as u32;
 
-            state.update(&mut self.ctx);
+            first_scene.update(&mut self.ctx);
 
             self.ctx.render.clear();
-            state.draw(&mut self.ctx);
-            self.ctx.render.present();
+            first_scene.draw(&mut self.ctx);
+
+            self.ctx.render.gl_present_surface();
+            self.ctx.render.draw_quad(vao, indices.len());
+            self.ctx.window.swap_buffers();
 
             self.ctx.input.flush();
-
-            self.ctx.time.fps = times.len() as u32;
-            self.ctx.time.tps = ticks.len() as u32;
 
             let t2 = t1.elapsed().as_secs_f32();
             let remaining = self.ctx.time.render_step - t2;
@@ -103,60 +166,48 @@ impl App {
                 spin_sleep::sleep(Duration::from_secs_f32(remaining));
             }
         }
+
+        self.clean(vbo, vao, ebo);
     }
 
-    fn handle_events(&mut self, event_pump: &mut sdl2::EventPump) {
-        let ctx = &mut self.ctx;
-
-        for event in event_pump.poll_iter() {
+    fn handle_events(ctx: &mut Context) {
+        for event in ctx.sdl.event_pump.poll_iter() {
             match event {
-                Event::Quit { .. } => ctx.stop(),
+                Event::Quit { .. } => ctx.running = false,
 
-                // Keyboard events
                 Event::KeyDown {
-                    keycode: Some(key),
                     repeat,
+                    keycode: Some(code),
                     ..
                 } => {
-                    if !ctx.input.key_down(key) {
-                        ctx.input.keys.push(key);
-                    }
-
-                    if !repeat && !ctx.input.key_pressed(key) {
-                        ctx.input.pressed_keys.push(key);
+                    ctx.input.keys.insert(code);
+                    if !repeat {
+                        ctx.input.pressed_keys.insert(code);
                     }
                 }
 
                 Event::KeyUp {
-                    keycode: Some(key), ..
+                    keycode: Some(code),
+                    ..
                 } => {
-                    ctx.input.keys.retain(|&k| k != key);
+                    ctx.input.keys.remove(&code);
                 }
 
-                // Mouse events
                 Event::MouseButtonDown { mouse_btn, .. } => {
-                    if !ctx.input.mouse_down(mouse_btn) {
-                        ctx.input.mouse_buttons.push(mouse_btn);
-                    }
-
-                    if !ctx.input.mouse_clicked(mouse_btn) {
-                        ctx.input.clicked_mouse_buttons.push(mouse_btn);
-                    }
+                    ctx.input.mouse_buttons.insert(mouse_btn);
+                    ctx.input.clicked_mouse_buttons.insert(mouse_btn);
                 }
 
                 Event::MouseButtonUp { mouse_btn, .. } => {
-                    ctx.input.mouse_buttons.retain(|&b| b != mouse_btn);
+                    ctx.input.mouse_buttons.remove(&mouse_btn);
                 }
 
-                Event::MouseMotion { x, y, .. } => {
-                    ctx.input.mouse_position.set(x, y);
+                Event::MouseMotion { x, y, .. } => ctx.input.mouse_position.set(x, y),
+
+                Event::ControllerDeviceAdded { .. } | Event::ControllerDeviceRemoved { .. } => {
+                    ctx.input.scan_controllers();
                 }
 
-                // Rescan controllers every time a controller is added or removed
-                Event::ControllerDeviceAdded { .. } => ctx.input.scan_controllers(),
-                Event::ControllerDeviceRemoved { .. } => ctx.input.scan_controllers(),
-
-                // Controller events
                 Event::ControllerAxisMotion { axis, value, .. } => {
                     let mut value = value.to_f32();
 
@@ -223,21 +274,27 @@ impl App {
                 }
 
                 Event::ControllerButtonDown { button, .. } => {
-                    if !ctx.input.button_down(button) {
-                        ctx.input.buttons.push(button);
-                    }
-
-                    if !ctx.input.button_pressed(button) {
-                        ctx.input.pressed_buttons.push(button);
-                    }
+                    ctx.input.buttons.insert(button);
+                    ctx.input.pressed_buttons.insert(button);
                 }
 
                 Event::ControllerButtonUp { button, .. } => {
-                    ctx.input.buttons.retain(|&b| b != button);
+                    ctx.input.buttons.remove(&button);
                 }
 
                 _ => {}
             }
+        }
+    }
+
+    fn clean(&self, vbo: u32, vao: u32, ebo: u32) {
+        unsafe {
+            gl::DeleteTextures(1, &self.ctx.render.texture_id);
+            gl::DeleteBuffers(1, &vbo);
+            gl::DeleteBuffers(1, &ebo);
+            gl::DeleteVertexArrays(1, &vao);
+
+            self.ctx.render.clean_shaders();
         }
     }
 }

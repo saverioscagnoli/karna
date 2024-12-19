@@ -13,6 +13,10 @@ impl Window {
         Self(sdl_win)
     }
 
+    pub(crate) fn swap_buffers(&self) {
+        self.0.gl_swap_window();
+    }
+
     pub fn hide(&mut self) {
         self.0.hide();
     }

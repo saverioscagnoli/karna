@@ -1,15 +1,18 @@
 mod app;
 mod context;
+mod time;
+mod window;
 
-pub(crate) mod log;
+pub use app::App;
+pub use audio::Audio;
+pub use context::Context;
+pub use input::Input;
+pub use render::renderer::Renderer;
+pub use time::Time;
+pub use window::Window;
 
 pub mod audio;
 pub mod input;
 pub mod math;
 pub mod render;
-pub mod time;
 pub mod traits;
-pub mod window;
-
-pub use app::App;
-pub use context::Context;

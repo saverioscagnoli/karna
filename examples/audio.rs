@@ -1,21 +1,13 @@
-use karna::{
-    input::Key,
-    math::ToF32,
-    render::Color,
-    traits::{Draw, Load, Update},
-    App, Context,
-};
+use karna::{input::Key, math::ToF32, render::Color, traits::Scene, App, Context};
 
-struct Game;
+struct FirstScene;
 
-impl Load for Game {
+impl Scene for FirstScene {
     fn load(&mut self, ctx: &mut Context) {
         ctx.audio
             .load("get-out", "examples/assets/tuco-get-out.mp3");
     }
-}
 
-impl Update for Game {
     fn update(&mut self, ctx: &mut Context) {
         if ctx.input.key_pressed(Key::Space) {
             ctx.audio.play("get-out");
@@ -23,9 +15,7 @@ impl Update for Game {
     }
 
     fn fixed_update(&mut self, _ctx: &mut Context) {}
-}
 
-impl Draw for Game {
     fn draw(&mut self, ctx: &mut Context) {
         let text = "Press SPACE to play the audio!";
         let center = ctx.window.center_position();
@@ -40,5 +30,5 @@ impl Draw for Game {
 }
 
 fn main() {
-    App::new("GET OUT", (800, 600)).unwrap().run(&mut Game);
+    App::window("GET OUT", (800, 600)).run(FirstScene);
 }

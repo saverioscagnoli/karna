@@ -2,24 +2,22 @@ use karna::{
     input::Key,
     math::{pick, rng, Easing, Tween, Vec2},
     render::Color,
-    traits::{Draw, Load, Update},
+    traits::Scene,
     App, Context,
 };
 use std::time::Duration;
 
-struct Game {
+struct FirstScene {
     pos: Vec2,
     tween: Tween<Vec2>,
     target: Vec2,
 }
 
-impl Load for Game {
+impl Scene for FirstScene {
     fn load(&mut self, ctx: &mut Context) {
         ctx.window.set_resizable(true);
     }
-}
 
-impl Update for Game {
     fn update(&mut self, ctx: &mut Context) {
         self.pos = self.tween.update(ctx.time.delta());
 
@@ -50,9 +48,7 @@ impl Update for Game {
     }
 
     fn fixed_update(&mut self, _ctx: &mut Context) {}
-}
 
-impl Draw for Game {
     fn draw(&mut self, ctx: &mut Context) {
         ctx.render.set_color(Color::RED);
         ctx.render.fill_aa_circle(self.pos, 25);
@@ -84,16 +80,14 @@ impl Draw for Game {
 }
 
 fn main() {
-    App::new("Tweeeeeeeeeeeeeeens", (800, 600))
-        .unwrap()
-        .run(&mut Game {
-            pos: Vec2::zero(),
-            tween: Tween::new_and_start(
-                Vec2::zero(),
-                (500, 500).into(),
-                Duration::from_secs_f32(2.0),
-                Easing::CubicBezier(0.17, 0.67, 0.83, 0.67),
-            ),
-            target: (500, 500).into(),
-        });
+    App::window("Tweeeeeeeeeeeeeeens", (800, 600)).run(FirstScene {
+        pos: Vec2::zero(),
+        tween: Tween::new_and_start(
+            Vec2::zero(),
+            (500, 500).into(),
+            Duration::from_secs_f32(2.0),
+            Easing::CubicBezier(0.17, 0.67, 0.83, 0.67),
+        ),
+        target: (500, 500).into(),
+    });
 }

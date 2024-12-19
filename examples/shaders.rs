@@ -9,7 +9,15 @@ struct FirstScene {
 }
 
 impl Scene for FirstScene {
-    fn load(&mut self, _ctx: &mut Context) {}
+    fn load(&mut self, ctx: &mut Context) {
+        ctx.render.load_shader(
+            "crt",
+            include_str!("./assets/vs.glsl"),
+            include_str!("./assets/fs.glsl"),
+        );
+
+        ctx.render.set_shader("crt");
+    }
 
     fn update(&mut self, ctx: &mut Context) {
         if ctx.input.key_down(Key::W) {
@@ -28,6 +36,14 @@ impl Scene for FirstScene {
             self.vel.x = SPEED;
         }
 
+        if ctx.input.key_pressed(Key::SPACE) {
+            if ctx.render.active_shader() == "crt" {
+                ctx.render.set_shader("default");
+            } else {
+                ctx.render.set_shader("crt");
+            }
+        }
+
         self.pos += self.vel * ctx.time.delta();
         self.vel *= 0.9;
     }
@@ -40,8 +56,9 @@ impl Scene for FirstScene {
         ctx.render.fill_rect(self.pos, (50, 50));
         ctx.render.set_color(Color::MAGENTA);
         ctx.render.draw_line((300, 10), (50, 500));
-        // Poker green:
         ctx.render.set_color(Color::RGB(53, 101, 77));
+
+        ctx.render.fill_text(ctx.time.fps(), (10, 10), Color::WHITE);
     }
 }
 

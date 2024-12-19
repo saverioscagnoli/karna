@@ -1,20 +1,11 @@
+use karna::{input::Button, math::Vec2, render::Color, traits::Scene, App, Context};
 use std::time::Duration;
 
-use karna::{
-    input::Button,
-    math::Vec2,
-    render::Color,
-    traits::{Draw, Load, Update},
-    App, Context,
-};
+struct FirstScene;
 
-struct Game;
-
-impl Load for Game {
+impl Scene for FirstScene {
     fn load(&mut self, _ctx: &mut Context) {}
-}
 
-impl Update for Game {
     fn update(&mut self, ctx: &mut Context) {
         let lt = ctx.input.left_trigger();
         let rt = ctx.input.right_trigger();
@@ -23,9 +14,7 @@ impl Update for Game {
     }
 
     fn fixed_update(&mut self, _ctx: &mut Context) {}
-}
 
-impl Draw for Game {
     fn draw(&mut self, ctx: &mut Context) {
         ctx.render.set_color(Color::GREEN);
 
@@ -136,7 +125,5 @@ impl Draw for Game {
 }
 
 fn main() {
-    App::new("controller testing", (800, 600))
-        .unwrap()
-        .run(&mut Game);
+    App::window("controller testing", (800, 600)).run(FirstScene);
 }

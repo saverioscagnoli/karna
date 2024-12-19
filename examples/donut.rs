@@ -1,11 +1,6 @@
-use karna::{
-    render::Color,
-    traits::{Draw, Load, Update},
-    App, Context,
-};
+use karna::{render::Color, traits::Scene, App, Context};
 use std::{char, vec};
-
-struct Game {
+struct FirstScene {
     a: f32,
     b: f32,
     chars_to_draw: Vec<(char, i32, i32)>,
@@ -16,11 +11,9 @@ const CHARS: [&str; 13] = [
     " ", ".", ",", "-", "~", ":", ";", "=", "!", "*", "#", "$", "@",
 ];
 
-impl Load for Game {
+impl Scene for FirstScene {
     fn load(&mut self, _ctx: &mut Context) {}
-}
 
-impl Update for Game {
     fn update(&mut self, ctx: &mut Context) {
         self.chars_to_draw.clear();
 
@@ -92,12 +85,9 @@ impl Update for Game {
     }
 
     fn fixed_update(&mut self, _ctx: &mut Context) {}
-}
 
-impl Draw for Game {
     fn draw(&mut self, ctx: &mut Context) {
         ctx.render.fill_text(ctx.time.fps(), (10, 10), Color::WHITE);
-        ctx.render.fill_text(ctx.time.tps(), (10, 30), Color::WHITE);
 
         for (c, x, y) in &self.chars_to_draw {
             ctx.render.fill_text(c, (*x, *y), self.color);
@@ -108,7 +98,7 @@ impl Draw for Game {
 }
 
 fn main() {
-    App::new("donut", (1280, 720)).unwrap().run(&mut Game {
+    App::window("donut", (1280, 720)).run(FirstScene {
         a: 0.0,
         b: 0.0,
         chars_to_draw: vec![],
