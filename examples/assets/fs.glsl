@@ -3,6 +3,7 @@ out vec4 FragColor;
 in vec2 TexCoord;
 
 uniform sampler2D screenTexture;
+uniform float elapsed;
 
 void main() {   
     vec2 uv = TexCoord;
@@ -27,6 +28,15 @@ void main() {
 
         // Apply the edge fade
         color *= edgeFade;
+
+        // Apply vignette with elapsed dependent color
+        float vignette = smoothstep(0.5, 0.8, dist);
+        vec3 vignetteColor = vec3(
+            0.5 + 0.5 * sin(elapsed * 0.5),
+            0.5 + 0.5 * sin(elapsed * 0.7),
+            0.5 + 0.5 * sin(elapsed * 0.9)
+        );
+        color = mix(color, vignetteColor, vignette);
 
         FragColor = vec4(color, 1.0);
     }
