@@ -1,6 +1,8 @@
 use std::ops::Div;
 
-use super::{ToF32, ToU32};
+use sdl2::rect::FRect;
+
+use super::{ToF32, ToU32, Vec2};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Size {
@@ -14,6 +16,10 @@ impl Size {
             width: width.to_u32(),
             height: height.to_u32(),
         }
+    }
+
+    pub(crate) fn to_frect(&self, vec: Vec2) -> FRect {
+        FRect::new(vec.x, vec.y, self.width as f32, self.height as f32)
     }
 }
 

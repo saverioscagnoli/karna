@@ -1,6 +1,6 @@
 pub(crate) mod atlas;
 pub(crate) mod font;
+pub(crate) mod renderer;
+pub(crate) mod shaders;
 
-pub mod renderer;
-
-pub use sdl2::pixels::Color;
+pub use renderer::Color;

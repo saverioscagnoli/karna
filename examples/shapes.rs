@@ -1,22 +1,14 @@
-use karna::{
-    render::Color,
-    traits::{Draw, Load, Update},
-    App, Context,
-};
+use karna::{render::Color, traits::Scene, App, Context};
 
-struct Game;
+struct FirstScene;
 
-impl Load for Game {
+impl Scene for FirstScene {
     fn load(&mut self, _ctx: &mut Context) {}
-}
 
-impl Update for Game {
     fn update(&mut self, _ctx: &mut Context) {}
 
     fn fixed_update(&mut self, _ctx: &mut Context) {}
-}
 
-impl Draw for Game {
     fn draw(&mut self, ctx: &mut Context) {
         ctx.render.set_color(Color::GREEN);
 
@@ -25,7 +17,7 @@ impl Draw for Game {
         ctx.render.draw_aa_arc((350, 250), 50, 0.0, 80.0);
 
         ctx.render.set_color(Color::YELLOW);
-        
+
         ctx.render.fill_arc((550, 400), 70, 20.0, 110.0);
 
         ctx.render.fill_aa_arc((500, 100), 100, 0.0, 180.0);
@@ -51,5 +43,5 @@ impl Draw for Game {
 }
 
 fn main() {
-    App::new("Basic window", (800, 600)).unwrap().run(&mut Game);
+    App::window("Basic window", (800, 600)).run(FirstScene);
 }

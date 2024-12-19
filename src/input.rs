@@ -1,21 +1,22 @@
 use std::time::Duration;
 
+use hashbrown::HashSet;
 pub use sdl2::controller::Button;
 use sdl2::controller::GameController;
 pub use sdl2::keyboard::Keycode as Key;
 pub use sdl2::mouse::MouseButton as Mouse;
 use sdl2::{GameControllerSubsystem, Sdl};
 
-use crate::{error, info, math::Vec2, warn};
+use crate::math::Vec2;
 
 pub struct Input {
     controller_sys: GameControllerSubsystem,
 
-    pub(crate) keys: Vec<Key>,
-    pub(crate) pressed_keys: Vec<Key>,
+    pub(crate) keys: HashSet<Key>,
+    pub(crate) pressed_keys: HashSet<Key>,
 
-    pub(crate) mouse_buttons: Vec<Mouse>,
-    pub(crate) clicked_mouse_buttons: Vec<Mouse>,
+    pub(crate) mouse_buttons: HashSet<Mouse>,
+    pub(crate) clicked_mouse_buttons: HashSet<Mouse>,
     pub(crate) mouse_position: Vec2,
 
     controller: Option<GameController>,
@@ -23,8 +24,8 @@ pub struct Input {
     pub(crate) right_stick: Vec2,
     pub(crate) left_trigger: f32,
     pub(crate) right_trigger: f32,
-    pub(crate) buttons: Vec<Button>,
-    pub(crate) pressed_buttons: Vec<Button>,
+    pub(crate) buttons: HashSet<Button>,
+    pub(crate) pressed_buttons: HashSet<Button>,
 }
 
 impl Input {
@@ -33,18 +34,18 @@ impl Input {
 
         Self {
             controller_sys,
-            keys: Vec::new(),
-            pressed_keys: Vec::new(),
-            mouse_buttons: Vec::new(),
-            clicked_mouse_buttons: Vec::new(),
+            keys: HashSet::new(),
+            pressed_keys: HashSet::new(),
+            mouse_buttons: HashSet::new(),
+            clicked_mouse_buttons: HashSet::new(),
             mouse_position: Vec2::zero(),
             controller: None,
             left_stick: Vec2::zero(),
             right_stick: Vec2::zero(),
             left_trigger: 0.0,
             right_trigger: 0.0,
-            buttons: Vec::new(),
-            pressed_buttons: Vec::new(),
+            buttons: HashSet::new(),
+            pressed_buttons: HashSet::new(),
         }
     }
 
@@ -58,18 +59,15 @@ impl Input {
 
             match self.controller_sys.open(i) {
                 Ok(c) => {
-                    info!("Found controller: {}", c.name());
+                    println!("Controller {} connected.", c.name());
                     Some(c)
                 }
-                Err(e) => {
-                    error!("Failed to open controller {}: {}", i, e);
-                    None
-                }
+                Err(_) => None,
             }
         });
 
         if controller.is_none() {
-            warn!("No controller found.");
+            println!("No controller found.");
         }
 
         self.controller = controller;

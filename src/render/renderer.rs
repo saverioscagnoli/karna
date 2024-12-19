@@ -10,84 +10,107 @@ use crate::{
     traits::LoadSurface,
 };
 use fontdue::layout::TextStyle;
+use gl::types::{GLint, GLsizei};
 use sdl2::{
-    pixels::Color,
+    pixels::PixelFormatEnum,
     rect::{FPoint, FRect},
     render::{Canvas, Texture, TextureCreator},
-    surface::Surface,
-    video::{Window, WindowContext},
+    surface::{Surface, SurfaceContext, SurfaceRef},
 };
 use std::{ops::Deref, path::Path, sync::OnceLock};
 
-/// Little bit of a hack to get around the lifetime issues with the texture creator
-/// This is a wrapper that impements Send and Sync, so we can store it as a static
-/// OnceLock, so all the textures created with it can be stored as 'static.
-///
-/// Safe as long as the texture creator is only used in the main thread,
-/// but the compiler doesnt allow it, we're so gucci
-struct TextureCreatorWrapper(TextureCreator<WindowContext>);
+pub use sdl2::pixels::Color;
 
-impl Deref for TextureCreatorWrapper {
-    type Target = TextureCreator<WindowContext>;
+struct TC(TextureCreator<SurfaceContext<'static>>);
+
+unsafe impl Send for TC {}
+unsafe impl Sync for TC {}
+
+impl Deref for TC {
+    type Target = TextureCreator<SurfaceContext<'static>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-/// :3
-unsafe impl Send for TextureCreatorWrapper {}
-unsafe impl Sync for TextureCreatorWrapper {}
+static TEXTURE_CREATOR: OnceLock<TC> = OnceLock::new();
 
-/// Static texture creator
-/// All textures created with it are 'static
-static TEXTURE_CREATOR: OnceLock<TextureCreatorWrapper> = OnceLock::new();
-
-/// Helper function so we dont have to unwrap the texture creator every time
-pub(crate) fn texture_creator() -> &'static TextureCreator<WindowContext> {
-    &TEXTURE_CREATOR.get().unwrap()
+pub(crate) fn texture_creator() -> &'static TextureCreator<SurfaceContext<'static>> {
+    TEXTURE_CREATOR.get().unwrap()
 }
 
-/// Renderer
-///
-/// The renderer is the main struct that you will interact with to draw things on the screen.
-/// It has methods to draw pixels, lines, rectangles, circles, images and text.
-///
-/// All the textures are stored in the atlas, so they can be cached and reused,
-/// saving cpu and gpu time.
 pub struct Renderer {
-    /// Internal sdl2 canvas
-    pub(crate) canvas: Canvas<Window>,
-    /// Texture atlas
+    pub(crate) texture_id: u32,
+    pub(crate) canvas: Canvas<Surface<'static>>,
     pub(crate) atlas: Atlas,
 }
 
 impl Renderer {
-    /// Creates a new renderer
-    /// Only one renderer is allowed per window
-    pub(crate) fn new(canvas: Canvas<Window>) -> Self {
-        let tc = canvas.texture_creator();
-
-        TEXTURE_CREATOR
-            .set(TextureCreatorWrapper(tc))
-            .map_err(|_| "Failed to set texture creator")
+    pub fn new(width: u32, height: u32) -> Self {
+        let canvas = Surface::new(width, height, PixelFormatEnum::RGBA32)
+            .unwrap()
+            .into_canvas()
             .unwrap();
 
-        let atlas = Atlas::new();
+        TEXTURE_CREATOR
+            .set(TC(canvas.texture_creator()))
+            .map_err(|_| panic!("Failed to set texture creator"))
+            .unwrap();
 
-        Self { canvas, atlas }
+        Self {
+            texture_id: 0,
+            canvas,
+            atlas: Atlas::new(),
+        }
     }
 
-    /// Loads a font from a .ttf file.
-    /// The font is stored in the atlas with the given label.
-    pub fn load_font<L: ToString, P: AsRef<Path>>(&mut self, label: L, path: P, size: f32) {
+    fn surface(&self) -> &SurfaceRef {
+        self.canvas.surface()
+    }
+
+    pub(crate) fn gl_present_surface(&self) {
+        unsafe {
+            let surface = self.surface();
+            let pixel_buffer = surface.without_lock().unwrap();
+
+            gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
+            gl::TexImage2D(
+                gl::TEXTURE_2D,
+                0,
+                gl::RGBA as GLint,
+                surface.width() as GLsizei,
+                surface.height() as GLsizei,
+                0,
+                gl::RGBA,
+                gl::UNSIGNED_BYTE,
+                pixel_buffer.as_ptr() as *const _,
+            );
+        }
+    }
+
+    pub(crate) fn draw_quad(&self, program: u32, vao: u32, indices_len: usize) {
+        unsafe {
+            gl::UseProgram(program);
+            gl::BindVertexArray(vao);
+            gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
+            gl::DrawElements(
+                gl::TRIANGLES,
+                indices_len as i32,
+                gl::UNSIGNED_INT,
+                std::ptr::null(),
+            );
+        }
+    }
+
+    pub fn load_font<L: ToString, P: AsRef<Path>>(&mut self, label: L, path: P, size: u16) {
         let label = label.to_string();
 
         let bytes = std::fs::read(path).expect("Failed to read font file");
-        let font = fontdue::Font::from_bytes(bytes.as_slice(), Default::default())
-            .expect("Failed to load font");
+        let font = fontdue::Font::from_bytes(bytes, Default::default())
+            .expect("Failed to parse font file");
 
-        self.atlas.fonts.insert(label, Font::new(font, size));
+        self.atlas.fonts.insert(label, Font::new(font, size as f32));
     }
 
     /// Loads an image from a file.
@@ -106,133 +129,38 @@ impl Renderer {
             .insert_texture(&TextureKind::Image(label.into()), texture);
     }
 
-    /// Sets the current font to be used when drawing text.
-    pub fn set_font<L: ToString>(&mut self, label: L) {
-        self.atlas.current_font = label.to_string();
-    }
-
-    /// Clears everything on the screen
     pub fn clear(&mut self) {
         self.canvas.clear();
     }
 
-    /// Internal function to say that we're finished drawing for this frame
-    pub(crate) fn present(&mut self) {
-        self.canvas.present();
-    }
-
-    /// Returns the current drawing color
-    pub fn color(&mut self) -> Color {
+    pub fn color(&self) -> Color {
         self.canvas.draw_color()
     }
 
-    /// Sets the drawing color
-    /// Everything drawn after this will be in this color
     pub fn set_color(&mut self, color: Color) {
         self.canvas.set_draw_color(color);
     }
 
-    /// Draws a pixel at the given position
-    pub fn draw_pixel<P: Into<Vec2>>(&mut self, pos: P) {
-        self.canvas.draw_fpoint(FPoint::from(pos.into())).unwrap();
-    }
-
-    /// Draws multiple pixels at the given positions
-    /// Saves time by batching the draw calls
-    pub fn draw_pixels<P: Into<Vec2>, I: IntoIterator<Item = P>>(&mut self, pixels: I) {
-        let pixels = pixels
-            .into_iter()
-            .map(|pos| FPoint::from(pos.into()))
-            .collect::<Vec<_>>();
-
-        self.canvas.draw_fpoints(&*pixels).unwrap();
-    }
-
-    /// Draws a line from start to end
     pub fn draw_line<P: Into<Vec2>, Q: Into<Vec2>>(&mut self, start: P, end: Q) {
+        let start: Vec2 = start.into();
+        let end: Vec2 = end.into();
         self.canvas
-            .draw_fline(FPoint::from(start.into()), FPoint::from(end.into()))
+            .draw_fline(FPoint::from(start), FPoint::from(end))
             .unwrap();
     }
 
-    /// Draws multiple lines
-    /// They are all connected, so the first point of the next line is the last point of the previous line
-    /// Saves time by batching the draw calls
-    pub fn draw_lines<P: Into<Vec2>, I: IntoIterator<Item = P>>(&mut self, lines: I) {
-        let lines = lines
-            .into_iter()
-            .map(|pos| FPoint::from(pos.into()))
-            .collect::<Vec<_>>();
-
-        self.canvas.draw_flines(&*lines).unwrap();
-    }
-
-    /// Draws the outline of a rectangle
     pub fn draw_rect<P: Into<Vec2>, S: Into<Size>>(&mut self, pos: P, size: S) {
         let pos: Vec2 = pos.into();
         let size: Size = size.into();
 
-        self.canvas
-            .draw_frect(FRect::new(
-                pos.x,
-                pos.y,
-                size.width as f32,
-                size.height as f32,
-            ))
-            .unwrap();
+        self.canvas.draw_frect(size.to_frect(pos)).unwrap();
     }
 
-    /// Draws multiple rectangles
-    /// Saves time by batching the draw calls
-    pub fn draw_rects<P: Into<Vec2>, S: Into<Size>, I: IntoIterator<Item = (P, S)>>(
-        &mut self,
-        rects: I,
-    ) {
-        let rects: Vec<FRect> = rects
-            .into_iter()
-            .map(|(pos, size)| {
-                let pos: Vec2 = pos.into();
-                let size: Size = size.into();
-
-                FRect::new(pos.x, pos.y, size.width as f32, size.height as f32)
-            })
-            .collect();
-
-        self.canvas.draw_frects(&rects).unwrap();
-    }
-
-    /// Draws a filled rectangle
     pub fn fill_rect<P: Into<Vec2>, S: Into<Size>>(&mut self, pos: P, size: S) {
         let pos: Vec2 = pos.into();
         let size: Size = size.into();
 
-        self.canvas
-            .fill_frect(FRect::new(
-                pos.x,
-                pos.y,
-                size.width as f32,
-                size.height as f32,
-            ))
-            .unwrap();
-    }
-
-    /// Draws multiple filled rectangles
-    /// Saves time by batching the draw calls
-    pub fn fill_rects<P: Into<Vec2>, S: Into<Size>, I: IntoIterator<Item = (P, S)>>(
-        &mut self,
-        rects: I,
-    ) {
-        let rects: Vec<FRect> = rects
-            .into_iter()
-            .map(|(pos, size)| {
-                let pos: Vec2 = pos.into();
-                let size: Size = size.into();
-
-                FRect::new(pos.x, pos.y, size.width as f32, size.height as f32)
-            })
-            .collect();
-
-        self.canvas.fill_frects(&rects).unwrap();
+        self.canvas.fill_frect(size.to_frect(pos)).unwrap();
     }
 
     /// Draws an arc
@@ -525,26 +453,22 @@ impl Renderer {
 
         if let Some(texture) = self.atlas.get_texture(&kind) {
             let query = texture.query();
-            let dest = FRect::new(pos.x, pos.y, query.width as f32, query.height as f32);
+            let dst = Size::from((query.width, query.height)).to_frect(pos);
 
-            self.canvas.copy_f(texture, None, dest).unwrap();
+            self.canvas.copy_f(texture, None, dst).unwrap();
         }
     }
 
-    /// Draws text at the given position
     pub fn fill_text<T: ToString, P: Into<Vec2>>(&mut self, text: T, pos: P, color: Color) {
         let text = text.to_string();
-
         let pos: Vec2 = pos.into();
-        let (r, g, b) = (color.r, color.g, color.b);
+        let (r, g, b) = color.rgb();
 
         let glyphs = {
-            let font = self.atlas.fonts.get_mut(&self.atlas.current_font).unwrap();
+            let font = self.atlas.get_current_font();
 
-            font.layout.append(
-                &[font.inner.clone()],
-                &TextStyle::new(text.as_str(), font.size as f32, 0),
-            );
+            font.layout
+                .append(&[font.inner.clone()], &TextStyle::new(&text, font.size, 0));
 
             let glyphs = text
                 .chars()
@@ -562,29 +486,24 @@ impl Renderer {
             glyphs
         };
 
-        // Process glyphs after font borrow is dropped
         for (ch, (x, y, width, height)) in glyphs {
             if ch.is_whitespace() {
                 continue;
             }
 
+            let size = Size::from((width, height));
+
             if let Some(texture) = self.atlas.get_glyph(ch) {
-                let dest = FRect::new(
-                    pos.x + x as f32,
-                    pos.y + y as f32,
-                    width as f32,
-                    height as f32,
-                );
+                let dst = size.to_frect((pos.x + x, pos.y + y).into());
 
                 texture.set_color_mod(r, g, b);
-                self.canvas.copy_f(texture, None, dest).unwrap();
+                self.canvas.copy_f(texture, None, dst).unwrap();
             } else {
                 self.atlas.insert_glyph(ch);
             }
         }
     }
 
-    /// Returns the size of the given text
     pub fn text_size<T: ToString>(&mut self, text: T) -> Size {
         let text = text.to_string();
 

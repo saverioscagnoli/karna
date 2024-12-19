@@ -1,38 +1,38 @@
 use sdl2::{
     pixels::{Color, PixelFormatEnum},
     render::{BlendMode, Texture, TextureCreator},
-    video::WindowContext,
+    surface::SurfaceContext,
 };
 
 pub(crate) trait CircleOutline<'a> {
     fn arc(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
         start_angle: f32,
         end_angle: f32,
     ) -> Texture<'a>;
 
     fn aa_arc(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
         start_angle: f32,
         end_angle: f32,
     ) -> Texture<'a>;
 
     fn circle_outline(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
     ) -> Texture<'a>;
 
     fn aa_circle_outline(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
     ) -> Texture<'a>;
 }
 
 impl<'a> CircleOutline<'a> for Texture<'a> {
     fn arc(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
         start_angle: f32,
         end_angle: f32,
@@ -100,7 +100,7 @@ impl<'a> CircleOutline<'a> for Texture<'a> {
     }
 
     fn aa_arc(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
         start_angle: f32,
         end_angle: f32,
@@ -149,7 +149,7 @@ impl<'a> CircleOutline<'a> for Texture<'a> {
     }
 
     fn circle_outline(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
     ) -> Texture<'a> {
         let d = radius * 2;
@@ -192,7 +192,7 @@ impl<'a> CircleOutline<'a> for Texture<'a> {
     }
 
     fn aa_circle_outline(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
     ) -> Texture<'a> {
         let d = radius * 2;
@@ -231,30 +231,33 @@ impl<'a> CircleOutline<'a> for Texture<'a> {
 
 pub(crate) trait CircleFill<'a> {
     fn arc_fill(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
         start_angle: f32,
         end_angle: f32,
     ) -> Texture<'a>;
 
     fn aa_arc_fill(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
         start_angle: f32,
         end_angle: f32,
     ) -> Texture<'a>;
 
-    fn circle_fill(texture_creator: &'a TextureCreator<WindowContext>, radius: u32) -> Texture<'a>;
+    fn circle_fill(
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
+        radius: u32,
+    ) -> Texture<'a>;
 
     fn aa_circle_fill(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
     ) -> Texture<'a>;
 }
 
 impl<'a> CircleFill<'a> for Texture<'a> {
     fn arc_fill(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
         start_angle: f32,
         end_angle: f32,
@@ -302,7 +305,7 @@ impl<'a> CircleFill<'a> for Texture<'a> {
     }
 
     fn aa_arc_fill(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
         start_angle: f32,
         end_angle: f32,
@@ -356,7 +359,10 @@ impl<'a> CircleFill<'a> for Texture<'a> {
         texture
     }
 
-    fn circle_fill(texture_creator: &'a TextureCreator<WindowContext>, radius: u32) -> Texture<'a> {
+    fn circle_fill(
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
+        radius: u32,
+    ) -> Texture<'a> {
         let d = radius * 2;
         let color = Color::WHITE;
         let mut texture = texture_creator
@@ -412,7 +418,7 @@ impl<'a> CircleFill<'a> for Texture<'a> {
     }
 
     fn aa_circle_fill(
-        texture_creator: &'a TextureCreator<WindowContext>,
+        texture_creator: &'a TextureCreator<SurfaceContext<'a>>,
         radius: u32,
     ) -> Texture<'a> {
         let d = radius * 2;

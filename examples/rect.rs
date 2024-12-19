@@ -1,22 +1,14 @@
-use karna::{
-    input::Key,
-    math::Vec2,
-    render::Color,
-    traits::{Draw, Load, Update},
-    App, Context,
-};
+use karna::{input::Key, math::Vec2, render::Color, traits::Scene, App, Context};
 
-struct Game {
+struct FirstScene {
     pos: Vec2,
     vel: Vec2,
     using_keyboard: bool,
 }
 
-impl Load for Game {
+impl Scene for FirstScene {
     fn load(&mut self, _ctx: &mut Context) {}
-}
 
-impl Update for Game {
     fn update(&mut self, ctx: &mut Context) {
         let speed = 250.0;
 
@@ -53,9 +45,7 @@ impl Update for Game {
     }
 
     fn fixed_update(&mut self, _ctx: &mut Context) {}
-}
 
-impl Draw for Game {
     fn draw(&mut self, ctx: &mut Context) {
         ctx.render.set_color(Color::RED);
         ctx.render.fill_rect(self.pos, (50, 50));
@@ -76,11 +66,9 @@ impl Draw for Game {
 }
 
 fn main() {
-    App::new("Press WASD to move!", (800, 600))
-        .unwrap()
-        .run(&mut Game {
-            pos: Vec2::new(100, 100),
-            vel: Vec2::zero(),
-            using_keyboard: false,
-        });
+    App::window("Press WASD to move!", (800, 600)).run(FirstScene {
+        pos: Vec2::new(100, 100),
+        vel: Vec2::zero(),
+        using_keyboard: false,
+    });
 }
