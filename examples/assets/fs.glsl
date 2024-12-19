@@ -3,6 +3,7 @@ out vec4 FragColor;
 in vec2 TexCoord;
 
 uniform sampler2D screenTexture;
+uniform float elapsed;
 
 void main() {   
     vec2 uv = TexCoord;
@@ -16,18 +17,20 @@ void main() {
     float edgeFade = smoothstep(0.0, 0.01, min(uv.x, 1.0 - uv.x)); // Horizontal edges
     edgeFade *= smoothstep(0.0, 0.01, min(uv.y, 1.0 - uv.y));      // Vertical edges
 
-    // Check if the distorted coordinates are outside the valid range
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-        FragColor = vec4(0.0, 0.0, 0.0, 1.0); // Set color to black
-    } else {
-        // Apply scanlines with smoother interpolation
-        float scanline = sin(uv.y * 800.0) * 0.05; // Scanline effect
-        vec3 color = texture(screenTexture, uv).rgb;
-        color = mix(color, color - scanline, 0.5); // Blend the scanline effect
+    // Calculate background color based on elapsed time
+    vec3 bgColor = vec3(sin(elapsed), cos(elapsed), sin(elapsed * 0.5));
 
-        // Apply the edge fade
-        color *= edgeFade;
+    // Apply scanlines with smoother interpolation
+    float scanline = sin(uv.y * 800.0) * 0.05; // Scanline effect
+    vec3 color = texture(screenTexture, uv).rgb;
+    color = mix(color, color - scanline, 0.5); // Blend the scanline effect
 
-        FragColor = vec4(color, 1.0);
-    }
+    // Apply the edge fade
+    color *= edgeFade;
+
+    // Blend the texture color with the background color
+    color = mix(bgColor, color, edgeFade);
+
+    // Set the final color to the background color based on elapsed time
+    FragColor = vec4(mix(bgColor, color, edgeFade), 1.0);
 }

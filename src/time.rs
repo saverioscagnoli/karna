@@ -1,8 +1,11 @@
+use std::time::Instant;
+
 pub struct Time {
     pub(crate) delta: f32,
     pub(crate) render_step: f32,
     pub(crate) tick_step: f32,
     pub(crate) fps: u32,
+    pub(crate) start: Instant,
 }
 
 impl Time {
@@ -12,6 +15,7 @@ impl Time {
             tick_step: 1.0 / 60.0,
             render_step: 1.0 / 60.0,
             fps: 0,
+            start: Instant::now(),
         }
     }
 
@@ -29,5 +33,9 @@ impl Time {
 
     pub fn fps(&self) -> u32 {
         self.fps
+    }
+
+    pub fn started_at(&self) -> Instant {
+        self.start
     }
 }

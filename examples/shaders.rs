@@ -1,4 +1,4 @@
-use karna::{input::Key, math::Vec2, traits::Scene, App, Context};
+use karna::{input::Key, math::Vec2, render::Uniform, traits::Scene, App, Context};
 use sdl2::pixels::Color;
 
 const SPEED: f32 = 250.0;
@@ -46,6 +46,12 @@ impl Scene for FirstScene {
 
         self.pos += self.vel * ctx.time.delta();
         self.vel *= 0.9;
+
+        ctx.render.set_shader_uniform(
+            "crt",
+            "elapsed",
+            Uniform::Float(ctx.time.started_at().elapsed().as_secs_f32()),
+        );
     }
 
     fn fixed_update(&mut self, _ctx: &mut Context) {}

@@ -1,7 +1,7 @@
 use super::{
     atlas::{Atlas, TextureKind},
     font::Font,
-    shaders::create_shader_program,
+    shaders::{create_shader_program, Uniform},
 };
 use crate::{
     math::{
@@ -148,6 +148,37 @@ impl Renderer {
 
         if let Some(&program) = self.shaders.get(&label) {
             self.active_shader = (label.into(), program);
+        } else {
+            panic!("Shader not found: {}", label);
+        }
+    }
+
+    pub fn set_shader_uniform<L: ToString, U: ToString>(
+        &self,
+        label: L,
+        uniform: U,
+        value: Uniform,
+    ) {
+        let label = label.to_string();
+        let uniform = uniform.to_string();
+
+        if let Some(&program) = self.shaders.get(&label) {
+            unsafe {
+                let location = gl::GetUniformLocation(program, uniform.as_ptr() as *const i8);
+
+                gl::UseProgram(program);
+
+                match value {
+                    Uniform::Int(v) => gl::Uniform1i(location, v),
+                    Uniform::Float(v) => gl::Uniform1f(location, v),
+                    Uniform::Vec2(x, y) => gl::Uniform2f(location, x, y),
+                    Uniform::Vec3(x, y, z) => gl::Uniform3f(location, x, y, z),
+                    Uniform::Vec4(x, y, z, w) => gl::Uniform4f(location, x, y, z, w),
+                    Uniform::Mat4(v) => gl::UniformMatrix4fv(location, 1, gl::FALSE, v.as_ptr()),
+                }
+
+                gl::UseProgram(0);
+            }
         } else {
             panic!("Shader not found: {}", label);
         }

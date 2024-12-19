@@ -1,5 +1,14 @@
 use gl::types::{GLchar, GLenum, GLint, GLuint};
 
+pub enum Uniform {
+    Int(i32),
+    Float(f32),
+    Vec2(f32, f32),
+    Vec3(f32, f32, f32),
+    Vec4(f32, f32, f32, f32),
+    Mat4([f32; 16]),
+}
+
 pub(crate) unsafe fn create_shader_program(vertex_src: &str, fragment_src: &str) -> GLuint {
     let vertex_shader = compile_shader(vertex_src, gl::VERTEX_SHADER);
     let fragment_shader = compile_shader(fragment_src, gl::FRAGMENT_SHADER);
