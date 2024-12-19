@@ -1,4 +1,4 @@
-use crate::{math::Size, render::shaders::create_shader_program, traits::Scene, Context};
+use crate::{math::Size, traits::Scene, Context};
 use gl::types::{GLint, GLsizei, GLsizeiptr};
 use hashbrown::HashMap;
 use rodio::Sample;
@@ -25,7 +25,7 @@ impl App {
         }
     }
 
-    fn setup_buffers(&self) -> ([f32; 16], [u32; 6], u32, (u32, u32, u32)) {
+    fn setup_buffers(&mut self) -> ([f32; 16], [u32; 6], (u32, u32, u32)) {
         let vertices: [f32; 16] = [
             // Positions    // Texture Coords
             -1.0, -1.0, 0.0, 1.0, // Bottom-left
@@ -42,16 +42,16 @@ impl App {
         let vs = include_str!("../assets/vs.glsl");
         let fs = include_str!("../assets/fs.glsl");
 
-        let program = unsafe { create_shader_program(vs, fs) };
+        self.ctx.render.load_shader("default", vs, fs);
 
         let (vbo, vao, ebo) = (0, 0, 0);
 
-        (vertices, indices, program, (vbo, vao, ebo))
+        (vertices, indices, (vbo, vao, ebo))
     }
 
     pub fn run<S: Scene + 'static>(&mut self, first_scene: S) {
         self.ctx.start();
-        let (vertices, indices, program, (mut vbo, mut vao, mut ebo)) = self.setup_buffers();
+        let (vertices, indices, (mut vbo, mut vao, mut ebo)) = self.setup_buffers();
 
         unsafe {
             // Generate and bind Vertex Array Object
@@ -114,6 +114,8 @@ impl App {
         self.scenes
             .insert("first".to_string(), Box::new(first_scene));
 
+        self.ctx.render.set_shader("default");
+
         let first_scene = self.scenes.get_mut("first").unwrap();
 
         first_scene.load(&mut self.ctx);
@@ -152,7 +154,7 @@ impl App {
             first_scene.draw(&mut self.ctx);
 
             self.ctx.render.gl_present_surface();
-            self.ctx.render.draw_quad(program, vao, indices.len());
+            self.ctx.render.draw_quad(vao, indices.len());
             self.ctx.window.swap_buffers();
 
             self.ctx.input.flush();
@@ -165,7 +167,7 @@ impl App {
             }
         }
 
-        self.clean(vbo, vao, ebo, program);
+        self.clean(vbo, vao, ebo);
     }
 
     fn handle_events(ctx: &mut Context) {
@@ -285,13 +287,14 @@ impl App {
         }
     }
 
-    fn clean(&self, vbo: u32, vao: u32, ebo: u32, program: u32) {
+    fn clean(&self, vbo: u32, vao: u32, ebo: u32) {
         unsafe {
             gl::DeleteTextures(1, &self.ctx.render.texture_id);
             gl::DeleteBuffers(1, &vbo);
             gl::DeleteBuffers(1, &ebo);
             gl::DeleteVertexArrays(1, &vao);
-            gl::DeleteProgram(program);
+
+            self.ctx.render.clean_shaders();
         }
     }
 }

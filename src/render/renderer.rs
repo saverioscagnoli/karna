@@ -1,6 +1,7 @@
 use super::{
     atlas::{Atlas, TextureKind},
     font::Font,
+    shaders::create_shader_program,
 };
 use crate::{
     math::{
@@ -11,13 +12,14 @@ use crate::{
 };
 use fontdue::layout::TextStyle;
 use gl::types::{GLint, GLsizei};
+use hashbrown::HashMap;
 use sdl2::{
     pixels::PixelFormatEnum,
     rect::{FPoint, FRect},
     render::{Canvas, Texture, TextureCreator},
     surface::{Surface, SurfaceContext, SurfaceRef},
 };
-use std::{ops::Deref, path::Path, sync::OnceLock};
+use std::{ops::Deref, path::Path, rc::Rc, sync::OnceLock};
 
 pub use sdl2::pixels::Color;
 
@@ -44,6 +46,8 @@ pub struct Renderer {
     pub(crate) texture_id: u32,
     pub(crate) canvas: Canvas<Surface<'static>>,
     pub(crate) atlas: Atlas,
+    pub(crate) shaders: HashMap<String, u32>,
+    active_shader: (Rc<str>, u32),
 }
 
 impl Renderer {
@@ -62,6 +66,8 @@ impl Renderer {
             texture_id: 0,
             canvas,
             atlas: Atlas::new(),
+            shaders: HashMap::new(),
+            active_shader: ("".into(), 0),
         }
     }
 
@@ -89,7 +95,9 @@ impl Renderer {
         }
     }
 
-    pub(crate) fn draw_quad(&self, program: u32, vao: u32, indices_len: usize) {
+    pub(crate) fn draw_quad(&self, vao: u32, indices_len: usize) {
+        let (_, program) = self.active_shader;
+
         unsafe {
             gl::UseProgram(program);
             gl::BindVertexArray(vao);
@@ -100,6 +108,9 @@ impl Renderer {
                 gl::UNSIGNED_INT,
                 std::ptr::null(),
             );
+
+            gl::BindVertexArray(0);
+            gl::UseProgram(0);
         }
     }
 
@@ -111,6 +122,45 @@ impl Renderer {
             .expect("Failed to parse font file");
 
         self.atlas.fonts.insert(label, Font::new(font, size as f32));
+    }
+
+    pub fn load_shader<L: ToString, V: ToString, F: ToString>(
+        &mut self,
+        label: L,
+        vertex_src: V,
+        fragment_src: F,
+    ) {
+        let label = label.to_string();
+        let vertex = vertex_src.to_string();
+        let fragment = fragment_src.to_string();
+
+        let program = unsafe { create_shader_program(&vertex, &fragment) };
+
+        self.shaders.insert(label, program);
+    }
+
+    pub fn active_shader(&self) -> String {
+        self.active_shader.0.to_string()
+    }
+
+    pub fn set_shader<L: ToString>(&mut self, label: L) {
+        let label = label.to_string();
+
+        if let Some(&program) = self.shaders.get(&label) {
+            self.active_shader = (label.into(), program);
+        } else {
+            panic!("Shader not found: {}", label);
+        }
+    }
+
+    pub(crate) fn clean_shaders(&self) {
+        let programs = self.shaders.values();
+
+        for program in programs.into_iter() {
+            unsafe {
+                gl::DeleteProgram(*program);
+            }
+        }
     }
 
     /// Loads an image from a file.
