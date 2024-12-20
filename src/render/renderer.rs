@@ -71,6 +71,16 @@ impl Renderer {
         }
     }
 
+    pub(crate) fn update(&mut self, size: Size) {
+        self.canvas
+            .set_logical_size(size.width, size.height)
+            .unwrap();
+
+        unsafe {
+            gl::Viewport(0, 0, size.width as i32, size.height as i32);
+        }
+    }
+
     fn surface(&self) -> &SurfaceRef {
         self.canvas.surface()
     }

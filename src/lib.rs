@@ -9,6 +9,7 @@ pub use context::Context;
 pub use input::Input;
 pub use render::renderer::Renderer;
 pub use time::Time;
+pub use window::Cursor;
 pub use window::Window;
 
 pub mod audio;
