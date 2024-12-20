@@ -71,13 +71,7 @@ impl Interpolate for Color {
     }
 }
 
-/// A list of easing functions that can be used to interpolate values.
-/// Basically a function that takes a value between 0.0 and 1.0 and returns
-/// a value following the easing function's curve.
-///
-/// # References
-/// - [Easing functions](https://easings.net/)
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum Easing {
     Linear,
     InSine,
@@ -115,7 +109,12 @@ pub enum Easing {
 }
 
 impl Easing {
-    pub fn apply(&self, t: f32) -> f32 {
+    pub(crate) fn apply<T: Add<Output = T> + Sub<Output = T> + Mul<f32, Output = T> + Copy>(
+        &self,
+        t: f32,
+        start: T,
+        end: T,
+    ) -> f32 {
         match self {
             Self::Linear => t,
             Self::InSine => 1.0 - (t * std::f32::consts::PI / 2.0).cos(),
@@ -248,7 +247,7 @@ impl Easing {
                     2.0f32.powf(-20.0 * t + 10.0) * (c5 * (20.0 * t - 11.125)).sin() / 2.0 + 1.0
                 }
             }
-            Self::InBounce => 1.0 - Self::OutBounce.apply(1.0 - t),
+            Self::InBounce => 1.0 - Self::OutBounce.apply(1.0 - t, start, end),
             Self::OutBounce => {
                 let n1 = 7.5625;
                 let d1 = 2.75;
@@ -265,247 +264,188 @@ impl Easing {
             }
             Self::InOutBounce => {
                 if t < 0.5 {
-                    Self::InBounce.apply(t * 2.0) / 2.0
+                    Self::InBounce.apply(t * 2.0, start, end) / 2.0
                 } else {
-                    Self::OutBounce.apply(t * 2.0 - 1.0) / 2.0 + 0.5
+                    Self::OutBounce.apply(t * 2.0 - 1.0, start, end) / 2.0 + 0.5
                 }
             }
             Self::Custom(f) => f(t),
+            Self::CubicBezier(x1, y1, x2, y2) => {
+                // 1-  https://wikipedia.org/wiki/B%C3%A9zier_curve#Cubic_B%C3%A9zier_curves
+                let bezier = |t: f32, p0: f32, p1: f32, p2: f32, p3: f32| -> f32 {
+                    let mt = 1.0 - t;
+                    mt * mt * mt * p0
+                        + 3.0 * mt * mt * t * p1
+                        + 3.0 * mt * t * t * p2
+                        + t * t * t * p3
+                };
 
-            Self::CubicBezier(p0, p1, p2, p3) => {
-                p0 * (1.0 - t).powi(3)
-                    + 3.0 * p1 * t * (1.0 - t).powi(2)
-                    + 3.0 * p2 * t.powi(2) * (1.0 - t)
-                    + p3 * t.powi(3)
+                // 1- Derivative of the cubic bezier curve
+                let derivative = |t: f32, p0: f32, p1: f32, p2: f32, p3: f32| -> f32 {
+                    let mt = 1.0 - t;
+                    3.0 * mt * mt * (p1 - p0) + 6.0 * mt * t * (p2 - p1) + 3.0 * t * t * (p3 - p2)
+                };
+
+                let mut t_guess = t;
+                for _ in 0..10 {
+                    let x = bezier(t_guess, 0.0, *x1, *x2, 1.0);
+                    let dx = derivative(t_guess, 0.0, *x1, *x2, 1.0);
+
+                    if dx.abs() < 1e-6 {
+                        break;
+                    }
+
+                    t_guess -= (x - t) / dx;
+                }
+
+                bezier(t_guess, 0.0, *y1, *y2, 1.0)
             }
         }
     }
+}
 
-    pub fn name(&self) -> String {
+impl Default for Easing {
+    fn default() -> Self {
+        Easing::Linear
+    }
+}
+
+impl ToString for Easing {
+    fn to_string(&self) -> String {
         match self {
-            Self::Linear => "Linear".to_string(),
-            Self::InSine => "InSine".to_string(),
-            Self::OutSine => "OutSine".to_string(),
-            Self::InOutSine => "InOutSine".to_string(),
-            Self::InQuad => "InQuad".to_string(),
-            Self::OutQuad => "OutQuad".to_string(),
-            Self::InOutQuad => "InOutQuad".to_string(),
-            Self::InCubic => "InCubic".to_string(),
-            Self::OutCubic => "OutCubic".to_string(),
-            Self::InOutCubic => "InOutCubic".to_string(),
-            Self::InQuart => "InQuart".to_string(),
-            Self::OutQuart => "OutQuart".to_string(),
-            Self::InOutQuart => "InOutQuart".to_string(),
-            Self::InQuint => "InQuint".to_string(),
-            Self::OutQuint => "OutQuint".to_string(),
-            Self::InOutQuint => "InOutQuint".to_string(),
-            Self::InExpo => "InExpo".to_string(),
-            Self::OutExpo => "OutExpo".to_string(),
-            Self::InOutExpo => "InOutExpo".to_string(),
-            Self::InCirc => "InCirc".to_string(),
-            Self::OutCirc => "OutCirc".to_string(),
-            Self::InOutCirc => "InOutCirc".to_string(),
-            Self::InBack => "InBack".to_string(),
-            Self::OutBack => "OutBack".to_string(),
-            Self::InOutBack => "InOutBack".to_string(),
-            Self::InElastic => "InElastic".to_string(),
-            Self::OutElastic => "OutElastic".to_string(),
-            Self::InOutElastic => "InOutElastic".to_string(),
-            Self::InBounce => "InBounce".to_string(),
-            Self::OutBounce => "OutBounce".to_string(),
-            Self::InOutBounce => "InOutBounce".to_string(),
-            Self::Custom(_) => "Custom".to_string(),
-            Self::CubicBezier(p0, p1, p2, p3) => {
-                format!("CubicBezier({}, {}, {}, {})", p0, p1, p2, p3)
+            Easing::Linear => "Linear".to_string(),
+            Easing::InSine => "InSine".to_string(),
+            Easing::OutSine => "OutSine".to_string(),
+            Easing::InOutSine => "InOutSine".to_string(),
+            Easing::InQuad => "InQuad".to_string(),
+            Easing::OutQuad => "OutQuad".to_string(),
+            Easing::InOutQuad => "InOutQuad".to_string(),
+            Easing::InCubic => "InCubic".to_string(),
+            Easing::OutCubic => "OutCubic".to_string(),
+            Easing::InOutCubic => "InOutCubic".to_string(),
+            Easing::InQuart => "InQuart".to_string(),
+            Easing::OutQuart => "OutQuart".to_string(),
+            Easing::InOutQuart => "InOutQuart".to_string(),
+            Easing::InQuint => "InQuint".to_string(),
+            Easing::OutQuint => "OutQuint".to_string(),
+            Easing::InOutQuint => "InOutQuint".to_string(),
+            Easing::InExpo => "InExpo".to_string(),
+            Easing::OutExpo => "OutExpo".to_string(),
+            Easing::InOutExpo => "InOutExpo".to_string(),
+            Easing::InCirc => "InCirc".to_string(),
+            Easing::OutCirc => "OutCirc".to_string(),
+            Easing::InOutCirc => "InOutCirc".to_string(),
+            Easing::InBack => "InBack".to_string(),
+            Easing::OutBack => "OutBack".to_string(),
+            Easing::InOutBack => "InOutBack".to_string(),
+            Easing::InElastic => "InElastic".to_string(),
+            Easing::OutElastic => "OutElastic".to_string(),
+            Easing::InOutElastic => "InOutElastic".to_string(),
+            Easing::InBounce => "InBounce".to_string(),
+            Easing::OutBounce => "OutBounce".to_string(),
+            Easing::InOutBounce => "InOutBounce".to_string(),
+            Easing::Custom(_) => "Custom".to_string(),
+            Easing::CubicBezier(x1, y1, x2, y2) => {
+                format!("CubicBezier({}, {}, {}, {})", x1, y1, x2, y2)
             }
         }
     }
-
-    pub fn all() -> Vec<Easing> {
-        vec![
-            Self::Linear,
-            Self::InSine,
-            Self::OutSine,
-            Self::InOutSine,
-            Self::InQuad,
-            Self::OutQuad,
-            Self::InOutQuad,
-            Self::InCubic,
-            Self::OutCubic,
-            Self::InOutCubic,
-            Self::InQuart,
-            Self::OutQuart,
-            Self::InOutQuart,
-            Self::InQuint,
-            Self::OutQuint,
-            Self::InOutQuint,
-            Self::InExpo,
-            Self::OutExpo,
-            Self::InOutExpo,
-            Self::InCirc,
-            Self::OutCirc,
-            Self::InOutCirc,
-            Self::InBack,
-            Self::OutBack,
-            Self::InOutBack,
-            Self::InElastic,
-            Self::OutElastic,
-            Self::InOutElastic,
-            Self::InBounce,
-            Self::OutBounce,
-            Self::InOutBounce,
-        ]
-    }
 }
 
-/// A structs that takes in a value and interpolates it
-/// to another value over a certain duration.
-/// This means that you can change a value from one to another
-/// while respecting a certain easing function.
-///
-/// This is very useful for animations and transitions,
-/// like the opening of a menu, or the rotation of a sprite.
-pub struct Tween<T: Interpolate + Copy> {
-    /// The value at the start of the tween
+pub struct Tween<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> {
     start: T,
-    /// The target value, meaning the start value will interpolate to this value
     end: T,
-    /// The duration of the tween
     duration: Duration,
-    /// The time elapsed since the tween started
     elapsed: f32,
-    /// The easing function to use
     easing: Easing,
-    /// Internal flag to know if the tween is running or not
-    running: bool,
 
-    /// A value needed to reset / reverse the tween
-    original_start: T,
+    /// Internals
+    running: bool,
+    paused: bool,
 }
 
-impl<T: Interpolate + Copy> Tween<T> {
-    /// Creates a new tween with the given start and end values.
-    /// It will not start automatically, you need to call `start` to start it.
+impl<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> Tween<T> {
     pub fn new(start: T, end: T, duration: Duration, easing: Easing) -> Self {
         Self {
             start,
             end,
             duration,
+            elapsed: 0.0,
+            easing,
             running: false,
-            elapsed: 0.0,
-            easing,
-            original_start: start,
+            paused: false,
         }
     }
 
-    /// Creates a new tween with the given start and end values.
-    /// It will start automatically.
     pub fn new_and_start(start: T, end: T, duration: Duration, easing: Easing) -> Self {
-        Self {
-            start,
-            end,
-            duration,
-            running: true,
-            elapsed: 0.0,
-            easing,
-            original_start: start,
-        }
+        let mut tween = Self::new(start, end, duration, easing);
+        tween.start();
+        tween
     }
 
-    /// Returns true if the tween is running, false otherwise.
-    pub fn paused(&self) -> bool {
-        !self.running
-    }
-
-    /// Pauses the tween.
-    pub fn pause(&mut self) {
-        self.running = false;
-    }
-
-    /// Starts / resumes the tween.
     pub fn start(&mut self) {
         self.running = true;
     }
 
-    /// A function that returns the value of the tween at the current time.
-    /// This function should be called every frame to update the tween.
-    pub fn update(&mut self, dt: f32) -> T {
-        if self.running {
-            self.elapsed += dt;
+    pub fn pause(&mut self) {
+        self.paused = true;
+    }
+
+    pub fn resume(&mut self) {
+        self.paused = false;
+    }
+
+    pub fn move_by(&mut self, t: f32) -> T {
+        if !self.running || self.paused {
+            return self.start;
         }
 
-        let dur = self.duration.as_secs_f32();
+        self.elapsed += t;
 
-        if self.elapsed > dur {
-            self.elapsed = dur;
+        let dur_f32 = self.duration.as_secs_f32();
+
+        if self.elapsed >= dur_f32 {
+            self.running = false;
+            self.elapsed = dur_f32;
         }
 
-        self.start
-            .interpolate(&self.end, self.easing.apply(self.elapsed / dur))
+        let t = self
+            .easing
+            .apply(self.elapsed / dur_f32, self.start, self.end);
+
+        lerp(self.start, self.end, t)
     }
 
-    /// Returns the duration of the tween.
-    pub fn duration(&self) -> Duration {
-        self.duration
+    pub fn is_finished(&self) -> bool {
+        self.elapsed >= self.duration.as_secs_f32()
     }
 
-    /// Returns the time elapsed since the tween started.
-    pub fn elapsed(&self) -> f32 {
-        self.elapsed
+    pub fn is_running(&self) -> bool {
+        self.running
     }
 
-    /// Returns the easing function of the tween.
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+
     pub fn easing(&self) -> Easing {
         self.easing
     }
 
-    /// Returns the end value of the tween.
-    pub fn target(&self) -> T {
-        self.end
+    pub fn elapsed(&self) -> f32 {
+        self.elapsed
     }
 
-    /// Sets the end value of the tween.
-    /// Useful for changing the target value while running.
-    pub fn set_target(&mut self, target: T) {
-        self.end = target;
+    pub fn duration(&self) -> Duration {
+        self.duration
     }
 
-    /// Resets the tween to its original state.
-    /// Does not start the tween.
+    pub fn reverse(&mut self) {
+        std::mem::swap(&mut self.start, &mut self.end);
+        self.elapsed = 0.0;
+    }
+
     pub fn reset(&mut self) {
         self.elapsed = 0.0;
-        self.start = self.original_start;
-        self.pause();
-    }
-
-    /// Resets the tween to its original state and starts it.
-    pub fn restart(&mut self) {
-        self.elapsed = 0.0;
-        self.start = self.original_start;
-        self.start();
-    }
-
-    /// Reverses the tween.
-    /// Does not start the tween.
-    pub fn reverse(&mut self) {
-        let temp = self.start;
-        self.start = self.end;
-        self.end = temp;
-        self.elapsed = 0.0;
-        self.pause();
-    }
-
-    /// Reverse the tween and starts it.
-    pub fn reverse_and_start(&mut self) {
-        let temp = self.start;
-        self.start = self.end;
-        self.end = temp;
-        self.elapsed = 0.0;
-        self.start();
-    }
-
-    /// Returns true if the tween is finished, false otherwise.
-    pub fn finished(&self) -> bool {
-        self.elapsed >= self.duration.as_secs_f32()
     }
 }
