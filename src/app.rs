@@ -2,7 +2,10 @@ use crate::{math::Size, traits::Scene, Context};
 use gl::types::{GLint, GLsizei, GLsizeiptr};
 use hashbrown::HashMap;
 use rodio::Sample;
-use sdl2::{controller::Axis, event::Event};
+use sdl2::{
+    controller::Axis,
+    event::{Event, WindowEvent},
+};
 use std::{
     collections::VecDeque,
     time::{Duration, Instant},
@@ -174,6 +177,11 @@ impl App {
         for event in ctx.sdl.event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => ctx.running = false,
+                Event::Window { win_event, .. } => match win_event {
+                    WindowEvent::Resized(w, h) => ctx.render.update((w, h).into()),
+
+                    _ => {}
+                },
 
                 Event::KeyDown {
                     repeat,

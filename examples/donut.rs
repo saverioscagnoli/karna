@@ -12,7 +12,9 @@ const CHARS: [&str; 13] = [
 ];
 
 impl Scene for FirstScene {
-    fn load(&mut self, _ctx: &mut Context) {}
+    fn load(&mut self, ctx: &mut Context) {
+        ctx.window.set_resizable(true);
+    }
 
     fn update(&mut self, ctx: &mut Context) {
         self.chars_to_draw.clear();
