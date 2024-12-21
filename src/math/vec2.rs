@@ -18,27 +18,27 @@ impl Vec2 {
         }
     }
 
-    pub fn zero() -> Self {
+    pub const fn zero() -> Self {
         Self { x: 0.0, y: 0.0 }
     }
 
-    pub fn one() -> Self {
+    pub const fn one() -> Self {
         Self { x: 1.0, y: 1.0 }
     }
 
-    pub fn up() -> Self {
+    pub const fn up() -> Self {
         Self { x: 0.0, y: 1.0 }
     }
 
-    pub fn down() -> Self {
+    pub const fn down() -> Self {
         Self { x: 0.0, y: -1.0 }
     }
 
-    pub fn left() -> Self {
+    pub const fn left() -> Self {
         Self { x: -1.0, y: 0.0 }
     }
 
-    pub fn right() -> Self {
+    pub const fn right() -> Self {
         Self { x: 1.0, y: 0.0 }
     }
 
