@@ -21,6 +21,41 @@ impl Size {
     pub(crate) fn to_frect(&self, vec: Vec2) -> FRect {
         FRect::new(vec.x, vec.y, self.width as f32, self.height as f32)
     }
+
+    pub fn center_x(&self) -> f32 {
+        self.width as f32 / 2.0
+    }
+
+    pub fn center_y(&self) -> f32 {
+        self.height as f32 / 2.0
+    }
+
+    pub fn center(&self) -> Vec2 {
+        let x = self.center_x();
+        let y = self.center_y();
+
+        (x, y).into()
+    }
+
+    pub fn fit_center_x(&self, size: u32) -> f32 {
+        (self.width as f32 - size as f32) / 2.0
+    }
+
+    pub fn fit_center_y(&self, size: u32) -> f32 {
+        (self.height as f32 - size as f32) / 2.0
+    }
+
+    /// Returns the position to fit the size in the center of the size.
+    pub fn fit_center(&self, size: Size) -> Vec2 {
+        let x = self.fit_center_x(size.width);
+        let y = self.fit_center_y(size.height);
+
+        (x, y).into()
+    }
+
+    pub fn area(&self) -> u32 {
+        self.width * self.height
+    }
 }
 
 impl Default for Size {

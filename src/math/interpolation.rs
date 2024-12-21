@@ -1,6 +1,3 @@
-use sdl2::pixels::Color;
-
-use super::Vec2;
 use std::{
     ops::{Add, Mul, Sub},
     time::Duration,
@@ -32,45 +29,11 @@ where
     a + (b - a) * t
 }
 
-/// A trait that allows a type to be interpolated between two values.
-/// This is useful for creating smooth transitions between values.
-/// Must be implemented to create a Tween.
-pub trait Interpolate {
-    fn interpolate(&self, other: &Self, t: f32) -> Self;
-}
-
-impl Interpolate for f32 {
-    fn interpolate(&self, other: &Self, t: f32) -> Self {
-        lerp(*self, *other, t)
-    }
-}
-
-impl Interpolate for u32 {
-    fn interpolate(&self, other: &Self, t: f32) -> Self {
-        self + ((*other as f32 - *self as f32) * t) as u32
-    }
-}
-
-impl Interpolate for Vec2 {
-    fn interpolate(&self, other: &Self, t: f32) -> Self {
-        Vec2 {
-            x: lerp(self.x, other.x, t),
-            y: lerp(self.y, other.y, t),
-        }
-    }
-}
-
-impl Interpolate for Color {
-    fn interpolate(&self, other: &Self, t: f32) -> Self {
-        Color {
-            r: lerp(self.r as f32, other.r as f32, t).clamp(0.0, 255.0) as u8,
-            g: lerp(self.g as f32, other.g as f32, t).clamp(0.0, 255.0) as u8,
-            b: lerp(self.b as f32, other.b as f32, t).clamp(0.0, 255.0) as u8,
-            a: lerp(self.a as f32, other.a as f32, t).clamp(0.0, 255.0) as u8,
-        }
-    }
-}
-
+/// Easing functions are used to create smooth transitions between two values.
+/// They are used in tweens to determine how the transition should look like.
+///
+/// # Reference
+/// - [Easing functions](https://easings.net/)
 #[derive(Debug, Clone, Copy)]
 pub enum Easing {
     Linear,
@@ -381,8 +344,6 @@ impl ToString for Easing {
 pub struct Tween<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> {
     /// The start value of the tween
     start: T,
-    /// The current value of the tween
-    curr: T,
     /// The end value of the tween
     end: T,
     /// The duration of the tween
@@ -394,7 +355,6 @@ pub struct Tween<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + C
 
     /// Internals
     running: bool,
-    paused: bool,
 }
 
 impl<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> Tween<T> {
@@ -402,13 +362,11 @@ impl<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> Tween<T
     pub fn new(start: T, end: T, duration: Duration, easing: Easing) -> Self {
         Self {
             start,
-            curr: start,
             end,
             duration,
             elapsed: 0.0,
             easing,
             running: false,
-            paused: false,
         }
     }
 
@@ -426,21 +384,19 @@ impl<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> Tween<T
 
     /// Pauses the tween
     pub fn pause(&mut self) {
-        self.paused = true;
+        self.running = false;
     }
 
     /// Resumes the tween
     pub fn resume(&mut self) {
-        self.paused = false;
+        self.running = true;
     }
 
     /// Updates the tween by the given time delta.
     pub fn move_by(&mut self, t: f32) -> T {
-        if !self.running || self.paused {
-            return self.curr;
+        if self.running {
+            self.elapsed += t;
         }
-
-        self.elapsed += t;
 
         let dur_f32 = self.duration.as_secs_f32();
 
@@ -451,9 +407,9 @@ impl<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> Tween<T
 
         let t = self
             .easing
-            .apply(self.elapsed / dur_f32, self.curr, self.end);
+            .apply(self.elapsed / dur_f32, self.start, self.end);
 
-        lerp(self.curr, self.end, t)
+        lerp(self.start, self.end, t)
     }
 
     /// Returns the start value of the tween
@@ -464,11 +420,6 @@ impl<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> Tween<T
     /// Returns the end value of the tween
     pub fn target(&self) -> T {
         self.end
-    }
-
-    /// Returns the value of the tween at the given time.
-    pub fn value(&self) -> T {
-        self.curr
     }
 
     /// Checks if the tween has finished
@@ -483,7 +434,7 @@ impl<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> Tween<T
 
     /// Checks if the tween is paused
     pub fn is_paused(&self) -> bool {
-        self.paused
+        !self.running
     }
 
     /// Returns the easing function of the tween
@@ -505,7 +456,6 @@ impl<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> Tween<T
     pub fn reset(&mut self) {
         self.elapsed = 0.0;
         self.running = false;
-        self.paused = false;
     }
 
     /// Reverses the tween and keeps it running
@@ -516,13 +466,12 @@ impl<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> Tween<T
 
     /// Reverses the tween and stops it
     pub fn reverse(&mut self) {
-        let temp = self.curr;
-        self.curr = self.end;
+        let temp = self.start;
+        self.start = self.end;
         self.end = temp;
 
         self.elapsed = 0.0;
         self.running = false;
-        self.paused = false;
     }
 
     /// Reverses the tween and keeps it running
