@@ -44,7 +44,6 @@ const EASINGS: &[Easing] = &[
 struct FirstScene {
     pos: Vec2,
     tween: Tween<Vec2>,
-    target: Vec2,
 }
 
 impl Scene for FirstScene {
@@ -64,8 +63,6 @@ impl Scene for FirstScene {
 
             self.tween =
                 Tween::new_and_start(self.pos, target, Duration::from_secs(2), *pick(EASINGS));
-
-            self.target = target;
         }
 
         if ctx.input.key_pressed(Key::Space) {
@@ -84,7 +81,7 @@ impl Scene for FirstScene {
         ctx.render.fill_aa_circle(self.pos, 25);
 
         ctx.render.set_color(Color::GREEN);
-        ctx.render.fill_aa_circle(self.target, 5);
+        ctx.render.fill_aa_circle(self.tween.target(), 5);
 
         ctx.render.set_color(Color::BLACK);
 
@@ -118,6 +115,5 @@ fn main() {
             Duration::from_secs_f32(1.0),
             Easing::CubicBezier(0.14, 1.06, 0.88, 0.11),
         ),
-        target: (500, 500).into(),
     });
 }

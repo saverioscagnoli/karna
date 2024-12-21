@@ -352,11 +352,44 @@ impl ToString for Easing {
     }
 }
 
+/// A tween is a smooth transition between two values over a period of time.
+/// It uses an easing function to determine how the transition should look like.
+/// For more information on easing functions, check the `Easing` enum.
+///
+/// The `T` type must implement scalar add, sub and mul operations.
+/// Basically it must be a type that can be added, subtracted and multiplied by a float.
+/// Works with numbers, vectors, colors, etc.
+///
+/// # Example
+/// ```no_run
+/// let start = Vec2::new(0.0, 0.0);
+/// let end = Vec2::new(100.0, 100.0);
+///
+/// let mut tween = Tween::new(start, end, Duration::from_secs(2), Easing::InOutQuad);
+///
+/// loop {
+///    let pos = tween.move_by(delta);
+///
+///     if tween.is_finished() {
+///        break;
+///    }
+/// }
+/// ```
+///
+/// This will move the vector from `(0, 0)` to `(100, 100)` over a period of 2 seconds using the `InOutQuad` easing function.
+///
 pub struct Tween<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> {
+    /// The start value of the tween
     start: T,
+    /// The current value of the tween
+    curr: T,
+    /// The end value of the tween
     end: T,
+    /// The duration of the tween
     duration: Duration,
+    /// The time elapsed since the tween started
     elapsed: f32,
+    /// The easing function to use
     easing: Easing,
 
     /// Internals
@@ -365,9 +398,11 @@ pub struct Tween<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + C
 }
 
 impl<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> Tween<T> {
+    /// Creates a new tween with the given start and end values, duration and easing function.
     pub fn new(start: T, end: T, duration: Duration, easing: Easing) -> Self {
         Self {
             start,
+            curr: start,
             end,
             duration,
             elapsed: 0.0,
@@ -377,27 +412,32 @@ impl<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> Tween<T
         }
     }
 
+    /// Creates a new tween with the given start and end values, duration and easing function and starts it immediately.
     pub fn new_and_start(start: T, end: T, duration: Duration, easing: Easing) -> Self {
         let mut tween = Self::new(start, end, duration, easing);
         tween.start();
         tween
     }
 
+    /// Starts the tween
     pub fn start(&mut self) {
         self.running = true;
     }
 
+    /// Pauses the tween
     pub fn pause(&mut self) {
         self.paused = true;
     }
 
+    /// Resumes the tween
     pub fn resume(&mut self) {
         self.paused = false;
     }
 
+    /// Updates the tween by the given time delta.
     pub fn move_by(&mut self, t: f32) -> T {
         if !self.running || self.paused {
-            return self.start;
+            return self.curr;
         }
 
         self.elapsed += t;
@@ -411,41 +451,83 @@ impl<T: Mul<f32, Output = T> + Add<Output = T> + Sub<Output = T> + Copy> Tween<T
 
         let t = self
             .easing
-            .apply(self.elapsed / dur_f32, self.start, self.end);
+            .apply(self.elapsed / dur_f32, self.curr, self.end);
 
-        lerp(self.start, self.end, t)
+        lerp(self.curr, self.end, t)
     }
 
+    /// Returns the start value of the tween
+    pub fn start_value(&self) -> T {
+        self.start
+    }
+
+    /// Returns the end value of the tween
+    pub fn target(&self) -> T {
+        self.end
+    }
+
+    /// Returns the value of the tween at the given time.
+    pub fn value(&self) -> T {
+        self.curr
+    }
+
+    /// Checks if the tween has finished
     pub fn is_finished(&self) -> bool {
         self.elapsed >= self.duration.as_secs_f32()
     }
 
+    /// Checks if the tween is running
     pub fn is_running(&self) -> bool {
         self.running
     }
 
+    /// Checks if the tween is paused
     pub fn is_paused(&self) -> bool {
         self.paused
     }
 
+    /// Returns the easing function of the tween
     pub fn easing(&self) -> Easing {
         self.easing
     }
 
+    /// Returns how much time has elapsed since the tween started
     pub fn elapsed(&self) -> f32 {
         self.elapsed
     }
 
+    /// Returns the duration of the tween
     pub fn duration(&self) -> Duration {
         self.duration
     }
 
-    pub fn reverse(&mut self) {
-        std::mem::swap(&mut self.start, &mut self.end);
-        self.elapsed = 0.0;
-    }
-
+    /// Resets the tween and stops it
     pub fn reset(&mut self) {
         self.elapsed = 0.0;
+        self.running = false;
+        self.paused = false;
+    }
+
+    /// Reverses the tween and keeps it running
+    pub fn reset_and_start(&mut self) {
+        self.reset();
+        self.start();
+    }
+
+    /// Reverses the tween and stops it
+    pub fn reverse(&mut self) {
+        let temp = self.curr;
+        self.curr = self.end;
+        self.end = temp;
+
+        self.elapsed = 0.0;
+        self.running = false;
+        self.paused = false;
+    }
+
+    /// Reverses the tween and keeps it running
+    pub fn reverse_and_start(&mut self) {
+        self.reverse();
+        self.start();
     }
 }
