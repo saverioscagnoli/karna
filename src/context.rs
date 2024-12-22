@@ -44,6 +44,8 @@ impl Context {
 
         let (window, _gl_context, _gl) = Context::init_opengl(&sdl.video, title, width, height);
 
+        let (width, height) = window.size();
+
         let window = Window::new(window);
         let render = Renderer::new(width, height);
         let input = Input::new(&sdl.ctx);

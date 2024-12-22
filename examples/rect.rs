@@ -7,10 +7,16 @@ struct FirstScene {
 }
 
 impl Scene for FirstScene {
-    fn load(&mut self, _ctx: &mut Context) {}
+    fn load(&mut self, _ctx: &mut Context) {
+        _ctx.window.set_resizable(true);
+    }
 
     fn update(&mut self, ctx: &mut Context) {
         let speed = 250.0;
+
+        if ctx.input.key_down(Key::G) {
+            ctx.window.set_size((1280, 720));
+        }
 
         if ctx.input.key_down(Key::W) {
             self.vel.y = -speed;
@@ -67,8 +73,8 @@ impl Scene for FirstScene {
 
 fn main() {
     App::window("Press WASD to move!", (800, 600)).run(FirstScene {
-        pos: Vec2::new(100, 100),
-        vel: Vec2::zero(),
+        pos: Vec2::new(100.0, 100.0),
+        vel: Vec2::ZERO,
         using_keyboard: false,
     });
 }

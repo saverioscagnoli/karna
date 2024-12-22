@@ -56,7 +56,7 @@ impl Inventory {
         let inv_size = Size::new(500, 300);
 
         Self {
-            pos: Vec2::zero(),
+            pos: Vec2::ZERO,
             size: (500, 300).into(),
             tween: Tween::new(
                 Vec2::new(size.fit_center_x(inv_size.width), HEIGHT as f32),
@@ -95,9 +95,9 @@ struct Circle {
 impl Circle {
     fn new() -> Self {
         Self {
-            pos: Vec2::zero(),
+            pos: Vec2::ZERO,
             tween: Tween::new_and_start(
-                Vec2::zero(),
+                Vec2::ZERO,
                 Size::new(800, 600).center(),
                 Duration::from_millis(1000),
                 Easing::InSine,

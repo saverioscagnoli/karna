@@ -47,7 +47,7 @@ impl Scene for FirstScene {
 
 fn main() {
     App::window("basic window", (800, 600)).run(FirstScene {
-        pos: Vec2::one(),
-        vel: Vec2::zero(),
+        pos: Vec2::ONE,
+        vel: Vec2::ZERO,
     });
 }
