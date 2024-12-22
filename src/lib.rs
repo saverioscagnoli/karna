@@ -14,6 +14,7 @@ pub use window::Window;
 
 pub mod audio;
 pub mod input;
+pub mod log;
 pub mod math;
 pub mod render;
 pub mod traits;

@@ -7,7 +7,7 @@ pub use sdl2::keyboard::Keycode as Key;
 pub use sdl2::mouse::MouseButton as Mouse;
 use sdl2::{GameControllerSubsystem, Sdl};
 
-use crate::math::Vec2;
+use crate::{error, info, math::Vec2, warn};
 
 pub struct Input {
     controller_sys: GameControllerSubsystem,
@@ -59,7 +59,7 @@ impl Input {
 
             match self.controller_sys.open(i) {
                 Ok(c) => {
-                    println!("Controller {} connected.", c.name());
+                    info!("Controller found: {}", c.name());
                     Some(c)
                 }
                 Err(_) => None,
@@ -67,7 +67,8 @@ impl Input {
         });
 
         if controller.is_none() {
-            println!("No controller found.");
+            warn!("No controller found.");
+            error!("aaa");
         }
 
         self.controller = controller;
