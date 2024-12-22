@@ -1,4 +1,6 @@
-use crate::{input::Input, Audio, Renderer, Time, Window};
+use std::ffi::CStr;
+
+use crate::{info, input::Input, Audio, Renderer, Time, Window};
 use sdl2::{
     video::{self, GLContext},
     VideoSubsystem,
@@ -51,6 +53,23 @@ impl Context {
         let input = Input::new(&sdl.ctx);
         let time = Time::new();
         let audio = Audio::new();
+
+        info!("Karna v{}", env!("CARGO_PKG_VERSION"));
+
+        unsafe {
+            let version = gl::GetString(gl::VERSION);
+            let renderer = gl::GetString(gl::RENDERER);
+
+            if !version.is_null() {
+                let version = CStr::from_ptr(version as *const _).to_str().unwrap();
+                info!("Using OpenGL v{}", version);
+            }
+
+            if !renderer.is_null() {
+                let renderer = CStr::from_ptr(renderer as *const _).to_str().unwrap();
+                info!("Device: {}", renderer);
+            }
+        }
 
         Self {
             sdl,
