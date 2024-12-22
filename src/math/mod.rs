@@ -2,13 +2,20 @@ mod interpolation;
 mod random;
 mod size;
 mod vec2;
+mod vec3;
+mod vec4;
+
+mod mat4;
 
 pub(crate) mod circles;
 
 pub use interpolation::{Easing, Tween};
+pub use mat4::Mat4;
 pub use random::{coin_flip, pick, pick_mut, rng};
 pub use size::Size;
 pub use vec2::Vec2;
+pub use vec3::Vec3;
+pub use vec4::Vec4;
 
 pub trait ToF32 {
     fn to_f32(&self) -> f32;

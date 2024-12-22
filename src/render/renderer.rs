@@ -1,9 +1,9 @@
 use super::{
     atlas::{Atlas, TextureKind},
     font::Font,
-    shaders::{create_shader_program, Uniform},
 };
 use crate::{
+    gl::{vertex_attrib_pointer, Ebo, OpenGLTexture, Program, Shader, ShaderKind, Vao, Vbo},
     math::{
         circles::{CircleFill, CircleOutline},
         Size, ToU32, Vec2,
@@ -11,15 +11,13 @@ use crate::{
     traits::LoadSurface,
 };
 use fontdue::layout::TextStyle;
-use gl::types::{GLint, GLsizei};
-use hashbrown::HashMap;
 use sdl2::{
     pixels::PixelFormatEnum,
     rect::{FPoint, FRect},
     render::{Canvas, Texture, TextureCreator},
-    surface::{Surface, SurfaceContext, SurfaceRef},
+    surface::{Surface, SurfaceContext},
 };
-use std::{ops::Deref, path::Path, rc::Rc, sync::OnceLock};
+use std::{ops::Deref, path::Path, sync::OnceLock};
 
 pub use sdl2::pixels::Color;
 
@@ -43,14 +41,33 @@ pub(crate) fn texture_creator() -> &'static TextureCreator<SurfaceContext<'stati
 }
 
 pub struct Renderer {
-    pub(crate) texture_id: u32,
     pub(crate) canvas: Canvas<Surface<'static>>,
     pub(crate) atlas: Atlas,
-    pub(crate) shaders: HashMap<String, u32>,
-    active_shader: (Rc<str>, u32),
+
+    vao: Vao,
+    _vbo: Vbo,
+    _ebo: Ebo,
+
+    program: Program,
+    gl_tex: OpenGLTexture,
 }
 
 impl Renderer {
+    #[rustfmt::skip]
+    const QUAD_VERTEX: [f32; 20] = [
+            // Positions    // Texture Coords
+            1.0,  1.0, 0.0,  1.0, 0.0, // top right
+            1.0, -1.0, 0.0,  1.0, 1.0, // bottom right
+           -1.0, -1.0, 0.0,  0.0, 1.0, // bottom left
+           -1.0,  1.0, 0.0,  0.0, 0.0  // top left 
+    ];
+
+    #[rustfmt::skip]
+    const QUAD_INDEX: [u32; 6] = [
+        0, 1, 3, // first triangle
+        1, 2, 3  // second triangle
+    ];
+
     pub fn new(width: u32, height: u32) -> Self {
         let canvas = Surface::new(width, height, PixelFormatEnum::RGBA32)
             .unwrap()
@@ -62,65 +79,48 @@ impl Renderer {
             .map_err(|_| panic!("Failed to set texture creator"))
             .unwrap();
 
+        let vs = Shader::from_str(include_str!("../../assets/vs.glsl"), ShaderKind::Vertex);
+        let fs = Shader::from_str(include_str!("../../assets/fs.glsl"), ShaderKind::Fragment);
+
+        let program = Program::new(vs, fs);
+
+        let vao = Vao::new();
+        let vbo = Vbo::new();
+        let ebo = Ebo::new();
+
+        vao.bind();
+
+        vbo.bind();
+        vbo.buffer_data(&Self::QUAD_VERTEX, gl::STATIC_DRAW);
+
+        ebo.bind();
+        ebo.buffer_data(&Self::QUAD_INDEX, gl::STATIC_DRAW);
+
+        vertex_attrib_pointer(0, 3, 5, 0);
+        vertex_attrib_pointer(1, 2, 5, 3);
+
+        Vbo::unbind();
+        Vao::unbind();
+
+        let texture = OpenGLTexture::new();
+
+        texture.bind();
+
+        texture.parameteri(gl::TEXTURE_MIN_FILTER, gl::LINEAR);
+        texture.parameteri(gl::TEXTURE_MAG_FILTER, gl::LINEAR);
+        texture.parameteri(gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE);
+        texture.parameteri(gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE);
+
+        texture.image_2d(width, height, std::ptr::null());
+
         Self {
-            texture_id: 0,
             canvas,
             atlas: Atlas::new(),
-            shaders: HashMap::new(),
-            active_shader: ("".into(), 0),
-        }
-    }
-
-    pub(crate) fn update(&mut self, size: Size) {
-        self.canvas
-            .set_logical_size(size.width, size.height)
-            .unwrap();
-
-        unsafe {
-            gl::Viewport(0, 0, size.width as i32, size.height as i32);
-        }
-    }
-
-    fn surface(&self) -> &SurfaceRef {
-        self.canvas.surface()
-    }
-
-    pub(crate) fn gl_present_surface(&self) {
-        unsafe {
-            let surface = self.surface();
-            let pixel_buffer = surface.without_lock().unwrap();
-
-            gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
-            gl::TexImage2D(
-                gl::TEXTURE_2D,
-                0,
-                gl::RGBA as GLint,
-                surface.width() as GLsizei,
-                surface.height() as GLsizei,
-                0,
-                gl::RGBA,
-                gl::UNSIGNED_BYTE,
-                pixel_buffer.as_ptr() as *const _,
-            );
-        }
-    }
-
-    pub(crate) fn draw_quad(&self, vao: u32, indices_len: usize) {
-        let (_, program) = self.active_shader;
-
-        unsafe {
-            gl::UseProgram(program);
-            gl::BindVertexArray(vao);
-            gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
-            gl::DrawElements(
-                gl::TRIANGLES,
-                indices_len as i32,
-                gl::UNSIGNED_INT,
-                std::ptr::null(),
-            );
-
-            gl::BindVertexArray(0);
-            gl::UseProgram(0);
+            vao,
+            _vbo: vbo,
+            _ebo: ebo,
+            program,
+            gl_tex: texture,
         }
     }
 
@@ -132,76 +132,6 @@ impl Renderer {
             .expect("Failed to parse font file");
 
         self.atlas.fonts.insert(label, Font::new(font, size as f32));
-    }
-
-    pub fn load_shader<L: ToString, V: ToString, F: ToString>(
-        &mut self,
-        label: L,
-        vertex_src: V,
-        fragment_src: F,
-    ) {
-        let label = label.to_string();
-        let vertex = vertex_src.to_string();
-        let fragment = fragment_src.to_string();
-
-        let program = unsafe { create_shader_program(&vertex, &fragment) };
-
-        self.shaders.insert(label, program);
-    }
-
-    pub fn active_shader(&self) -> String {
-        self.active_shader.0.to_string()
-    }
-
-    pub fn set_shader<L: ToString>(&mut self, label: L) {
-        let label = label.to_string();
-
-        if let Some(&program) = self.shaders.get(&label) {
-            self.active_shader = (label.into(), program);
-        } else {
-            panic!("Shader not found: {}", label);
-        }
-    }
-
-    pub fn set_shader_uniform<L: ToString, U: ToString>(
-        &self,
-        label: L,
-        uniform: U,
-        value: Uniform,
-    ) {
-        let label = label.to_string();
-        let uniform = uniform.to_string();
-
-        if let Some(&program) = self.shaders.get(&label) {
-            unsafe {
-                let location = gl::GetUniformLocation(program, uniform.as_ptr() as *const i8);
-
-                gl::UseProgram(program);
-
-                match value {
-                    Uniform::Int(v) => gl::Uniform1i(location, v),
-                    Uniform::Float(v) => gl::Uniform1f(location, v),
-                    Uniform::Vec2(x, y) => gl::Uniform2f(location, x, y),
-                    Uniform::Vec3(x, y, z) => gl::Uniform3f(location, x, y, z),
-                    Uniform::Vec4(x, y, z, w) => gl::Uniform4f(location, x, y, z, w),
-                    Uniform::Mat4(v) => gl::UniformMatrix4fv(location, 1, gl::FALSE, v.as_ptr()),
-                }
-
-                gl::UseProgram(0);
-            }
-        } else {
-            panic!("Shader not found: {}", label);
-        }
-    }
-
-    pub(crate) fn clean_shaders(&self) {
-        let programs = self.shaders.values();
-
-        for program in programs.into_iter() {
-            unsafe {
-                gl::DeleteProgram(*program);
-            }
-        }
     }
 
     /// Loads an image from a file.
@@ -220,6 +150,26 @@ impl Renderer {
             .insert_texture(&TextureKind::Image(label.into()), texture);
     }
 
+    pub fn present(&mut self) {
+        let surf = self.canvas.surface();
+        let (width, height) = surf.size();
+        let pixels = surf.without_lock().unwrap();
+
+        self.gl_tex.bind();
+        self.gl_tex
+            .sub_image_2d(0, 0, width, height, pixels.as_ptr());
+
+        self.program.r#use();
+
+        self.gl_tex.bind();
+        self.vao.bind();
+
+        unsafe {
+            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, std::ptr::null());
+        }
+
+        Vao::unbind();
+    }
     pub fn clear(&mut self) {
         self.canvas.clear();
     }

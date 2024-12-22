@@ -44,7 +44,7 @@ impl ToString for Cursor {
 }
 
 pub struct Window {
-    inner: sdl2::video::Window,
+    pub(crate) inner: sdl2::video::Window,
     cursors: HashMap<String, sdl2::mouse::Cursor>,
 }
 

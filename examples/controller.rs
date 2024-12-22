@@ -77,8 +77,8 @@ impl Scene for FirstScene {
 
         let ls = ctx.input.left_stick();
 
-        let ls_center = Vec2::new(250, 450);
-        let actual_ls = ls_center + ls * 50;
+        let ls_center = Vec2::new(250.0, 450.0);
+        let actual_ls = ls_center + ls * 50.0;
 
         ctx.render.draw_aa_circle(ls_center, 50);
         ctx.render.draw_line(ls_center, actual_ls);
@@ -86,9 +86,9 @@ impl Scene for FirstScene {
 
         let rs = ctx.input.right_stick();
 
-        let rs_center = Vec2::new(550, 450);
+        let rs_center = Vec2::new(550.0, 450.0);
 
-        let actual_rs = rs_center + rs * 50;
+        let actual_rs = rs_center + rs * 50.0;
 
         ctx.render.set_color(Color::WHITE);
 
