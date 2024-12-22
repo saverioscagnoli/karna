@@ -14,10 +14,6 @@ impl Scene for FirstScene {
     fn update(&mut self, ctx: &mut Context) {
         let speed = 250.0;
 
-        if ctx.input.key_down(Key::G) {
-            ctx.window.set_size((1280, 720));
-        }
-
         if ctx.input.key_down(Key::W) {
             self.vel.y = -speed;
             self.using_keyboard = true;

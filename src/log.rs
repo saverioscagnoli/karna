@@ -15,7 +15,6 @@ macro_rules! warn {
 #[macro_export]
 macro_rules! error {
     ($($arg:tt)*) => {
-        let loc = std::panic::Location::caller();
-        println!("[\x1b[31mERROR\x1b[0m] {} at {}", format!($($arg)*), loc);
+        eprintln!("[\x1b[31mERROR\x1b[0m] {}", format!($($arg)*));
     };
 }

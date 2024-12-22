@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 
-use crate::{info, input::Input, Audio, Renderer, Time, Window};
+use crate::{error, info, input::Input, Audio, Renderer, Time, Window};
 use sdl2::{
     video::{self, GLContext},
     VideoSubsystem,
@@ -18,6 +18,18 @@ impl SDL {
         let video = sdl.video().unwrap();
 
         let event_pump = sdl.event_pump().unwrap();
+
+        std::panic::set_hook(Box::new(|info| {
+            let location = info.location().unwrap();
+            let message = info.payload().downcast_ref::<&str>().unwrap();
+
+            error!(
+                "Panicked!: \"{}\" at {}:{}",
+                message,
+                location.file(),
+                location.line()
+            );
+        }));
 
         Self {
             ctx: sdl,
