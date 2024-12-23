@@ -70,8 +70,8 @@ impl App {
             self.ctx.render.clear();
 
             first_scene.draw(&mut self.ctx);
-
             self.ctx.render.present();
+
             self.ctx.window.swap_buffers();
 
             self.ctx.input.flush();

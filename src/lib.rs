@@ -20,3 +20,7 @@ pub mod render;
 pub mod traits;
 
 pub(crate) mod gl;
+
+pub mod shaders {
+    pub use crate::gl::{Shader, ShaderKind, Uniform};
+}

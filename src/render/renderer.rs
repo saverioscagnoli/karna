@@ -3,7 +3,9 @@ use super::{
     font::Font,
 };
 use crate::{
-    gl::{vertex_attrib_pointer, Ebo, OpenGLTexture, Program, Shader, ShaderKind, Vao, Vbo},
+    gl::{
+        vertex_attrib_pointer, Ebo, OpenGLTexture, Program, Shader, ShaderKind, Uniform, Vao, Vbo,
+    },
     math::{
         circles::{CircleFill, CircleOutline},
         Size, ToU32, Vec2,
@@ -11,13 +13,14 @@ use crate::{
     traits::LoadSurface,
 };
 use fontdue::layout::TextStyle;
+use hashbrown::HashMap;
 use sdl2::{
     pixels::PixelFormatEnum,
     rect::{FPoint, FRect},
     render::{Canvas, Texture, TextureCreator},
     surface::{Surface, SurfaceContext},
 };
-use std::{ops::Deref, path::Path, sync::OnceLock};
+use std::{ops::Deref, path::Path, rc::Rc, sync::OnceLock};
 
 pub use sdl2::pixels::Color;
 
@@ -47,9 +50,13 @@ pub struct Renderer {
     vao: Vao,
     _vbo: Vbo,
     _ebo: Ebo,
-
-    program: Program,
     gl_tex: OpenGLTexture,
+
+    default_program: Program,
+    programs: HashMap<String, Rc<Program>>,
+
+    current_program: Option<Rc<Program>>,
+    programs_this_frame: Vec<Rc<Program>>,
 }
 
 impl Renderer {
@@ -82,7 +89,7 @@ impl Renderer {
         let vs = Shader::from_str(include_str!("../../assets/vs.glsl"), ShaderKind::Vertex);
         let fs = Shader::from_str(include_str!("../../assets/fs.glsl"), ShaderKind::Fragment);
 
-        let program = Program::new(vs, fs);
+        let default_program = Program::new(vs, fs);
 
         let vao = Vao::new();
         let vbo = Vbo::new();
@@ -119,8 +126,11 @@ impl Renderer {
             vao,
             _vbo: vbo,
             _ebo: ebo,
-            program,
             gl_tex: texture,
+            default_program,
+            current_program: None,
+            programs: HashMap::new(),
+            programs_this_frame: Vec::new(),
         }
     }
 
@@ -150,28 +160,73 @@ impl Renderer {
             .insert_texture(&TextureKind::Image(label.into()), texture);
     }
 
-    pub fn present(&mut self) {
+    pub fn load_shader<L: ToString>(
+        &mut self,
+        label: L,
+        vertex_shader: Shader,
+        fragment_shader: Shader,
+    ) {
+        assert!(
+            vertex_shader.kind == ShaderKind::Vertex,
+            "Expected vertex shader, found fragment shader. Maybe did you swap the arguments?",
+        );
+
+        assert!(
+            fragment_shader.kind == ShaderKind::Fragment,
+            "Expected fragment shader, found vertex shader. Maybe did you swap the arguments?",
+        );
+
+        let program = Program::new(vertex_shader, fragment_shader);
+        self.programs.insert(label.to_string(), program.into());
+    }
+
+    pub fn set_shader<L: ToString>(&mut self, label: L) {
+        let label = label.to_string();
+
+        if let Some(program) = self.programs.get(&label) {
+            self.programs_this_frame.push(program.clone());
+            self.current_program = Some(program.clone());
+        }
+    }
+
+    pub fn set_shader_uniform<L: ToString>(&self, uniform: L, value: Uniform) {
+        if let Some(program) = self.current_program.as_ref() {
+            let uniform = uniform.to_string();
+            program.set_uniform(&uniform, value);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.canvas.clear();
+    }
+
+    pub(crate) fn present(&mut self) {
         let surf = self.canvas.surface();
         let (width, height) = surf.size();
         let pixels = surf.without_lock().unwrap();
+
+        self.default_program.r#use();
 
         self.gl_tex.bind();
         self.gl_tex
             .sub_image_2d(0, 0, width, height, pixels.as_ptr());
 
-        self.program.r#use();
-
-        self.gl_tex.bind();
         self.vao.bind();
 
         unsafe {
             gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, std::ptr::null());
         }
 
+        for program in self.programs_this_frame.iter() {
+            program.r#use();
+
+            unsafe {
+                gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, std::ptr::null());
+            }
+        }
+
         Vao::unbind();
-    }
-    pub fn clear(&mut self) {
-        self.canvas.clear();
+        self.programs_this_frame.clear();
     }
 
     pub fn color(&self) -> Color {
