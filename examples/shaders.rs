@@ -62,6 +62,7 @@ impl Scene for FirstScene {
         ctx.render.set_color(Color::RGB(53, 101, 77));
 
         ctx.render.fill_text(ctx.time.fps(), (10, 10), Color::WHITE);
+        ctx.render.reset_shader();
     }
 }
 

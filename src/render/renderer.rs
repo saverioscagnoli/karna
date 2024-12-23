@@ -16,7 +16,7 @@ use fontdue::layout::TextStyle;
 use hashbrown::HashMap;
 use sdl2::{
     pixels::PixelFormatEnum,
-    rect::{FPoint, FRect},
+    rect::{self, FPoint, FRect},
     render::{Canvas, Texture, TextureCreator},
     surface::{Surface, SurfaceContext},
 };
@@ -189,6 +189,10 @@ impl Renderer {
         }
     }
 
+    pub fn reset_shader(&mut self) {
+        self.current_program = None;
+    }
+
     pub fn set_shader_uniform<L: ToString>(&self, uniform: L, value: Uniform) {
         if let Some(program) = self.current_program.as_ref() {
             let uniform = uniform.to_string();
@@ -215,14 +219,6 @@ impl Renderer {
 
         unsafe {
             gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, std::ptr::null());
-        }
-
-        for program in self.programs_this_frame.iter() {
-            program.r#use();
-
-            unsafe {
-                gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, std::ptr::null());
-            }
         }
 
         Vao::unbind();
@@ -257,6 +253,23 @@ impl Renderer {
         let size: Size = size.into();
 
         self.canvas.fill_frect(size.to_frect(pos)).unwrap();
+    }
+
+    pub fn fill_rects<P: Into<Vec2>, S: Into<Size>, I: IntoIterator<Item = (P, S)>>(
+        &mut self,
+        rects: I,
+    ) {
+        let rects: Vec<_> = rects
+            .into_iter()
+            .map(|(pos, size)| {
+                let pos: Vec2 = pos.into();
+                let size: Size = size.into();
+
+                size.to_frect(pos)
+            })
+            .collect();
+
+        self.canvas.fill_frects(&rects).unwrap();
     }
 
     /// Draws an arc
