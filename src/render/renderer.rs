@@ -213,6 +213,10 @@ impl Renderer {
 
         self.vao.bind();
 
+        unsafe {
+            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, std::ptr::null());
+        }
+
         for program in self.programs_this_frame.iter() {
             program.r#use();
 
