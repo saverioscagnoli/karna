@@ -99,16 +99,6 @@ impl Ebo {
         }
     }
 
-    pub fn unbind() {
-        unsafe {
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
-        }
-    }
-
-    pub fn id(&self) -> u32 {
-        self.id
-    }
-
     pub fn buffer_data<T>(&self, data: &[T], usage: u32) {
         unsafe {
             gl::BufferData(

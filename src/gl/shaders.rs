@@ -19,10 +19,6 @@ pub struct Program {
 
 impl Program {
     pub fn new(vertex: Shader, fragment: Shader) -> Self {
-        if vertex.kind != ShaderKind::Vertex || fragment.kind != ShaderKind::Fragment {
-            panic!("The inputs must be a vertex and a fragment shader");
-        }
-
         unsafe {
             let id = gl::CreateProgram();
 
@@ -34,15 +30,9 @@ impl Program {
         }
     }
 
-    pub fn r#use(&self) {
+    pub(crate) fn r#use(&self) {
         unsafe {
             gl::UseProgram(self.id);
-        }
-    }
-
-    pub fn reset() {
-        unsafe {
-            gl::UseProgram(0);
         }
     }
 
@@ -72,6 +62,14 @@ impl Program {
     }
 }
 
+impl Drop for Program {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteProgram(self.id);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShaderKind {
     Vertex,
@@ -81,7 +79,7 @@ pub enum ShaderKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shader {
     id: u32,
-    kind: ShaderKind,
+    pub(crate) kind: ShaderKind,
 }
 
 impl Shader {
@@ -120,14 +118,6 @@ impl Shader {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Self {
         let src = fs::read_to_string(path).unwrap();
         Self::from_str(&src, ShaderKind::Vertex)
-    }
-
-    pub fn kind(&self) -> ShaderKind {
-        self.kind
-    }
-
-    pub fn id(&self) -> u32 {
-        self.id
     }
 
     pub fn attach(&self, program: u32) {
