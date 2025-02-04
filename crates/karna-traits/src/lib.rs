@@ -5,7 +5,7 @@
 /// # Example
 ///
 /// ```no_run
-/// // Creating a Vectors:
+/// // Creating Vectors:
 /// let vec: Vec2 = [10, 10].into(); // Vec2 { x: 10.0, y: 10.0 }
 /// let vec3 = Vec3::new(10, 20, 30); // Vec3 { x: 10.0, y: 20.0, z: 30.0 }
 ///
