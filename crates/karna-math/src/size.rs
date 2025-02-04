@@ -3,6 +3,7 @@ use num::Num;
 
 /// Struct to represent a size with width and height.
 /// Useful in many contexts, such as representing the size of a window or a rectangle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Size<T: Num + Copy + PartialOrd> {
     pub width: T,
     pub height: T,

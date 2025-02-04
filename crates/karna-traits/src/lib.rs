@@ -1,3 +1,9 @@
+pub trait Scene<T> {
+    fn load(&mut self, ctx: &mut T);
+    fn update(&mut self, ctx: &mut T);
+    fn draw(&self, ctx: &mut T);
+}
+
 /// Helper trait to convert a value to f32.
 /// This trait in the library will be used in a way
 /// to easily create a f32 value from any type.
