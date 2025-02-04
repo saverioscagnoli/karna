@@ -5,7 +5,7 @@ use sdl3::{
     Sdl,
 };
 
-use crate::window::Window;
+use crate::{time::Time, window::Window};
 
 #[derive(Debug, Clone)]
 pub enum Flags {
@@ -27,12 +27,20 @@ impl Default for Flags {
 }
 
 pub struct Context {
+    /// Private stuff, such as the SDL context and the OpenGL context.
     pub(crate) sdl: Sdl,
     pub(crate) should_close: bool,
 
+    /// Must keep this alive, otherwise the OpenGL context will be destroyed.
+    _gl_context: GLContext,
+
+    /// The handle to the main window,
+    /// So that it can be interacted with.
     pub window: Window,
 
-    _gl_context: GLContext,
+    /// The time interface to handle all time-related operations.
+    /// This includes delta time, elapsed time, fps, ticks, etc.
+    pub time: Time,
 }
 
 impl Context {
@@ -72,11 +80,13 @@ impl Context {
         info!("Using OpenGL v{}.{}", 4, 6);
 
         let window = Window::new(sdl_window);
+        let time = Time::new();
 
         Self {
             sdl,
             should_close: false,
             window,
+            time,
             _gl_context,
         }
     }

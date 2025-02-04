@@ -35,11 +35,15 @@ impl App {
 
         while !context.should_close {
             let t1 = Instant::now();
-            let _dt = t1.duration_since(t0).as_secs_f32();
+            let dt = t1.duration_since(t0).as_secs_f32();
 
             t0 = t1;
 
             App::handle_events(&mut events, &mut context);
+
+            // Upodate the time interface before updating the scene,
+            // So that the time interface is up-to-date.
+            context.time.update(dt);
 
             first_scene.update(&mut context);
             first_scene.draw(&mut context);

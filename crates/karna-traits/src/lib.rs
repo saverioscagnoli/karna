@@ -1,3 +1,9 @@
+/// The most basic trait in this library, used to define the current scene to draw.
+/// Implement as much scene as you want, and switch between them as you please.
+///
+/// This takes in a generic type `T`, which is the context that the scene will interact with.
+/// It is not defined immediately because it would cause a circular dependency.
+// TODO: Find a way to define the context here.
 pub trait Scene<T> {
     fn load(&mut self, ctx: &mut T);
     fn update(&mut self, ctx: &mut T);
