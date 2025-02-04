@@ -1,0 +1,23 @@
+[package]
+name = "karna"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+repository = "https://github.com/saverioscagnoli/karna"
+categories = ["game", "game-engine", "game-development"]
+keywords = ["game", "game-engine", "game-development"]
+
+[workspace]
+members = [
+    "crates/karna-math",
+    "crates/karna-core"
+, "crates/karna-traits"
+]
+
+[dependencies]
+karna-math = { path = "crates/karna-math" }
+karna-core = { path = "crates/karna-core" }
+karna-traits = { path = "crates/karna-traits" }
+
+[lib]
+doctest = false
