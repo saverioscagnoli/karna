@@ -34,6 +34,13 @@ macro_rules! error {
     };
 }
 
+#[macro_export]
+macro_rules! debug {
+    ($($arg:tt)*) => {
+        println!("[\x1b[34mDEBUG\x1b[0m] [\x1b[36m{}\x1b[0m] {}", $crate::date(), format_args!($($arg)*));
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

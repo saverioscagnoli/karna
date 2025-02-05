@@ -10,6 +10,9 @@ pub struct App {
 }
 
 impl App {
+    /// Sets up a window builder with the given title and size.
+    ///
+    /// Chain all the flags and the `run` method to start the application.
     pub fn window<T: Into<String>, S: Into<Size<u32>>>(title: T, size: S) -> Self {
         let title: String = title.into();
         let size: Size<u32> = size.into();

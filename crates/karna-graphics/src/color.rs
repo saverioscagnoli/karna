@@ -1,6 +1,9 @@
 #![allow(non_snake_case)]
 
+use karna_math::vector::Vec4;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(C)]
 pub struct Color {
     pub r: f32,
     pub g: f32,
@@ -32,5 +35,19 @@ impl Color {
         let b = (hex & 0xFF) as f32 / 255.0;
 
         Self::RGB(r, g, b)
+    }
+}
+
+/// Color -> [r, g, b, a]
+impl Into<[f32; 4]> for Color {
+    fn into(self) -> [f32; 4] {
+        [self.r, self.g, self.b, self.a]
+    }
+}
+
+/// Color -> Vec4
+impl Into<Vec4> for Color {
+    fn into(self) -> Vec4 {
+        Vec4::new(self.r, self.g, self.b, self.a)
     }
 }

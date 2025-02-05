@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 karna-opengl = { path = "../karna-opengl" }
+karna-math = { path = "../karna-math" }
 
 [lib]
 doctest = false

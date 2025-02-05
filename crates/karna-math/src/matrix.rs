@@ -374,6 +374,23 @@ pub type Mat2 = Matrix<2, 2>;
 pub type Mat3 = Matrix<3, 3>;
 pub type Mat4 = Matrix<4, 4>;
 
+impl Mat4 {
+    /// Creates a new orthographic projection matrix.
+    /// Useful for 2D rendering, where the dimensions of the objects do not change with depth.
+    pub fn ortho(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Self {
+        let mut m = Self::identity();
+
+        m[(0, 0)] = 2.0 / (right - left);
+        m[(1, 1)] = 2.0 / (top - bottom);
+        m[(2, 2)] = -2.0 / (far - near);
+        m[(0, 3)] = -(right + left) / (right - left);
+        m[(1, 3)] = -(top + bottom) / (top - bottom);
+        m[(2, 3)] = -(far + near) / (far - near);
+
+        m
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

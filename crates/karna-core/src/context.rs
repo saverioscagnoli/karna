@@ -89,7 +89,7 @@ impl Context {
 
         let window = Window::new(sdl_window);
         let time = Time::new();
-        let render = Renderer::_new();
+        let render = Renderer::_new(size.width, size.height);
         let input = Input::new();
 
         Self {
