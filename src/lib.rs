@@ -16,3 +16,7 @@ pub mod traits {
 pub mod render {
     pub use karna_graphics::color::Color;
 }
+
+pub mod input {
+    pub use karna_core::input::{Key, Mouse, Scan};
+}

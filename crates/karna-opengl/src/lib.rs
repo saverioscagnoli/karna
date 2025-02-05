@@ -103,9 +103,9 @@ pub enum DataType {
     Float = gl::FLOAT,
 }
 
-pub fn draw_arrays(mode: DrawMode, first: i32, count: i32) {
+pub fn draw_arrays(mode: DrawMode, first: i32, count: usize) {
     unsafe {
-        gl::DrawArrays(mode as u32, first, count);
+        gl::DrawArrays(mode as u32, first, count as i32);
     }
 }
 

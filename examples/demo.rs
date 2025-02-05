@@ -1,5 +1,4 @@
-use karna::{math::Vec2, render::Color, traits::Scene, App, Context};
-use karna_core::input::Key;
+use karna::{input::Key, math::Vec2, render::Color, traits::Scene, App, Context};
 
 struct S {
     pos: Vec2,

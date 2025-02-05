@@ -1,4 +1,7 @@
-use crate::{batchers::triangle::TriangleBatcher, color::Color};
+use crate::{
+    batchers::{point::PointBatcher, triangle::TriangleBatcher},
+    color::Color,
+};
 use karna_math::{matrix::Mat4, size::Size, vector::Vec2};
 use karna_opengl::{
     buffers::VertexArray,
@@ -13,6 +16,7 @@ pub struct Renderer {
     program: Program,
 
     /// Batchers
+    points: PointBatcher,
     triangles: TriangleBatcher,
 }
 
@@ -60,6 +64,7 @@ impl Renderer {
             vao,
 
             program,
+            points: PointBatcher::new(),
             triangles: TriangleBatcher::new(),
         }
     }
@@ -80,6 +85,23 @@ impl Renderer {
     #[inline]
     pub fn clear_background(&self, color: Color) {
         clear_color(color.r, color.g, color.b, color.a);
+    }
+
+    /// Draws a single pixel at the specified coordinates.
+    #[inline]
+    pub fn draw_pixel(&mut self, x: f32, y: f32) {
+        self.points.draw_pixel(x, y, 0.0, self.draw_color.into());
+    }
+
+    /// Draws a single pixel at the specified coordinates.
+    ///
+    /// This differs from `draw_pixel` because it takes a vector for more ergonomic use.
+    #[inline]
+    pub fn draw_pixel_v<P: Into<Vec2>>(&mut self, pos: P) {
+        let pos: Vec2 = pos.into();
+
+        self.points
+            .draw_pixel(pos.x, pos.y, 0.0, self.draw_color.into());
     }
 
     /// Draws a solid-color rectangle with the top-left corner at (x, y) and the specified width and height.
@@ -128,6 +150,7 @@ impl Renderer {
         self.program.enable();
         self.vao.bind();
 
+        self.points.flush();
         self.triangles.flush();
     }
 }
