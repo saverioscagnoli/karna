@@ -12,13 +12,14 @@ members = [
     "crates/karna-math",
     "crates/karna-core"
 , "crates/karna-traits"
-, "crates/karna-log"]
+, "crates/karna-log", "crates/karna-graphics", "crates/karna-opengl"]
 
 [dependencies]
 karna-math = { path = "crates/karna-math" }
 karna-core = { path = "crates/karna-core" }
 karna-traits = { path = "crates/karna-traits" }
 karna-log = { path = "crates/karna-log" }
+karna-graphics = { path = "crates/karna-graphics" }
 
 [lib]
 doctest = false

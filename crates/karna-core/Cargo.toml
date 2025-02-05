@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-gl = "0.14.0"
 sdl3 = { version = "0.14.4", features = ["build-from-source-static"] }
 karna-math = { path = "../karna-math" }
+karna-graphics = { path = "../karna-graphics" }
 karna-traits = { path = "../karna-traits" }
 karna-log = { path = "../karna-log" }
 

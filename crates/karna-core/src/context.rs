@@ -1,11 +1,11 @@
+use crate::{input::Input, time::Time, window::Window};
+use karna_graphics::renderer::Renderer;
 use karna_log::{info, KarnaError};
 use karna_math::size::Size;
 use sdl3::{
     video::{GLContext, GLProfile, WindowBuilder},
     Sdl,
 };
-
-use crate::{time::Time, window::Window};
 
 #[derive(Debug, Clone)]
 pub enum Flags {
@@ -37,6 +37,13 @@ pub struct Context {
     /// The handle to the main window,
     /// So that it can be interacted with.
     pub window: Window,
+
+    /// The rendering interface to handle all the stuff related
+    /// to making things appear on the screen.
+    pub render: Renderer,
+
+    /// The input interface to check for input events.
+    pub input: Input,
 
     /// The time interface to handle all time-related operations.
     /// This includes delta time, elapsed time, fps, ticks, etc.
@@ -74,19 +81,24 @@ impl Context {
             .map_err(|e| KarnaError::Sdl("OpenGL context creation".to_string(), e.to_string()))
             .unwrap();
 
-        gl::load_with(|name| video.gl_get_proc_address(name).unwrap() as _);
+        // Load OpenGL functions
+        karna_graphics::load_with(|name| video.gl_get_proc_address(name).unwrap() as _);
 
         // TODO: Dynamic version
         info!("Using OpenGL v{}.{}", 4, 6);
 
         let window = Window::new(sdl_window);
         let time = Time::new();
+        let render = Renderer::_new();
+        let input = Input::new();
 
         Self {
             sdl,
             should_close: false,
             window,
             time,
+            render,
+            input,
             _gl_context,
         }
     }

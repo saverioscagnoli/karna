@@ -1,0 +1,10 @@
+[package]
+name = "karna-graphics"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+karna-opengl = { path = "../karna-opengl" }
+
+[lib]
+doctest = false

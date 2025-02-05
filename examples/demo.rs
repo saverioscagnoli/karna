@@ -1,4 +1,4 @@
-use karna::{traits::Scene, App, Context};
+use karna::{render::Color, traits::Scene, App, Context};
 
 struct S;
 
@@ -9,7 +9,10 @@ impl Scene<Context> for S {
         println!("delta time: {}", ctx.time.elapsed());
     }
 
-    fn draw(&self, _ctx: &mut Context) {}
+    fn draw(&self, ctx: &mut Context) {
+        ctx.render.clear_background(Color::CYAN);
+        ctx.render._present();
+    }
 }
 
 fn main() {

@@ -48,7 +48,10 @@ impl App {
             first_scene.update(&mut context);
             first_scene.draw(&mut context);
 
+            context.render._present();
             context.window.swap_buffers();
+
+            context.input.flush();
         }
 
         info!("App was terminated.");
@@ -56,6 +59,8 @@ impl App {
 
     fn handle_events(events: &mut EventPump, context: &mut Context) {
         for event in events.poll_iter() {
+            context.input.update(&event);
+
             match event {
                 Event::Quit { .. } => context.should_close = true,
 

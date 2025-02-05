@@ -12,3 +12,7 @@ pub mod math {
 pub mod traits {
     pub use karna_traits::*;
 }
+
+pub mod render {
+    pub use karna_graphics::color::Color;
+}
