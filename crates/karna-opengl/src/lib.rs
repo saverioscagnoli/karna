@@ -3,6 +3,7 @@
 
 pub mod buffers;
 pub mod shaders;
+pub mod texture;
 
 use buffers::VertexBuffer;
 use karna_log::{debug, KarnaError};
@@ -66,6 +67,32 @@ pub fn enable(cap: Cap) {
 pub fn disable(cap: Cap) {
     unsafe {
         gl::Disable(cap as u32);
+    }
+}
+
+#[repr(u32)]
+pub enum BlendFunc {
+    Zero = gl::ZERO,
+    One = gl::ONE,
+    SrcColor = gl::SRC_COLOR,
+    OneMinusSrcColor = gl::ONE_MINUS_SRC_COLOR,
+    DstColor = gl::DST_COLOR,
+    OneMinusDstColor = gl::ONE_MINUS_DST_COLOR,
+    SrcAlpha = gl::SRC_ALPHA,
+    OneMinusSrcAlpha = gl::ONE_MINUS_SRC_ALPHA,
+    DstAlpha = gl::DST_ALPHA,
+    OneMinusDstAlpha = gl::ONE_MINUS_DST_ALPHA,
+    ConstantColor = gl::CONSTANT_COLOR,
+    OneMinusConstantColor = gl::ONE_MINUS_CONSTANT_COLOR,
+    ConstantAlpha = gl::CONSTANT_ALPHA,
+    OneMinusConstantAlpha = gl::ONE_MINUS_CONSTANT_ALPHA,
+    SrcAlphaSaturate = gl::SRC_ALPHA_SATURATE,
+}
+
+/// Sets the blend function.
+pub fn blend_func(sfactor: BlendFunc, dfactor: BlendFunc) {
+    unsafe {
+        gl::BlendFunc(sfactor as u32, dfactor as u32);
     }
 }
 

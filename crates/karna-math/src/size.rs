@@ -11,7 +11,7 @@ pub struct Size<T: Num + Copy + PartialOrd> {
 
 impl<T: Num + Copy + PartialOrd> Size<T> {
     /// Creates a new Size with the given width and height.
-    pub fn new(width: T, height: T) -> Self {
+    pub const fn new(width: T, height: T) -> Self {
         Self { width, height }
     }
 

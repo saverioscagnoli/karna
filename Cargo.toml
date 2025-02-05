@@ -7,6 +7,9 @@ repository = "https://github.com/saverioscagnoli/karna"
 categories = ["game", "game-engine", "game-development"]
 keywords = ["game", "game-engine", "game-development"]
 
+# Include assets folder for default shaders, fonts, etc.
+include = ["assets"]
+
 [workspace]
 members = [
     "crates/karna-math",
@@ -20,6 +23,7 @@ karna-core = { path = "crates/karna-core" }
 karna-traits = { path = "crates/karna-traits" }
 karna-log = { path = "crates/karna-log" }
 karna-graphics = { path = "crates/karna-graphics" }
+
 
 [lib]
 doctest = false

@@ -5,6 +5,9 @@ in vec2 tex_coords;
 
 out vec4 color;
 
+uniform sampler2D tex;
+
 void main() {
-    color = vertex_color;
+    vec4 texture_color = texture(tex, tex_coords);
+    color = texture_color * vertex_color;
 }

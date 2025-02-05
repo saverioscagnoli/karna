@@ -38,7 +38,7 @@ impl Scene<Context> for S {
     fn draw(&self, ctx: &mut Context) {
         ctx.render.clear_background(Color::BLACK);
 
-        ctx.render.set_color(Color::WHITE);
+        ctx.render.set_color(Color::CYAN);
 
         for particle in self.particles.iter() {
             ctx.render.draw_pixel_v(particle.pos);

@@ -6,6 +6,10 @@ edition = "2021"
 [dependencies]
 karna-opengl = { path = "../karna-opengl" }
 karna-math = { path = "../karna-math" }
+karna-log = { path = "../karna-log" }
+fontdue = "0.9.2"
+rect_packer = "0.2.1"
+image = "0.25.5"
 
 [lib]
 doctest = false
