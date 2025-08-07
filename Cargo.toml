@@ -7,23 +7,18 @@ repository = "https://github.com/saverioscagnoli/karna"
 categories = ["game", "game-engine", "game-development"]
 keywords = ["game", "game-engine", "game-development"]
 
-# Include assets folder for default shaders, fonts, etc.
-include = ["assets"]
+[dependencies]
+engine = { path = "engine" }
+math.workspace = true
+
 
 [workspace]
-members = [
-    "crates/karna-math",
-    "crates/karna-core"
-, "crates/karna-traits"
-, "crates/karna-log", "crates/karna-graphics", "crates/karna-opengl"]
+members = ["engine", "err", "math", "renderer"]
+resolver = "3"
 
-[dependencies]
-karna-math = { path = "crates/karna-math" }
-karna-core = { path = "crates/karna-core" }
-karna-traits = { path = "crates/karna-traits" }
-karna-log = { path = "crates/karna-log" }
-karna-graphics = { path = "crates/karna-graphics" }
+[workspace.dependencies]
+err = { path = "err" }
+math = { path = "math" }
+sdl2 = "0.38.0"
+traccia = "2.2.5"
 
-
-[lib]
-doctest = false

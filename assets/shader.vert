@@ -13,6 +13,5 @@ void main() {
     gl_Position = uProjection * vec4(aPosition, 1.0);
     vertex_color = aColor;
     tex_coords = aTexCoords;
-
 }
 
