@@ -3,14 +3,6 @@ name = "engine"
 version = "0.1.0"
 edition = "2024"
 
-# Include assets folder for default shaders, fonts, etc.
-include = ["assets"]
-
 [dependencies]
-sdl2.workspace = true
-err.workspace = true
-traccia.workspace = true
-math = { path = "../math" }
-spin_sleep = "1.3.2"
-gl = "0.14.0"
-phf = { version = "0.12.1", features = ["macros"] }
+winit.workspace = true
+math.workspace = true

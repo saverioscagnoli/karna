@@ -13,12 +13,10 @@ math.workspace = true
 
 
 [workspace]
-members = ["engine", "err", "math", "renderer"]
+members = ["engine", "math", "renderer"]
 resolver = "3"
 
 [workspace.dependencies]
-err = { path = "err" }
 math = { path = "math" }
-sdl2 = "0.38.0"
-traccia = "2.2.5"
-
+winit = "0.30.12"
+wgpu = "26.0.1"

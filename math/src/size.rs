@@ -1,4 +1,5 @@
 use num::Num;
+use winit::dpi::{LogicalSize, PhysicalSize};
 
 use crate::{ToF32, ToU32};
 
@@ -125,6 +126,36 @@ impl From<u32> for Size<u32> {
         Self {
             width: size,
             height: size,
+        }
+    }
+}
+
+impl<T: Num + Copy + PartialOrd> From<Size<T>> for LogicalSize<T> {
+    fn from(size: Size<T>) -> Self {
+        LogicalSize::new(size.width, size.height)
+    }
+}
+
+impl<T: Num + Copy + PartialOrd> From<LogicalSize<T>> for Size<T> {
+    fn from(size: LogicalSize<T>) -> Self {
+        Self {
+            width: size.width,
+            height: size.height,
+        }
+    }
+}
+
+impl<T: Num + Copy + PartialOrd> From<Size<T>> for PhysicalSize<T> {
+    fn from(size: Size<T>) -> Self {
+        PhysicalSize::new(size.width, size.height)
+    }
+}
+
+impl<T: Num + Copy + PartialOrd> From<PhysicalSize<T>> for Size<T> {
+    fn from(size: PhysicalSize<T>) -> Self {
+        Self {
+            width: size.width,
+            height: size.height,
         }
     }
 }
