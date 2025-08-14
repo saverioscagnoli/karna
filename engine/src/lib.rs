@@ -2,11 +2,29 @@ mod context;
 
 use crate::context::Context;
 use math::Size;
+use renderer::Color;
+use std::sync::Arc;
+use traccia::{Color as TColor, Colorize, LogLevel, Style, info};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
+
+struct LogFormatter;
+
+impl traccia::Formatter for LogFormatter {
+    fn format(&self, record: &traccia::Record) -> String {
+        let date = chrono::Local::now().format("%m/%d %H:%M:%S").to_string();
+        format!(
+            "{} [{}] {} {}",
+            date.color(TColor::Cyan).dim(),
+            record.target.dim(),
+            record.level.default_coloring().to_lowercase(),
+            record.message
+        )
+    }
+}
 
 pub struct App {
     context: Option<Context>,
@@ -21,7 +39,15 @@ impl ApplicationHandler<Context> for App {
             .create_window(attributes)
             .expect("Failed to create window");
 
+        let window = Arc::new(window);
+
         let context = Context::new(window);
+        let info = context.render.info();
+
+        info!("backend: {}", info.backend);
+        info!("device type: {:?}", info.device_type);
+        info!("driver: {}", info.driver_info);
+        info!("card: {}", info.name);
 
         context.window.request_redraw();
         self.context = Some(context);
@@ -31,7 +57,7 @@ impl ApplicationHandler<Context> for App {
         self.context = Some(event);
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         let Some(context) = &mut self.context else {
             return;
         };
@@ -41,7 +67,12 @@ impl ApplicationHandler<Context> for App {
                 event_loop.exit();
             }
 
+            WindowEvent::Resized(size) => {
+                context.render._resize(size.into());
+            }
+
             WindowEvent::RedrawRequested => {
+                context.render._clear();
                 // Redraw the application.
                 //
                 // It's preferable for applications that do not render continuously to render in
@@ -50,7 +81,17 @@ impl ApplicationHandler<Context> for App {
 
                 // Draw.
 
+                context.render.set_clear_color(Color::Black);
+                context.render.set_draw_color(Color::Magenta);
+                context
+                    .render
+                    .fill_triangle([100.0, 300.0], [150.0, 200.0], [200.0, 300.0]);
+
+                context.render.set_draw_color(Color::Cyan);
+                context.render.fill_rect([10, 10], (50, 50));
+
                 context.window.request_redraw();
+                context.render.render();
 
                 // Queue a RedrawRequested event.
                 //
@@ -77,6 +118,16 @@ impl App {
     }
 
     pub fn run(mut self) -> Result<(), String> {
+        traccia::init_with_config(traccia::Config {
+            level: if cfg!(debug_assertions) {
+                LogLevel::Debug
+            } else {
+                LogLevel::Info
+            },
+            format: Some(Box::new(LogFormatter)),
+            ..Default::default()
+        });
+
         let event_loop = EventLoop::with_user_event()
             .build()
             .expect("Failed to create event loop");

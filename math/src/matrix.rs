@@ -112,6 +112,38 @@ impl<const R: usize, const C: usize> Matrix<R, C> {
     pub fn as_ptr(&self) -> *const f32 {
         self.0.as_ptr() as *const f32
     }
+
+    /// Converts this matrix to a different size matrix.
+    /// If the new matrix is larger, the new elements are filled with the provided value.
+    /// If the new matrix is smaller, the elements are truncated.
+    pub fn resize<const NR: usize, const NC: usize, F: ToF32>(
+        self,
+        fill_value: F,
+    ) -> Matrix<NR, NC> {
+        let fill = fill_value.to_f32();
+        let mut new_matrix = Matrix::<NR, NC>::filled(fill);
+
+        let min_rows = R.min(NR);
+        let min_cols = C.min(NC);
+
+        for i in 0..min_rows {
+            for j in 0..min_cols {
+                new_matrix[(i, j)] = self[(i, j)];
+            }
+        }
+
+        new_matrix
+    }
+
+    /// Converts this matrix to a different size matrix, filling new elements with zeros.
+    pub fn resize_zeros<const NR: usize, const NC: usize>(self) -> Matrix<NR, NC> {
+        self.resize(0.0)
+    }
+
+    /// Converts this matrix to a different size matrix, filling new elements with ones.
+    pub fn resize_ones<const NR: usize, const NC: usize>(self) -> Matrix<NR, NC> {
+        self.resize(1.0)
+    }
 }
 
 impl<const R: usize, const C: usize> Default for Matrix<R, C> {

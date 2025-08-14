@@ -6,3 +6,7 @@ edition = "2024"
 [dependencies]
 winit.workspace = true
 math.workspace = true
+wgpu.workspace = true
+renderer = { path = "../renderer" }
+traccia.workspace = true
+chrono = "0.4.41"

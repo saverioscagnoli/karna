@@ -20,3 +20,4 @@ resolver = "3"
 math = { path = "math" }
 winit = "0.30.12"
 wgpu = "26.0.1"
+traccia = "2.2.5"
