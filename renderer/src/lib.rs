@@ -11,6 +11,7 @@ use std::{
     sync::Arc,
 };
 use traccia::info;
+use wgpu::Backends;
 use winit::window::Window;
 
 pub struct GpuState {
@@ -27,7 +28,7 @@ impl GpuState {
     pub fn new(window: Arc<Window>) -> Self {
         let (width, height) = window.inner_size().into();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
+            backends: Backends::all(),
             ..Default::default()
         });
 
@@ -78,7 +79,7 @@ impl GpuState {
             format: surface_format,
             width,
             height,
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode: wgpu::PresentMode::AutoVsync,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: Vec::default(),
             desired_maximum_frame_latency: 2,
@@ -149,6 +150,8 @@ pub struct Renderer {
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
 
+    point_pipeline: wgpu::RenderPipeline,
+    line_pipeline: wgpu::RenderPipeline,
     triangle_pipeline: wgpu::RenderPipeline,
 
     projection_buffer: wgpu::Buffer,
@@ -223,6 +226,24 @@ impl Renderer {
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader_src)),
             });
 
+        let point_pipeline = Self::create_pipeline(
+            "Point Pipeline",
+            &state.device,
+            &shader,
+            &state.bind_group_layout,
+            state.surface_format,
+            wgpu::PrimitiveTopology::PointList,
+        );
+
+        let line_pipeline = Self::create_pipeline(
+            "Line Pipeline",
+            &state.device,
+            &shader,
+            &state.bind_group_layout,
+            state.surface_format,
+            wgpu::PrimitiveTopology::LineList,
+        );
+
         let triangle_pipeline = Self::create_pipeline(
             "Triangle Pipeline",
             &state.device,
@@ -240,6 +261,8 @@ impl Renderer {
             vertex_buffer,
             index_buffer,
             triangle_pipeline,
+            point_pipeline,
+            line_pipeline,
             projection_buffer,
             projection_bind_group,
             circle_cache: HashMap::new(),
@@ -345,12 +368,39 @@ impl Renderer {
         })
     }
 
+    pub fn vsync(&self) -> bool {
+        self.config.present_mode == wgpu::PresentMode::AutoVsync
+    }
+
+    pub fn set_vsync(&mut self, vsync: bool) {
+        if vsync {
+            self.config.present_mode = wgpu::PresentMode::AutoVsync;
+        } else {
+            self.config.present_mode = wgpu::PresentMode::AutoNoVsync;
+        }
+
+        self.surface.configure(&self.device, &self.config);
+    }
+
     pub fn set_clear_color<C: Into<Color>>(&mut self, color: C) {
         self.clear_color = color.into();
     }
 
     pub fn set_draw_color<C: Into<Color>>(&mut self, color: C) {
         self.draw_color = color.into();
+    }
+
+    pub fn draw_pixel<P: Into<Vec2>>(&mut self, pos: P) {
+        let pos: Vec2 = pos.into();
+        let vertex_index = self.vertices.len() as u32;
+
+        self.vertices.push(Vertex {
+            pos: pos.resize_zeros(),
+            color: self.draw_color.into(),
+        });
+
+        self.indices.push(vertex_index);
+        self.add_draw_call(wgpu::PrimitiveTopology::PointList, 1, 1);
     }
 
     pub fn fill_triangle<P: Into<Vec2>>(&mut self, p1: P, p2: P, p3: P) {
@@ -486,7 +536,7 @@ impl Renderer {
         }
     }
 
-    pub fn render(&mut self) {
+    pub fn _render(&mut self) {
         self.update_projection(self.config.width as f32, self.config.height as f32);
         self.update_buffers();
 
@@ -535,6 +585,15 @@ impl Renderer {
                         wgpu::PrimitiveTopology::TriangleList => {
                             render_pass.set_pipeline(&self.triangle_pipeline);
                         }
+
+                        wgpu::PrimitiveTopology::LineList => {
+                            render_pass.set_pipeline(&self.line_pipeline);
+                        }
+
+                        wgpu::PrimitiveTopology::PointList => {
+                            render_pass.set_pipeline(&self.point_pipeline);
+                        }
+
                         _ => {}
                     }
 

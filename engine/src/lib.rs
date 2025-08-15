@@ -1,14 +1,21 @@
 mod context;
+mod time;
+
+pub mod input;
 
 use crate::context::Context;
+use crate::input::KeyState;
 use math::Size;
 use renderer::Color;
+use spin_sleep::SpinSleeper;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use traccia::{Color as TColor, Colorize, LogLevel, Style, info};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
 struct LogFormatter;
@@ -29,6 +36,8 @@ impl traccia::Formatter for LogFormatter {
 pub struct App {
     context: Option<Context>,
     window_size: Size<u32>,
+    acc: f32,
+    sleeper: SpinSleeper,
 }
 
 impl ApplicationHandler<Context> for App {
@@ -49,12 +58,35 @@ impl ApplicationHandler<Context> for App {
         info!("driver: {}", info.driver_info);
         info!("card: {}", info.name);
 
-        context.window.request_redraw();
         self.context = Some(context);
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: Context) {
         self.context = Some(event);
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        let Some(context) = &mut self.context else {
+            return;
+        };
+
+        context.time.t1 = Instant::now();
+        let dt = context
+            .time
+            .t1
+            .duration_since(context.time.t0)
+            .as_secs_f32();
+
+        context.time.t0 = context.time.t1;
+        self.acc += dt;
+
+        context.time.update(dt);
+
+        while self.acc >= context.time.ups_step {
+            self.acc -= context.time.ups_step
+        }
+
+        context.input.flush();
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -71,18 +103,33 @@ impl ApplicationHandler<Context> for App {
                 context.render._resize(size.into());
             }
 
+            WindowEvent::KeyboardInput { event, .. } => match event.physical_key {
+                PhysicalKey::Code(code) => {
+                    let state = context
+                        .input
+                        .keys
+                        .entry(code)
+                        .or_insert(KeyState::default());
+
+                    if event.state.is_pressed() {
+                        if !event.repeat {
+                            state.pressed = true;
+                        }
+
+                        state.held = true;
+                    } else {
+                        state.held = false;
+                    }
+                }
+                PhysicalKey::Unidentified(_) => {}
+            },
+
             WindowEvent::RedrawRequested => {
                 context.render._clear();
-                // Redraw the application.
-                //
-                // It's preferable for applications that do not render continuously to render in
-                // this event rather than in AboutToWait, since rendering in here allows
-                // the program to gracefully handle redraws requested by the OS.
-
-                // Draw.
 
                 context.render.set_clear_color(Color::Black);
                 context.render.set_draw_color(Color::Magenta);
+                context.render.draw_pixel([400, 400]);
                 context
                     .render
                     .fill_triangle([100.0, 300.0], [150.0, 200.0], [200.0, 300.0]);
@@ -90,16 +137,23 @@ impl ApplicationHandler<Context> for App {
                 context.render.set_draw_color(Color::Cyan);
                 context.render.fill_rect([10, 10], (50, 50));
 
-                context.window.request_redraw();
-                context.render.render();
+                println!("fps: {}", context.time.fps());
 
-                // Queue a RedrawRequested event.
-                //
-                // You only need to call this if you've determined that you need to redraw in
-                // applications which do not always need to. Applications that redraw continuously
-                // can render here instead.
+                context.render._render();
+
+                if !context.render.vsync() {
+                    context.time.t2 = context.time.t1.elapsed().as_secs_f32();
+                    let sleep_time = context.time.fps_step - context.time.t2;
+
+                    if sleep_time > 0.0 {
+                        self.sleeper.sleep(Duration::from_secs_f32(sleep_time));
+                    }
+                }
+
+                context.window.request_redraw();
             }
-            _ => (),
+
+            _ => {}
         }
     }
 }
@@ -109,6 +163,8 @@ impl App {
         Self {
             context: None,
             window_size: Size::new(800, 600),
+            acc: 0.0,
+            sleeper: SpinSleeper::default(),
         }
     }
 
@@ -132,9 +188,12 @@ impl App {
             .build()
             .expect("Failed to create event loop");
 
+        event_loop.set_control_flow(ControlFlow::Poll);
+
         event_loop
             .run_app(&mut self)
             .expect("Failed to run application");
+
         Ok(())
     }
 }
