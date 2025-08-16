@@ -37,8 +37,11 @@ impl Scene for S {
             particle.pos += particle.vel;
         }
 
-        println!("fps: {}", ctx.time.fps());
-        println!("particles: {}", self.particles.len());
+        println!(
+            "fps: {}, particles: {}",
+            ctx.time.fps(),
+            self.particles.len()
+        );
     }
 
     fn render(&mut self, ctx: &mut Context) {

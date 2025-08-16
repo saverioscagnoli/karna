@@ -1,22 +1,24 @@
+mod batcher;
 mod color;
 mod util;
 
-pub use color::*;
-
+use crate::batcher::Batcher;
 use math::{Size, Vec2, Vec3, Vec4};
 use std::{
     borrow::Cow,
-    collections::HashMap,
     ops::{Deref, DerefMut},
+    rc::Rc,
     sync::Arc,
 };
-use traccia::info;
 use wgpu::Backends;
 use winit::window::Window;
 
+// Re-exports
+pub use color::*;
+
 pub struct GpuState {
     surface: wgpu::Surface<'static>,
-    device: wgpu::Device,
+    device: Rc<wgpu::Device>,
     adapter: wgpu::Adapter,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
@@ -51,6 +53,8 @@ impl GpuState {
             ..Default::default()
         }))
         .expect("Failed to request a device");
+
+        let device = Rc::new(device);
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -131,35 +135,22 @@ impl Vertex {
 #[derive(Copy, Clone, Debug)]
 struct ProjectionUniform([[f32; 4]; 4]);
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-struct DrawCall {
-    vertex_start: u32,
-    vertex_count: u32,
-    index_start: u32,
-    index_count: u32,
-    topology: wgpu::PrimitiveTopology,
+pub struct FrameInfo {
+    pub draw_calls: u32,
 }
 
 pub struct Renderer {
     state: GpuState,
-    vertices: Vec<Vertex>,
-    indices: Vec<u32>,
-    draw_calls: Vec<DrawCall>,
 
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    vertex_capacity: u64,
-    index_capacity: u64,
-
-    point_pipeline: wgpu::RenderPipeline,
-    line_pipeline: wgpu::RenderPipeline,
-    triangle_pipeline: wgpu::RenderPipeline,
+    point_batcher: Batcher,
+    line_batcher: Batcher,
+    line_strip_batcher: Batcher,
+    triangle_batcher: Batcher,
+    triangle_strip_batcher: Batcher,
+    draw_calls: u32,
 
     projection_buffer: wgpu::Buffer,
     projection_bind_group: wgpu::BindGroup,
-
-    circle_cache: HashMap<(u32, u32), (Vec<Vertex>, Vec<u32>)>,
 
     clear_color: Color,
     draw_color: Color,
@@ -185,20 +176,6 @@ impl Renderer {
 
     pub fn _new(window: Arc<Window>) -> Self {
         let state = GpuState::new(window);
-        let vertex_buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Vertex Buffer"),
-            size: (std::mem::size_of::<Vertex>()) as u64 * Self::VERTEX_CAPACITY,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let index_buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Index Buffer"),
-            size: (std::mem::size_of::<u32>()) as u64 * Self::INDEX_CAPACITY,
-
-            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
 
         let projection_buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Projection Buffer"),
@@ -228,48 +205,73 @@ impl Renderer {
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader_src)),
             });
 
-        let point_pipeline = Self::create_pipeline(
-            "Point Pipeline",
-            &state.device,
+        let point_batcher = Batcher::new(
+            "Point Batcher",
+            state.device.clone(),
             &shader,
             &state.bind_group_layout,
             state.surface_format,
             wgpu::PrimitiveTopology::PointList,
+            Self::VERTEX_CAPACITY,
+            Self::INDEX_CAPACITY,
         );
 
-        let line_pipeline = Self::create_pipeline(
-            "Line Pipeline",
-            &state.device,
+        let line_batcher = Batcher::new(
+            "Line Batcher",
+            state.device.clone(),
             &shader,
             &state.bind_group_layout,
             state.surface_format,
             wgpu::PrimitiveTopology::LineList,
+            Self::VERTEX_CAPACITY,
+            Self::INDEX_CAPACITY,
         );
 
-        let triangle_pipeline = Self::create_pipeline(
-            "Triangle Pipeline",
-            &state.device,
+        let line_strip_batcher = Batcher::new(
+            "Line Strip Batcher",
+            state.device.clone(),
+            &shader,
+            &state.bind_group_layout,
+            state.surface_format,
+            wgpu::PrimitiveTopology::LineStrip,
+            Self::VERTEX_CAPACITY,
+            Self::INDEX_CAPACITY,
+        );
+
+        let triangle_batcher = Batcher::new(
+            "Triangle Batcher",
+            state.device.clone(),
             &shader,
             &state.bind_group_layout,
             state.surface_format,
             wgpu::PrimitiveTopology::TriangleList,
+            Self::VERTEX_CAPACITY,
+            Self::INDEX_CAPACITY,
+        );
+
+        let triangle_strip_batcher = Batcher::new(
+            "Triangle Strip Batcher",
+            state.device.clone(),
+            &shader,
+            &state.bind_group_layout,
+            state.surface_format,
+            wgpu::PrimitiveTopology::TriangleStrip,
+            Self::VERTEX_CAPACITY,
+            Self::INDEX_CAPACITY,
         );
 
         Self {
             state,
-            vertices: Vec::with_capacity(100_000),
-            indices: Vec::with_capacity(100_000 * 10),
-            draw_calls: Vec::new(),
-            vertex_buffer,
-            index_buffer,
-            vertex_capacity: Self::VERTEX_CAPACITY,
-            index_capacity: Self::INDEX_CAPACITY,
-            triangle_pipeline,
-            point_pipeline,
-            line_pipeline,
+
+            point_batcher,
+            line_batcher,
+            line_strip_batcher,
+            triangle_batcher,
+            triangle_strip_batcher,
+            draw_calls: 0,
+
             projection_buffer,
             projection_bind_group,
-            circle_cache: HashMap::new(),
             clear_color: Color::Black,
             draw_color: Color::White,
         }
@@ -310,68 +312,6 @@ impl Renderer {
         .to_string()
     }
 
-    fn create_pipeline<S: AsRef<str>>(
-        label: S,
-        device: &wgpu::Device,
-        shader: &wgpu::ShaderModule,
-        bind_group_layout: &wgpu::BindGroupLayout,
-        surface_format: wgpu::TextureFormat,
-        topology: wgpu::PrimitiveTopology,
-    ) -> wgpu::RenderPipeline {
-        let label = label.as_ref();
-
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: None,
-            bind_group_layouts: &[bind_group_layout],
-            push_constant_ranges: &[],
-        });
-
-        let compilation_options = wgpu::PipelineCompilationOptions {
-            constants: &[],
-            zero_initialize_workgroup_memory: true,
-        };
-
-        info!("Creating render pipeline: {}", label);
-
-        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: Some(&pipeline_layout),
-            label: Some(label),
-            vertex: wgpu::VertexState {
-                module: shader,
-                entry_point: Some("vs_main"),
-                buffers: &[Vertex::desc()],
-                compilation_options: compilation_options.clone(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: surface_format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options,
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                unclipped_depth: false,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-            cache: None,
-        })
-    }
-
     pub fn vsync(&self) -> bool {
         self.config.present_mode == wgpu::PresentMode::AutoVsync
     }
@@ -396,15 +336,14 @@ impl Renderer {
 
     pub fn draw_pixel<P: Into<Vec2>>(&mut self, pos: P) {
         let pos: Vec2 = pos.into();
-        let vertex_index = self.vertices.len() as u32;
+        let vertex_index = self.point_batcher.vertex_count();
 
-        self.vertices.push(Vertex {
+        self.point_batcher.vertices.push(Vertex {
             pos: pos.resize_zeros(),
             color: self.draw_color.into(),
         });
 
-        self.indices.push(vertex_index);
-        self.add_draw_call(wgpu::PrimitiveTopology::PointList, 1, 1);
+        self.point_batcher.indices.push(vertex_index);
     }
 
     pub fn fill_triangle<P: Into<Vec2>>(&mut self, p1: P, p2: P, p3: P) {
@@ -413,9 +352,9 @@ impl Renderer {
         let p3: Vec2 = p3.into();
         let color: Vec4 = self.draw_color.into();
 
-        let start_index = self.vertices.len() as u32;
+        let start_index = self.triangle_batcher.vertex_count();
 
-        self.vertices.extend_from_slice(&[
+        self.triangle_batcher.vertices.extend_from_slice(&[
             Vertex {
                 pos: p1.resize_zeros(),
                 color,
@@ -430,10 +369,11 @@ impl Renderer {
             },
         ]);
 
-        self.indices
-            .extend_from_slice(&[start_index, start_index + 1, start_index + 2]);
-
-        self.add_draw_call(wgpu::PrimitiveTopology::TriangleList, 3, 3);
+        self.triangle_batcher.indices.extend_from_slice(&[
+            start_index,
+            start_index + 1,
+            start_index + 2,
+        ]);
     }
 
     pub fn fill_rect<P: Into<Vec2>, S: Into<Size<f32>>>(&mut self, pos: P, size: S) {
@@ -441,7 +381,7 @@ impl Renderer {
         let size: Size<f32> = size.into();
         let color: Vec4 = self.draw_color.into();
 
-        let start_index = self.vertices.len() as u32;
+        let start_index = self.triangle_batcher.vertex_count();
 
         // Define the four corners of the rectangle
         let top_left = pos;
@@ -450,7 +390,7 @@ impl Renderer {
         let bottom_right = Vec2::new(pos.x + size.width, pos.y + size.height);
 
         // Add vertices for the rectangle
-        self.vertices.extend_from_slice(&[
+        self.triangle_batcher.vertices.extend_from_slice(&[
             Vertex {
                 pos: top_left.resize_zeros(),
                 color,
@@ -469,8 +409,7 @@ impl Renderer {
             },
         ]);
 
-        // Add indices for two triangles (top-left, top-right, bottom-left) and (top-right, bottom-right, bottom-left)
-        self.indices.extend_from_slice(&[
+        self.triangle_batcher.indices.extend_from_slice(&[
             start_index,
             start_index + 1,
             start_index + 2, // First triangle
@@ -478,53 +417,30 @@ impl Renderer {
             start_index + 3,
             start_index + 2, // Second triangle
         ]);
-
-        self.add_draw_call(wgpu::PrimitiveTopology::TriangleList, 4, 6);
     }
 
     pub fn info(&self) -> wgpu::AdapterInfo {
         self.adapter.get_info()
     }
 
-    pub fn _clear(&mut self) {
-        self.vertices.clear();
-        self.indices.clear();
-        println!("draw_calls: {}", self.draw_calls.len());
-        self.draw_calls.clear();
+    pub fn frame_info(&self) -> FrameInfo {
+        FrameInfo {
+            draw_calls: self.draw_calls,
+        }
+    }
+
+    fn clear(&mut self) {
+        self.point_batcher.clear();
+        self.line_batcher.clear();
+        self.line_strip_batcher.clear();
+        self.triangle_batcher.clear();
+        self.triangle_strip_batcher.clear();
     }
 
     pub fn _resize(&mut self, size: Size<u32>) {
         self.config.width = size.width;
         self.config.height = size.height;
         self.surface.configure(&self.device, &self.config);
-    }
-
-    // i made a shallow draw call number reduction fix, but things should be batched togheter
-    fn add_draw_call(
-        &mut self,
-        topology: wgpu::PrimitiveTopology,
-        vertex_count: u32,
-        index_count: u32,
-    ) {
-        // Try to merge with the last draw call if same topology
-        if let Some(last_call) = self.draw_calls.last_mut() {
-            if last_call.topology == topology {
-                last_call.vertex_count +    = vertex_count;
-                last_call.index_count += index_count;
-                return;
-            }
-        }
-
-        let vertex_start = (self.vertices.len() - vertex_count as usize) as u32;
-        let index_start = (self.indices.len() - index_count as usize) as u32;
-
-        self.draw_calls.push(DrawCall {
-            vertex_start,
-            vertex_count,
-            index_start,
-            index_count,
-            topology,
-        });
     }
 
     fn update_projection(&self, screen_width: f32, screen_height: f32) {
@@ -540,68 +456,23 @@ impl Renderer {
             .write_buffer(&self.projection_buffer, 0, util::as_u8_slice(&[uniform]));
     }
 
-    fn resize_buffers_if_needed(&mut self) {
-        let needed_vertex_capacity = self.vertices.len() as u64;
-        let needed_index_capacity = self.indices.len() as u64;
-
-        let mut vertex_capacity = self.vertex_capacity;
-        let mut index_capacity = self.index_capacity;
-
-        // Double capacity until we have enough space
-        while vertex_capacity < needed_vertex_capacity {
-            vertex_capacity *= 2;
-        }
-
-        while index_capacity < needed_index_capacity {
-            index_capacity *= 2;
-        }
-
-        // Only recreate buffers if we need more space
-        if vertex_capacity > self.vertex_capacity {
-            info!(
-                "Resizing vertex buffer from {} to {} vertices",
-                self.vertex_capacity, vertex_capacity
-            );
-            self.vertex_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Vertex Buffer"),
-                size: (std::mem::size_of::<Vertex>()) as u64 * vertex_capacity,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            self.vertex_capacity = vertex_capacity;
-        }
-
-        if index_capacity > self.index_capacity {
-            info!(
-                "Resizing index buffer from {} to {} indices",
-                self.index_capacity, index_capacity
-            );
-            self.index_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Index Buffer"),
-                size: (std::mem::size_of::<u32>()) as u64 * index_capacity,
-                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            self.index_capacity = index_capacity;
-        }
+    fn update_batchers(&self) {
+        self.point_batcher.update(&self.queue);
+        self.line_batcher.update(&self.queue);
+        self.line_strip_batcher.update(&self.queue);
+        self.triangle_batcher.update(&self.queue);
+        self.triangle_strip_batcher.update(&self.queue);
     }
 
-    fn update_buffers(&mut self) {
-        self.resize_buffers_if_needed();
-
-        if !self.vertices.is_empty() {
-            self.queue
-                .write_buffer(&self.vertex_buffer, 0, util::as_u8_slice(&self.vertices));
-        }
-        if !self.indices.is_empty() {
-            self.queue
-                .write_buffer(&self.index_buffer, 0, util::as_u8_slice(&self.indices));
-        }
+    fn check_resize_buffers(&mut self) {
+        self.point_batcher.check_resize_buffers();
     }
 
     pub fn _present(&mut self) {
         self.update_projection(self.config.width as f32, self.config.height as f32);
-        self.update_buffers();
+        self.check_resize_buffers();
+        self.update_batchers();
+        self.draw_calls = 0;
 
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
@@ -636,42 +507,22 @@ impl Renderer {
             });
 
             render_pass.set_bind_group(0, &self.projection_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
-            let mut current_topology = None;
-
-            for draw_call in &self.draw_calls {
-                // Switch pipeline only when topology changes
-                if current_topology != Some(draw_call.topology) {
-                    match draw_call.topology {
-                        wgpu::PrimitiveTopology::TriangleList => {
-                            render_pass.set_pipeline(&self.triangle_pipeline);
-                        }
-
-                        wgpu::PrimitiveTopology::LineList => {
-                            render_pass.set_pipeline(&self.line_pipeline);
-                        }
-
-                        wgpu::PrimitiveTopology::PointList => {
-                            render_pass.set_pipeline(&self.point_pipeline);
-                        }
-
-                        _ => {}
-                    }
-
-                    current_topology = Some(draw_call.topology);
-                }
-
-                render_pass.draw_indexed(
-                    draw_call.index_start..draw_call.index_start + draw_call.index_count,
-                    0,
-                    0..1,
-                );
-            }
+            // 1 point batcher
+            // 2 line batcher
+            // 3 line strip batcher
+            // 4 triangle batcher
+            // 5 triangle strip batcher
+            self.draw_calls += self.point_batcher.flush(&mut render_pass);
+            self.draw_calls += self.line_batcher.flush(&mut render_pass);
+            self.draw_calls += self.line_strip_batcher.flush(&mut render_pass);
+            self.draw_calls += self.triangle_batcher.flush(&mut render_pass);
+            self.draw_calls += self.triangle_strip_batcher.flush(&mut render_pass);
         }
 
         self.queue.submit([encoder.finish()]);
         frame.present();
+
+        self.clear();
     }
 }
