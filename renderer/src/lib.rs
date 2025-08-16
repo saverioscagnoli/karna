@@ -489,6 +489,7 @@ impl Renderer {
     pub fn _clear(&mut self) {
         self.vertices.clear();
         self.indices.clear();
+        println!("draw_calls: {}", self.draw_calls.len());
         self.draw_calls.clear();
     }
 
@@ -498,12 +499,22 @@ impl Renderer {
         self.surface.configure(&self.device, &self.config);
     }
 
+    // i made a shallow draw call number reduction fix, but things should be batched togheter
     fn add_draw_call(
         &mut self,
         topology: wgpu::PrimitiveTopology,
         vertex_count: u32,
         index_count: u32,
     ) {
+        // Try to merge with the last draw call if same topology
+        if let Some(last_call) = self.draw_calls.last_mut() {
+            if last_call.topology == topology {
+                last_call.vertex_count +    = vertex_count;
+                last_call.index_count += index_count;
+                return;
+            }
+        }
+
         let vertex_start = (self.vertices.len() - vertex_count as usize) as u32;
         let index_start = (self.indices.len() - index_count as usize) as u32;
 
