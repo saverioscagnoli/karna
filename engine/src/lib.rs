@@ -1,12 +1,10 @@
 mod context;
+mod scene;
 mod time;
 
-pub mod input;
-
-use crate::context::Context;
 use crate::input::KeyState;
+use crate::scene::SceneManager;
 use math::Size;
-use renderer::Color;
 use spin_sleep::SpinSleeper;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -15,8 +13,13 @@ use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::keyboard::PhysicalKey;
 use winit::window::{Window, WindowId};
+
+// Re-exports
+pub mod input;
+pub use crate::context::Context;
+pub use scene::Scene;
 
 struct LogFormatter;
 
@@ -38,25 +41,33 @@ pub struct App {
     window_size: Size<u32>,
     acc: f32,
     sleeper: SpinSleeper,
+    scenes: SceneManager,
 }
 
 impl ApplicationHandler<Context> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let size: PhysicalSize<u32> = self.window_size.into();
-        let attributes = Window::default_attributes().with_inner_size(size);
+        let attributes = Window::default_attributes()
+            .with_inner_size(size)
+            .with_resizable(false);
+
         let window = event_loop
             .create_window(attributes)
             .expect("Failed to create window");
 
         let window = Arc::new(window);
 
-        let context = Context::new(window);
+        let mut context = Context::new(window);
         let info = context.render.info();
 
         info!("backend: {}", info.backend);
         info!("device type: {:?}", info.device_type);
         info!("driver: {}", info.driver_info);
         info!("card: {}", info.name);
+
+        if let Some(scene) = self.scenes.current_mut() {
+            scene.load(&mut context);
+        }
 
         self.context = Some(context);
     }
@@ -81,6 +92,10 @@ impl ApplicationHandler<Context> for App {
         self.acc += dt;
 
         context.time.update(dt);
+
+        if let Some(scene) = self.scenes.current_mut() {
+            scene.update(context);
+        }
 
         while self.acc >= context.time.ups_step {
             self.acc -= context.time.ups_step
@@ -124,22 +139,31 @@ impl ApplicationHandler<Context> for App {
                 PhysicalKey::Unidentified(_) => {}
             },
 
+            WindowEvent::MouseInput { button, state, .. } => {
+                let s = context
+                    .input
+                    .mouse
+                    .entry(button)
+                    .or_insert(KeyState::default());
+
+                if state.is_pressed() {
+                    s.held = true;
+                    s.pressed = true;
+                } else {
+                    s.held = false;
+                }
+            }
+
+            WindowEvent::CursorMoved { position, .. } => context.input.mouse_pos = position.into(),
+
             WindowEvent::RedrawRequested => {
                 context.render._clear();
 
-                context.render.set_clear_color(Color::Black);
-                context.render.set_draw_color(Color::Magenta);
-                context.render.draw_pixel([400, 400]);
-                context
-                    .render
-                    .fill_triangle([100.0, 300.0], [150.0, 200.0], [200.0, 300.0]);
+                if let Some(scene) = self.scenes.current_mut() {
+                    scene.render(context);
+                }
 
-                context.render.set_draw_color(Color::Cyan);
-                context.render.fill_rect([10, 10], (50, 50));
-
-                println!("fps: {}", context.time.fps());
-
-                context.render._render();
+                context.render._present();
 
                 if !context.render.vsync() {
                     context.time.t2 = context.time.t1.elapsed().as_secs_f32();
@@ -165,11 +189,22 @@ impl App {
             window_size: Size::new(800, 600),
             acc: 0.0,
             sleeper: SpinSleeper::default(),
+            scenes: SceneManager::new(),
         }
     }
 
     pub fn with_size<S: Into<Size<u32>>>(mut self, size: S) -> Self {
         self.window_size = size.into();
+        self
+    }
+
+    pub fn with_scene<T: AsRef<str>, S: Scene + 'static>(mut self, scene_id: T, scene: S) -> Self {
+        if self.scenes.current == "" {
+            self.scenes.current = scene_id.as_ref().to_string()
+        }
+
+        self.scenes.add(scene_id, Box::new(scene));
+
         self
     }
 

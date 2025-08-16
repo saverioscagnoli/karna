@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
+use math::Vec2;
 // Re-exports
+pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
 
 pub(crate) struct KeyState {
@@ -19,12 +21,16 @@ impl Default for KeyState {
 
 pub struct Input {
     pub(crate) keys: HashMap<KeyCode, KeyState>,
+    pub(crate) mouse: HashMap<MouseButton, KeyState>,
+    pub(crate) mouse_pos: Vec2,
 }
 
 impl Input {
     pub(crate) fn new() -> Self {
         Self {
             keys: HashMap::new(),
+            mouse: HashMap::new(),
+            mouse_pos: Vec2::zero(),
         }
     }
 
@@ -36,9 +42,27 @@ impl Input {
         self.keys.get(&key).map(|s| s.pressed).unwrap_or(false)
     }
 
+    pub fn mouse_held(&self, button: MouseButton) -> bool {
+        self.mouse.get(&button).map(|s| s.held).unwrap_or(false)
+    }
+
+    pub fn mouse_clicked(&self, button: MouseButton) -> bool {
+        self.mouse.get(&button).map(|s| s.pressed).unwrap_or(false)
+    }
+
+    pub fn mouse_position(&self) -> Vec2 {
+        self.mouse_pos
+    }
+
     pub(crate) fn flush(&mut self) {
-        for state in self.keys.values_mut() {
+        self.keys.retain(|_, state| {
             state.pressed = false;
-        }
+            true // Keep all entries
+        });
+
+        self.mouse.retain(|_, state| {
+            state.pressed = false;
+            true // Keep all entries
+        });
     }
 }

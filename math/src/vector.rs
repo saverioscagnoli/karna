@@ -1,3 +1,6 @@
+use num::Num;
+use winit::dpi::PhysicalPosition;
+
 use crate::{
     matrix::Matrix,
     points::{Point2, Point3, Point4},
@@ -140,6 +143,12 @@ impl Vec2 {
     pub fn set<F: ToF32>(&mut self, x: F, y: F) {
         self.x = x.to_f32();
         self.y = y.to_f32();
+    }
+}
+
+impl<T: Num + ToF32> From<PhysicalPosition<T>> for Vec2 {
+    fn from(value: PhysicalPosition<T>) -> Self {
+        Vec2::new(value.x.to_f32(), value.y.to_f32())
     }
 }
 

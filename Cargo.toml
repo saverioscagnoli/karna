@@ -10,6 +10,8 @@ keywords = ["game", "game-engine", "game-development"]
 [dependencies]
 engine = { path = "engine" }
 math.workspace = true
+renderer.workspace = true
+
 
 
 [workspace]
@@ -21,3 +23,4 @@ math = { path = "math" }
 winit = "0.30.12"
 wgpu = "26.0.1"
 traccia = "2.2.5"
+renderer = { path = "renderer" }

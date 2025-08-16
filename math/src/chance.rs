@@ -29,14 +29,14 @@ pub fn coin_flip(chance: u8) -> bool {
 pub trait Pick<T> {
     /// Picks a random element from the container.
     /// Returns the index of the element and a reference to it.
-    fn pick(&self) -> (usize, &T);
+    fn pick(&self) -> &T;
 }
 
 /// Pick a random element from a slice or a vector.
 /// The element will be borrowed mutably.
 pub trait PickMut<T> {
     /// Picks a random element from the container.
-    fn pick_mut(&mut self) -> (usize, &mut T);
+    fn pick_mut(&mut self) -> &mut T;
 }
 
 /// Implement pick for all elements that can be converted to a slice of T.
@@ -44,10 +44,10 @@ impl<T, C> Pick<T> for C
 where
     C: AsRef<[T]>,
 {
-    fn pick(&self) -> (usize, &T) {
+    fn pick(&self) -> &T {
         let slice = self.as_ref();
         let index = rng(0..slice.len());
-        (index, &slice[index])
+        &slice[index]
     }
 }
 
@@ -56,10 +56,10 @@ impl<T, C> PickMut<T> for C
 where
     C: AsMut<[T]>,
 {
-    fn pick_mut(&mut self) -> (usize, &mut T) {
+    fn pick_mut(&mut self) -> &mut T {
         let slice = self.as_mut();
         let index = rng(0..slice.len());
-        (index, &mut slice[index])
+        &mut slice[index]
     }
 }
 
@@ -83,20 +83,16 @@ mod test {
     #[test]
     fn test_pick() {
         let list = [1, 2, 3, 4, 5];
-        let (index, picked) = list.pick();
+        let picked = list.pick();
 
-        assert!(index < list.len());
         assert!(*picked >= 1 && *picked <= 5);
-        assert!(list[index] == *picked);
     }
 
     #[test]
     fn test_pick_mut() {
         let mut list = [1, 2, 3, 4, 5];
-        let len = list.len();
-        let (index, picked) = list.pick_mut();
+        let picked = list.pick_mut();
 
-        assert!(index < len);
         assert!(*picked >= 1 && *picked <= 5);
     }
 }

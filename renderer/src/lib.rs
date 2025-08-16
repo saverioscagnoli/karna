@@ -149,6 +149,8 @@ pub struct Renderer {
 
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
+    vertex_capacity: u64,
+    index_capacity: u64,
 
     point_pipeline: wgpu::RenderPipeline,
     line_pipeline: wgpu::RenderPipeline,
@@ -260,6 +262,8 @@ impl Renderer {
             draw_calls: Vec::new(),
             vertex_buffer,
             index_buffer,
+            vertex_capacity: Self::VERTEX_CAPACITY,
+            index_capacity: Self::INDEX_CAPACITY,
             triangle_pipeline,
             point_pipeline,
             line_pipeline,
@@ -525,7 +529,55 @@ impl Renderer {
             .write_buffer(&self.projection_buffer, 0, util::as_u8_slice(&[uniform]));
     }
 
-    fn update_buffers(&self) {
+    fn resize_buffers_if_needed(&mut self) {
+        let needed_vertex_capacity = self.vertices.len() as u64;
+        let needed_index_capacity = self.indices.len() as u64;
+
+        let mut vertex_capacity = self.vertex_capacity;
+        let mut index_capacity = self.index_capacity;
+
+        // Double capacity until we have enough space
+        while vertex_capacity < needed_vertex_capacity {
+            vertex_capacity *= 2;
+        }
+
+        while index_capacity < needed_index_capacity {
+            index_capacity *= 2;
+        }
+
+        // Only recreate buffers if we need more space
+        if vertex_capacity > self.vertex_capacity {
+            info!(
+                "Resizing vertex buffer from {} to {} vertices",
+                self.vertex_capacity, vertex_capacity
+            );
+            self.vertex_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Vertex Buffer"),
+                size: (std::mem::size_of::<Vertex>()) as u64 * vertex_capacity,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.vertex_capacity = vertex_capacity;
+        }
+
+        if index_capacity > self.index_capacity {
+            info!(
+                "Resizing index buffer from {} to {} indices",
+                self.index_capacity, index_capacity
+            );
+            self.index_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Index Buffer"),
+                size: (std::mem::size_of::<u32>()) as u64 * index_capacity,
+                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.index_capacity = index_capacity;
+        }
+    }
+
+    fn update_buffers(&mut self) {
+        self.resize_buffers_if_needed();
+
         if !self.vertices.is_empty() {
             self.queue
                 .write_buffer(&self.vertex_buffer, 0, util::as_u8_slice(&self.vertices));
@@ -536,7 +588,7 @@ impl Renderer {
         }
     }
 
-    pub fn _render(&mut self) {
+    pub fn _present(&mut self) {
         self.update_projection(self.config.width as f32, self.config.height as f32);
         self.update_buffers();
 

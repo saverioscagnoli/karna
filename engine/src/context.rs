@@ -1,8 +1,7 @@
+use crate::{input::Input, time::Time};
 use renderer::Renderer;
 use std::sync::Arc;
 use winit::window::Window;
-
-use crate::{input::Input, time::Time};
 
 pub struct Context {
     pub window: Arc<Window>,
