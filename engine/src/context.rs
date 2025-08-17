@@ -1,18 +1,18 @@
-use crate::{input::Input, time::Time};
+use crate::{input::Input, time::Time, window::Window};
 use renderer::Renderer;
 use std::sync::Arc;
-use winit::window::Window;
 
 pub struct Context {
-    pub window: Arc<Window>,
+    pub window: Window,
     pub render: Renderer,
     pub time: Time,
     pub input: Input,
 }
 
 impl Context {
-    pub fn new(window: Arc<Window>) -> Self {
-        let render = Renderer::_new(window.clone());
+    pub fn new(inner: Arc<winit::window::Window>) -> Self {
+        let render = Renderer::_new(inner.clone());
+        let window = Window::new(inner);
         let time = Time::new();
         let input = Input::new();
 

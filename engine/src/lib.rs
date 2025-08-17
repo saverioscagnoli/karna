@@ -1,6 +1,7 @@
 mod context;
 mod scene;
 mod time;
+mod window;
 
 use crate::input::KeyState;
 use crate::scene::SceneManager;
