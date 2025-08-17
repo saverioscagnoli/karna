@@ -1,3 +1,3 @@
 pub use engine::*;
 pub use math;
-pub use renderer::Color;
+pub use renderer::*;

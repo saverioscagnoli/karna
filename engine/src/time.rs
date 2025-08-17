@@ -44,6 +44,10 @@ impl Time {
         self.delta
     }
 
+    pub fn elapsed(&self) -> f32 {
+        self.elapsed
+    }
+
     pub fn frame(&self) -> f32 {
         self.t2
     }

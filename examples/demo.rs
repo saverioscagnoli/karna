@@ -1,15 +1,14 @@
-use karna::{input::KeyCode, math::Vec2, App, Color, Context, Scene};
+use karna::{App, Color, Context, Scene};
+use math::Vec2;
 
 struct S {
-    pos: Vec2,
-    vel: Vec2,
+    rect_color: Color,
 }
 
 impl Default for S {
     fn default() -> Self {
         Self {
-            pos: Vec2::zero(),
-            vel: Vec2::zero(),
+            rect_color: Color::Cyan,
         }
     }
 }
@@ -19,32 +18,29 @@ impl Scene for S {
 
     fn fixed_update(&mut self, _ctx: &mut Context) {}
 
-    fn update(&mut self, ctx: &mut Context) {
-        let dt = ctx.time.delta();
-
-        if ctx.input.key_held(KeyCode::KeyW) {
-            self.vel.y = -250.0;
-        }
-
-        if ctx.input.key_held(KeyCode::KeyS) {
-            self.vel.y = 250.0;
-        }
-
-        if ctx.input.key_held(KeyCode::KeyA) {
-            self.vel.x = -250.0;
-        }
-
-        if ctx.input.key_held(KeyCode::KeyD) {
-            self.vel.x = 250.0;
-        }
-
-        self.pos += self.vel * dt;
-        self.vel *= 0.9;
-    }
+    fn update(&mut self, _ctx: &mut Context) {}
 
     fn render(&mut self, ctx: &mut Context) {
         ctx.render.set_draw_color(Color::Cyan);
-        ctx.render.fill_rect(self.pos, (50, 50));
+
+        for i in 0..20 {
+            let rect_x = 300.0 + (i as f32 * 15.0);
+            let rect_y = 50.0 + (ctx.time.elapsed() + i as f32 * 0.1).sin() * 20.0;
+
+            self.rect_color = Color::rgb(0.2 + i as f32 * 0.04, 0.8, 0.3);
+            ctx.render.set_draw_color(self.rect_color);
+            ctx.render.fill_rect([rect_x, rect_y], (10.0, 10.0));
+        }
+
+        let mut wave_points = Vec::new();
+        for i in 0..100 {
+            let x = 400.0 + i as f32 * 2.0;
+            let y = 300.0 + (ctx.time.elapsed() + i as f32 * 0.1).sin() * 30.0;
+            wave_points.push(Vec2::new(x, y));
+        }
+
+        ctx.render.set_draw_color(Color::Red);
+        ctx.render.draw_line_strip(&wave_points);
     }
 }
 

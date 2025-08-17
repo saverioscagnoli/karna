@@ -1,8 +1,10 @@
+mod atlas;
 mod batcher;
 mod color;
 mod util;
 
-use crate::batcher::Batcher;
+use crate::{atlas::TextureAtlas, batcher::Batcher};
+use image::GenericImageView;
 use math::{Size, Vec2, Vec3, Vec4};
 use std::{
     borrow::Cow,
@@ -23,6 +25,7 @@ pub struct GpuState {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     bind_group_layout: wgpu::BindGroupLayout,
+    texture_bind_group_layout: wgpu::BindGroupLayout,
     surface_format: wgpu::TextureFormat,
 }
 
@@ -70,6 +73,30 @@ impl GpuState {
             label: Some("Bind Group Layout"),
         });
 
+        // Add texture bind group layout
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label: Some("Texture Bind Group Layout"),
+            });
+
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps
             .formats
@@ -98,6 +125,7 @@ impl GpuState {
             queue,
             config,
             bind_group_layout,
+            texture_bind_group_layout,
             surface_format,
         }
     }
@@ -108,6 +136,7 @@ impl GpuState {
 struct Vertex {
     pos: Vec3,
     color: Vec4,
+    tex_coords: Vec2,
 }
 
 impl Vertex {
@@ -125,6 +154,11 @@ impl Vertex {
                     offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 7]>() as wgpu::BufferAddress,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x2,
                 },
             ],
         }
@@ -151,6 +185,9 @@ pub struct Renderer {
 
     projection_buffer: wgpu::Buffer,
     projection_bind_group: wgpu::BindGroup,
+
+    atlas: TextureAtlas,
+    atlas_bind_group: wgpu::BindGroup,
 
     clear_color: Color,
     draw_color: Color,
@@ -197,6 +234,23 @@ impl Renderer {
             }],
         });
 
+        let atlas = TextureAtlas::new(&state.device, &state.queue, 800);
+
+        let atlas_bind_group = state.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Atlas Bind Group"),
+            layout: &state.texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&atlas.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&atlas.sampler),
+                },
+            ],
+        });
+
         let shader_src = Self::shader_src();
         let shader = state
             .device
@@ -210,6 +264,7 @@ impl Renderer {
             state.device.clone(),
             &shader,
             &state.bind_group_layout,
+            &state.texture_bind_group_layout,
             state.surface_format,
             wgpu::PrimitiveTopology::PointList,
             Self::VERTEX_CAPACITY,
@@ -221,6 +276,7 @@ impl Renderer {
             state.device.clone(),
             &shader,
             &state.bind_group_layout,
+            &state.texture_bind_group_layout,
             state.surface_format,
             wgpu::PrimitiveTopology::LineList,
             Self::VERTEX_CAPACITY,
@@ -232,6 +288,7 @@ impl Renderer {
             state.device.clone(),
             &shader,
             &state.bind_group_layout,
+            &state.texture_bind_group_layout,
             state.surface_format,
             wgpu::PrimitiveTopology::LineStrip,
             Self::VERTEX_CAPACITY,
@@ -243,6 +300,7 @@ impl Renderer {
             state.device.clone(),
             &shader,
             &state.bind_group_layout,
+            &state.texture_bind_group_layout,
             state.surface_format,
             wgpu::PrimitiveTopology::TriangleList,
             Self::VERTEX_CAPACITY,
@@ -254,6 +312,7 @@ impl Renderer {
             state.device.clone(),
             &shader,
             &state.bind_group_layout,
+            &state.texture_bind_group_layout,
             state.surface_format,
             wgpu::PrimitiveTopology::TriangleStrip,
             Self::VERTEX_CAPACITY,
@@ -272,6 +331,8 @@ impl Renderer {
 
             projection_buffer,
             projection_bind_group,
+            atlas,
+            atlas_bind_group,
             clear_color: Color::Black,
             draw_color: Color::White,
         }
@@ -284,30 +345,42 @@ impl Renderer {
         }
 
         @group(0) @binding(0) var<uniform> projection: ProjectionUniform;
+        @group(1) @binding(0) var t_diffuse: texture_2d<f32>;
+        @group(1) @binding(1) var s_diffuse: sampler;
 
         struct VertexInput {
             @location(0) pos: vec3<f32>,
             @location(1) color: vec4<f32>,
+            @location(2) tex_coords: vec2<f32>,
         }
 
         struct VertexOutput {
             @builtin(position) clip_position: vec4<f32>,
-            @location(0) color: vec3<f32>,
+            @location(0) color: vec4<f32>,
+            @location(1) tex_coords: vec2<f32>,
         }
 
         @vertex
         fn vs_main(model: VertexInput) -> VertexOutput {
             var out: VertexOutput;
-            out.color = model.color.xyz;
+            out.color = model.color;
+            out.tex_coords = model.tex_coords;
             let pos = vec4<f32>(model.pos, 1.0);
             out.clip_position = projection.matrix * pos;
             return out;
         }
 
-        @fragment
+         @fragment
         fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-            return vec4<f32>(in.color, 1.0);
+        let tex_color = textureSample(t_diffuse, s_diffuse, in.tex_coords);
+        
+        // For solid colors (when tex_coords are zero), bypass texture sampling
+        if (in.tex_coords.x == 0.0 && in.tex_coords.y == 0.0) {
+            return in.color;
         }
+        
+        return tex_color * in.color;
+    }
         "#
         .to_string()
     }
@@ -341,9 +414,58 @@ impl Renderer {
         self.point_batcher.vertices.push(Vertex {
             pos: pos.resize_zeros(),
             color: self.draw_color.into(),
+            tex_coords: Vec2::zero(),
         });
 
         self.point_batcher.indices.push(vertex_index);
+    }
+
+    pub fn draw_line<P1: Into<Vec2>, P2: Into<Vec2>>(&mut self, p1: P1, p2: P2) {
+        let p1: Vec2 = p1.into();
+        let p2: Vec2 = p2.into();
+        let start_index = self.line_batcher.vertex_count();
+        let color: Vec4 = self.draw_color.into();
+
+        self.line_batcher.vertices.extend_from_slice(&[
+            Vertex {
+                pos: p1.resize_zeros(),
+                color,
+                tex_coords: Vec2::zero(),
+            },
+            Vertex {
+                pos: p2.resize_zeros(),
+                color,
+                tex_coords: Vec2::zero(),
+            },
+        ]);
+
+        self.line_batcher
+            .indices
+            .extend_from_slice(&[start_index, start_index + 1]);
+    }
+
+    pub fn draw_line_strip(&mut self, points: &[Vec2]) {
+        if points.len() < 2 {
+            return;
+        }
+
+        let start_index = self.line_strip_batcher.vertex_count();
+        let color: Vec4 = self.draw_color.into();
+
+        for &point in points {
+            self.line_strip_batcher.vertices.push(Vertex {
+                pos: point.resize_zeros(),
+                color,
+                tex_coords: Vec2::zero(),
+            });
+        }
+
+        for i in 0..points.len() - 1 {
+            self.line_strip_batcher.indices.push(start_index + i as u32);
+            self.line_strip_batcher
+                .indices
+                .push(start_index + i as u32 + 1);
+        }
     }
 
     pub fn fill_triangle<P: Into<Vec2>>(&mut self, p1: P, p2: P, p3: P) {
@@ -358,14 +480,17 @@ impl Renderer {
             Vertex {
                 pos: p1.resize_zeros(),
                 color,
+                tex_coords: Vec2::zero(),
             },
             Vertex {
                 pos: p2.resize_zeros(),
                 color,
+                tex_coords: Vec2::zero(),
             },
             Vertex {
                 pos: p3.resize_zeros(),
                 color,
+                tex_coords: Vec2::zero(),
             },
         ]);
 
@@ -394,18 +519,22 @@ impl Renderer {
             Vertex {
                 pos: top_left.resize_zeros(),
                 color,
+                tex_coords: Vec2::zero(),
             },
             Vertex {
                 pos: top_right.resize_zeros(),
                 color,
+                tex_coords: Vec2::zero(),
             },
             Vertex {
                 pos: bottom_left.resize_zeros(),
                 color,
+                tex_coords: Vec2::zero(),
             },
             Vertex {
                 pos: bottom_right.resize_zeros(),
                 color,
+                tex_coords: Vec2::zero(),
             },
         ]);
 
@@ -419,6 +548,80 @@ impl Renderer {
         ]);
     }
 
+    pub fn load_image_from_bytes<L: AsRef<str>>(&mut self, name: L, bytes: &[u8]) {
+        let img = image::load_from_memory(bytes)
+            .ok()
+            .expect("Failed to load image from bytes");
+        let rgba = img.to_rgba8();
+        let dimensions = img.dimensions();
+
+        let device = self.device.clone();
+        let queue = &self.queue.clone();
+
+        let was_resized = self.atlas.add_texture(
+            &device,
+            queue,
+            name.as_ref(),
+            &rgba,
+            Size::new(dimensions.0, dimensions.1),
+            None,
+        );
+
+        // If the atlas was expanded, update the bind group
+        if was_resized {
+            self.update_atlas_bind_group();
+        }
+    }
+
+    pub fn draw_image<P: Into<Vec2>>(&mut self, label: &str, pos: P) {
+        let pos: Vec2 = pos.into();
+        let color: Vec4 = Color::White.into();
+
+        if let Some(region) = self.atlas.get_region(label) {
+            let start_index = self.triangle_batcher.vertex_count();
+
+            let top_left = pos;
+            let top_right = Vec2::new(pos.x + region.size.width as f32, pos.y);
+            let bottom_left = Vec2::new(pos.x, pos.y + region.size.height as f32);
+            let bottom_right = Vec2::new(
+                pos.x + region.size.width as f32,
+                pos.y + region.size.height as f32,
+            );
+
+            self.triangle_batcher.vertices.extend_from_slice(&[
+                Vertex {
+                    pos: top_left.resize_zeros(),
+                    color,
+                    tex_coords: Vec2::new(region.uv_min.x, region.uv_min.y),
+                },
+                Vertex {
+                    pos: top_right.resize_zeros(),
+                    color,
+                    tex_coords: Vec2::new(region.uv_max.x, region.uv_min.y),
+                },
+                Vertex {
+                    pos: bottom_left.resize_zeros(),
+                    color,
+                    tex_coords: Vec2::new(region.uv_min.x, region.uv_max.y),
+                },
+                Vertex {
+                    pos: bottom_right.resize_zeros(),
+                    color,
+                    tex_coords: Vec2::new(region.uv_max.x, region.uv_max.y),
+                },
+            ]);
+
+            self.triangle_batcher.indices.extend_from_slice(&[
+                start_index,
+                start_index + 1,
+                start_index + 2,
+                start_index + 1,
+                start_index + 3,
+                start_index + 2,
+            ]);
+        }
+    }
+
     pub fn info(&self) -> wgpu::AdapterInfo {
         self.adapter.get_info()
     }
@@ -427,6 +630,12 @@ impl Renderer {
         FrameInfo {
             draw_calls: self.draw_calls,
         }
+    }
+
+    pub fn update_atlas_bind_group(&mut self) {
+        self.atlas_bind_group = self
+            .atlas
+            .create_bind_group(&self.device, &self.texture_bind_group_layout);
     }
 
     fn clear(&mut self) {
@@ -466,6 +675,10 @@ impl Renderer {
 
     fn check_resize_buffers(&mut self) {
         self.point_batcher.check_resize_buffers();
+        self.line_batcher.check_resize_buffers();
+        self.line_strip_batcher.check_resize_buffers();
+        self.triangle_batcher.check_resize_buffers();
+        self.triangle_strip_batcher.check_resize_buffers();
     }
 
     pub fn _present(&mut self) {
@@ -507,6 +720,7 @@ impl Renderer {
             });
 
             render_pass.set_bind_group(0, &self.projection_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.atlas_bind_group, &[]);
 
             // 1 point batcher
             // 2 line batcher

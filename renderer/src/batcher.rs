@@ -1,6 +1,5 @@
-use std::rc::Rc;
-
 use crate::{Vertex, util};
+use std::rc::Rc;
 use traccia::info;
 
 pub struct Batcher {
@@ -20,6 +19,7 @@ impl Batcher {
         device: Rc<wgpu::Device>,
         shader: &wgpu::ShaderModule,
         bind_group_layout: &wgpu::BindGroupLayout,
+        texture_bind_group_layout: &wgpu::BindGroupLayout,
         surface_format: wgpu::TextureFormat,
         topology: wgpu::PrimitiveTopology,
         vertex_capacity: u64,
@@ -29,7 +29,7 @@ impl Batcher {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[bind_group_layout],
+            bind_group_layouts: &[bind_group_layout, texture_bind_group_layout],
             push_constant_ranges: &[],
         });
 
