@@ -158,6 +158,8 @@ impl ApplicationHandler<Context> for App {
             WindowEvent::CursorMoved { position, .. } => context.input.mouse_pos = position.into(),
 
             WindowEvent::RedrawRequested => {
+                context.render._clear();
+
                 if let Some(scene) = self.scenes.current_mut() {
                     scene.render(context);
                 }

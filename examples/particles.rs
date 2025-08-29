@@ -1,11 +1,11 @@
 use karna::{
     input::MouseButton,
     math::{rng, Vec2},
-    App, Color, Context, Scene,
+    App, Color, Context, Point, Rect, Scene,
 };
 
 struct Particle {
-    pos: Vec2,
+    p: Point,
     vel: Vec2,
 }
 
@@ -26,9 +26,16 @@ impl Scene for S {
         if ctx.input.mouse_held(MouseButton::Left) {
             let mouse_pos = ctx.input.mouse_position();
 
-            for _ in 0..rng(25..=50) {
+            let time = ctx.time.elapsed();
+
+            // Create animated color using sin for smooth transitions (0-1 range)
+            let r = time.sin() * 0.5 + 0.5;
+            let g = (time + 2.0).sin() * 0.5 + 0.5;
+            let b = (time + 4.0).sin() * 0.5 + 0.5;
+
+            for _ in 0..rng(25..=1000) {
                 self.particles.push(Particle {
-                    pos: mouse_pos,
+                    p: Point::new(mouse_pos.x, mouse_pos.y).with_color(Color::rgb(r, g, b)),
                     vel: Vec2::new(rng(-2.5..=2.5), rng(-2.5..=2.5)),
                 });
             }
@@ -39,21 +46,21 @@ impl Scene for S {
         let height = window_size.height as f32;
 
         for particle in self.particles.iter_mut() {
-            particle.pos += particle.vel;
+            particle.p.pos += particle.vel;
 
-            // Bounce off left and right edges
-            if particle.pos.x <= 0.0 || particle.pos.x >= width {
-                particle.vel.x = -particle.vel.x;
-                // Clamp position to stay within bounds
-                particle.pos.x = particle.pos.x.clamp(0.0, width);
-            }
+            // // Bounce off left and right edges
+            // if particle.p.pos.x <= 0.0 || particle.p.pos.x >= width {
+            //     particle.vel.x = -particle.vel.x;
+            //     // Clamp position to stay within bounds
+            //     particle.p.pos.x = particle.p.pos.x.clamp(0.0, width);
+            // }
 
-            // Bounce off top and bottom edges
-            if particle.pos.y <= 0.0 || particle.pos.y >= height {
-                particle.vel.y = -particle.vel.y;
-                // Clamp position to stay within bounds
-                particle.pos.y = particle.pos.y.clamp(0.0, height);
-            }
+            // // Bounce off top and bottom edges
+            // if particle.p.pos.y <= 0.0 || particle.p.pos.y >= height {
+            //     particle.vel.y = -particle.vel.y;
+            //     // Clamp position to stay within bounds
+            //     particle.p.pos.y = particle.p.pos.y.clamp(0.0, height);
+            // }
         }
 
         println!(
@@ -64,18 +71,8 @@ impl Scene for S {
     }
 
     fn render(&mut self, ctx: &mut Context) {
-        let time = ctx.time.elapsed();
-
-        // Create animated color using sin for smooth transitions (0-1 range)
-        let r = time.sin() * 0.5 + 0.5;
-        let g = (time + 2.0).sin() * 0.5 + 0.5;
-        let b = (time + 4.0).sin() * 0.5 + 0.5;
-
-        let animated_color = Color::rgb(r, g, b);
-        ctx.render.set_draw_color(animated_color);
-
         for particle in self.particles.iter() {
-            ctx.render.draw_pixel(particle.pos);
+            particle.p.render(&mut ctx.render);
         }
     }
 }
