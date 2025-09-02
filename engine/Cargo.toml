@@ -11,3 +11,4 @@ traccia.workspace = true
 chrono = "0.4.41"
 spin_sleep = "1.3.2"
 renderer.workspace = true
+pollster.workspace = true

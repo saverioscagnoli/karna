@@ -6,13 +6,13 @@ readme = "README.md"
 repository = "https://github.com/saverioscagnoli/karna"
 categories = ["game", "game-engine", "game-development"]
 keywords = ["game", "game-engine", "game-development"]
+include = ["assets"]
+
 
 [dependencies]
 engine = { path = "engine" }
 math.workspace = true
 renderer.workspace = true
-
-
 
 [workspace]
 members = ["engine", "math", "renderer"]
@@ -24,3 +24,5 @@ winit = "0.30.12"
 wgpu = "26.0.1"
 traccia = "2.2.5"
 renderer = { path = "renderer" }
+pollster = "0.4.0"
+

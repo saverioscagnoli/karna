@@ -35,6 +35,12 @@ impl Color {
     }
 }
 
+impl Default for Color {
+    fn default() -> Self {
+        Self::White
+    }
+}
+
 impl From<Vec3> for Color {
     fn from(vec: Vec3) -> Self {
         Self {

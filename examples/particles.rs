@@ -1,26 +1,22 @@
 use karna::{
     input::MouseButton,
     math::{rng, Vec2},
-    App, Color, Context, Point, Rect, Scene,
+    App, Color, Context, Pixel, Scene,
 };
 
 struct Particle {
-    p: Point,
+    p: Pixel,
     vel: Vec2,
 }
 
 struct S {
-    color: Color,
     particles: Vec<Particle>,
 }
 
 impl Scene for S {
-    fn load(&mut self, ctx: &mut Context) {
-        ctx.render.set_vsync(false);
-        ctx.time.set_target_fps(120);
-    }
+    fn load(&mut self, _ctx: &mut Context) {}
 
-    fn fixed_update(&mut self, ctx: &mut Context) {}
+    fn fixed_update(&mut self, _ctx: &mut Context) {}
 
     fn update(&mut self, ctx: &mut Context) {
         if ctx.input.mouse_held(MouseButton::Left) {
@@ -35,32 +31,14 @@ impl Scene for S {
 
             for _ in 0..rng(25..=1000) {
                 self.particles.push(Particle {
-                    p: Point::new(mouse_pos.x, mouse_pos.y).with_color(Color::rgb(r, g, b)),
+                    p: Pixel::new(mouse_pos).with_color(Color::rgb(r, g, b)),
                     vel: Vec2::new(rng(-2.5..=2.5), rng(-2.5..=2.5)),
                 });
             }
         }
 
-        let window_size = ctx.window.size();
-        let width = window_size.width as f32;
-        let height = window_size.height as f32;
-
         for particle in self.particles.iter_mut() {
-            particle.p.pos += particle.vel;
-
-            // // Bounce off left and right edges
-            // if particle.p.pos.x <= 0.0 || particle.p.pos.x >= width {
-            //     particle.vel.x = -particle.vel.x;
-            //     // Clamp position to stay within bounds
-            //     particle.p.pos.x = particle.p.pos.x.clamp(0.0, width);
-            // }
-
-            // // Bounce off top and bottom edges
-            // if particle.p.pos.y <= 0.0 || particle.p.pos.y >= height {
-            //     particle.vel.y = -particle.vel.y;
-            //     // Clamp position to stay within bounds
-            //     particle.p.pos.y = particle.p.pos.y.clamp(0.0, height);
-            // }
+            particle.p.position += particle.vel;
         }
 
         println!(
@@ -84,7 +62,6 @@ fn main() {
             "default",
             S {
                 particles: Vec::new(),
-                color: Color::Red,
             },
         )
         .run()
