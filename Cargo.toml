@@ -25,4 +25,4 @@ wgpu = "26.0.1"
 traccia = "2.2.5"
 renderer = { path = "renderer" }
 pollster = "0.4.0"
-
+err = { path = "err" }

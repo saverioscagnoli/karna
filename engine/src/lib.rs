@@ -8,8 +8,8 @@ use crate::scene::SceneManager;
 use math::Size;
 use spin_sleep::SpinSleeper;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use traccia::{Color as TColor, Colorize, LogLevel, Style, info};
+use std::time::Instant;
+use traccia::{Color as TColor, Colorize, LogLevel, Style, fatal, info};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::WindowEvent;
@@ -58,7 +58,15 @@ impl ApplicationHandler<Context> for App {
 
         let window = Arc::new(window);
 
-        let mut context = Context::new(window);
+        let mut context = match Context::new(window.clone()) {
+            Ok(ctx) => ctx,
+            Err(e) => {
+                fatal!("Failed to create context: {}", e);
+                event_loop.exit();
+                return;
+            }
+        };
+
         let info = context.render.info();
 
         info!("backend: {}", info.backend);
@@ -116,7 +124,7 @@ impl ApplicationHandler<Context> for App {
             }
 
             WindowEvent::Resized(size) => {
-                context.render._resize(size.into());
+                context.render.resize(size.into());
             }
 
             WindowEvent::KeyboardInput { event, .. } => match event.physical_key {
@@ -158,22 +166,22 @@ impl ApplicationHandler<Context> for App {
             WindowEvent::CursorMoved { position, .. } => context.input.mouse_pos = position.into(),
 
             WindowEvent::RedrawRequested => {
-                context.render._clear();
+                // context.render._clear();
 
                 if let Some(scene) = self.scenes.current_mut() {
                     scene.render(context);
                 }
 
-                context.render._present();
+                context.render.present();
 
-                if !context.render.vsync() {
-                    context.time.t2 = context.time.t1.elapsed().as_secs_f32();
-                    let sleep_time = context.time.fps_step - context.time.t2;
+                // if !context.render.vsync() {
+                //     context.time.t2 = context.time.t1.elapsed().as_secs_f32();
+                //     let sleep_time = context.time.fps_step - context.time.t2;
 
-                    if sleep_time > 0.0 {
-                        self.sleeper.sleep(Duration::from_secs_f32(sleep_time));
-                    }
-                }
+                //     if sleep_time > 0.0 {
+                //         self.sleeper.sleep(Duration::from_secs_f32(sleep_time));
+                //     }
+                // }
 
                 context.window.request_redraw();
             }

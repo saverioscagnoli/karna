@@ -11,4 +11,4 @@ traccia.workspace = true
 image = "0.25.6"
 futures = "0.3.31"
 futures-intrusive = "0.5.0"
-pollster.workspace = true
+err.workspace = true

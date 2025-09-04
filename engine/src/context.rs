@@ -10,17 +10,17 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(inner: Arc<winit::window::Window>) -> Self {
-        let render = Renderer::_new(inner.clone());
+    pub fn new(inner: Arc<winit::window::Window>) -> Result<Self, Box<dyn std::error::Error>> {
+        let render = pollster::block_on(Renderer::_new(inner.clone()))?;
         let window = Window::new(inner);
         let time = Time::new();
         let input = Input::new();
 
-        Self {
+        Ok(Self {
             window,
             render,
             time,
             input,
-        }
+        })
     }
 }

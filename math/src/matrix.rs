@@ -1,4 +1,4 @@
-use crate::{chance::rng, ToF32};
+use crate::{chance::rng, ToF32, Vec3};
 use rand::distr::uniform::SampleRange;
 use std::{
     fmt::Debug,
@@ -418,6 +418,14 @@ impl Mat4 {
         m[(1, 3)] = -(top + bottom) / (top - bottom);
         m[(2, 3)] = -(far + near) / (far - near);
 
+        m
+    }
+
+    pub fn translation(v: Vec3) -> Self {
+        let mut m = Self::identity();
+        m[(0, 3)] = v.x;
+        m[(1, 3)] = v.y;
+        m[(2, 3)] = v.z;
         m
     }
 }
