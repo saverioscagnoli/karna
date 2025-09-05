@@ -4,18 +4,25 @@ mod config;
 mod draw_calls;
 mod shaders;
 mod state;
+mod subrenderers;
 mod util;
 mod vertex;
 
 use crate::{
-    camera::Camera, color::Color, config::RendererConfig, shaders::Shaders, state::GpuState,
+    camera::Camera,
+    color::Color,
+    config::RendererConfig,
+    draw_calls::{DrawIndirectArgs, PrimitiveKind},
+    shaders::Shaders,
+    state::GpuState,
+    subrenderers::{RectInstance, RectRenderer},
     vertex::Vertex,
 };
 use err::RendererError;
-use math::Size;
+use math::{Size, Vec2, Vec4};
 use std::sync::Arc;
 use traccia::{info, warn};
-use wgpu::{util::DeviceExt, wgt::DrawIndirectArgs};
+use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 pub mod render {
@@ -27,6 +34,34 @@ pub trait Descriptor {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
 }
 
+pub struct Rect {
+    pub position: Vec2,
+    pub width: f32,
+    pub height: f32,
+    pub color: Color,
+}
+
+impl Rect {
+    pub fn new(position: Vec2, width: f32, height: f32, color: Color) -> Self {
+        Self {
+            position,
+            width,
+            height,
+            color,
+        }
+    }
+
+    pub fn render(&self, renderer: &mut Renderer) {
+        let instance = RectInstance {
+            position: self.position,
+            scale: Vec2::new(self.width, self.height),
+            color: self.color.into(),
+        };
+
+        renderer.rect_renderer.instances.push(instance);
+    }
+}
+
 pub struct Renderer {
     state: GpuState,
     config: RendererConfig,
@@ -35,6 +70,8 @@ pub struct Renderer {
     vertex_buffer: wgpu::Buffer,
     render_pipeline: wgpu::RenderPipeline,
     indirect_buffer: wgpu::Buffer,
+
+    rect_renderer: RectRenderer,
 }
 
 impl Renderer {
@@ -50,46 +87,26 @@ impl Renderer {
             },
         );
 
-        let vertex_buffer = state
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: util::as_u8_slice(&[
-                    // Triangle 1 (vertices 0-2)
-                    Vertex {
-                        position: [10.0, 10.0, 0.0].into(),
-                        color: Color::RED.into(),
-                    },
-                    Vertex {
-                        position: [100.0, 10.0, 0.0].into(),
-                        color: Color::GREEN.into(),
-                    },
-                    Vertex {
-                        position: [55.0, 100.0, 0.0].into(),
-                        color: Color::BLUE.into(),
-                    },
-                    // Triangle 2 (vertices 3-5)
-                    Vertex {
-                        position: [120.0, 10.0, 0.0].into(),
-                        color: Color::YELLOW.into(),
-                    },
-                    Vertex {
-                        position: [200.0, 10.0, 0.0].into(),
-                        color: Color::MAGENTA.into(),
-                    },
-                    Vertex {
-                        position: [160.0, 100.0, 0.0].into(),
-                        color: Color::CYAN.into(),
-                    },
-                ]),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let vertex_buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Vertex Buffer"),
+            size: std::mem::size_of::<Vertex>() as u64 * 10_000,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
         let shader = state
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("Shader"),
                 source: wgpu::ShaderSource::Wgsl(Shaders::basic().into()),
+            });
+
+        // Create rect shader
+        let rect_shader = state
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Rect Shader"),
+                source: wgpu::ShaderSource::Wgsl(Shaders::rect().into()),
             });
 
         let render_pipeline_layout =
@@ -142,30 +159,21 @@ impl Renderer {
                     cache: None,
                 });
 
-        let draws: Vec<DrawIndirectArgs> = vec![
-            DrawIndirectArgs {
-                vertex_count: 3, // First triangle
-                instance_count: 1,
-                first_vertex: 0,
-                first_instance: 0,
-            },
-            DrawIndirectArgs {
-                vertex_count: 3, // Second triangle
-                instance_count: 1,
-                first_vertex: 3,
-                first_instance: 0,
-            },
-        ];
+        // Create rect pipeline
 
-        let indirect_buffer = state
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("indirect args"),
-                contents: util::as_u8_slice(&draws),
-                usage: wgpu::BufferUsages::INDIRECT
-                    | wgpu::BufferUsages::STORAGE
-                    | wgpu::BufferUsages::COPY_DST,
-            });
+        let indirect_buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Indirect Draw Buffer"),
+            size: std::mem::size_of::<DrawIndirectArgs>() as u64 * 100, // Support up to 100 draw calls
+            usage: wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let rect_renderer = RectRenderer::new(
+            &state.device,
+            &render_pipeline_layout,
+            &rect_shader,
+            config.format,
+        );
 
         Ok(Self {
             state,
@@ -175,6 +183,7 @@ impl Renderer {
             clear_color: Color::BLACK,
             vertex_buffer,
             render_pipeline,
+            rect_renderer,
         })
     }
 
@@ -243,11 +252,9 @@ impl Renderer {
             });
 
             render_pass.set_bind_group(0, self.camera.bind_group(), &[]);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_pipeline(&self.render_pipeline);
 
-            // Use multi-indirect drawing instead of direct draw
-            render_pass.multi_draw_indirect(&self.indirect_buffer, 0, 2);
+            self.rect_renderer
+                .flush(&self.state.queue, &self.indirect_buffer, &mut render_pass);
         }
 
         self.state.queue.submit(std::iter::once(encoder.finish()));

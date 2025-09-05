@@ -62,7 +62,7 @@ impl<const R: usize, const C: usize> IndexMut<(usize, usize)> for Matrix<R, C> {
 
 impl<const R: usize, const C: usize> Matrix<R, C> {
     /// Creates a new matrix from a two-dimensional array.
-    pub fn from_array(array: [[f32; R]; C]) -> Self {
+    pub const fn from_array(array: [[f32; R]; C]) -> Self {
         Self(array)
     }
 

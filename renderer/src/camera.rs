@@ -2,6 +2,13 @@ use crate::util;
 use math::{Mat4, Size};
 use std::rc::Rc;
 
+const OPENGL_TO_WGPU_MATRIX: Mat4 = Mat4::from_array([
+    [1.0, 0.0, 0.0, 0.0], //
+    [0.0, 1.0, 0.0, 0.0], //
+    [0.0, 0.0, 0.5, 0.0], //
+    [0.0, 0.0, 0.5, 1.0], //
+]);
+
 pub struct Camera {
     queue: Rc<wgpu::Queue>,
     view_projection_buffer: wgpu::Buffer,

@@ -37,7 +37,18 @@ impl Scene for S {
             }
         }
 
+        let size = ctx.window.size();
+
         for particle in self.particles.iter_mut() {
+            // do not update if out of bounds
+            if particle.p.position.x < 0.0
+                || particle.p.position.x > size.width as f32
+                || particle.p.position.y < 0.0
+                || particle.p.position.y > size.height as f32
+            {
+                continue;
+            }
+
             particle.p.position += particle.vel;
         }
 
