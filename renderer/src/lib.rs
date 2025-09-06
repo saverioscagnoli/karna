@@ -2,6 +2,7 @@ mod camera;
 mod color;
 mod config;
 mod draw_calls;
+#[cfg(feature = "imgui")]
 mod imgui_state;
 mod shaders;
 mod state;
@@ -14,7 +15,6 @@ use crate::{
     color::Color,
     config::RendererConfig,
     draw_calls::DrawIndirectArgs,
-    imgui_state::ImguiState,
     shaders::Shaders,
     state::GpuState,
     subrenderers::{RectInstance, RectRenderer},
@@ -27,9 +27,13 @@ use traccia::{info, warn};
 use winit::window::Window;
 
 // Re-exports
+#[cfg(feature = "imgui")]
 pub mod imgui {
     pub use ::imgui::{Condition, Ui};
 }
+
+#[cfg(feature = "imgui")]
+use imgui_state::ImguiState;
 
 pub trait Descriptor {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
@@ -74,6 +78,7 @@ pub struct Renderer {
 
     rect_renderer: RectRenderer,
 
+    #[cfg(feature = "imgui")]
     pub imgui: ImguiState,
 }
 
@@ -178,6 +183,7 @@ impl Renderer {
             config.format,
         );
 
+        #[cfg(feature = "imgui")]
         let imgui = ImguiState::new(
             window.clone(),
             window.scale_factor() as f32,
@@ -195,6 +201,7 @@ impl Renderer {
             vertex_buffer,
             render_pipeline,
             rect_renderer,
+            #[cfg(feature = "imgui")]
             imgui,
         })
     }
@@ -265,6 +272,7 @@ impl Renderer {
                 occlusion_query_set: None,
             });
 
+            #[cfg(feature = "imgui")]
             if let Err(e) = self.imgui.renderer.render(
                 self.imgui.context.render(),
                 &self.state.queue,

@@ -12,6 +12,8 @@ use std::time::Instant;
 use traccia::{Color as TColor, Colorize, LogLevel, Style, fatal, info, warn};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
+#[cfg(not(feature = "imgui"))]
+use winit::event;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::PhysicalKey;
@@ -81,7 +83,13 @@ impl ApplicationHandler<Context> for App {
         self.context = Some(context);
     }
 
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, mut event: Context) {
+    fn user_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        #[cfg(feature = "imgui")] mut event: Context,
+        #[cfg(not(feature = "imgui"))] event: Context,
+    ) {
+        #[cfg(feature = "imgui")]
         event.render.imgui.handle_event(&Event::UserEvent(()));
 
         self.context = Some(event);
@@ -98,6 +106,7 @@ impl ApplicationHandler<Context> for App {
             return;
         };
 
+        #[cfg(feature = "imgui")]
         context
             .render
             .imgui
@@ -109,12 +118,15 @@ impl ApplicationHandler<Context> for App {
             return;
         };
 
-        context.render.imgui.handle_event(&Event::AboutToWait);
         context.time.t1 = Instant::now();
 
         let dt = context.time.t1.duration_since(context.time.t0);
 
-        context.render.imgui.update_dt(dt);
+        #[cfg(feature = "imgui")]
+        {
+            context.render.imgui.handle_event(&Event::AboutToWait);
+            context.render.imgui.update_dt(dt);
+        }
 
         let dt = dt.as_secs_f32();
 
@@ -207,6 +219,7 @@ impl ApplicationHandler<Context> for App {
             _ => {}
         }
 
+        #[cfg(feature = "imgui")]
         context
             .render
             .imgui

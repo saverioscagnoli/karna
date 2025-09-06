@@ -13,3 +13,7 @@ spin_sleep = "1.3.2"
 pollster.workspace = true
 imgui.workspace = true
 renderer.workspace = true
+
+[features]
+default = []
+imgui = ["renderer/imgui"]

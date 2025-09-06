@@ -8,11 +8,14 @@ categories = ["game", "game-engine", "game-development"]
 keywords = ["game", "game-engine", "game-development"]
 include = ["assets"]
 
-
 [dependencies]
 engine = { path = "engine" }
 math.workspace = true
 renderer.workspace = true
+
+[features]
+default = []
+imgui = ["renderer/imgui", "engine/imgui"]
 
 [workspace]
 members = ["engine", "math", "renderer", "err"]
@@ -27,3 +30,8 @@ pollster = "0.4.0"
 err = { path = "err" }
 imgui = "0.12.0"
 renderer = { path = "renderer" }
+
+
+[[example]]
+name = "imgui"
+required-features = ["imgui"]
