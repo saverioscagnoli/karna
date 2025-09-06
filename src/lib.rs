@@ -1,3 +1,6 @@
 pub use engine::*;
 pub use math;
-pub use renderer::render;
+
+pub mod render {
+    pub use renderer::imgui;
+}

@@ -15,14 +15,15 @@ math.workspace = true
 renderer.workspace = true
 
 [workspace]
-members = ["engine", "math", "renderer"]
+members = ["engine", "math", "renderer", "err"]
 resolver = "3"
 
 [workspace.dependencies]
 math = { path = "math" }
 winit = "0.30.12"
-wgpu = "26.0.1"
+wgpu = "25.0.1"
 traccia = "2.2.5"
-renderer = { path = "renderer" }
 pollster = "0.4.0"
 err = { path = "err" }
+imgui = "0.12.0"
+renderer = { path = "renderer" }

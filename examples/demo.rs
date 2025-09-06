@@ -1,12 +1,4 @@
-use karna::{input::KeyCode, render::Color, App, Context, Scene};
-use math::Vec2;
-use renderer::Rect;
-
-struct RectScene {
-    player: Rect,
-    vel: Vec2,
-    rects: Vec<Rect>,
-}
+struct RectScene {}
 
 impl RectScene {
     fn new() -> Self {

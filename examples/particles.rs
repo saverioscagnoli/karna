@@ -1,7 +1,7 @@
 use karna::{
     input::MouseButton,
     math::{rng, Vec2},
-    App, Color, Context, Pixel, Scene,
+    App, Context, Scene,
 };
 
 struct Particle {

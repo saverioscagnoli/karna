@@ -9,10 +9,10 @@ use math::Size;
 use spin_sleep::SpinSleeper;
 use std::sync::Arc;
 use std::time::Instant;
-use traccia::{Color as TColor, Colorize, LogLevel, Style, fatal, info};
+use traccia::{Color as TColor, Colorize, LogLevel, Style, fatal, info, warn};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
-use winit::event::WindowEvent;
+use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Window, WindowId};
@@ -70,9 +70,9 @@ impl ApplicationHandler<Context> for App {
         let info = context.render.info();
 
         info!("backend: {}", info.backend);
+        info!("device: {}", info.name);
         info!("device type: {:?}", info.device_type);
         info!("driver: {}", info.driver_info);
-        info!("card: {}", info.name);
 
         if let Some(scene) = self.scenes.current_mut() {
             scene.load(&mut context);
@@ -81,8 +81,27 @@ impl ApplicationHandler<Context> for App {
         self.context = Some(context);
     }
 
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: Context) {
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, mut event: Context) {
+        event.render.imgui.handle_event(&Event::UserEvent(()));
+
         self.context = Some(event);
+    }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        device_id: winit::event::DeviceId,
+        event: winit::event::DeviceEvent,
+    ) {
+        let Some(context) = &mut self.context else {
+            warn!("Received a device event before initializing context");
+            return;
+        };
+
+        context
+            .render
+            .imgui
+            .handle_event(&Event::DeviceEvent { device_id, event });
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
@@ -90,12 +109,14 @@ impl ApplicationHandler<Context> for App {
             return;
         };
 
+        context.render.imgui.handle_event(&Event::AboutToWait);
         context.time.t1 = Instant::now();
-        let dt = context
-            .time
-            .t1
-            .duration_since(context.time.t0)
-            .as_secs_f32();
+
+        let dt = context.time.t1.duration_since(context.time.t0);
+
+        context.render.imgui.update_dt(dt);
+
+        let dt = dt.as_secs_f32();
 
         context.time.t0 = context.time.t1;
         self.acc += dt;
@@ -113,21 +134,28 @@ impl ApplicationHandler<Context> for App {
         context.input.flush();
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent,
+    ) {
         let Some(context) = &mut self.context else {
             return;
         };
 
-        match event {
+        match &event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
 
             WindowEvent::Resized(size) => {
-                context.render.resize(size.into());
+                context.render.resize((*size).into());
             }
 
-            WindowEvent::KeyboardInput { event, .. } => match event.physical_key {
+            WindowEvent::KeyboardInput {
+                event: key_event, ..
+            } => match key_event.physical_key {
                 PhysicalKey::Code(code) => {
                     let state = context
                         .input
@@ -135,16 +163,16 @@ impl ApplicationHandler<Context> for App {
                         .entry(code)
                         .or_insert(KeyState::default());
 
-                    if event.state.is_pressed() {
-                        if !event.repeat {
+                    if key_event.state.is_pressed() {
+                        if !key_event.repeat {
                             state.pressed = true;
                         }
-
                         state.held = true;
                     } else {
                         state.held = false;
                     }
                 }
+
                 PhysicalKey::Unidentified(_) => {}
             },
 
@@ -152,7 +180,7 @@ impl ApplicationHandler<Context> for App {
                 let s = context
                     .input
                     .mouse
-                    .entry(button)
+                    .entry(*button)
                     .or_insert(KeyState::default());
 
                 if state.is_pressed() {
@@ -163,31 +191,26 @@ impl ApplicationHandler<Context> for App {
                 }
             }
 
-            WindowEvent::CursorMoved { position, .. } => context.input.mouse_pos = position.into(),
+            WindowEvent::CursorMoved { position, .. } => {
+                context.input.mouse_pos = (*position).into();
+            }
 
             WindowEvent::RedrawRequested => {
-                // context.render._clear();
-
                 if let Some(scene) = self.scenes.current_mut() {
                     scene.render(context);
                 }
 
                 context.render.present();
-
-                // if !context.render.vsync() {
-                //     context.time.t2 = context.time.t1.elapsed().as_secs_f32();
-                //     let sleep_time = context.time.fps_step - context.time.t2;
-
-                //     if sleep_time > 0.0 {
-                //         self.sleeper.sleep(Duration::from_secs_f32(sleep_time));
-                //     }
-                // }
-
                 context.window.request_redraw();
             }
 
             _ => {}
         }
+
+        context
+            .render
+            .imgui
+            .handle_event(&Event::WindowEvent { window_id, event });
     }
 }
 

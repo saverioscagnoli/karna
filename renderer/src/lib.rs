@@ -2,6 +2,7 @@ mod camera;
 mod color;
 mod config;
 mod draw_calls;
+mod imgui_state;
 mod shaders;
 mod state;
 mod subrenderers;
@@ -12,22 +13,22 @@ use crate::{
     camera::Camera,
     color::Color,
     config::RendererConfig,
-    draw_calls::{DrawIndirectArgs, PrimitiveKind},
+    draw_calls::DrawIndirectArgs,
+    imgui_state::ImguiState,
     shaders::Shaders,
     state::GpuState,
     subrenderers::{RectInstance, RectRenderer},
     vertex::Vertex,
 };
 use err::RendererError;
-use math::{Size, Vec2, Vec4};
+use math::{Size, Vec2};
 use std::sync::Arc;
 use traccia::{info, warn};
-use wgpu::util::DeviceExt;
 use winit::window::Window;
 
-pub mod render {
-    pub use crate::Renderer;
-    pub use crate::color::Color;
+// Re-exports
+pub mod imgui {
+    pub use ::imgui::{Condition, Ui};
 }
 
 pub trait Descriptor {
@@ -72,11 +73,15 @@ pub struct Renderer {
     indirect_buffer: wgpu::Buffer,
 
     rect_renderer: RectRenderer,
+
+    pub imgui: ImguiState,
 }
 
 impl Renderer {
-    pub async fn _new(window: Arc<Window>) -> Result<Self, RendererError> {
-        let (state, wgpu_config) = GpuState::new(window).await?;
+    #[doc(hidden)]
+    pub async fn new(window: Arc<Window>) -> Result<Self, RendererError> {
+        let window_clone = window.clone();
+        let (state, wgpu_config) = GpuState::new(window_clone).await?;
         let config = RendererConfig::new(wgpu_config);
         let camera = Camera::new(
             &state.device,
@@ -101,7 +106,6 @@ impl Renderer {
                 source: wgpu::ShaderSource::Wgsl(Shaders::basic().into()),
             });
 
-        // Create rect shader
         let rect_shader = state
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -160,7 +164,6 @@ impl Renderer {
                 });
 
         // Create rect pipeline
-
         let indirect_buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Indirect Draw Buffer"),
             size: std::mem::size_of::<DrawIndirectArgs>() as u64 * 100, // Support up to 100 draw calls
@@ -175,6 +178,14 @@ impl Renderer {
             config.format,
         );
 
+        let imgui = ImguiState::new(
+            window.clone(),
+            window.scale_factor() as f32,
+            state.device.clone(),
+            state.queue.clone(),
+            config.format,
+        );
+
         Ok(Self {
             state,
             indirect_buffer,
@@ -184,6 +195,7 @@ impl Renderer {
             vertex_buffer,
             render_pipeline,
             rect_renderer,
+            imgui,
         })
     }
 
@@ -192,6 +204,7 @@ impl Renderer {
         self.state.adapter.get_info()
     }
 
+    #[inline]
     pub fn resize(&mut self, size: Size<u32>) {
         if size.width <= 0 || size.height <= 0 {
             warn!("Attempted to resize renderer to zero dimension");
@@ -214,8 +227,10 @@ impl Renderer {
         self.clear_color = color;
     }
 
+    #[inline]
+    #[doc(hidden)]
     pub fn present(&mut self) {
-        let frame = match self.state.surface.get_current_texture() {
+        let frame: wgpu::SurfaceTexture = match self.state.surface.get_current_texture() {
             Ok(f) => f,
             Err(e) => {
                 warn!("Failed to acquire next swap chain texture: {:?}", e);
@@ -243,7 +258,6 @@ impl Renderer {
                         load: wgpu::LoadOp::Clear(self.clear_color.into()),
                         store: wgpu::StoreOp::Store,
                     },
-                    depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
                 label: None,
@@ -251,8 +265,18 @@ impl Renderer {
                 occlusion_query_set: None,
             });
 
+            if let Err(e) = self.imgui.renderer.render(
+                self.imgui.context.render(),
+                &self.state.queue,
+                &self.state.device,
+                &mut render_pass,
+            ) {
+                warn!("Failed to render imgui frame: {}", e);
+            }
+
             render_pass.set_bind_group(0, self.camera.bind_group(), &[]);
 
+            // Render your regular content
             self.rect_renderer
                 .flush(&self.state.queue, &self.indirect_buffer, &mut render_pass);
         }

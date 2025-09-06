@@ -12,6 +12,10 @@ impl Window {
         Self { inner }
     }
 
+    pub(crate) fn winit(&self) -> &Arc<winit::window::Window> {
+        &self.inner
+    }
+
     pub fn size(&self) -> Size<u32> {
         self.inner.inner_size().into()
     }
