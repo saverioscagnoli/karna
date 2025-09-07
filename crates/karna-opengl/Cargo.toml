@@ -1,9 +1,0 @@
-[package]
-name = "karna-opengl"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-gl = "0.14.0"
-karna-log = { path = "../karna-log" }
-karna-math = { path = "../karna-math" }

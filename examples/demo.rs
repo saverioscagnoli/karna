@@ -1,47 +1,73 @@
-use karna::{input::Key, math::Vec2, render::Color, traits::Scene, App, Context};
+use karna::{
+    input::KeyCode,
+    math::Vec2,
+    render::{Color, Rect},
+    App, Context, Scene,
+};
 
-struct S {
-    pos: Vec2,
+struct RectScene {
+    player: Rect,
     vel: Vec2,
+    rects: Vec<Rect>,
 }
 
-impl Scene<Context> for S {
-    fn load(&mut self, _ctx: &mut Context) {}
+impl RectScene {
+    fn new() -> Self {
+        Self {
+            player: Rect::new([10, 10], 50.0).with_color(Color::RED),
+            vel: Vec2::zero(),
+            rects: vec![],
+        }
+    }
+}
+
+impl Scene for RectScene {
+    fn load(&mut self, _ctx: &mut Context) {
+        for i in 0..10 {
+            for j in 0..5 {
+                let rect = Rect::new([i as f32 * 60.0 + 200.0, j as f32 * 60.0 + 100.0], 50.0)
+                    .with_color(Color::GREEN);
+                self.rects.push(rect);
+            }
+        }
+    }
+
+    fn fixed_update(&mut self, ctx: &mut Context) {}
 
     fn update(&mut self, ctx: &mut Context) {
-        let dt = ctx.time.delta();
-
-        if ctx.input.key_down(Key::W) {
-            self.vel.y = -250.0;
+        if ctx.input.key_held(KeyCode::KeyW) {
+            self.vel.y = -200.0;
         }
 
-        if ctx.input.key_down(Key::S) {
-            self.vel.y = 250.0;
+        if ctx.input.key_held(KeyCode::KeyS) {
+            self.vel.y = 200.0;
         }
 
-        if ctx.input.key_down(Key::A) {
-            self.vel.x = -250.0;
+        if ctx.input.key_held(KeyCode::KeyA) {
+            self.vel.x = -200.0;
         }
 
-        if ctx.input.key_down(Key::D) {
-            self.vel.x = 250.0;
+        if ctx.input.key_held(KeyCode::KeyD) {
+            self.vel.x = 200.0;
         }
 
-        self.pos += self.vel * dt;
+        self.player.position += self.vel * ctx.time.delta();
         self.vel *= 0.9;
     }
 
-    fn draw(&self, ctx: &mut Context) {
-        ctx.render.clear_background(Color::BLACK);
+    fn render(&mut self, ctx: &mut Context) {
+        for rect in &self.rects {
+            rect.render(&mut ctx.render);
+        }
 
-        ctx.render.set_color(Color::CYAN);
-        ctx.render.fill_rect_v(self.pos, (50, 50));
+        self.player.render(&mut ctx.render);
     }
 }
 
 fn main() {
-    App::window("Demo window", (800, 600)).run(S {
-        pos: Vec2::zero(),
-        vel: Vec2::zero(),
-    });
+    App::new()
+        .with_size((1280, 720))
+        .with_scene("default", RectScene::new())
+        .run()
+        .expect("Failed to run application");
 }
