@@ -1,32 +1,35 @@
 mod camera;
 mod color;
 mod config;
-mod draw_calls;
+mod fundamentals;
+mod mesh;
+mod shaders;
+mod shapes;
+mod state;
+mod util;
+
 #[cfg(feature = "imgui")]
 mod imgui_state;
-mod shaders;
-mod state;
-mod subrenderers;
-mod util;
-mod vertex;
 
 use crate::{
-    camera::Camera,
-    color::Color,
+    camera::{Camera, CameraType},
     config::RendererConfig,
-    draw_calls::DrawIndirectArgs,
+    fundamentals::{Descriptor, Vertex},
+    mesh::{Mesh, MeshData, MeshInstance},
     shaders::Shaders,
     state::GpuState,
-    subrenderers::{RectInstance, RectRenderer},
-    vertex::Vertex,
 };
 use err::RendererError;
-use math::{Size, Vec2};
-use std::sync::Arc;
-use traccia::{info, warn};
+use math::Size;
+use std::{collections::HashMap, sync::Arc};
+use traccia::{info, trace, warn};
+use wgpu::{util::DeviceExt, wgt::DrawIndirectArgs};
 use winit::window::Window;
 
 // Re-exports
+pub use color::Color;
+pub use shapes::rect::Rect;
+
 #[cfg(feature = "imgui")]
 pub mod imgui {
     pub use ::imgui::{Condition, Ui};
@@ -34,38 +37,6 @@ pub mod imgui {
 
 #[cfg(feature = "imgui")]
 use imgui_state::ImguiState;
-
-pub trait Descriptor {
-    fn desc() -> wgpu::VertexBufferLayout<'static>;
-}
-
-pub struct Rect {
-    pub position: Vec2,
-    pub width: f32,
-    pub height: f32,
-    pub color: Color,
-}
-
-impl Rect {
-    pub fn new(position: Vec2, width: f32, height: f32, color: Color) -> Self {
-        Self {
-            position,
-            width,
-            height,
-            color,
-        }
-    }
-
-    pub fn render(&self, renderer: &mut Renderer) {
-        let instance = RectInstance {
-            position: self.position,
-            scale: Vec2::new(self.width, self.height),
-            color: self.color.into(),
-        };
-
-        renderer.rect_renderer.instances.push(instance);
-    }
-}
 
 pub struct Renderer {
     state: GpuState,
@@ -76,7 +47,7 @@ pub struct Renderer {
     render_pipeline: wgpu::RenderPipeline,
     indirect_buffer: wgpu::Buffer,
 
-    rect_renderer: RectRenderer,
+    mesh_data: HashMap<u64, MeshData>, // Maps mesh id to its data
 
     #[cfg(feature = "imgui")]
     pub imgui: ImguiState,
@@ -95,6 +66,7 @@ impl Renderer {
                 width: config.width,
                 height: config.height,
             },
+            CameraType::Orthographic,
         );
 
         let vertex_buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
@@ -109,13 +81,6 @@ impl Renderer {
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("Shader"),
                 source: wgpu::ShaderSource::Wgsl(Shaders::basic().into()),
-            });
-
-        let rect_shader = state
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("Rect Shader"),
-                source: wgpu::ShaderSource::Wgsl(Shaders::rect().into()),
             });
 
         let render_pipeline_layout =
@@ -136,7 +101,7 @@ impl Renderer {
                     vertex: wgpu::VertexState {
                         module: &shader,
                         entry_point: Some("vs_main"),
-                        buffers: &[Vertex::desc()],
+                        buffers: &[Vertex::desc(), MeshInstance::desc()],
                         compilation_options: wgpu::PipelineCompilationOptions::default(),
                     },
                     fragment: Some(wgpu::FragmentState {
@@ -176,13 +141,6 @@ impl Renderer {
             mapped_at_creation: false,
         });
 
-        let rect_renderer = RectRenderer::new(
-            &state.device,
-            &render_pipeline_layout,
-            &rect_shader,
-            config.format,
-        );
-
         #[cfg(feature = "imgui")]
         let imgui = ImguiState::new(
             window.clone(),
@@ -200,7 +158,7 @@ impl Renderer {
             clear_color: Color::BLACK,
             vertex_buffer,
             render_pipeline,
-            rect_renderer,
+            mesh_data: HashMap::new(),
             #[cfg(feature = "imgui")]
             imgui,
         })
@@ -234,10 +192,103 @@ impl Renderer {
         self.clear_color = color;
     }
 
+    pub fn add_mesh_instance<M: Mesh>(&mut self, mut instance: MeshInstance) {
+        let mesh_id = M::id();
+
+        // Get or create mesh data
+        let mesh_data = self.mesh_data.entry(mesh_id).or_insert_with(|| {
+            let vertices = M::vertices();
+            let indices = M::indices();
+
+            let vertex_buffer =
+                self.state
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some(&format!("Vertex Buffer {}", mesh_id)),
+                        contents: util::as_u8_slice(&vertices),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    });
+
+            let index_buffer =
+                self.state
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some(&format!("Index Buffer {}", mesh_id)),
+                        contents: util::as_u8_slice(&indices),
+                        usage: wgpu::BufferUsages::INDEX,
+                    });
+
+            MeshData {
+                vertex_buffer,
+                index_buffer,
+                index_count: indices.len() as u32,
+                instances: Vec::new(),
+                instance_buffer: None,
+            }
+        });
+
+        // instance.translation.x += instance.scale.x / 2.0;
+        // instance.translation.y += instance.scale.y / 2.0;
+
+        // Add instance
+        mesh_data.instances.push(instance);
+    }
+
+    // Call this before rendering to update instance buffers
+    pub fn update_instance_buffers(&mut self) {
+        for (mesh_id, mesh_data) in &mut self.mesh_data {
+            if mesh_data.instances.is_empty() {
+                continue;
+            }
+
+            let instance_count = mesh_data.instances.len();
+
+            // Always create instance buffer for consistency
+            let instance_buffer =
+                self.state
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some(&format!("Instance Buffer {}", mesh_id)),
+                        contents: util::as_u8_slice(&mesh_data.instances),
+                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    });
+
+            mesh_data.instance_buffer = Some(instance_buffer);
+        }
+    }
+
+    // Clear all mesh instances (call at the beginning of each frame)
+    pub fn clear_mesh_instances(&mut self) {
+        for mesh_data in self.mesh_data.values_mut() {
+            mesh_data.instances.clear();
+            mesh_data.instance_buffer = None;
+        }
+    }
+
+    // Get instance count for a specific mesh type
+    pub fn get_instance_count<M: Mesh>(&self) -> usize {
+        let mesh_id = M::id();
+        self.mesh_data
+            .get(&mesh_id)
+            .map(|data| data.instances.len())
+            .unwrap_or(0)
+    }
+
+    // Remove all instances of a specific mesh type
+    pub fn clear_mesh_type<M: Mesh>(&mut self) {
+        let mesh_id = M::id();
+        if let Some(mesh_data) = self.mesh_data.get_mut(&mesh_id) {
+            mesh_data.instances.clear();
+            mesh_data.instance_buffer = None;
+        }
+    }
+
     #[inline]
     #[doc(hidden)]
     pub fn present(&mut self) {
-        let frame: wgpu::SurfaceTexture = match self.state.surface.get_current_texture() {
+        self.update_instance_buffers();
+
+        let frame = match self.state.surface.get_current_texture() {
             Ok(f) => f,
             Err(e) => {
                 warn!("Failed to acquire next swap chain texture: {:?}", e);
@@ -248,7 +299,6 @@ impl Renderer {
         let output = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-
         let mut encoder =
             self.state
                 .device
@@ -272,6 +322,38 @@ impl Renderer {
                 occlusion_query_set: None,
             });
 
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, self.camera.bind_group(), &[]);
+
+            // Render all meshes
+            for (mesh_id, mesh_data) in &self.mesh_data {
+                if mesh_data.instances.is_empty() {
+                    continue;
+                }
+
+                render_pass.set_vertex_buffer(0, mesh_data.vertex_buffer.slice(..));
+                render_pass
+                    .set_index_buffer(mesh_data.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+
+                let instance_count = mesh_data.instances.len() as u32;
+
+                if let Some(instance_buffer) = &mesh_data.instance_buffer {
+                    render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+
+                    if instance_count > 1 {
+                        // Instanced rendering - single draw call for multiple instances
+                        render_pass.draw_indexed(0..mesh_data.index_count, 0, 0..instance_count);
+                        trace!(
+                            "Rendered {} instances of mesh {} in single draw call",
+                            instance_count, mesh_id
+                        );
+                    } else {
+                        // Single instance
+                        render_pass.draw_indexed(0..mesh_data.index_count, 0, 0..1);
+                    }
+                }
+            }
+
             #[cfg(feature = "imgui")]
             if let Err(e) = self.imgui.renderer.render(
                 self.imgui.context.render(),
@@ -281,12 +363,6 @@ impl Renderer {
             ) {
                 warn!("Failed to render imgui frame: {}", e);
             }
-
-            render_pass.set_bind_group(0, self.camera.bind_group(), &[]);
-
-            // Render your regular content
-            self.rect_renderer
-                .flush(&self.state.queue, &self.indirect_buffer, &mut render_pass);
         }
 
         self.state.queue.submit(std::iter::once(encoder.finish()));

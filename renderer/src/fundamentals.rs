@@ -1,5 +1,8 @@
-use crate::Descriptor;
 use math::{Vec3, Vec4};
+
+pub trait Descriptor {
+    fn desc() -> wgpu::VertexBufferLayout<'static>;
+}
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]

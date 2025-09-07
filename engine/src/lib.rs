@@ -208,6 +208,8 @@ impl ApplicationHandler<Context> for App {
             }
 
             WindowEvent::RedrawRequested => {
+                context.render.clear_mesh_instances();
+
                 if let Some(scene) = self.scenes.current_mut() {
                     scene.render(context);
                 }

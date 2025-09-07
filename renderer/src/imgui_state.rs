@@ -1,12 +1,10 @@
-use imgui::{FontSource, MouseCursor};
+use imgui::FontSource;
 use imgui_wgpu::{Renderer, RendererConfig};
 use imgui_winit_support::WinitPlatform;
 use std::{rc::Rc, sync::Arc, time::Duration};
 use traccia::warn;
 
 pub struct ImguiState {
-    device: Rc<wgpu::Device>,
-    queue: Rc<wgpu::Queue>,
     window: Arc<winit::window::Window>,
     pub(crate) renderer: Renderer,
 
@@ -15,7 +13,6 @@ pub struct ImguiState {
 
     #[doc(hidden)]
     platform: WinitPlatform,
-    last_cursor: Option<MouseCursor>,
 }
 
 impl ImguiState {
@@ -55,16 +52,12 @@ impl ImguiState {
         };
 
         let renderer = Renderer::new(&mut context, &device, &queue, renderer_config);
-        let last_cursor = None;
 
         Self {
-            device,
-            queue,
             window,
             renderer,
             context,
             platform,
-            last_cursor,
         }
     }
 

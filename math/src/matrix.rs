@@ -116,7 +116,7 @@ impl<const R: usize, const C: usize> Matrix<R, C> {
     /// Converts this matrix to a different size matrix.
     /// If the new matrix is larger, the new elements are filled with the provided value.
     /// If the new matrix is smaller, the elements are truncated.
-    pub fn resize<const NR: usize, const NC: usize, F: ToF32>(
+    pub fn expand<const NR: usize, const NC: usize, F: ToF32>(
         self,
         fill_value: F,
     ) -> Matrix<NR, NC> {
@@ -133,16 +133,6 @@ impl<const R: usize, const C: usize> Matrix<R, C> {
         }
 
         new_matrix
-    }
-
-    /// Converts this matrix to a different size matrix, filling new elements with zeros.
-    pub fn resize_zeros<const NR: usize, const NC: usize>(self) -> Matrix<NR, NC> {
-        self.resize(0.0)
-    }
-
-    /// Converts this matrix to a different size matrix, filling new elements with ones.
-    pub fn resize_ones<const NR: usize, const NC: usize>(self) -> Matrix<NR, NC> {
-        self.resize(1.0)
     }
 }
 
@@ -421,12 +411,94 @@ impl Mat4 {
         m
     }
 
+    pub fn perspective(fov_y: f32, aspect: f32, near: f32, far: f32) -> Self {
+        let f = 1.0 / (fov_y / 2.0).tan();
+        let mut m = Self::zero();
+
+        m[(0, 0)] = f / aspect;
+        m[(1, 1)] = f;
+        m[(2, 2)] = (far + near) / (near - far);
+        m[(2, 3)] = (2.0 * far * near) / (near - far);
+        m[(3, 2)] = -1.0;
+
+        m
+    }
+
     pub fn translation(v: Vec3) -> Self {
         let mut m = Self::identity();
         m[(0, 3)] = v.x;
         m[(1, 3)] = v.y;
         m[(2, 3)] = v.z;
         m
+    }
+
+    pub fn scale(v: Vec3) -> Self {
+        let mut m = Self::identity();
+        m[(0, 0)] = v.x;
+        m[(1, 1)] = v.y;
+        m[(2, 2)] = v.z;
+        m
+    }
+
+    pub fn rotation_x(angle_rad: f32) -> Self {
+        let mut m = Self::identity();
+        let cos = angle_rad.cos();
+        let sin = angle_rad.sin();
+
+        m[(1, 1)] = cos;
+        m[(1, 2)] = -sin;
+        m[(2, 1)] = sin;
+        m[(2, 2)] = cos;
+
+        m
+    }
+
+    pub fn rotation_y(angle_rad: f32) -> Self {
+        let mut m = Self::identity();
+        let cos = angle_rad.cos();
+        let sin = angle_rad.sin();
+
+        m[(0, 0)] = cos;
+        m[(0, 2)] = sin;
+        m[(2, 0)] = -sin;
+        m[(2, 2)] = cos;
+
+        m
+    }
+
+    pub fn rotation_z(angle_rad: f32) -> Self {
+        let mut m = Self::identity();
+        let cos = angle_rad.cos();
+        let sin = angle_rad.sin();
+
+        m[(0, 0)] = cos;
+        m[(0, 1)] = -sin;
+        m[(1, 0)] = sin;
+        m[(1, 1)] = cos;
+
+        m
+    }
+
+    pub fn look_at(eye: Vec3, target: Vec3, up: Vec3) -> Self {
+        let f = (target - eye).normalized();
+        let s = f.cross(&up).normalized();
+        let u = s.cross(&f);
+
+        let mut result = Self::identity();
+        result[(0, 0)] = s.x;
+        result[(1, 0)] = s.y;
+        result[(2, 0)] = s.z;
+        result[(0, 1)] = u.x;
+        result[(1, 1)] = u.y;
+        result[(2, 1)] = u.z;
+        result[(0, 2)] = -f.x;
+        result[(1, 2)] = -f.y;
+        result[(2, 2)] = -f.z;
+        result[(3, 0)] = -s.dot(&eye);
+        result[(3, 1)] = -u.dot(&eye);
+        result[(3, 2)] = f.dot(&eye);
+
+        result
     }
 }
 

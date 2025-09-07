@@ -1,22 +1,39 @@
-struct RectScene {}
+use karna::{
+    input::KeyCode,
+    math::Vec2,
+    render::{Color, Rect},
+    App, Context, Scene,
+};
+
+struct RectScene {
+    player: Rect,
+    vel: Vec2,
+    rects: Vec<Rect>,
+}
 
 impl RectScene {
     fn new() -> Self {
         Self {
-            player: Rect::new(Vec2::new(400.0, 300.0), 50.0, 50.0, Color::YELLOW),
+            player: Rect::new([10, 10], 50.0).with_color(Color::RED),
             vel: Vec2::zero(),
-            rects: vec![
-                Rect::new(Vec2::new(100.0, 100.0), 50.0, 30.0, Color::RED),
-                Rect::new(Vec2::new(200.0, 150.0), 80.0, 40.0, Color::GREEN),
-                Rect::new(Vec2::new(300.0, 200.0), 60.0, 60.0, Color::BLUE),
-            ],
+            rects: vec![],
         }
     }
 }
 
 impl Scene for RectScene {
-    fn load(&mut self, ctx: &mut Context) {}
+    fn load(&mut self, _ctx: &mut Context) {
+        for i in 0..10 {
+            for j in 0..5 {
+                let rect = Rect::new([i as f32 * 60.0 + 200.0, j as f32 * 60.0 + 100.0], 50.0)
+                    .with_color(Color::GREEN);
+                self.rects.push(rect);
+            }
+        }
+    }
+
     fn fixed_update(&mut self, ctx: &mut Context) {}
+
     fn update(&mut self, ctx: &mut Context) {
         if ctx.input.key_held(KeyCode::KeyW) {
             self.vel.y = -200.0;

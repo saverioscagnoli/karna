@@ -1,11 +1,17 @@
-use karna::{input::KeyCode, render::imgui::Condition, App, Context, Scene};
-use math::rng;
+use karna::{
+    input::KeyCode,
+    math::rng,
+    render::{imgui::Condition, Rect},
+    App, Context, Scene,
+};
 
 pub struct ImguiDemo {
     checked: bool,
     slider_value: i32,
     values: Vec<f32>,
     open: bool,
+    clear_color: [f32; 4],
+    rect: Rect,
 }
 
 impl Scene for ImguiDemo {
@@ -20,6 +26,7 @@ impl Scene for ImguiDemo {
     }
 
     fn render(&mut self, ctx: &mut Context) {
+        let mut new_clear_color = None;
         ctx.render.imgui.render_frame(|ui| {
             if self.open {
                 ui.window("Frame Info")
@@ -38,11 +45,21 @@ impl Scene for ImguiDemo {
                         ui.checkbox("cool", &mut self.checked);
                         ui.slider("slider", 0, 100, &mut self.slider_value);
                         ui.plot_histogram("Frame Times", &self.values).build();
+
+                        if ui.color_picker4("Clear color", &mut self.clear_color) {
+                            new_clear_color.replace(self.clear_color);
+                        }
                     });
             }
 
             ui.show_demo_window(&mut true);
         });
+
+        if let Some(color) = new_clear_color {
+            ctx.render.set_clear_color(color.into());
+        }
+
+        self.rect.render(&mut ctx.render);
     }
 }
 
@@ -56,6 +73,9 @@ fn main() {
                 slider_value: 0,
                 values: (0..20).map(|_| rng(0.0..16.0)).collect(),
                 open: true,
+                clear_color: [0.1, 0.1, 0.1, 1.0],
+                
+                rect: Rect::default().with_position([10, 10]).with_size(50.0),
             },
         )
         .run()

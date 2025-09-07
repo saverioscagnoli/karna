@@ -70,3 +70,37 @@ impl Into<Color> for Vec4 {
         }
     }
 }
+
+impl From<[f32; 3]> for Color {
+    fn from(arr: [f32; 3]) -> Self {
+        Self {
+            r: arr[0],
+            g: arr[1],
+            b: arr[2],
+            a: 1.0,
+        }
+    }
+}
+
+impl From<Color> for [f32; 3] {
+    fn from(color: Color) -> Self {
+        [color.r, color.g, color.b]
+    }
+}
+
+impl From<[f32; 4]> for Color {
+    fn from(arr: [f32; 4]) -> Self {
+        Self {
+            r: arr[0],
+            g: arr[1],
+            b: arr[2],
+            a: arr[3],
+        }
+    }
+}
+
+impl From<Color> for [f32; 4] {
+    fn from(color: Color) -> Self {
+        [color.r, color.g, color.b, color.a]
+    }
+}

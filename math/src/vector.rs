@@ -200,6 +200,14 @@ impl Vec3 {
         self.y = y.to_f32();
         self.z = z.to_f32();
     }
+
+    pub fn cross(&self, other: &Self) -> Self {
+        Vec3::new(
+            self.y * other.z - self.z * other.y,
+            self.z * other.x - self.x * other.z,
+            self.x * other.y - self.y * other.x,
+        )
+    }
 }
 
 pub type Vec4 = Vector<4>;
