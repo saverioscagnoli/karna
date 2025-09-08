@@ -42,7 +42,6 @@ impl traccia::Formatter for LogFormatter {
 pub struct App {
     context: Option<Context>,
     window_size: Size<u32>,
-    acc: f32,
     sleeper: SpinSleeper,
     scenes: SceneManager,
 }
@@ -118,9 +117,9 @@ impl ApplicationHandler<Context> for App {
             return;
         };
 
-        context.time.t1 = Instant::now();
+        context.time.this_frame = Instant::now();
 
-        let dt = context.time.t1.duration_since(context.time.t0);
+        let dt = context.time.this_frame - context.time.last_frame;
 
         #[cfg(feature = "imgui")]
         {
@@ -128,19 +127,24 @@ impl ApplicationHandler<Context> for App {
             context.render.imgui.update_dt(dt);
         }
 
-        let dt = dt.as_secs_f32();
+        context.time.last_frame = context.time.this_frame;
+        context.time.update_accum += dt;
 
-        context.time.t0 = context.time.t1;
-        self.acc += dt;
-
-        context.time.update(dt);
+        context.time.tick(dt);
 
         if let Some(scene) = self.scenes.current_mut() {
             scene.update(context);
         }
 
-        while self.acc >= context.time.ups_step {
-            self.acc -= context.time.ups_step
+        while context.time.update_accum >= context.time.ups_step {
+            let update_start = Instant::now();
+
+            if let Some(scene) = self.scenes.current_mut() {
+                scene.fixed_update(context);
+            }
+
+            context.time.update_accum -= context.time.ups_step;
+            context.time.tick_fixed(update_start);
         }
 
         context.input.flush();
@@ -216,6 +220,16 @@ impl ApplicationHandler<Context> for App {
 
                 context.render.present();
                 context.window.request_redraw();
+                context.time.frame_time = Instant::now() - context.time.this_frame;
+
+                if !context.render.vsync() {
+                    let sleep_duration = context
+                        .time
+                        .fps_step
+                        .saturating_sub(context.time.frame_time);
+
+                    self.sleeper.sleep(sleep_duration);
+                }
             }
 
             _ => {}
@@ -234,7 +248,6 @@ impl App {
         Self {
             context: None,
             window_size: Size::new(800, 600),
-            acc: 0.0,
             sleeper: SpinSleeper::default(),
             scenes: SceneManager::new(),
         }

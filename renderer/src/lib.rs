@@ -21,7 +21,11 @@ use crate::{
 };
 use err::RendererError;
 use math::Size;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, VecDeque},
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 use traccia::{info, trace, warn};
 use wgpu::{util::DeviceExt, wgt::DrawIndirectArgs};
 use winit::window::Window;
@@ -38,16 +42,6 @@ pub mod imgui {
 #[cfg(feature = "imgui")]
 use imgui_state::ImguiState;
 
-pub struct FrameInfo {
-    pub delta_time: f32,
-    pub update_time: f32,
-    pub render_time: f32,
-    pub draw_calls: u32,
-    pub vertices: u32,
-    pub indices: u32,
-    pub instances: u32,
-}
-
 pub struct Renderer {
     state: GpuState,
     config: RendererConfig,
@@ -59,8 +53,24 @@ pub struct Renderer {
 
     mesh_data: HashMap<u64, MeshData>, // Maps mesh id to its data
 
+    draw_calls: u32,
+
     #[cfg(feature = "imgui")]
     pub imgui: ImguiState,
+}
+
+impl Deref for Renderer {
+    type Target = RendererConfig;
+
+    fn deref(&self) -> &Self::Target {
+        &self.config
+    }
+}
+
+impl DerefMut for Renderer {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.config
+    }
 }
 
 impl Renderer {
@@ -68,13 +78,13 @@ impl Renderer {
     pub async fn new(window: Arc<Window>) -> Result<Self, RendererError> {
         let window_clone = window.clone();
         let (state, wgpu_config) = GpuState::new(window_clone).await?;
-        let config = RendererConfig::new(wgpu_config);
+        let config = RendererConfig::new(state.surface.clone(), state.device.clone(), wgpu_config);
         let camera = Camera::new(
             &state.device,
             state.queue.clone(),
             Size {
-                width: config.width,
-                height: config.height,
+                width: config.wgpu().width,
+                height: config.wgpu().height,
             },
             CameraType::Orthographic,
         );
@@ -118,7 +128,7 @@ impl Renderer {
                         module: &shader,
                         entry_point: Some("fs_main"),
                         targets: &[Some(wgpu::ColorTargetState {
-                            format: config.format,
+                            format: config.wgpu().format,
                             blend: Some(wgpu::BlendState::REPLACE),
                             write_mask: wgpu::ColorWrites::ALL,
                         })],
@@ -157,7 +167,7 @@ impl Renderer {
             window.scale_factor() as f32,
             state.device.clone(),
             state.queue.clone(),
-            config.format,
+            config.wgpu().format,
         );
 
         Ok(Self {
@@ -169,6 +179,7 @@ impl Renderer {
             vertex_buffer,
             render_pipeline,
             mesh_data: HashMap::new(),
+            draw_calls: 0,
             #[cfg(feature = "imgui")]
             imgui,
         })
@@ -180,6 +191,11 @@ impl Renderer {
     }
 
     #[inline]
+    pub fn draw_calls(&self) -> u32 {
+        self.draw_calls
+    }
+
+    #[inline]
     pub fn resize(&mut self, size: Size<u32>) {
         if size.width <= 0 || size.height <= 0 {
             warn!("Attempted to resize renderer to zero dimension");
@@ -188,12 +204,7 @@ impl Renderer {
 
         self.camera.update_projection(size);
 
-        self.config.width = size.width;
-        self.config.height = size.height;
-        self.state
-            .surface
-            .configure(&self.state.device, &self.config);
-
+        self.config.resize(size.width, size.height);
         info!("Resized renderer viewport to {:?}", size);
     }
 
@@ -296,6 +307,7 @@ impl Renderer {
     #[inline]
     #[doc(hidden)]
     pub fn present(&mut self) {
+        self.draw_calls = 0;
         self.update_instance_buffers();
 
         let frame = match self.state.surface.get_current_texture() {
@@ -353,13 +365,11 @@ impl Renderer {
                     if instance_count > 1 {
                         // Instanced rendering - single draw call for multiple instances
                         render_pass.draw_indexed(0..mesh_data.index_count, 0, 0..instance_count);
-                        trace!(
-                            "Rendered {} instances of mesh {} in single draw call",
-                            instance_count, mesh_id
-                        );
+                        self.draw_calls += 1;
                     } else {
                         // Single instance
                         render_pass.draw_indexed(0..mesh_data.index_count, 0, 0..1);
+                        self.draw_calls += 1;
                     }
                 }
             }

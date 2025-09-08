@@ -4,7 +4,7 @@ use wgpu::Backends;
 use winit::window::Window;
 
 pub struct GpuState {
-    pub surface: wgpu::Surface<'static>,
+    pub surface: Rc<wgpu::Surface<'static>>,
     pub device: Rc<wgpu::Device>,
     pub queue: Rc<wgpu::Queue>,
     pub adapter: wgpu::Adapter,
@@ -21,7 +21,7 @@ impl GpuState {
             ..Default::default()
         });
 
-        let surface = instance.create_surface(window)?;
+        let surface = Rc::new(instance.create_surface(window)?);
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
