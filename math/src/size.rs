@@ -1,7 +1,7 @@
 use num::Num;
 use winit::dpi::{LogicalSize, PhysicalSize};
 
-use crate::{ToF32, ToU32};
+use crate::{ToF32, ToU32, Vec2};
 
 /// Struct to represent a size with width and height.
 /// Useful in many contexts, such as representing the size of a window or a rectangle.
@@ -156,6 +156,21 @@ impl<T: Num + Copy + PartialOrd> From<PhysicalSize<T>> for Size<T> {
         Self {
             width: size.width,
             height: size.height,
+        }
+    }
+}
+
+impl From<Size<f32>> for Vec2 {
+    fn from(value: Size<f32>) -> Self {
+        Vec2::new(value.width, value.height)
+    }
+}
+
+impl From<Vec2> for Size<f32> {
+    fn from(value: Vec2) -> Self {
+        Self {
+            width: value.x,
+            height: value.y,
         }
     }
 }

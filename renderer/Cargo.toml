@@ -15,6 +15,7 @@ err.workspace = true
 imgui = { workspace = true, optional = true }
 imgui-wgpu = { version = "0.25.0", optional = true }
 imgui-winit-support = { version = "0.13.0", optional = true }
+globals.workspace = true
 
 [features]
 default = []

@@ -116,7 +116,7 @@ impl<const R: usize, const C: usize> Matrix<R, C> {
     /// Converts this matrix to a different size matrix.
     /// If the new matrix is larger, the new elements are filled with the provided value.
     /// If the new matrix is smaller, the elements are truncated.
-    pub fn expand<const NR: usize, const NC: usize, F: ToF32>(
+    pub fn extend<const NR: usize, const NC: usize, F: ToF32>(
         self,
         fill_value: F,
     ) -> Matrix<NR, NC> {

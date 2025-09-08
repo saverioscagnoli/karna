@@ -1,34 +1,13 @@
-use std::{
-    hash::{DefaultHasher, Hash, Hasher},
-    sync::OnceLock,
-};
-
 use crate::{
-    Descriptor, Renderer,
     color::Color,
     fundamentals::Vertex,
     mesh::{Mesh, MeshInstance},
 };
-use math::{Size, Vec2, Vec3, Vec4};
+use math::{Size, Vec2, Vec3};
 
-pub struct Rect {
-    pub position: Vec2,
-    pub size: Size<f32>,
-    pub color: Color,
-}
+pub struct Rect(MeshInstance);
 
 impl Mesh for Rect {
-    fn id() -> u64 {
-        static ID: OnceLock<u64> = OnceLock::new();
-
-        *ID.get_or_init(|| {
-            let type_name = std::any::type_name::<Self>();
-            let mut hasher = DefaultHasher::new();
-            type_name.hash(&mut hasher);
-            hasher.finish()
-        })
-    }
-
     fn vertices() -> Vec<Vertex> {
         vec![
             Vertex {
@@ -53,48 +32,51 @@ impl Mesh for Rect {
     fn indices() -> Vec<u16> {
         vec![0, 1, 2, 2, 3, 0]
     }
+
+    fn instance(&self) -> &MeshInstance {
+        &self.0
+    }
+
+    fn insance_mut(&mut self) -> &mut MeshInstance {
+        &mut self.0
+    }
 }
 
 impl Default for Rect {
     fn default() -> Self {
-        Self {
-            position: Vec2::zero(),
-            size: Size::new(10.0, 10.0),
-            color: Color::WHITE,
-        }
+        Self(MeshInstance {
+            translation: Vec3::zero(),
+            scale: Vec3::new(10.0, 10.0, 1.0),
+            rotation: Vec3::zero(),
+            color: Color::WHITE.into(),
+            dirty: false,
+        })
     }
 }
 
 impl Rect {
-    pub fn new<P: Into<Vec2>, S: Into<Size<f32>>>(pos: P, size: S) -> Self {
-        Self {
-            position: pos.into(),
-            size: size.into(),
-            color: Color::WHITE,
-        }
+    pub fn new<P: Into<Vec3>, S: Into<Size<f32>>>(pos: P, size: S) -> Self {
+        Self(MeshInstance {
+            translation: pos.into(),
+            scale: Vec2::from(size.into()).extend(1.0),
+            rotation: Vec3::zero(),
+            color: Color::WHITE.into(),
+            dirty: false,
+        })
     }
 
-    pub fn with_position<P: Into<Vec2>>(mut self, pos: P) -> Self {
-        self.position = pos.into();
+    pub fn with_position<P: Into<Vec3>>(mut self, pos: P) -> Self {
+        self.0.translation = pos.into();
         self
     }
 
     pub fn with_size<S: Into<Size<f32>>>(mut self, size: S) -> Self {
-        self.size = size.into();
+        self.0.scale = Vec2::from(size.into()).extend(1.0);
         self
     }
 
     pub fn with_color(mut self, color: Color) -> Self {
-        self.color = color;
+        self.0.color = color.into();
         self
-    }
-
-    pub fn render(&self, renderer: &mut Renderer) {
-        renderer.add_mesh_instance::<Self>(MeshInstance {
-            translation: Vec3::new(self.position.x, self.position.y, -1.0), // Move back in Z
-            rotation: Vec3::zero(),
-            scale: Vec3::new(self.size.width, self.size.height, 1.0),
-            color: self.color.into(),
-        });
     }
 }

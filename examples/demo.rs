@@ -1,9 +1,10 @@
 use karna::{
     input::KeyCode,
     math::Vec2,
-    render::{Color, Rect},
+    render::{Color, Mesh, Rect},
     App, Context, Scene,
 };
+use math::Vec3;
 
 struct RectScene {
     player: Rect,
@@ -14,7 +15,7 @@ struct RectScene {
 impl RectScene {
     fn new() -> Self {
         Self {
-            player: Rect::new([10, 10], 50.0).with_color(Color::RED),
+            player: Rect::new([10, 10, 0], 50.0).with_color(Color::RED),
             vel: Vec2::zero(),
             rects: vec![],
         }
@@ -25,8 +26,11 @@ impl Scene for RectScene {
     fn load(&mut self, _ctx: &mut Context) {
         for i in 0..10 {
             for j in 0..5 {
-                let rect = Rect::new([i as f32 * 60.0 + 200.0, j as f32 * 60.0 + 100.0], 50.0)
-                    .with_color(Color::GREEN);
+                let rect = Rect::new(
+                    [i as f32 * 60.0 + 200.0, j as f32 * 60.0 + 100.0, 0.0],
+                    50.0,
+                )
+                .with_color(Color::GREEN);
                 self.rects.push(rect);
             }
         }
@@ -51,7 +55,11 @@ impl Scene for RectScene {
             self.vel.x = 200.0;
         }
 
-        self.player.position += self.vel * ctx.time.delta();
+        self.player
+            .add_position(self.vel.extend(0.0) * ctx.time.delta().as_secs_f32());
+
+        self.player
+            .add_rotation(Vec3::new(0.0, 0.0, 1.0 * ctx.time.delta().as_secs_f32()));
         self.vel *= 0.9;
     }
 

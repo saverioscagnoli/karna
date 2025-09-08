@@ -18,7 +18,7 @@ default = []
 imgui = ["renderer/imgui", "engine/imgui"]
 
 [workspace]
-members = ["engine", "math", "renderer", "err"]
+members = ["engine", "math", "renderer", "err", "globals"]
 resolver = "3"
 
 [workspace.dependencies]
@@ -30,6 +30,7 @@ pollster = "0.4.0"
 err = { path = "err" }
 imgui = "0.12.0"
 renderer = { path = "renderer" }
+globals = { path = "globals" }
 
 
 [[example]]
