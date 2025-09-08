@@ -38,6 +38,16 @@ pub mod imgui {
 #[cfg(feature = "imgui")]
 use imgui_state::ImguiState;
 
+pub struct FrameInfo {
+    pub delta_time: f32,
+    pub update_time: f32,
+    pub render_time: f32,
+    pub draw_calls: u32,
+    pub vertices: u32,
+    pub indices: u32,
+    pub instances: u32,
+}
+
 pub struct Renderer {
     state: GpuState,
     config: RendererConfig,
