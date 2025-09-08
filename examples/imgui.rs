@@ -1,13 +1,13 @@
 use std::collections::VecDeque;
 
 use karna::{
-    render::{imgui, imgui::Condition, Color, Mesh, Rect2D},
+    render::{imgui, imgui::Condition, Color, Mesh, Rect},
     App, Context, Scene,
 };
 
 pub struct ImguiDemo {
-    player: Rect2D,
-    grid: Vec<Rect2D>,
+    player: Rect,
+    grid: Vec<Rect>,
     delta_time_history: VecDeque<f32>,
     frame_time_history: VecDeque<f32>,
     fps_history: VecDeque<f32>,
@@ -30,15 +30,15 @@ pub struct ImguiDemo {
 impl ImguiDemo {
     fn new() -> Self {
         Self {
-            player: Rect2D::default().with_position([10, 10]).with_size(50.0),
+            player: Rect::default().with_position([10, 10, 0]).with_size(50.0),
             grid: (0..5)
                 .flat_map(|i| {
                     (0..10).map(move |j| {
                         let x_t = i as f32 / 4.0;
                         let y_t = j as f32 / 9.0;
 
-                        Rect2D::default()
-                            .with_position([i as f32 * 60.0 + 200.0, j as f32 * 60.0 + 100.0])
+                        Rect::default()
+                            .with_position([i as f32 * 60.0 + 200.0, j as f32 * 60.0 + 100.0, 0.0])
                             .with_size(50.0)
                             .with_color(Color::rgb(x_t, y_t, 1.0 - x_t))
                     })
@@ -305,8 +305,8 @@ impl Scene for ImguiDemo {
 
         // Render game objects
         self.player.render(&mut ctx.render);
-        for Rect2D in &self.grid {
-            Rect2D.render(&mut ctx.render);
+        for Rect in &self.grid {
+            Rect.render(&mut ctx.render);
         }
     }
 }
