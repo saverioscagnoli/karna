@@ -44,25 +44,23 @@ impl Mesh for Rect {
 
 impl Default for Rect {
     fn default() -> Self {
-        Self(MeshInstance {
-            translation: Vec3::zero(),
-            scale: Vec3::new(10.0, 10.0, 1.0),
-            rotation: Vec3::zero(),
-            color: Color::WHITE.into(),
-            dirty: false,
-        })
+        Self(MeshInstance::new(
+            Vec3::zero(),
+            Vec3::new(10.0, 10.0, 1.0),
+            Vec3::zero(),
+            Color::WHITE.into(),
+        ))
     }
 }
 
 impl Rect {
     pub fn new<P: Into<Vec3>, S: Into<Size<f32>>>(pos: P, size: S) -> Self {
-        Self(MeshInstance {
-            translation: pos.into(),
-            scale: Vec2::from(size.into()).extend(1.0),
-            rotation: Vec3::zero(),
-            color: Color::WHITE.into(),
-            dirty: false,
-        })
+        Self(MeshInstance::new(
+            pos.into(),
+            Vec2::from(size.into()).extend(1.0),
+            Vec3::zero(),
+            Color::WHITE.into(),
+        ))
     }
 
     pub fn with_position<P: Into<Vec3>>(mut self, pos: P) -> Self {

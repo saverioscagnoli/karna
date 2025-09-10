@@ -64,7 +64,7 @@ impl Scene for RectScene {
     }
 
     fn render(&mut self, ctx: &mut Context) {
-        for rect in &self.rects {
+        for rect in self.rects.iter_mut() {
             rect.render(&mut ctx.render);
         }
 

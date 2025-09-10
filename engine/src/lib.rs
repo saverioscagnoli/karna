@@ -68,12 +68,12 @@ impl ApplicationHandler<Context> for App {
             }
         };
 
-        let info = context.render.info();
+        // let info = context.render.info();
 
-        info!("backend: {}", info.backend);
-        info!("device: {}", info.name);
-        info!("device type: {:?}", info.device_type);
-        info!("driver: {}", info.driver_info);
+        // info!("backend: {}", info.backend);
+        // info!("device: {}", info.name);
+        // info!("device type: {:?}", info.device_type);
+        // info!("driver: {}", info.driver_info);
 
         if let Some(scene) = self.scenes.current_mut() {
             scene.load(&mut context);
@@ -88,8 +88,8 @@ impl ApplicationHandler<Context> for App {
         #[cfg(feature = "imgui")] mut event: Context,
         #[cfg(not(feature = "imgui"))] event: Context,
     ) {
-        #[cfg(feature = "imgui")]
-        event.render.imgui.handle_event(&Event::UserEvent(()));
+        // #[cfg(feature = "imgui")]
+        //  event.render.imgui.handle_event(&Event::UserEvent(()));
 
         self.context = Some(event);
     }
@@ -105,11 +105,11 @@ impl ApplicationHandler<Context> for App {
             return;
         };
 
-        #[cfg(feature = "imgui")]
-        context
-            .render
-            .imgui
-            .handle_event(&Event::DeviceEvent { device_id, event });
+        // #[cfg(feature = "imgui")]
+        // context
+        //     .render
+        //     .imgui
+        //     .handle_event(&Event::DeviceEvent { device_id, event });
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
@@ -123,8 +123,8 @@ impl ApplicationHandler<Context> for App {
 
         #[cfg(feature = "imgui")]
         {
-            context.render.imgui.handle_event(&Event::AboutToWait);
-            context.render.imgui.update_dt(dt);
+            // context.render.imgui.handle_event(&Event::AboutToWait);
+            // context.render.imgui.update_dt(dt);
         }
 
         context.time.last_frame = context.time.this_frame;
@@ -166,7 +166,7 @@ impl ApplicationHandler<Context> for App {
             }
 
             WindowEvent::Resized(size) => {
-                context.render.resize((*size).into());
+                // context.render.resize((*size).into());
             }
 
             WindowEvent::KeyboardInput {
@@ -212,34 +212,32 @@ impl ApplicationHandler<Context> for App {
             }
 
             WindowEvent::RedrawRequested => {
-                context.render.clear_mesh_instances();
-
                 if let Some(scene) = self.scenes.current_mut() {
                     scene.render(context);
                 }
 
-                context.render.present();
+                // context.render.present();
                 context.window.request_redraw();
                 context.time.frame_time = Instant::now() - context.time.this_frame;
 
-                if !context.render.vsync() {
-                    let sleep_duration = context
-                        .time
-                        .fps_step
-                        .saturating_sub(context.time.frame_time);
+                // if !context.render.vsync() {
+                //     let sleep_duration = context
+                //         .time
+                //         .fps_step
+                //         .saturating_sub(context.time.frame_time);
 
-                    self.sleeper.sleep(sleep_duration);
-                }
+                //     self.sleeper.sleep(sleep_duration);
+                // }
             }
 
             _ => {}
         }
 
-        #[cfg(feature = "imgui")]
-        context
-            .render
-            .imgui
-            .handle_event(&Event::WindowEvent { window_id, event });
+        // #[cfg(feature = "imgui")]
+        // context
+        //     .render
+        //     .imgui
+        //     .handle_event(&Event::WindowEvent { window_id, event });
     }
 }
 
