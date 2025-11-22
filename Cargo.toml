@@ -1,37 +1,17 @@
 [package]
 name = "karna"
 version = "0.1.0"
-edition = "2021"
-readme = "README.md"
-repository = "https://github.com/saverioscagnoli/karna"
-categories = ["game", "game-engine", "game-development"]
-keywords = ["game", "game-engine", "game-development"]
-include = ["assets"]
+edition = "2024"
+
+[workspace]
+members = ["common","engine", "renderer"]
 
 [dependencies]
 engine = { path = "engine" }
-math.workspace = true
-renderer.workspace = true
-
-[features]
-default = []
-imgui = ["renderer/imgui", "engine/imgui"]
-
-[workspace]
-members = ["engine", "math", "renderer", "err"]
-resolver = "3"
+common = { path = "common" }
 
 [workspace.dependencies]
-math = { path = "math" }
 winit = "0.30.12"
-wgpu = "25.0.1"
-traccia = "2.2.5"
-pollster = "0.4.0"
-err = { path = "err" }
-imgui = "0.12.0"
+wgpu = "27.0.1"
+common = { path = "common" }
 renderer = { path = "renderer" }
-
-
-[[example]]
-name = "imgui"
-required-features = ["imgui"]

@@ -5,15 +5,5 @@ edition = "2024"
 
 [dependencies]
 winit.workspace = true
-math.workspace = true
-wgpu.workspace = true
-traccia.workspace = true
-chrono = "0.4.41"
-spin_sleep = "1.3.2"
-pollster.workspace = true
-imgui.workspace = true
+pollster = "0.4.0"
 renderer.workspace = true
-
-[features]
-default = []
-imgui = ["renderer/imgui"]
