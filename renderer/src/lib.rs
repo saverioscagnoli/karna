@@ -1,18 +1,18 @@
 pub mod camera;
+pub mod color;
 pub mod mesh;
 mod util;
 
-pub use camera::Camera;
-pub use wgpu::Color;
-use wgpu::{naga::FastHashMap, util::DeviceExt};
-
 use crate::{
-    camera::CameraKind,
+    camera::Projection,
+    color::Color,
     mesh::{InstanceData, InstanceDataGpu, Mesh, MeshData, MeshId},
 };
+pub use camera::Camera;
 use common::error::RendererError;
-use nalgebra::{Quaternion, Vector2, Vector3, Vector4};
+use nalgebra::{Vector2, Vector3, Vector4};
 use std::{borrow::Cow, sync::Arc};
+use wgpu::{naga::FastHashMap, util::DeviceExt};
 
 fn shader_src() -> String {
     r#"
@@ -32,7 +32,7 @@ fn shader_src() -> String {
 
         struct VertexOutput {
             @builtin(position) clip_position: vec4<f32>,
-            @location(0) color: vec3<f32>,
+            @location(0) color: vec4<f32>,
         }
 
         // Rotate a vector by a quaternion
@@ -53,7 +53,7 @@ fn shader_src() -> String {
             let world_pos = rotated_pos + instance.instance_position;
 
             // Multiply vertex color by instance color
-            out.color = model.color.xyz * instance.instance_color.xyz;
+            out.color = model.color * instance.instance_color;
 
             let pos = vec4<f32>(world_pos, 1.0);
             out.clip_position = projection * pos;
@@ -63,7 +63,7 @@ fn shader_src() -> String {
 
         @fragment
         fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-            return vec4<f32>(in.color, 1.0);
+            return in.color;
         }
     "#
     .to_string()
@@ -166,32 +166,25 @@ impl Vertex {
     }
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct DrawCall {
-    vertex_start: u32,
-    vertex_count: u32,
-    index_start: u32,
-    index_count: u32,
-    topology: wgpu::PrimitiveTopology,
-}
-
 pub struct Renderer {
+    pub state: GpuState,
+
+    // Heap storage
     vertices: Vec<Vertex>,
     indices: Vec<u32>,
+    instances: FastHashMap<MeshId, Vec<InstanceDataGpu>>,
 
+    // Gpu buffers
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
-    draw_calls: Vec<DrawCall>,
+    instance_buffer: wgpu::Buffer,
 
+    // Rendering
     triangle_pipeline: wgpu::RenderPipeline,
-    clear_color: wgpu::Color,
+    meshes: FastHashMap<MeshId, MeshData>,
+    clear_color: Color,
 
     camera: Camera,
-    meshes: FastHashMap<MeshId, MeshData>,
-    instances: FastHashMap<MeshId, Vec<InstanceDataGpu>>,
-    instance_buffer: wgpu::Buffer,
-    pub state: GpuState,
 }
 
 impl Renderer {
@@ -224,11 +217,12 @@ impl Renderer {
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader_src())),
             });
 
-        let screen_size = window.inner_size();
         let camera = Camera::new(
             &state.device,
-            Vector2::new(screen_size.width, screen_size.height),
-            CameraKind::Orthographic,
+            Projection::OrthographicStandard2D {
+                near: -1.0,
+                far: 1000.0,
+            },
         );
 
         let triangle_pipeline = Self::create_render_pipeline(
@@ -253,9 +247,8 @@ impl Renderer {
             indices: Vec::with_capacity(Self::INDEX_CAPACITY),
             vertex_buffer,
             index_buffer,
-            draw_calls: Vec::new(),
             triangle_pipeline,
-            clear_color: wgpu::Color::BLACK,
+            clear_color: Color::Black,
             camera,
             instance_buffer,
             instances: FastHashMap::default(),
@@ -319,7 +312,7 @@ impl Renderer {
     #[inline]
     #[doc(hidden)]
     pub fn resize(&mut self, size: Vector2<u32>) {
-        self.camera.update_projection(size, &self.state.queue);
+        self.camera.update(size, &self.state.queue);
 
         self.state.config.width = size.x;
         self.state.config.height = size.y;
@@ -328,8 +321,9 @@ impl Renderer {
             .configure(&self.state.device, &self.state.config);
     }
 
-    pub fn set_clear_color(&mut self, color: wgpu::Color) {
-        self.clear_color = color;
+    #[inline]
+    pub fn set_clear_color<C: Into<Color>>(&mut self, color: C) {
+        self.clear_color = color.into();
     }
 
     fn create_render_pipeline<S>(
@@ -410,9 +404,29 @@ impl Renderer {
         }
     }
 
+    #[inline]
     #[doc(hidden)]
     pub fn end_frame(&mut self) {
         self.update_buffers();
+
+        // Write ALL instance data BEFORE rendering
+        let mut instance_offset = 0;
+        let mut instance_ranges = std::collections::HashMap::new();
+
+        for (mesh_id, instances) in &self.instances {
+            if !instances.is_empty() {
+                self.state.queue.write_buffer(
+                    &self.instance_buffer,
+                    instance_offset,
+                    util::as_u8_slice(instances),
+                );
+
+                let start = instance_offset / std::mem::size_of::<InstanceDataGpu>() as u64;
+                instance_ranges.insert(*mesh_id, (start as u32, instances.len() as u32));
+                instance_offset +=
+                    (instances.len() * std::mem::size_of::<InstanceDataGpu>()) as u64;
+            }
+        }
 
         let frame = match self.state.surface.get_current_texture() {
             Ok(f) => f,
@@ -435,7 +449,7 @@ impl Renderer {
                     view: &output,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(self.clear_color),
+                        load: wgpu::LoadOp::Clear(self.clear_color.into()),
                         store: wgpu::StoreOp::Store,
                     },
                     depth_slice: None,
@@ -455,19 +469,20 @@ impl Renderer {
                 }
 
                 let mesh_data = self.meshes.get(mesh_id).unwrap();
-
-                self.state.queue.write_buffer(
-                    &self.instance_buffer,
-                    0,
-                    util::as_u8_slice(instances),
-                );
+                let (start, count) = instance_ranges.get(mesh_id).unwrap();
 
                 render_pass.set_vertex_buffer(0, mesh_data.vertex_buffer.slice(..));
-                render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+
+                let instance_size = std::mem::size_of::<InstanceDataGpu>() as u64;
+                let buffer_start = (*start as u64) * instance_size;
+                let buffer_end = buffer_start + (*count as u64) * instance_size;
+                render_pass
+                    .set_vertex_buffer(1, self.instance_buffer.slice(buffer_start..buffer_end));
+
                 render_pass
                     .set_index_buffer(mesh_data.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
-                render_pass.draw_indexed(0..mesh_data.index_count, 0, 0..instances.len() as u32);
+                render_pass.draw_indexed(0..mesh_data.index_count, 0, 0..*count);
             }
         }
 

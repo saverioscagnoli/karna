@@ -9,3 +9,4 @@ winit.workspace = true
 common.workspace = true
 nalgebra.workspace = true
 macros.workspace = true
+macros-derive.workspace = true

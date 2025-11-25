@@ -1,4 +1,4 @@
-use crate::{Renderer, Vertex};
+use crate::{Renderer, Vertex, color::Color};
 use macros::impl_mesh_deref;
 use nalgebra::{Quaternion, UnitQuaternion, Vector3, Vector4};
 use std::{
@@ -27,6 +27,22 @@ pub trait Mesh: DerefMut<Target = InstanceData> + Sized + 'static {
         &self.position
     }
 
+    fn set_position(&mut self, position: Vector3<f32>) {
+        self.position = position;
+    }
+
+    fn set_position_x(&mut self, x: f32) {
+        self.position.x = x;
+    }
+
+    fn set_position_y(&mut self, y: f32) {
+        self.position.y = y;
+    }
+
+    fn set_position_z(&mut self, z: f32) {
+        self.position.z = z;
+    }
+
     fn with_position(mut self, position: Vector3<f32>) -> Self {
         self.position = position;
         self
@@ -51,6 +67,22 @@ pub trait Mesh: DerefMut<Target = InstanceData> + Sized + 'static {
         &self.scale
     }
 
+    fn set_scale(&mut self, scale: Vector3<f32>) {
+        self.scale = scale;
+    }
+
+    fn set_scale_x(&mut self, x: f32) {
+        self.scale.x = x;
+    }
+
+    fn set_scale_y(&mut self, y: f32) {
+        self.scale.y = y;
+    }
+
+    fn set_scale_z(&mut self, z: f32) {
+        self.scale.z = z;
+    }
+
     fn with_scale(mut self, scale: Vector3<f32>) -> Self {
         self.scale = scale;
         self
@@ -71,17 +103,33 @@ pub trait Mesh: DerefMut<Target = InstanceData> + Sized + 'static {
         self
     }
 
-    fn color(&self) -> &Vector4<f32> {
+    fn color(&self) -> &Color {
         &self.color
     }
 
-    fn with_color(mut self, color: Vector4<f32>) -> Self {
-        self.color = color;
+    fn with_color<C: Into<Color>>(mut self, color: C) -> Self {
+        self.color = color.into();
         self
     }
 
     fn rotation(&self) -> &Vector3<f32> {
         &self.rotation
+    }
+
+    fn set_rotation(&mut self, rotation: Vector3<f32>) {
+        self.rotation = rotation;
+    }
+
+    fn set_rotation_x(&mut self, x: f32) {
+        self.rotation.x = x;
+    }
+
+    fn set_rotation_y(&mut self, y: f32) {
+        self.rotation.y = y;
+    }
+
+    fn set_rotation_z(&mut self, z: f32) {
+        self.rotation.z = z;
     }
 
     fn with_rotation(mut self, rotation: Vector3<f32>) -> Self {
@@ -129,7 +177,7 @@ pub struct InstanceData {
     pub position: Vector3<f32>,
     pub rotation: Vector3<f32>,
     pub scale: Vector3<f32>,
-    pub color: Vector4<f32>,
+    pub color: Color,
 }
 
 /// This is the actual struct that will be sent
@@ -149,7 +197,7 @@ impl Default for InstanceData {
             position: Vector3::zeros(),
             rotation: Vector3::zeros(),
             scale: Vector3::new(1.0, 1.0, 1.0),
-            color: Vector4::new(1.0, 1.0, 1.0, 1.0),
+            color: Color::White,
         }
     }
 }
@@ -164,7 +212,7 @@ impl InstanceData {
             position: self.position,
             rotation: rotation_quat,
             scale: self.scale,
-            color: self.color,
+            color: self.color.into(),
         }
     }
 }
@@ -238,7 +286,7 @@ impl Mesh for Rectangle {
     }
 
     fn indices() -> Vec<u32> {
-        vec![0, 1, 2, 1, 3, 2]
+        vec![0, 2, 1, 1, 2, 3]
     }
 }
 
@@ -289,14 +337,14 @@ impl Mesh for Cube {
         ]
     }
 
+    #[rustfmt::skip]
     fn indices() -> Vec<u32> {
         vec![
-            // Front face
-            0, 1, 2, 2, 3, 0, // Right face
-            1, 5, 6, 6, 2, 1, // Back face
-            5, 4, 7, 7, 6, 5, // Left face
-            4, 0, 3, 3, 7, 4, // Top face
-            3, 2, 6, 6, 7, 3, // Bottom face
+            0, 1, 2, 2, 3, 0,
+            1, 5, 6, 6, 2, 1,
+            5, 4, 7, 7, 6, 5,
+            4, 0, 3, 3, 7, 4,
+            3, 2, 6, 6, 7, 3,
             4, 5, 1, 1, 0, 4,
         ]
     }
