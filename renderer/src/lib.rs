@@ -1,24 +1,33 @@
 pub mod camera;
+pub mod mesh;
 mod util;
 
-pub use camera::{Camera, OrthographicCamera, PerspectiveCamera, WgpuCamera};
+pub use camera::Camera;
 pub use wgpu::Color;
+use wgpu::{naga::FastHashMap, util::DeviceExt};
 
+use crate::{
+    camera::CameraKind,
+    mesh::{InstanceData, InstanceDataGpu, Mesh, MeshData, MeshId},
+};
 use common::error::RendererError;
-use nalgebra::{Matrix4, Vector2, Vector3, Vector4};
-use std::{borrow::Cow, rc::Rc, sync::Arc};
+use nalgebra::{Quaternion, Vector2, Vector3, Vector4};
+use std::{borrow::Cow, sync::Arc};
 
 fn shader_src() -> String {
     r#"
-        struct ProjectionUniform {
-            matrix: mat4x4<f32>,
-        }
-
-        @group(0) @binding(0) var<uniform> projection: ProjectionUniform;
+        @group(0) @binding(0) var<uniform> projection: mat4x4<f32>;
 
         struct VertexInput {
             @location(0) pos: vec3<f32>,
             @location(1) color: vec4<f32>,
+        }
+
+        struct InstanceInput {
+            @location(2) instance_position: vec3<f32>,
+            @location(3) instance_rotation: vec4<f32>, // quaternion (x, y, z, w)
+            @location(4) instance_scale: vec3<f32>,
+            @location(5) instance_color: vec4<f32>,
         }
 
         struct VertexOutput {
@@ -26,12 +35,29 @@ fn shader_src() -> String {
             @location(0) color: vec3<f32>,
         }
 
+        // Rotate a vector by a quaternion
+        fn quat_rotate(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
+            let qvec = q.xyz;
+            let uv = cross(qvec, v);
+            let uuv = cross(qvec, uv);
+            return v + ((uv * q.w) + uuv) * 2.0;
+        }
+
         @vertex
-        fn vs_main(model: VertexInput) -> VertexOutput {
+        fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
             var out: VertexOutput;
-            out.color = model.color.xyz;
-            let pos = vec4<f32>(model.pos, 1.0);
-            out.clip_position = projection.matrix * pos;
+
+            // Apply transformations in order: scale -> rotate -> translate
+            let scaled_pos = model.pos * instance.instance_scale;
+            let rotated_pos = quat_rotate(instance.instance_rotation, scaled_pos);
+            let world_pos = rotated_pos + instance.instance_position;
+
+            // Multiply vertex color by instance color
+            out.color = model.color.xyz * instance.instance_color.xyz;
+
+            let pos = vec4<f32>(world_pos, 1.0);
+            out.clip_position = projection * pos;
+
             return out;
         }
 
@@ -39,32 +65,30 @@ fn shader_src() -> String {
         fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             return vec4<f32>(in.color, 1.0);
         }
-        "#
+    "#
     .to_string()
 }
 
 #[derive(Debug)]
 pub struct GpuState {
-    pub(crate) surface: Rc<wgpu::Surface<'static>>,
-    pub device: Rc<wgpu::Device>,
-    pub(crate) queue: Rc<wgpu::Queue>,
+    pub(crate) surface: wgpu::Surface<'static>,
+    pub device: wgpu::Device,
+    pub(crate) queue: wgpu::Queue,
     #[allow(unused)]
-    pub(crate) adapter: Rc<wgpu::Adapter>,
-    pub(crate) bind_group_layout: wgpu::BindGroupLayout,
+    pub(crate) adapter: wgpu::Adapter,
     pub(crate) surface_format: wgpu::TextureFormat,
+    config: wgpu::SurfaceConfiguration,
 }
 
 impl GpuState {
-    async fn new(
-        window: Arc<winit::window::Window>,
-    ) -> Result<(Self, wgpu::SurfaceConfiguration), RendererError> {
+    async fn new(window: Arc<winit::window::Window>) -> Result<Self, RendererError> {
         let (width, height) = window.inner_size().into();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
+            backends: wgpu::Backends::PRIMARY,
             ..Default::default()
         });
 
-        let surface = Rc::new(instance.create_surface(window)?);
+        let surface = instance.create_surface(window)?;
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -81,24 +105,6 @@ impl GpuState {
                 ..Default::default()
             })
             .await?;
-
-        let adapter = Rc::new(adapter);
-        let device = Rc::new(device);
-        let queue = Rc::new(queue);
-
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("bind group layout"),
-        });
 
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps
@@ -121,23 +127,20 @@ impl GpuState {
 
         surface.configure(&device, &config);
 
-        Ok((
-            Self {
-                surface,
-                device,
-                queue,
-                adapter,
-                bind_group_layout,
-                surface_format,
-            },
+        Ok(Self {
+            surface,
+            device,
+            queue,
+            adapter,
+            surface_format,
             config,
-        ))
+        })
     }
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct Vertex {
+pub struct Vertex {
     position: Vector3<f32>,
     color: Vector4<f32>,
 }
@@ -174,8 +177,6 @@ pub struct DrawCall {
 }
 
 pub struct Renderer {
-    pub state: GpuState,
-
     vertices: Vec<Vertex>,
     indices: Vec<u32>,
 
@@ -184,23 +185,23 @@ pub struct Renderer {
     draw_calls: Vec<DrawCall>,
 
     triangle_pipeline: wgpu::RenderPipeline,
-
-    projection_buffer: wgpu::Buffer,
-    projection_bind_group: wgpu::BindGroup,
-
     clear_color: wgpu::Color,
-    draw_color: wgpu::Color,
 
-    camera: Option<Box<dyn WgpuCamera>>,
+    camera: Camera,
+    meshes: FastHashMap<MeshId, MeshData>,
+    instances: FastHashMap<MeshId, Vec<InstanceDataGpu>>,
+    instance_buffer: wgpu::Buffer,
+    pub state: GpuState,
 }
 
 impl Renderer {
     const VERTEX_CAPACITY: usize = 1024;
     const INDEX_CAPACITY: usize = 1024;
+    const INSTANCE_CAPACITY: usize = 4096;
 
     #[doc(hidden)]
     pub async fn new(window: Arc<winit::window::Window>) -> Result<Self, RendererError> {
-        let (state, _wgpu_config) = GpuState::new(window.clone()).await?;
+        let state = GpuState::new(window.clone()).await?;
 
         let vertex_buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vertex buffer"),
@@ -216,26 +217,6 @@ impl Renderer {
             mapped_at_creation: false,
         });
 
-        let projection_buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("projection buffer"),
-            size: std::mem::size_of::<Matrix4<f32>>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let projection_bind_group = state.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("projection bind group"),
-            layout: &state.bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: &projection_buffer,
-                    offset: 0,
-                    size: None,
-                }),
-            }],
-        });
-
         let shader = state
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -243,14 +224,28 @@ impl Renderer {
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader_src())),
             });
 
+        let screen_size = window.inner_size();
+        let camera = Camera::new(
+            &state.device,
+            Vector2::new(screen_size.width, screen_size.height),
+            CameraKind::Orthographic,
+        );
+
         let triangle_pipeline = Self::create_render_pipeline(
             "triangle pipeline",
             &state.device,
             &shader,
-            &state.bind_group_layout,
+            &camera.bind_group_layout(),
             state.surface_format,
             wgpu::PrimitiveTopology::TriangleList,
         );
+
+        let instance_buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("instance buffer"),
+            size: (std::mem::size_of::<InstanceData>() * Self::INSTANCE_CAPACITY) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
         Ok(Self {
             state,
@@ -260,40 +255,81 @@ impl Renderer {
             index_buffer,
             draw_calls: Vec::new(),
             triangle_pipeline,
-            projection_buffer,
-            projection_bind_group,
             clear_color: wgpu::Color::BLACK,
-            draw_color: wgpu::Color::WHITE,
-            camera: None,
+            camera,
+            instance_buffer,
+            instances: FastHashMap::default(),
+            meshes: FastHashMap::default(),
         })
     }
 
-    pub fn set_camera(&mut self, camera: Box<dyn WgpuCamera>) {
-        self.camera = Some(camera);
+    pub fn register_mesh<M: Mesh + 'static>(&mut self) {
+        let mesh_id = MeshId::of::<M>();
+
+        if self.meshes.contains_key(&mesh_id) {
+            return;
+        }
+
+        let vertices = M::vertices();
+        let indices = M::indices();
+
+        let vertex_buffer =
+            self.state
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("mesh vertex buffer {:?}", mesh_id)),
+                    contents: util::as_u8_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+
+        let index_buffer =
+            self.state
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("mesh index buffer {:?}", mesh_id)),
+                    contents: util::as_u8_slice(&indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
+
+        self.meshes.insert(
+            mesh_id,
+            MeshData {
+                vertex_buffer,
+                index_buffer,
+                index_count: indices.len() as u32,
+            },
+        );
+
+        self.instances.insert(mesh_id, Vec::new());
     }
 
-    pub fn camera_mut(&mut self) -> Option<&mut Box<dyn WgpuCamera>> {
-        self.camera.as_mut()
+    pub fn draw_mesh<M: Mesh + 'static>(&mut self, instance: &InstanceData) {
+        let mesh_id = MeshId::of::<M>();
+
+        if !self.meshes.contains_key(&mesh_id) {
+            self.register_mesh::<M>();
+        }
+
+        self.instances
+            .get_mut(&mesh_id)
+            .unwrap()
+            .push(instance.to_gpu());
     }
 
-    pub fn camera(&self) -> Option<&Box<dyn WgpuCamera>> {
-        self.camera.as_ref()
-    }
+    #[inline]
+    #[doc(hidden)]
+    pub fn resize(&mut self, size: Vector2<u32>) {
+        self.camera.update_projection(size, &self.state.queue);
 
-    pub fn set_draw_color(&mut self, color: wgpu::Color) {
-        self.draw_color = color;
+        self.state.config.width = size.x;
+        self.state.config.height = size.y;
+        self.state
+            .surface
+            .configure(&self.state.device, &self.state.config);
     }
 
     pub fn set_clear_color(&mut self, color: wgpu::Color) {
         self.clear_color = color;
-    }
-
-    pub fn device(&self) -> &Rc<wgpu::Device> {
-        &self.state.device
-    }
-
-    pub fn queue(&self) -> &Rc<wgpu::Queue> {
-        &self.state.queue
     }
 
     fn create_render_pipeline<S>(
@@ -325,7 +361,7 @@ impl Renderer {
             vertex: wgpu::VertexState {
                 module: shader,
                 entry_point: Some("vs_main"),
-                buffers: &[Vertex::desc()],
+                buffers: &[Vertex::desc(), InstanceDataGpu::desc()],
                 compilation_options: compilation_options.clone(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -358,159 +394,6 @@ impl Renderer {
         })
     }
 
-    fn add_draw_call(
-        &mut self,
-        topology: wgpu::PrimitiveTopology,
-        vertex_count: u32,
-        index_count: u32,
-    ) {
-        let vertex_start = (self.vertices.len() - vertex_count as usize) as u32;
-        let index_start = (self.indices.len() - index_count as usize) as u32;
-
-        self.draw_calls.push(DrawCall {
-            vertex_start,
-            vertex_count,
-            index_start,
-            index_count,
-            topology,
-        });
-    }
-
-    pub fn fill_rect(&mut self, pos: Vector2<f32>, size: Vector2<f32>) {
-        let start_index = self.vertices.len() as u32;
-
-        // Define the four corners of the rectangle
-        let top_left = Vector3::new(pos.x, pos.y, 1.0);
-        let top_right = Vector3::new(pos.x + size.x, pos.y, 1.0);
-        let bottom_left = Vector3::new(pos.x, pos.y + size.y, 1.0);
-        let bottom_right = Vector3::new(pos.x + size.x, pos.y + size.y, 1.0);
-
-        let color = Vector4::new(
-            self.draw_color.r as f32,
-            self.draw_color.g as f32,
-            self.draw_color.b as f32,
-            self.draw_color.a as f32,
-        );
-
-        // Add vertices for the rectangle
-        self.vertices.extend_from_slice(&[
-            Vertex {
-                position: top_left,
-                color,
-            },
-            Vertex {
-                position: top_right,
-                color,
-            },
-            Vertex {
-                position: bottom_left,
-                color,
-            },
-            Vertex {
-                position: bottom_right,
-                color,
-            },
-        ]);
-
-        // Add indices for two triangles (top-left, top-right, bottom-left) and (top-right, bottom-right, bottom-left)
-        self.indices.extend_from_slice(&[
-            start_index,
-            start_index + 1,
-            start_index + 2, // First triangle
-            start_index + 1,
-            start_index + 3,
-            start_index + 2, // Second triangle
-        ]);
-
-        self.add_draw_call(wgpu::PrimitiveTopology::TriangleList, 4, 6);
-    }
-
-    /// Draw a rectangle in 3D world space coordinates
-    ///
-    /// # Arguments
-    /// * `pos` - 3D position in world space (center of rectangle)
-    /// * `size` - Width and height of the rectangle
-    /// * `rotation` - Rotation around Y axis in radians (optional, defaults to 0)
-    pub fn fill_rect_3d(&mut self, pos: Vector3<f32>, size: Vector2<f32>) {
-        let start_index = self.vertices.len() as u32;
-
-        let half_width = size.x / 2.0;
-        let half_height = size.y / 2.0;
-
-        // Define the four corners of the rectangle in world space
-        // Rectangle is in XY plane by default
-        let top_left = Vector3::new(pos.x - half_width, pos.y + half_height, pos.z);
-        let top_right = Vector3::new(pos.x + half_width, pos.y + half_height, pos.z);
-        let bottom_left = Vector3::new(pos.x - half_width, pos.y - half_height, pos.z);
-        let bottom_right = Vector3::new(pos.x + half_width, pos.y - half_height, pos.z);
-
-        let color = Vector4::new(
-            self.draw_color.r as f32,
-            self.draw_color.g as f32,
-            self.draw_color.b as f32,
-            self.draw_color.a as f32,
-        );
-
-        // Add vertices for the rectangle
-        self.vertices.extend_from_slice(&[
-            Vertex {
-                position: top_left,
-                color,
-            },
-            Vertex {
-                position: top_right,
-                color,
-            },
-            Vertex {
-                position: bottom_left,
-                color,
-            },
-            Vertex {
-                position: bottom_right,
-                color,
-            },
-        ]);
-
-        // Add indices for two triangles
-        self.indices.extend_from_slice(&[
-            start_index,
-            start_index + 1,
-            start_index + 2,
-            start_index + 1,
-            start_index + 3,
-            start_index + 2,
-        ]);
-
-        self.add_draw_call(wgpu::PrimitiveTopology::TriangleList, 4, 6);
-    }
-
-    fn update_projection(&self, screen_width: f32, screen_height: f32) {
-        let projection = Matrix4::new(
-            2.0 / screen_width,
-            0.0,
-            0.0,
-            -1.0,
-            0.0,
-            -2.0 / screen_height,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-        );
-
-        self.state.queue.write_buffer(
-            &self.projection_buffer,
-            0,
-            &util::as_u8_slice(&[projection]),
-        );
-    }
-
     fn update_buffers(&self) {
         if !self.vertices.is_empty() {
             self.state.queue.write_buffer(
@@ -529,13 +412,6 @@ impl Renderer {
 
     #[doc(hidden)]
     pub fn end_frame(&mut self) {
-        if let Some(camera) = &mut self.camera {
-            camera.update(0.0);
-            camera.update_buffer(&self.state.queue);
-        } else {
-            self.update_projection(1280.0, 720.0);
-        }
-
         self.update_buffers();
 
         let frame = match self.state.surface.get_current_texture() {
@@ -570,44 +446,36 @@ impl Renderer {
                 occlusion_query_set: None,
             });
 
-            if let Some(camera) = &self.camera {
-                render_pass.set_bind_group(0, camera.view_projection_bind_group(), &[]);
-            } else {
-                render_pass.set_bind_group(0, &self.projection_bind_group, &[]);
-            }
+            render_pass.set_bind_group(0, self.camera.bind_group(), &[]);
+            render_pass.set_pipeline(&self.triangle_pipeline);
 
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-
-            let mut current_topology = None;
-
-            for draw_call in &self.draw_calls {
-                if current_topology != Some(draw_call.topology) {
-                    match draw_call.topology {
-                        wgpu::PrimitiveTopology::TriangleList => {
-                            render_pass.set_pipeline(&self.triangle_pipeline);
-                        }
-
-                        _ => unimplemented!(),
-                    }
-
-                    current_topology = Some(draw_call.topology);
+            for (mesh_id, instances) in &self.instances {
+                if instances.is_empty() {
+                    continue;
                 }
 
-                render_pass.draw_indexed(
-                    draw_call.index_start..draw_call.index_start + draw_call.index_count,
+                let mesh_data = self.meshes.get(mesh_id).unwrap();
+
+                self.state.queue.write_buffer(
+                    &self.instance_buffer,
                     0,
-                    0..1,
+                    util::as_u8_slice(instances),
                 );
+
+                render_pass.set_vertex_buffer(0, mesh_data.vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+                render_pass
+                    .set_index_buffer(mesh_data.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+
+                render_pass.draw_indexed(0..mesh_data.index_count, 0, 0..instances.len() as u32);
             }
         }
 
         self.state.queue.submit([encoder.finish()]);
         frame.present();
 
-        // Clear for next frame
-        self.vertices.clear();
-        self.indices.clear();
-        self.draw_calls.clear();
+        for instances in self.instances.values_mut() {
+            instances.clear();
+        }
     }
 }

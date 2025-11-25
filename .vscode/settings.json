@@ -1,9 +1,0 @@
-{
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "rust-analyzer.cargo.features": ["imgui"],
-  "editor.formatOnSave": true,
-  "editor.formatOnPaste": true,
-  "[rust]": {
-    "editor.defaultFormatter": "rust-lang.rust-analyzer"
-  }
-}

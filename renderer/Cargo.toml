@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-nalgebra = "0.34.1"
 wgpu.workspace = true
 winit.workspace = true
 common.workspace = true
+nalgebra.workspace = true
+macros.workspace = true
