@@ -1,12 +1,12 @@
 [package]
-name = "renderer"
+name = "math"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-wgpu.workspace = true
-winit.workspace = true
-common.workspace = true
 macros.workspace = true
 macros-derive.workspace = true
-math.workspace = true
+num = "0.4.3"
+
+[dev-dependencies]
+nalgebra = "0.34.1"

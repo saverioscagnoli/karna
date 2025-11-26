@@ -9,7 +9,7 @@ pub struct S {
     rect: Rectangle,
     rect_2: Rectangle,
     cube: Cube,
-    vel: Vector3<f32>,
+    vel: Vector3,
 }
 
 impl Scene for S {
@@ -79,7 +79,7 @@ fn main() {
                     .with_position_z(-9.0)
                     .with_scale(Vector3::new(50.0, 50.0, 0.0))
                     .with_color(Vector4::new(1.0, 1.0, 1.0, 1.0)),
-                vel: Vector3::zeros(),
+                vel: Vector3::zero(),
             }),
         )
         .with_current_scene("default")

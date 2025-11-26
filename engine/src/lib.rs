@@ -4,7 +4,7 @@ pub mod scene;
 mod time;
 
 use crate::{context::Context, scene::Scene};
-use nalgebra::Vector2;
+use math::Size;
 use std::sync::Arc;
 use wgpu::naga::FastHashMap;
 use winit::{
@@ -19,7 +19,7 @@ use winit::{
 pub struct App {
     scenes: FastHashMap<String, Box<dyn Scene>>,
     current_scene: String,
-    initial_size: Vector2<u32>,
+    initial_size: Size<u32>,
     window: Option<Arc<Window>>,
     context: Option<Context>,
 }
@@ -29,7 +29,7 @@ impl Default for App {
         Self {
             scenes: FastHashMap::default(),
             current_scene: String::new(),
-            initial_size: Vector2::new(800, 600),
+            initial_size: Size::new(800, 600),
             window: None,
             context: None,
         }
@@ -38,7 +38,7 @@ impl Default for App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let size = PhysicalSize::new(self.initial_size.x, self.initial_size.y);
+        let size = PhysicalSize::new(self.initial_size.width, self.initial_size.height);
         let attributes = Window::default_attributes()
             .with_inner_size(size)
             .with_resizable(false);
@@ -102,7 +102,7 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::Resized(size) => {
-                ctx.render.resize([size.width, size.height].into());
+                ctx.render.resize((size.width, size.height).into());
             }
 
             WindowEvent::KeyboardInput { event, .. } => match event.physical_key {
@@ -152,7 +152,7 @@ impl App {
         Self::default()
     }
 
-    pub fn with_size(mut self, size: Vector2<u32>) -> Self {
+    pub fn with_size(mut self, size: Size<u32>) -> Self {
         self.initial_size = size;
         self
     }

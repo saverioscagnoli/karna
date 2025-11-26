@@ -58,6 +58,7 @@ pub fn getters_derive(input: TokenStream) -> TokenStream {
 
                     if let Some(target) = cast_target {
                         Some(quote! {
+                            #[inline]
                             pub fn #field_name(&self) -> #target {
                                 #processed_expr as #target
                             }
@@ -65,16 +66,19 @@ pub fn getters_derive(input: TokenStream) -> TokenStream {
                     } else {
                         match style {
                             "copied" => Some(quote! {
+                                #[inline]
                                 pub fn #field_name(&self) -> #field_type {
                                     #processed_expr
                                 }
                             }),
                             "cloned" => Some(quote! {
+                                #[inline]
                                 pub fn #field_name(&self) -> #field_type {
                                     #processed_expr.clone()
                                 }
                             }),
                             _ => Some(quote! {
+                                #[inline]
                                 pub fn #field_name(&self) -> &#field_type {
                                     &#processed_expr
                                 }
@@ -150,6 +154,7 @@ pub fn setters_derive(input: TokenStream) -> TokenStream {
                     };
 
                     Some(quote! {
+                        #[inline]
                         pub fn #setter_name(&mut self, value: #param_type) {
                             self.#field_name = #value_expr;
                         }

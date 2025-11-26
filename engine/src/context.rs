@@ -1,8 +1,6 @@
-use std::sync::Arc;
-
-use renderer::Renderer;
-
 use crate::{input::Input, time::Time};
+use renderer::Renderer;
+use std::sync::Arc;
 
 pub struct Context {
     pub input: Input,

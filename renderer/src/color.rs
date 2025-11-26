@@ -1,5 +1,5 @@
 use macros_derive::{Getters, Setters};
-use nalgebra::Vector4;
+use math::Vector4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Getters, Setters)]
 pub struct Color {
@@ -62,8 +62,8 @@ impl From<Color> for [f32; 4] {
     }
 }
 
-impl From<Vector4<f32>> for Color {
-    fn from(value: Vector4<f32>) -> Self {
+impl From<Vector4> for Color {
+    fn from(value: Vector4) -> Self {
         Self {
             r: value.x,
             g: value.y,
@@ -73,7 +73,7 @@ impl From<Vector4<f32>> for Color {
     }
 }
 
-impl From<Color> for Vector4<f32> {
+impl From<Color> for Vector4 {
     fn from(value: Color) -> Self {
         Vector4::new(value.r, value.g, value.b, value.a)
     }

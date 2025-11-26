@@ -1,12 +1,17 @@
+use macros_derive::Getters;
+use math::Vector2;
 use std::collections::HashSet;
-
-use nalgebra::Vector2;
 pub use winit::keyboard::KeyCode;
 
+#[rustfmt::skip]
+#[derive(Debug, Clone)]
+#[derive(Getters)]
 pub struct Input {
     pub(crate) keys_held: HashSet<KeyCode>,
     pub(crate) keys_pressed: HashSet<KeyCode>,
-    pub(crate) mouse_position: Vector2<f32>,
+
+    #[get(copied)]
+    pub(crate) mouse_position: Vector2,
 }
 
 impl Input {
@@ -14,7 +19,7 @@ impl Input {
         Self {
             keys_held: HashSet::new(),
             keys_pressed: HashSet::new(),
-            mouse_position: Vector2::default(),
+            mouse_position: Vector2::zero(),
         }
     }
 
@@ -24,10 +29,6 @@ impl Input {
 
     pub fn key_pressed(&self, key: &KeyCode) -> bool {
         self.keys_pressed.contains(&key)
-    }
-
-    pub fn mouse_position(&self) -> Vector2<f32> {
-        self.mouse_position
     }
 
     pub(crate) fn flush(&mut self) {

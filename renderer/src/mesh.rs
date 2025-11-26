@@ -1,6 +1,6 @@
 use crate::{Renderer, Vertex, color::Color};
 use macros::impl_mesh_deref;
-use nalgebra::{Quaternion, UnitQuaternion, Vector3, Vector4};
+use math::{Quaternion, Vector3, Vector4};
 use std::{
     any::TypeId,
     ops::{Deref, DerefMut},
@@ -23,11 +23,11 @@ pub trait Mesh: DerefMut<Target = InstanceData> + Sized + 'static {
         Self::default()
     }
 
-    fn position(&self) -> &Vector3<f32> {
+    fn position(&self) -> &Vector3 {
         &self.position
     }
 
-    fn set_position(&mut self, position: Vector3<f32>) {
+    fn set_position(&mut self, position: Vector3) {
         self.position = position;
     }
 
@@ -43,7 +43,7 @@ pub trait Mesh: DerefMut<Target = InstanceData> + Sized + 'static {
         self.position.z = z;
     }
 
-    fn with_position(mut self, position: Vector3<f32>) -> Self {
+    fn with_position(mut self, position: Vector3) -> Self {
         self.position = position;
         self
     }
@@ -63,11 +63,11 @@ pub trait Mesh: DerefMut<Target = InstanceData> + Sized + 'static {
         self
     }
 
-    fn scale(&self) -> &Vector3<f32> {
+    fn scale(&self) -> &Vector3 {
         &self.scale
     }
 
-    fn set_scale(&mut self, scale: Vector3<f32>) {
+    fn set_scale(&mut self, scale: Vector3) {
         self.scale = scale;
     }
 
@@ -83,7 +83,7 @@ pub trait Mesh: DerefMut<Target = InstanceData> + Sized + 'static {
         self.scale.z = z;
     }
 
-    fn with_scale(mut self, scale: Vector3<f32>) -> Self {
+    fn with_scale(mut self, scale: Vector3) -> Self {
         self.scale = scale;
         self
     }
@@ -112,11 +112,11 @@ pub trait Mesh: DerefMut<Target = InstanceData> + Sized + 'static {
         self
     }
 
-    fn rotation(&self) -> &Vector3<f32> {
+    fn rotation(&self) -> &Vector3 {
         &self.rotation
     }
 
-    fn set_rotation(&mut self, rotation: Vector3<f32>) {
+    fn set_rotation(&mut self, rotation: Vector3) {
         self.rotation = rotation;
     }
 
@@ -132,7 +132,7 @@ pub trait Mesh: DerefMut<Target = InstanceData> + Sized + 'static {
         self.rotation.z = z;
     }
 
-    fn with_rotation(mut self, rotation: Vector3<f32>) -> Self {
+    fn with_rotation(mut self, rotation: Vector3) -> Self {
         self.rotation = rotation;
         self
     }
@@ -174,9 +174,9 @@ impl MeshId {
 /// so it can be easily modified with `mesh.rotation.x|y|z += 1.0`
 #[derive(Debug, Clone, Copy)]
 pub struct InstanceData {
-    pub position: Vector3<f32>,
-    pub rotation: Vector3<f32>,
-    pub scale: Vector3<f32>,
+    pub position: Vector3,
+    pub rotation: Vector3,
+    pub scale: Vector3,
     pub color: Color,
 }
 
@@ -185,17 +185,17 @@ pub struct InstanceData {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct InstanceDataGpu {
-    pub position: Vector3<f32>,
-    pub rotation: Quaternion<f32>,
-    pub scale: Vector3<f32>,
-    pub color: Vector4<f32>,
+    pub position: Vector3,
+    pub rotation: Quaternion,
+    pub scale: Vector3,
+    pub color: Vector4,
 }
 
 impl Default for InstanceData {
     fn default() -> Self {
         Self {
-            position: Vector3::zeros(),
-            rotation: Vector3::zeros(),
+            position: Vector3::zero(),
+            rotation: Vector3::zero(),
             scale: Vector3::new(1.0, 1.0, 1.0),
             color: Color::White,
         }
@@ -205,8 +205,7 @@ impl Default for InstanceData {
 impl InstanceData {
     pub fn to_gpu(&self) -> InstanceDataGpu {
         let rotation_quat =
-            UnitQuaternion::from_euler_angles(self.rotation.x, self.rotation.y, self.rotation.z)
-                .into_inner();
+            Quaternion::from_euler_angles(self.rotation.x, self.rotation.y, self.rotation.z);
 
         InstanceDataGpu {
             position: self.position,
@@ -231,22 +230,20 @@ impl InstanceDataGpu {
                 },
                 // Rotation (quaternion)
                 wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<Vector3<f32>>() as wgpu::BufferAddress,
+                    offset: std::mem::size_of::<Vector3>() as wgpu::BufferAddress,
                     shader_location: 3,
                     format: wgpu::VertexFormat::Float32x4,
                 },
                 // Scale
                 wgpu::VertexAttribute {
-                    offset: (std::mem::size_of::<Vector3<f32>>()
-                        + std::mem::size_of::<Quaternion<f32>>())
+                    offset: (std::mem::size_of::<Vector3>() + std::mem::size_of::<Quaternion>())
                         as wgpu::BufferAddress,
                     shader_location: 4,
                     format: wgpu::VertexFormat::Float32x3,
                 },
                 // Color
                 wgpu::VertexAttribute {
-                    offset: (std::mem::size_of::<Vector3<f32>>() * 2
-                        + std::mem::size_of::<Quaternion<f32>>())
+                    offset: (std::mem::size_of::<Vector3>() * 2 + std::mem::size_of::<Quaternion>())
                         as wgpu::BufferAddress,
                     shader_location: 5,
                     format: wgpu::VertexFormat::Float32x4,

@@ -4,19 +4,19 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["common","engine", "macros", "macros-derive", "renderer"]
+members = ["common","engine", "macros", "macros-derive", "math", "renderer"]
 
 [dependencies]
 engine = { path = "engine" }
 common = { path = "common" }
 renderer.workspace = true
-nalgebra.workspace = true
+math.workspace = true
 
 [workspace.dependencies]
 winit = "0.30.12"
 wgpu = "27.0.1"
 common = { path = "common" }
 renderer = { path = "renderer" }
-nalgebra = "0.34.1"
 macros = { path = "macros" }
 macros-derive = { path = "macros-derive" }
+math = { path = "math" }

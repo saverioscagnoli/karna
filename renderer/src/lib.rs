@@ -10,7 +10,7 @@ use crate::{
 };
 pub use camera::Camera;
 use common::error::RendererError;
-use nalgebra::{Vector2, Vector3, Vector4};
+use math::{Size, Vector3, Vector4};
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{naga::FastHashMap, util::DeviceExt};
 
@@ -141,8 +141,8 @@ impl GpuState {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
-    position: Vector3<f32>,
-    color: Vector4<f32>,
+    position: Vector3,
+    color: Vector4,
 }
 
 impl Vertex {
@@ -157,7 +157,7 @@ impl Vertex {
                     format: wgpu::VertexFormat::Float32x3,
                 },
                 wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<Vector3<f32>>() as wgpu::BufferAddress,
+                    offset: std::mem::size_of::<Vector3>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x4,
                 },
@@ -236,7 +236,7 @@ impl Renderer {
 
         let instance_buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("instance buffer"),
-            size: (std::mem::size_of::<InstanceData>() * Self::INSTANCE_CAPACITY) as u64,
+            size: (std::mem::size_of::<InstanceDataGpu>() * Self::INSTANCE_CAPACITY) as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -311,11 +311,11 @@ impl Renderer {
 
     #[inline]
     #[doc(hidden)]
-    pub fn resize(&mut self, size: Vector2<u32>) {
+    pub fn resize(&mut self, size: Size<u32>) {
         self.camera.update(size, &self.state.queue);
 
-        self.state.config.width = size.x;
-        self.state.config.height = size.y;
+        self.state.config.width = size.width;
+        self.state.config.height = size.height;
         self.state
             .surface
             .configure(&self.state.device, &self.state.config);

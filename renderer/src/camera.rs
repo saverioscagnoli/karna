@@ -1,6 +1,6 @@
+use math::{Matrix4, Size, Vector3};
+
 use crate::util;
-use nalgebra::{Matrix, Matrix4, Point3, Vector2, Vector3};
-use winit::keyboard;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Projection {
@@ -24,7 +24,7 @@ pub enum Projection {
 }
 
 impl Projection {
-    fn matrix(&self, screen_size: Vector2<u32>) -> Matrix4<f32> {
+    fn matrix(&self, screen_size: Size<u32>) -> Matrix4 {
         match *self {
             Self::Orthographic {
                 left,
@@ -33,20 +33,20 @@ impl Projection {
                 top,
                 near,
                 far,
-            } => Matrix4::new_orthographic(left, right, bottom, top, near, far),
+            } => Matrix4::orthographic(left, right, bottom, top, near, far),
 
-            Self::OrthographicStandard2D { near, far } => Matrix4::new_orthographic(
+            Self::OrthographicStandard2D { near, far } => Matrix4::orthographic(
                 0.0,
-                screen_size.x as f32,
-                screen_size.y as f32,
+                screen_size.width() as f32,
+                screen_size.height() as f32,
                 0.0,
                 near,
                 far,
             ),
 
-            Self::Perspective { fovy, near, far } => Matrix::new_perspective(
-                screen_size.x as f32 / screen_size.y as f32,
+            Self::Perspective { fovy, near, far } => Matrix4::perspective(
                 fovy,
+                screen_size.width() as f32 / screen_size.height() as f32,
                 near,
                 far,
             ),
@@ -61,24 +61,24 @@ pub struct Camera {
     view_projection_bind_group_layout: wgpu::BindGroupLayout,
     view_projection_bind_group: wgpu::BindGroup,
 
-    position: Vector3<f32>,
-    target: Vector3<f32>,
-    up: Vector3<f32>,
+    position: Vector3,
+    target: Vector3,
+    up: Vector3,
 }
 
 impl Camera {
     #[rustfmt::skip]
-    const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
-        1.0, 0.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 0.0,
-        0.0, 0.0, 0.5, 0.5,
-        0.0, 0.0, 0.0, 1.0,
-    );
+    const OPENGL_TO_WGPU_MATRIX: Matrix4 = Matrix4::from_array([
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 0.5, 0.0],
+        [0.0, 0.0, 0.5, 1.0],
+    ]);
 
     pub(crate) fn new(device: &wgpu::Device, projection: Projection) -> Self {
         let view_projection_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("camera mvp buffer"),
-            size: std::mem::size_of::<Matrix4<f32>>() as wgpu::BufferAddress,
+            size: std::mem::size_of::<Matrix4>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -116,25 +116,22 @@ impl Camera {
             view_projection_buffer,
             view_projection_bind_group_layout,
             view_projection_bind_group,
-            position: Vector3::new(0.0, 0.0, 5.0),
-            target: Vector3::new(0.0, 0.0, 0.0), // Look to -z
-            up: Vector3::y(),
+            position: Vector3::new(0.0, 0.0, -5.0),
+            target: Vector3::new(0.0, 0.0, -1.0), // Look to -z
+            up: Vector3::new(0.0, 1.0, 0.0),
         }
     }
 
-    pub fn view_matrix(&self) -> Matrix4<f32> {
-        Matrix4::look_at_rh(
-            &Point3::from(self.position),
-            &Point3::from(self.target),
-            &self.up,
-        )
+    pub fn view_matrix(&self) -> Matrix4 {
+        Matrix4::look_at(self.position, self.target, self.up)
     }
 
-    pub fn view_projection_matrix(&self, screen_size: Vector2<u32>) -> Matrix4<f32> {
-        Self::OPENGL_TO_WGPU_MATRIX * self.projection.matrix(screen_size) * self.view_matrix()
+    pub fn view_projection_matrix(&self, screen_size: Size<u32>) -> Matrix4 {
+        Self::OPENGL_TO_WGPU_MATRIX * self.projection.matrix(screen_size)
     }
 
-    pub(crate) fn update(&mut self, screen_size: Vector2<u32>, queue: &wgpu::Queue) {
+    pub(crate) fn update(&mut self, screen_size: Size<u32>, queue: &wgpu::Queue) {
+        println!("{:?}", self.view_projection_matrix(screen_size));
         queue.write_buffer(
             &self.view_projection_buffer,
             0,
