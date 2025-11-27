@@ -1,15 +1,21 @@
 use engine::input::KeyCode;
 use karna::{
     App, Context, Scene,
+    color::Color,
+    define_mesh_from_gltf,
     math::{Vector3, Vector4},
     mesh::{Cube, Mesh, Rectangle},
 };
+use math::Vector;
+
+define_mesh_from_gltf!(Duck, "Duck.gltf");
 
 pub struct S {
     rect: Rectangle,
     rect_2: Rectangle,
     cube: Cube,
     vel: Vector3,
+    duck: Duck,
 }
 
 impl Scene for S {
@@ -42,6 +48,8 @@ impl Scene for S {
 
         self.cube
             .set_rotation(self.cube.rotation + Vector3::new(0.01, 0.01, 0.01));
+
+        self.duck.rotation += Vector3::new(0.0, 0.0, 0.1);
     }
 
     fn fixed_update(&mut self, ctx: &mut Context) {}
@@ -50,6 +58,7 @@ impl Scene for S {
         self.cube.render(&mut ctx.render);
         self.rect_2.render(&mut ctx.render);
         self.rect.render(&mut ctx.render);
+        self.duck.render(&mut ctx.render);
     }
 }
 
@@ -80,6 +89,13 @@ fn main() {
                     .with_scale(Vector3::new(50.0, 50.0, 0.0))
                     .with_color(Vector4::new(1.0, 1.0, 1.0, 1.0)),
                 vel: Vector3::zero(),
+                duck: Duck::new()
+                    .with_position_x(500.0)
+                    .with_position_y(500.0)
+                    .with_position_z(-100.0)
+                    .with_rotation_x(180.0_f32.to_radians())
+                    .with_scale([1.0, 1.0, 1.0].into())
+                    .with_color(Color::Cyan),
             }),
         )
         .with_current_scene("default")

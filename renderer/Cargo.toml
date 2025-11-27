@@ -10,3 +10,4 @@ common.workspace = true
 macros.workspace = true
 macros-derive.workspace = true
 math.workspace = true
+gltf = "1.4.1"

@@ -1,18 +1,19 @@
 use crate::{Renderer, Vertex, color::Color};
 use macros::impl_mesh_deref;
+use macros_derive::{Getters, Setters, With};
 use math::{Quaternion, Vector3, Vector4};
 use std::{
     any::TypeId,
     ops::{Deref, DerefMut},
 };
 
-pub struct MeshData {
+pub struct MeshBuffer {
     pub(crate) vertex_buffer: wgpu::Buffer,
     pub(crate) index_buffer: wgpu::Buffer,
     pub(crate) index_count: u32,
 }
 
-pub trait Mesh: DerefMut<Target = InstanceData> + Sized + 'static {
+pub trait Mesh: DerefMut<Target = MeshInstanceData> + Sized + 'static {
     fn vertices() -> Vec<Vertex>;
     fn indices() -> Vec<u32>;
 
@@ -21,14 +22,6 @@ pub trait Mesh: DerefMut<Target = InstanceData> + Sized + 'static {
         Self: Default,
     {
         Self::default()
-    }
-
-    fn position(&self) -> &Vector3 {
-        &self.position
-    }
-
-    fn set_position(&mut self, position: Vector3) {
-        self.position = position;
     }
 
     fn set_position_x(&mut self, x: f32) {
@@ -103,15 +96,6 @@ pub trait Mesh: DerefMut<Target = InstanceData> + Sized + 'static {
         self
     }
 
-    fn color(&self) -> &Color {
-        &self.color
-    }
-
-    fn with_color<C: Into<Color>>(mut self, color: C) -> Self {
-        self.color = color.into();
-        self
-    }
-
     fn rotation(&self) -> &Vector3 {
         &self.rotation
     }
@@ -152,6 +136,15 @@ pub trait Mesh: DerefMut<Target = InstanceData> + Sized + 'static {
         self
     }
 
+    fn color(&self) -> &Color {
+        &self.color
+    }
+
+    fn with_color<C: Into<Color>>(mut self, color: C) -> Self {
+        self.color = color.into();
+        self
+    }
+
     fn render(&self, renderer: &mut Renderer) {
         renderer.draw_mesh::<Self>(&self);
     }
@@ -172,8 +165,10 @@ impl MeshId {
 /// different from `InstanceDataGpu` because I want to expose
 /// a Vector4 instead of a Quaternion for rotations,
 /// so it can be easily modified with `mesh.rotation.x|y|z += 1.0`
-#[derive(Debug, Clone, Copy)]
-pub struct InstanceData {
+#[rustfmt::skip]
+#[derive(Debug, Clone,Copy)]
+#[derive(Getters,Setters, With)]
+pub struct MeshInstanceData {
     pub position: Vector3,
     pub rotation: Vector3,
     pub scale: Vector3,
@@ -184,14 +179,14 @@ pub struct InstanceData {
 /// to the shader
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct InstanceDataGpu {
+pub struct MeshInstanceDataGpu {
     pub position: Vector3,
     pub rotation: Quaternion,
     pub scale: Vector3,
     pub color: Vector4,
 }
 
-impl Default for InstanceData {
+impl Default for MeshInstanceData {
     fn default() -> Self {
         Self {
             position: Vector3::zero(),
@@ -202,12 +197,12 @@ impl Default for InstanceData {
     }
 }
 
-impl InstanceData {
-    pub fn to_gpu(&self) -> InstanceDataGpu {
+impl MeshInstanceData {
+    pub fn to_gpu(&self) -> MeshInstanceDataGpu {
         let rotation_quat =
             Quaternion::from_euler_angles(self.rotation.x, self.rotation.y, self.rotation.z);
 
-        InstanceDataGpu {
+        MeshInstanceDataGpu {
             position: self.position,
             rotation: rotation_quat,
             scale: self.scale,
@@ -216,10 +211,10 @@ impl InstanceData {
     }
 }
 
-impl InstanceDataGpu {
+impl MeshInstanceDataGpu {
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<InstanceDataGpu>() as wgpu::BufferAddress,
+            array_stride: std::mem::size_of::<MeshInstanceDataGpu>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &[
                 // Position
@@ -255,7 +250,7 @@ impl InstanceDataGpu {
 
 #[derive(Debug, Default)]
 pub struct Rectangle {
-    pub instance_data: InstanceData,
+    pub instance_data: MeshInstanceData,
 }
 
 impl_mesh_deref!(Rectangle);
@@ -289,7 +284,7 @@ impl Mesh for Rectangle {
 
 #[derive(Debug, Default)]
 pub struct Cube {
-    pub instance_data: InstanceData,
+    pub instance_data: MeshInstanceData,
 }
 
 impl_mesh_deref!(Cube);

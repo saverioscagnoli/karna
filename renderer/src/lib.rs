@@ -1,3 +1,4 @@
+pub mod asset_manager;
 pub mod camera;
 pub mod color;
 pub mod mesh;
@@ -6,7 +7,7 @@ mod util;
 use crate::{
     camera::Projection,
     color::Color,
-    mesh::{InstanceData, InstanceDataGpu, Mesh, MeshData, MeshId},
+    mesh::{Mesh, MeshBuffer, MeshId, MeshInstanceData, MeshInstanceDataGpu},
 };
 pub use camera::Camera;
 use common::error::RendererError;
@@ -172,7 +173,7 @@ pub struct Renderer {
     // Heap storage
     vertices: Vec<Vertex>,
     indices: Vec<u32>,
-    instances: FastHashMap<MeshId, Vec<InstanceDataGpu>>,
+    instances: FastHashMap<MeshId, Vec<MeshInstanceDataGpu>>,
 
     // Gpu buffers
     vertex_buffer: wgpu::Buffer,
@@ -181,7 +182,7 @@ pub struct Renderer {
 
     // Rendering
     triangle_pipeline: wgpu::RenderPipeline,
-    meshes: FastHashMap<MeshId, MeshData>,
+    meshes: FastHashMap<MeshId, MeshBuffer>,
     clear_color: Color,
 
     camera: Camera,
@@ -236,7 +237,7 @@ impl Renderer {
 
         let instance_buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("instance buffer"),
-            size: (std::mem::size_of::<InstanceDataGpu>() * Self::INSTANCE_CAPACITY) as u64,
+            size: (std::mem::size_of::<MeshInstanceDataGpu>() * Self::INSTANCE_CAPACITY) as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -286,7 +287,7 @@ impl Renderer {
 
         self.meshes.insert(
             mesh_id,
-            MeshData {
+            MeshBuffer {
                 vertex_buffer,
                 index_buffer,
                 index_count: indices.len() as u32,
@@ -296,7 +297,8 @@ impl Renderer {
         self.instances.insert(mesh_id, Vec::new());
     }
 
-    pub fn draw_mesh<M: Mesh + 'static>(&mut self, instance: &InstanceData) {
+    #[inline]
+    pub fn draw_mesh<M: Mesh + 'static>(&mut self, instance: &MeshInstanceData) {
         let mesh_id = MeshId::of::<M>();
 
         if !self.meshes.contains_key(&mesh_id) {
@@ -326,6 +328,7 @@ impl Renderer {
         self.clear_color = color.into();
     }
 
+    #[inline]
     fn create_render_pipeline<S>(
         label: S,
         device: &wgpu::Device,
@@ -355,7 +358,7 @@ impl Renderer {
             vertex: wgpu::VertexState {
                 module: shader,
                 entry_point: Some("vs_main"),
-                buffers: &[Vertex::desc(), InstanceDataGpu::desc()],
+                buffers: &[Vertex::desc(), MeshInstanceDataGpu::desc()],
                 compilation_options: compilation_options.clone(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -388,6 +391,7 @@ impl Renderer {
         })
     }
 
+    #[inline]
     fn update_buffers(&self) {
         if !self.vertices.is_empty() {
             self.state.queue.write_buffer(
@@ -421,10 +425,10 @@ impl Renderer {
                     util::as_u8_slice(instances),
                 );
 
-                let start = instance_offset / std::mem::size_of::<InstanceDataGpu>() as u64;
+                let start = instance_offset / std::mem::size_of::<MeshInstanceDataGpu>() as u64;
                 instance_ranges.insert(*mesh_id, (start as u32, instances.len() as u32));
                 instance_offset +=
-                    (instances.len() * std::mem::size_of::<InstanceDataGpu>()) as u64;
+                    (instances.len() * std::mem::size_of::<MeshInstanceDataGpu>()) as u64;
             }
         }
 
@@ -473,7 +477,7 @@ impl Renderer {
 
                 render_pass.set_vertex_buffer(0, mesh_data.vertex_buffer.slice(..));
 
-                let instance_size = std::mem::size_of::<InstanceDataGpu>() as u64;
+                let instance_size = std::mem::size_of::<MeshInstanceDataGpu>() as u64;
                 let buffer_start = (*start as u64) * instance_size;
                 let buffer_end = buffer_start + (*count as u64) * instance_size;
                 render_pass

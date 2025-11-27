@@ -4,7 +4,8 @@
 macro_rules! impl_mesh_deref {
     ($type:ty) => {
         impl Deref for $type {
-            type Target = InstanceData;
+            type Target = MeshInstanceData;
+
             fn deref(&self) -> &Self::Target {
                 &self.instance_data
             }
