@@ -1,13 +1,22 @@
-use crate::{
-    AsF32,
-    point::{Point2, Point3, Point4},
+use crate::point::{Point2, Point3, Point4};
+use common::impl_deref_to;
+use std::f32;
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::{
+    array::IntoIter,
+    ops::{Index, IndexMut},
+    slice::{Iter, IterMut},
 };
-use macros::{impl_deref_to, impl_vec_op, impl_vec_op_assign};
-use std::ops::{Index, IndexMut, Neg};
 
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Vector<const N: usize>([f32; N]);
+
+impl<const N: usize> Default for Vector<N> {
+    fn default() -> Self {
+        Self::splat(0.0)
+    }
+}
 
 impl<const N: usize> Index<usize> for Vector<N> {
     type Output = f32;
@@ -25,106 +34,307 @@ impl<const N: usize> IndexMut<usize> for Vector<N> {
 
 impl<const N: usize> Vector<N> {
     #[inline]
-    pub const fn from_array(arr: [f32; N]) -> Self {
+    pub fn iter(&self) -> Iter<'_, f32> {
+        self.0.iter()
+    }
+
+    #[inline]
+    pub fn inter_mut(&mut self) -> IterMut<'_, f32> {
+        self.0.iter_mut()
+    }
+
+    #[inline]
+    pub fn into_iter(self) -> IntoIter<f32, N> {
+        self.0.into_iter()
+    }
+
+    #[inline]
+    pub fn from_array(arr: [f32; N]) -> Self {
         Self(arr)
     }
 
-    #[inline]
-    pub const fn zero() -> Self {
-        Self([0.0; N])
-    }
-
-    #[inline]
-    pub fn reset(&mut self) {
-        for i in 0..N {
-            self[i] = 0.0;
-        }
-    }
-
-    #[inline]
-    pub const fn one() -> Self {
-        Self([1.0; N])
-    }
-
-    #[inline]
-    pub const fn fill(n: f32) -> Self {
+    pub fn splat(n: f32) -> Self {
         Self([n; N])
     }
 
     #[inline]
-    pub fn dot(&self, rhs: &Vector<N>) -> f32 {
-        let mut sum = 0.0;
-
-        for i in 0..N {
-            sum += self[i] * rhs[i]
-        }
-
-        sum
+    pub fn zeros() -> Self {
+        Self::default()
     }
 
     #[inline]
-    pub fn length_sq(&self) -> f32 {
+    pub fn ones() -> Self {
+        Self::splat(1.0)
+    }
+
+    #[inline]
+    pub fn dot(&self, rhs: &Self) -> f32 {
+        self.iter().zip(rhs.iter()).map(|(a, b)| a + b).sum()
+    }
+
+    #[inline]
+    pub fn length_squared(&self) -> f32 {
         self.dot(self)
     }
 
     #[inline]
     pub fn length(&self) -> f32 {
-        self.length_sq().sqrt()
+        self.length_squared().sqrt()
     }
 
     #[inline]
-    pub fn normalize(&self) -> Self {
-        let len = self.length();
-
-        if len <= 0.0 {
-            return Self::zero();
-        }
-
-        *self / len
+    pub fn normalize(&mut self) {
+        *self = *self / self.length()
     }
 
     #[inline]
-    pub fn normalize_mut(&mut self) {
-        let len = self.length();
-
-        if len <= 0.0 {
-            self.reset();
-            return;
-        }
-
-        *self /= len;
+    pub fn normalized(&self) -> Self {
+        *self / self.length()
     }
-}
 
-impl<F, const N: usize> From<[F; N]> for Vector<N>
-where
-    F: AsF32,
-{
-    fn from(value: [F; N]) -> Self {
-        let mut v = Self::zero();
+    #[inline]
+    /// Angle between two vectors in radians (0 to PI)
+    pub fn angle_to(&self, rhs: &Self) -> f32 {
+        let dot = self.dot(rhs);
+        let len = (self.length() * rhs.length()).max(f32::EPSILON);
+
+        (dot / len).clamp(-1.0, 1.0).acos()
+    }
+
+    #[inline]
+    /// Reflect across a normal
+    pub fn reflected(&self, normal: &Self) -> Self {
+        *self - *normal * 2.0 * self.dot(normal)
+    }
+
+    #[inline]
+    /// Project onto another vector
+    pub fn projected_onto(&self, rhs: &Self) -> Self {
+        *rhs * (self.dot(rhs) / rhs.length_squared())
+    }
+
+    #[inline]
+    /// Reject from another vector (perpendicular component)
+    pub fn rejected_from(&self, rhs: &Self) -> Self {
+        *self - self.projected_onto(rhs)
+    }
+
+    #[inline]
+    /// Component-wise min
+    pub fn min(&self, rhs: &Self) -> Self {
+        let mut result = Self::zeros();
 
         for i in 0..N {
-            v[i] = value[i].as_f32()
+            result[i] = self[i].min(rhs[i])
         }
 
-        v
+        result
+    }
+
+    #[inline]
+    /// Component-wise max
+    pub fn max(&self, rhs: &Self) -> Self {
+        let mut result = Self::zeros();
+
+        for i in 0..N {
+            result[i] = self[i].max(rhs[i])
+        }
+
+        result
+    }
+
+    #[inline]
+    /// Component-wise abs
+    pub fn abs(&self) -> Self {
+        let mut result = Self::zeros();
+
+        for i in 0..N {
+            result[i] = self[i].abs()
+        }
+
+        result
+    }
+
+    #[inline]
+    /// Component-wise floor
+    pub fn floor(&self) -> Self {
+        let mut result = Self::zeros();
+
+        for i in 0..N {
+            result[i] = self[i].floor()
+        }
+
+        result
+    }
+
+    #[inline]
+    /// Component-wise ceil
+    pub fn ceil(&self) -> Self {
+        let mut result = Self::zeros();
+
+        for i in 0..N {
+            result[i] = self[i].ceil()
+        }
+
+        result
+    }
+
+    #[inline]
+    /// Component-wise round
+    pub fn round(&self) -> Self {
+        let mut result = Self::zeros();
+
+        for i in 0..N {
+            result[i] = self[i].round()
+        }
+
+        result
+    }
+
+    #[inline]
+    /// Clamp components between min and max
+    pub fn clamp(&self, min: &Self, max: &Self) -> Self {
+        let mut result = Self::zeros();
+
+        for i in 0..N {
+            result[i] = self[i].clamp(min[i], max[i])
+        }
+
+        result
     }
 }
 
-// Operations
-impl_vec_op!(Add, add, +, commutative);
-impl_vec_op!(Sub, sub, -);
-impl_vec_op!(Mul, mul, *, commutative);
-impl_vec_op!(Div, div, /);
+macro_rules! impl_vector_op {
+    // Base: Vector-Vector ops (all 4 ref combinations)
+    ($trait:ident, $method:ident, $op:tt) => {
+        impl<const N: usize> $trait for Vector<N> {
+            type Output = Vector<N>;
+            fn $method(self, rhs: Self) -> Self::Output {
+                let mut r = [0.0; N];
+                for i in 0..N { r[i] = self.0[i] $op rhs.0[i]; }
+                Vector(r)
+            }
+        }
 
-impl_vec_op_assign!(AddAssign, add_assign, +=);
-impl_vec_op_assign!(SubAssign, sub_assign, -=);
-impl_vec_op_assign!(MulAssign, mul_assign, *=);
-impl_vec_op_assign!(DivAssign, div_assign, /=);
+        impl<const N: usize> $trait<&Vector<N>> for Vector<N> {
+            type Output = Vector<N>;
+            fn $method(self, rhs: &Vector<N>) -> Self::Output {
+                let mut r = [0.0; N];
+                for i in 0..N { r[i] = self.0[i] $op rhs.0[i]; }
+                Vector(r)
+            }
+        }
 
-/// Vector negation
+        impl<const N: usize> $trait<Vector<N>> for &Vector<N> {
+            type Output = Vector<N>;
+            fn $method(self, rhs: Vector<N>) -> Self::Output {
+                let mut r = [0.0; N];
+                for i in 0..N { r[i] = self.0[i] $op rhs.0[i]; }
+                Vector(r)
+            }
+        }
+
+        impl<const N: usize> $trait for &Vector<N> {
+            type Output = Vector<N>;
+            fn $method(self, rhs: Self) -> Self::Output {
+                let mut r = [0.0; N];
+                for i in 0..N { r[i] = self.0[i] $op rhs.0[i]; }
+                Vector(r)
+            }
+        }
+    };
+
+    // With scalar (non-commutative): Vector op f32
+    ($trait:ident, $method:ident, $op:tt, scalar) => {
+        impl_vector_op!($trait, $method, $op);
+
+        impl<const N: usize> $trait<f32> for Vector<N> {
+            type Output = Vector<N>;
+            fn $method(self, s: f32) -> Self::Output {
+                let mut r = [0.0; N];
+                for i in 0..N { r[i] = self.0[i] $op s; }
+                Vector(r)
+            }
+        }
+
+        impl<const N: usize> $trait<f32> for &Vector<N> {
+            type Output = Vector<N>;
+            fn $method(self, s: f32) -> Self::Output {
+                let mut r = [0.0; N];
+                for i in 0..N { r[i] = self.0[i] $op s; }
+                Vector(r)
+            }
+        }
+    };
+
+    // Commutative scalar: Vector op f32 AND f32 op Vector
+    ($trait:ident, $method:ident, $op:tt, scalar_commutative) => {
+        impl_vector_op!($trait, $method, $op, scalar);
+
+        impl<const N: usize> $trait<Vector<N>> for f32 {
+            type Output = Vector<N>;
+            fn $method(self, v: Vector<N>) -> Self::Output {
+                let mut r = [0.0; N];
+                for i in 0..N { r[i] = self $op v.0[i]; }
+                Vector(r)
+            }
+        }
+
+        impl<const N: usize> $trait<&Vector<N>> for f32 {
+            type Output = Vector<N>;
+            fn $method(self, v: &Vector<N>) -> Self::Output {
+                let mut r = [0.0; N];
+                for i in 0..N { r[i] = self $op v.0[i]; }
+                Vector(r)
+            }
+        }
+    };
+}
+
+macro_rules! impl_op_assign {
+    // Vector op= Vector
+    (vector: $trait:ident, $method:ident, $op:tt) => {
+        impl<const N: usize> $trait for Vector<N> {
+            fn $method(&mut self, rhs: Self) {
+                for i in 0..N { self.0[i] $op rhs.0[i]; }
+            }
+        }
+
+        impl<const N: usize> $trait<&Vector<N>> for Vector<N> {
+            fn $method(&mut self, rhs: &Vector<N>) {
+                for i in 0..N { self.0[i] $op rhs.0[i]; }
+            }
+        }
+    };
+
+    // Vector op= scalar
+    (scalar: $trait:ident, $method:ident, $op:tt) => {
+        impl<const N: usize> $trait<f32> for Vector<N> {
+            fn $method(&mut self, s: f32) {
+                for i in 0..N { self.0[i] $op s; }
+            }
+        }
+    };
+
+    // Both vector and scalar
+    (both: $trait:ident, $method:ident, $op:tt) => {
+        impl_op_assign!(vector: $trait, $method, $op);
+        impl_op_assign!(scalar: $trait, $method, $op);
+    };
+}
+
+impl_vector_op!(Add, add, +, scalar_commutative);
+impl_vector_op!(Sub, sub, -, scalar);
+impl_vector_op!(Mul, mul, *, scalar_commutative);
+impl_vector_op!(Div, div, /, scalar);
+
+impl_op_assign!(both: AddAssign, add_assign, +=);
+impl_op_assign!(both: SubAssign, sub_assign, -=);
+impl_op_assign!(both: MulAssign, mul_assign, *=);
+impl_op_assign!(both: DivAssign, div_assign, /=);
+
 impl<const N: usize> Neg for Vector<N> {
-    type Output = Self;
+    type Output = Vector<N>;
 
     fn neg(mut self) -> Self::Output {
         for i in 0..N {
@@ -136,6 +346,12 @@ impl<const N: usize> Neg for Vector<N> {
 }
 
 pub type Vector2 = Vector<2>;
+pub type Vector3 = Vector<3>;
+pub type Vector4 = Vector<4>;
+
+impl_deref_to!(Vector2 => Point2);
+impl_deref_to!(Vector3 => Point3);
+impl_deref_to!(Vector4 => Point4);
 
 impl Vector2 {
     #[inline]
@@ -144,176 +360,276 @@ impl Vector2 {
     }
 
     #[inline]
-    pub fn angle(&self) -> f32 {
-        self[1].atan2(self[0])
+    pub fn x() -> Self {
+        Self([1.0, 0.0])
     }
 
     #[inline]
-    pub fn angle_deg(&self) -> f32 {
-        self.angle().to_degrees()
+    pub fn y() -> Self {
+        Self([0.0, 1.0])
+    }
+
+    #[inline]
+    pub fn with_x(mut self, x: f32) -> Self {
+        self[0] = x;
+        self
+    }
+
+    #[inline]
+    pub fn with_y(mut self, y: f32) -> Self {
+        self[1] = y;
+        self
+    }
+
+    #[inline]
+    /// Creates a counter-clockwise 90 deg perpendicular vector
+    pub fn perp_ccw(&self) -> Self {
+        Self([-self.y, self.x])
+    }
+
+    #[inline]
+    /// Creates a clockwise 90 deg perpendicular vector
+    pub fn perp_cw(&self) -> Self {
+        Self([self.x, -self.y])
+    }
+
+    #[inline]
+    /// 2D cross product — returns the z-component of the 3D cross
+    /// Useful for determining winding order / signed area
+    pub fn cross(&self, rhs: &Self) -> f32 {
+        self.x * rhs.y - self.y * rhs.x
+    }
+
+    #[inline]
+    // Angle in radians from positive X axis (-PI to PI)
+    pub fn angle(&self) -> f32 {
+        self.y.atan2(self.x)
+    }
+
+    #[inline]
+    /// Signed angle to another vector (-PI to PI)
+    pub fn signed_angle_to(&self, rhs: &Self) -> f32 {
+        self.cross(rhs).atan2(self.dot(rhs))
+    }
+
+    #[inline]
+    /// Creates an unit vector from angle (radians)
+    pub fn from_angle(rad: f32) -> Self {
+        Self([rad.cos(), rad.sin()])
+    }
+
+    #[inline]
+    /// Rotates by angle (radians)
+    pub fn rotated(&self, rad: f32) -> Self {
+        let (sin, cos) = rad.sin_cos();
+
+        Self([self.x * cos - self.y * sin, self.x * sin - self.y * cos])
+    }
+
+    #[inline]
+    /// Extend to Vector3
+    pub fn extend(&self, z: f32) -> Vector3 {
+        Vector([self.x, self.y, z])
     }
 }
 
-pub type Vector3 = Vector<3>;
-
 impl Vector3 {
+    #[inline]
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self([x, y, z])
     }
 
     #[inline]
+    pub fn x() -> Self {
+        Self([1.0, 0.0, 0.0])
+    }
+
+    #[inline]
+    pub fn y() -> Self {
+        Self([0.0, 1.0, 0.0])
+    }
+
+    #[inline]
+    pub fn z() -> Self {
+        Self([0.0, 0.0, 1.0])
+    }
+
+    #[inline]
+    pub fn with_x(mut self, x: f32) -> Self {
+        self.x = x;
+        self
+    }
+
+    #[inline]
+    pub fn with_y(mut self, y: f32) -> Self {
+        self.y = y;
+        self
+    }
+
+    #[inline]
+    pub fn with_z(mut self, z: f32) -> Self {
+        self.z = z;
+        self
+    }
+
+    #[inline]
+    /// Cross product
     pub fn cross(&self, rhs: &Self) -> Self {
-        Self::new(
-            self[1] * rhs[2] - self[2] * rhs[1], // Yz - Zy
-            self[2] * rhs[0] - self[0] * rhs[2], // Zx - Xz
-            self[0] * rhs[1] - self[1] * rhs[0], // Xy - Yx
-        )
+        Self([
+            self.y * rhs.z - self.z * rhs.y,
+            self.z * rhs.x - self.x * rhs.z,
+            self.x * rhs.y - self.y * rhs.x,
+        ])
+    }
+
+    #[inline]
+    /// Triple scalar product: self · (a × b)
+    pub fn triple_scalar(&self, a: &Self, b: &Self) -> f32 {
+        self.dot(&a.cross(b))
+    }
+
+    #[inline]
+    /// Extend to Vector4
+    pub fn extend(&self, w: f32) -> Vector4 {
+        Vector([self.x, self.y, self.z, w])
+    }
+
+    #[inline]
+    /// Truncate to Vector2
+    pub fn truncate(&self) -> Vector2 {
+        Vector([self.x, self.y])
+    }
+
+    /// Swizzle
+    #[inline]
+    pub fn xy(&self) -> Vector2 {
+        Vector([self.x, self.y])
+    }
+
+    #[inline]
+    pub fn xz(&self) -> Vector2 {
+        Vector([self.x, self.z])
+    }
+
+    #[inline]
+    pub fn yz(&self) -> Vector2 {
+        Vector([self.y, self.z])
     }
 }
 
-pub type Vector4 = Vector<4>;
-
 impl Vector4 {
+    #[inline]
     pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self([x, y, z, w])
     }
-}
 
-impl_deref_to!(Vector2 => Point2);
-impl_deref_to!(Vector3 => Point3);
-impl_deref_to!(Vector4 => Point4);
-
-#[cfg(test)]
-mod tests {
-    use crate::vector::{Vector2, Vector3, Vector4};
-    use nalgebra as na;
-    const TOLERANCE: f32 = 1e-6;
-
-    #[test]
-    fn vec_dot() {
-        let a = Vector2::new(10.0, 10.0);
-        let b = Vector2::new(2.0, 3.0);
-        let an = na::Vector2::<f32>::new(10.0, 10.0);
-        let bn = na::Vector2::<f32>::new(2.0, 3.0);
-
-        assert_eq!(a.dot(&b), an.dot(&bn));
-
-        let a = Vector3::new(5.0, 6.0, 3.0);
-        let b = Vector3::new(1.0, 7.0, 3.0);
-        let an = na::Vector3::new(5.0, 6.0, 3.0);
-        let bn = na::Vector3::new(1.0, 7.0, 3.0);
-
-        assert_eq!(a.dot(&b), an.dot(&bn));
-
-        let a = Vector4::new(3.0, 6.5, 10.0, 21.5);
-        let b = Vector4::new(3.4, 6.7, 32.32, 0.5667);
-        let an = na::Vector4::new(3.0, 6.5, 10.0, 21.5);
-        let bn = na::Vector4::new(3.4, 6.7, 32.32, 0.5667);
-
-        assert_eq!(a.dot(&b), an.dot(&bn));
+    #[inline]
+    pub fn x() -> Self {
+        Self([1.0, 0.0, 0.0, 0.0])
     }
 
-    #[test]
-    fn vec_length_sq() {
-        let a = Vector2::new(3.0, 4.0);
-        let an = na::Vector2::<f32>::new(3.0, 4.0);
-
-        assert!((a.length_sq() - an.norm_squared()).abs() < TOLERANCE);
-        assert!((a.length_sq() - 25.0).abs() < TOLERANCE);
-
-        let a = Vector3::new(1.0, 2.0, 2.0);
-        let an = na::Vector3::<f32>::new(1.0, 2.0, 2.0);
-
-        assert!((a.length_sq() - an.norm_squared()).abs() < TOLERANCE);
-        assert!((a.length_sq() - 9.0).abs() < TOLERANCE);
-
-        let a = Vector4::new(1.0, 1.0, 1.0, 1.0);
-        let an = na::Vector4::<f32>::new(1.0, 1.0, 1.0, 1.0);
-
-        assert!((a.length_sq() - an.norm_squared()).abs() < TOLERANCE);
-        assert!((a.length_sq() - 4.0).abs() < TOLERANCE);
+    #[inline]
+    pub fn y() -> Self {
+        Self([0.0, 1.0, 0.0, 0.0])
     }
 
-    #[test]
-    fn vec_length() {
-        let a = Vector2::new(3.0, 4.0);
-        let an = na::Vector2::<f32>::new(3.0, 4.0);
-
-        assert!((a.length() - an.norm()).abs() < TOLERANCE);
-        assert!((a.length() - 5.0).abs() < TOLERANCE);
-
-        let a = Vector3::new(1.0, 2.0, 2.0);
-        let an = na::Vector3::<f32>::new(1.0, 2.0, 2.0);
-
-        assert!((a.length() - an.norm()).abs() < TOLERANCE);
-        assert!((a.length() - 3.0).abs() < TOLERANCE);
-
-        let a = Vector4::new(10.0, 0.0, 0.0, 0.0);
-        let an = na::Vector4::<f32>::new(10.0, 0.0, 0.0, 0.0);
-        assert!((a.length() - an.norm()).abs() < TOLERANCE);
-        assert!((a.length() - 10.0).abs() < TOLERANCE);
+    #[inline]
+    pub fn z() -> Self {
+        Self([0.0, 0.0, 1.0, 0.0])
     }
 
-    #[test]
-    fn vec_normalize() {
-        let a = Vector2::new(3.0, 4.0);
-        let b = a.normalize();
-        let an = na::Vector2::<f32>::new(3.0, 4.0).normalize();
-
-        assert!((b[0] - an[0]).abs() < TOLERANCE);
-        assert!((b[1] - an[1]).abs() < TOLERANCE);
-
-        assert!((b.length() - 1.0).abs() < TOLERANCE);
-
-        let a = Vector3::new(10.0, 0.0, 0.0);
-        let b = a.normalize();
-        let an = na::Vector3::<f32>::new(10.0, 0.0, 0.0).normalize();
-
-        assert!((b[0] - an[0]).abs() < TOLERANCE);
-        assert!((b[1] - an[1]).abs() < TOLERANCE);
-        assert!((b[2] - an[2]).abs() < TOLERANCE);
-        assert!((b.length() - 1.0).abs() < TOLERANCE);
-
-        let a = Vector4::new(0.0, 0.0, 0.0, 0.0);
-        let b = a.normalize();
-
-        assert_eq!(b, Vector4::zero());
-        assert!((b.length() - 0.0).abs() < TOLERANCE);
+    #[inline]
+    pub fn w() -> Self {
+        Self([0.0, 0.0, 0.0, 1.0])
     }
 
-    #[test]
-    fn vector3_cross() {
-        // Define basis vectors
-        let x = Vector3::new(1.0, 0.0, 0.0);
-        let y = Vector3::new(0.0, 1.0, 0.0);
-        let z = Vector3::new(0.0, 0.0, 1.0);
+    #[inline]
+    pub fn with_x(mut self, x: f32) -> Self {
+        self.x = x;
+        self
+    }
 
-        // 1. Right-Hand Rule: X cross Y = Z
-        let x_cross_y = x.cross(&y);
-        let nx_cross_ny =
-            na::Vector3::<f32>::new(1.0, 0.0, 0.0).cross(&na::Vector3::new(0.0, 1.0, 0.0));
-        assert_eq!(x_cross_y, z);
-        assert!((x_cross_y[0] - nx_cross_ny[0]).abs() < TOLERANCE);
+    #[inline]
+    pub fn with_y(mut self, y: f32) -> Self {
+        self.y = y;
+        self
+    }
 
-        // 2. Anti-Commutative: Y cross X = -Z
-        assert_eq!(y.cross(&x), -z);
+    #[inline]
+    pub fn with_z(mut self, z: f32) -> Self {
+        self.z = z;
+        self
+    }
 
-        // 3. Parallel vectors yield zero
-        let a = Vector3::new(2.0, 4.0, 6.0);
-        let b = Vector3::new(1.0, 2.0, 3.0);
-        assert_eq!(a.cross(&b), Vector3::new(0.0, 0.0, 0.0));
+    #[inline]
+    pub fn with_w(mut self, w: f32) -> Self {
+        self.w = w;
+        self
+    }
 
-        // 4. Test arbitrary vectors
-        let a = Vector3::new(1.0, 2.0, 3.0);
-        let b = Vector3::new(4.0, 5.0, 6.0);
-        // Expected: (-3.0, 6.0, -3.0)
-        let expected = Vector3::new(-3.0, 6.0, -3.0);
-        let result = a.cross(&b);
-        let n_result = na::Vector3::new(1.0, 2.0, 3.0).cross(&na::Vector3::new(4.0, 5.0, 6.0));
+    #[inline]
+    pub fn truncate2(&self) -> Vector2 {
+        Vector([self.x, self.y])
+    }
 
-        assert_eq!(result, expected);
-        assert!((result[0] - n_result[0]).abs() < TOLERANCE);
-        assert!((result[1] - n_result[1]).abs() < TOLERANCE);
-        assert!((result[2] - n_result[2]).abs() < TOLERANCE);
+    #[inline]
+    pub fn truncate(&self) -> Vector3 {
+        Vector([self.x, self.y, self.z])
+    }
+
+    #[inline]
+    pub fn perspective_divide(&self) -> Vector3 {
+        let w = self.w;
+        Vector([self.x / w, self.y / w, self.z / w])
+    }
+
+    #[inline]
+    pub fn from_point(p: Vector3) -> Self {
+        Self([p.x, p.y, p.z, 1.0])
+    }
+
+    #[inline]
+    pub fn from_direction(d: Vector3) -> Self {
+        Self([d.x, d.y, d.z, 0.0])
+    }
+
+    #[inline]
+    pub fn is_point(&self) -> bool {
+        self.w.abs() > f32::EPSILON
+    }
+
+    #[inline]
+    pub fn is_direction(&self) -> bool {
+        self.w.abs() <= f32::EPSILON
+    }
+
+    #[inline]
+    pub fn xyz(&self) -> Vector3 {
+        self.truncate()
+    }
+
+    #[inline]
+    pub fn xy(&self) -> Vector2 {
+        Vector([self.x, self.y])
+    }
+
+    #[inline]
+    pub fn xz(&self) -> Vector2 {
+        Vector([self.x, self.z])
+    }
+
+    #[inline]
+    pub fn yz(&self) -> Vector2 {
+        Vector([self.y, self.z])
+    }
+
+    #[inline]
+    pub fn xw(&self) -> Vector2 {
+        Vector([self.x, self.w])
+    }
+
+    #[inline]
+    pub fn zw(&self) -> Vector2 {
+        Vector([self.z, self.w])
     }
 }

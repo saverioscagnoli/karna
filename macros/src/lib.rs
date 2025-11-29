@@ -1,164 +1,311 @@
-/// For things to implement the `Mesh` trait (see renderer/src/mesh.rs)
-/// They must implement Deref<Target = InstanceData>
-#[macro_export]
-macro_rules! impl_mesh_deref {
-    ($type:ty) => {
-        impl Deref for $type {
-            type Target = MeshInstanceData;
+use darling::{FromDeriveInput, FromField, ast};
+use proc_macro::TokenStream;
+use quote::quote;
+use syn::{DeriveInput, Ident, Type, parse_macro_input};
 
-            fn deref(&self) -> &Self::Target {
-                &self.instance_data
-            }
-        }
+// ============================================================================
+// Getters Macro
+// ============================================================================
 
-        impl DerefMut for $type {
-            fn deref_mut(&mut self) -> &mut Self::Target {
-                &mut self.instance_data
-            }
-        }
-    };
+#[derive(Debug, FromField)]
+#[darling(attributes(get))]
+struct GetterFieldOpts {
+    ident: Option<Ident>,
+    ty: Type,
+
+    #[darling(default)]
+    mut_getter: bool,
+
+    #[darling(default)]
+    copied: bool,
+
+    #[darling(default)]
+    access: Option<String>,
+
+    #[darling(default)]
+    name: Option<String>,
+
+    #[darling(default)]
+    skip: bool,
 }
 
-/// Implements the `AsF32` (see `math/src/lib.rs`) for the given trait
-#[macro_export]
-macro_rules! impl_as_f32 {
-    ($($t:ty)*) => {
-        $(
-            impl AsF32 for $t {
-                fn as_f32(&self) -> f32 {
-                    *self as f32
-                }
-            }
-        )*
-    };
+#[derive(Debug, FromDeriveInput)]
+#[darling(supports(struct_named))]
+struct GetterOpts {
+    ident: Ident,
+    generics: syn::Generics, // Add this field
+    data: ast::Data<(), GetterFieldOpts>,
 }
 
-/// Implement Deref + DerefMut by transmuting from one type to another.
-///
-/// IMPORTANT: Both types MUST have the same memory layout!!
-#[macro_export]
-macro_rules! impl_deref_to {
-    ($from:ty => $to:ty) => {
-        impl ::std::ops::Deref for $from {
-            type Target = $to;
+#[proc_macro_derive(Getters, attributes(get))]
+pub fn derive_getters(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let opts = match GetterOpts::from_derive_input(&input) {
+        Ok(opts) => opts,
+        Err(e) => return e.write_errors().into(),
+    };
 
-            #[inline]
-            fn deref(&self) -> &Self::Target {
-                unsafe { &*(self as *const Self as *const $to) }
-            }
+    let struct_name = &opts.ident;
+    let generics = &opts.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let fields = opts.data.take_struct().unwrap();
+
+    let getters = fields.iter().filter_map(|field| {
+        if field.skip {
+            return None;
         }
 
-        impl ::std::ops::DerefMut for $from {
-            #[inline]
-            fn deref_mut(&mut self) -> &mut Self::Target {
-                unsafe { &mut *(self as *mut Self as *mut $to) }
+        let field_ident = field.ident.as_ref()?;
+        let field_type = &field.ty;
+
+        // Determine getter name
+        let getter_name = if let Some(ref name) = field.name {
+            Ident::new(name, field_ident.span())
+        } else {
+            field_ident.clone()
+        };
+
+        // Handle access path (for nested struct fields)
+        let field_access = if let Some(ref access_path) = field.access {
+            let parts: Vec<Ident> = access_path
+                .split('.')
+                .map(|s| Ident::new(s, field_ident.span()))
+                .collect();
+            quote! { self.#field_ident.#(#parts).* }
+        } else {
+            quote! { self.#field_ident }
+        };
+
+        // Generate immutable getter
+        let immut_getter = if field.copied {
+            quote! {
+                pub fn #getter_name(&self) -> #field_type {
+                    #field_access
+                }
             }
+        } else {
+            quote! {
+                pub fn #getter_name(&self) -> &#field_type {
+                    &#field_access
+                }
+            }
+        };
+
+        // Generate mutable getter if requested
+        let mut_getter = if field.mut_getter {
+            let mut_getter_name = Ident::new(&format!("{}_mut", getter_name), getter_name.span());
+            quote! {
+                pub fn #mut_getter_name(&mut self) -> &mut #field_type {
+                    &mut #field_access
+                }
+            }
+        } else {
+            quote! {}
+        };
+
+        Some(quote! {
+            #immut_getter
+            #mut_getter
+        })
+    });
+
+    let expanded = quote! {
+        impl #impl_generics #struct_name #ty_generics #where_clause {
+            #(#getters)*
         }
     };
+
+    TokenStream::from(expanded)
 }
 
-/// Implement binary operators (Add, Sub, Mul, Div) for Vector<N>
-#[macro_export]
-macro_rules! impl_vec_op {
-    // With scalar commutative variant (for Add and Mul)
-    ($trait:ident, $method:ident, $op:tt, commutative) => {
-        // Vector op Vector
-        impl<const N: usize> ::std::ops::$trait for Vector<N> {
-            type Output = Self;
+// ============================================================================
+// Setters Macro
+// ============================================================================
 
-            #[inline]
-            fn $method(self, rhs: Self) -> Self::Output {
-                let mut result = Self::zero();
-                for i in 0..N {
-                    result[i] = self[i] $op rhs[i];
-                }
-                result
-            }
-        }
+#[derive(Debug, FromField)]
+#[darling(attributes(set))]
+struct SetterFieldOpts {
+    ident: Option<Ident>,
+    ty: Type,
 
-        // Vector op f32
-        impl<const N: usize> ::std::ops::$trait<f32> for Vector<N> {
-            type Output = Self;
+    #[darling(default)]
+    access: Option<String>,
 
-            #[inline]
-            fn $method(self, rhs: f32) -> Self::Output {
-                let mut result = Self::zero();
-                for i in 0..N {
-                    result[i] = self[i] $op rhs;
-                }
-                result
-            }
-        }
+    #[darling(default)]
+    into: bool,
 
-        // f32 op Vector (only if commutative)
-        impl<const N: usize> ::std::ops::$trait<Vector<N>> for f32 {
-            type Output = Vector<N>;
+    #[darling(default)]
+    name: Option<String>,
 
-            #[inline]
-            fn $method(self, rhs: Vector<N>) -> Self::Output {
-                let mut result = Vector::zero();
-                for i in 0..N {
-                    result[i] = self $op rhs[i];
-                }
-                result
-            }
-        }
-    };
-
-    // Without scalar commutative variant (for Sub and Div)
-    ($trait:ident, $method:ident, $op:tt) => {
-        // Vector op Vector
-        impl<const N: usize> ::std::ops::$trait for Vector<N> {
-            type Output = Self;
-
-            #[inline]
-            fn $method(self, rhs: Self) -> Self::Output {
-                let mut result = Self::zero();
-                for i in 0..N {
-                    result[i] = self[i] $op rhs[i];
-                }
-                result
-            }
-        }
-
-        // Vector op f32
-        impl<const N: usize> ::std::ops::$trait<f32> for Vector<N> {
-            type Output = Self;
-
-            #[inline]
-            fn $method(self, rhs: f32) -> Self::Output {
-                let mut result = Self::zero();
-                for i in 0..N {
-                    result[i] = self[i] $op rhs;
-                }
-                result
-            }
-        }
-    };
+    #[darling(default)]
+    skip: bool,
 }
 
-/// Implement assignment operators (AddAssign, SubAssign, MulAssign, DivAssign) for Vector<N>
-#[macro_export]
-macro_rules! impl_vec_op_assign {
-    ($trait:ident, $method:ident, $op:tt) => {
-        // Vector op= Vector
-        impl<const N: usize> ::std::ops::$trait for Vector<N> {
-            #[inline]
-            fn $method(&mut self, rhs: Self) {
-                for i in 0..N {
-                    self[i] $op rhs[i];
-                }
-            }
+#[derive(Debug, FromDeriveInput)]
+#[darling(supports(struct_named))]
+struct SetterOpts {
+    ident: Ident,
+    generics: syn::Generics, // Add this field
+    data: ast::Data<(), SetterFieldOpts>,
+}
+
+#[proc_macro_derive(Setters, attributes(set))]
+pub fn derive_setters(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let opts = match SetterOpts::from_derive_input(&input) {
+        Ok(opts) => opts,
+        Err(e) => return e.write_errors().into(),
+    };
+
+    let struct_name = &opts.ident;
+    let generics = &opts.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let fields = opts.data.take_struct().unwrap();
+
+    let setters = fields.iter().filter_map(|field| {
+        if field.skip {
+            return None;
         }
 
-        // Vector op= f32
-        impl<const N: usize> ::std::ops::$trait<f32> for Vector<N> {
-            #[inline]
-            fn $method(&mut self, rhs: f32) {
-                for i in 0..N {
-                    self[i] $op rhs;
+        let field_ident = field.ident.as_ref()?;
+        let field_type = &field.ty;
+
+        // Determine setter name
+        let setter_name = if let Some(ref name) = field.name {
+            Ident::new(name, field_ident.span())
+        } else {
+            Ident::new(&format!("set_{}", field_ident), field_ident.span())
+        };
+
+        // Handle access path (for nested struct fields)
+        let field_access = if let Some(ref access_path) = field.access {
+            let parts: Vec<Ident> = access_path
+                .split('.')
+                .map(|s| Ident::new(s, field_ident.span()))
+                .collect();
+            quote! { self.#field_ident.#(#parts).* }
+        } else {
+            quote! { self.#field_ident }
+        };
+
+        // Generate setter with or without Into conversion
+        if field.into {
+            Some(quote! {
+                pub fn #setter_name(&mut self, value: impl Into<#field_type>) {
+                    #field_access = value.into();
                 }
-            }
+            })
+        } else {
+            Some(quote! {
+                pub fn #setter_name(&mut self, value: #field_type) {
+                    #field_access = value;
+                }
+            })
+        }
+    });
+
+    let expanded = quote! {
+        impl #impl_generics #struct_name #ty_generics #where_clause {
+            #(#setters)*
         }
     };
+
+    TokenStream::from(expanded)
+}
+
+// ============================================================================
+// With (Builder) Macro
+// ============================================================================
+
+#[derive(Debug, FromField)]
+#[darling(attributes(with))]
+struct WithFieldOpts {
+    ident: Option<Ident>,
+    ty: Type,
+
+    #[darling(default)]
+    access: Option<String>,
+
+    #[darling(default)]
+    into: bool,
+
+    #[darling(default)]
+    name: Option<String>,
+
+    #[darling(default)]
+    skip: bool,
+}
+
+#[derive(Debug, FromDeriveInput)]
+#[darling(supports(struct_named))]
+struct WithOpts {
+    ident: Ident,
+    generics: syn::Generics, // Add this field
+    data: ast::Data<(), WithFieldOpts>,
+}
+
+#[proc_macro_derive(With, attributes(with))]
+pub fn derive_with(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let opts = match WithOpts::from_derive_input(&input) {
+        Ok(opts) => opts,
+        Err(e) => return e.write_errors().into(),
+    };
+
+    let struct_name = &opts.ident;
+    let generics = &opts.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let fields = opts.data.take_struct().unwrap();
+
+    let with_methods = fields.iter().filter_map(|field| {
+        if field.skip {
+            return None;
+        }
+
+        let field_ident = field.ident.as_ref()?;
+        let field_type = &field.ty;
+
+        // Determine with method name
+        let with_name = if let Some(ref name) = field.name {
+            Ident::new(name, field_ident.span())
+        } else {
+            Ident::new(&format!("with_{}", field_ident), field_ident.span())
+        };
+
+        // Handle access path (for nested struct fields)
+        let field_access = if let Some(ref access_path) = field.access {
+            let parts: Vec<Ident> = access_path
+                .split('.')
+                .map(|s| Ident::new(s, field_ident.span()))
+                .collect();
+            quote! { self.#field_ident.#(#parts).* }
+        } else {
+            quote! { self.#field_ident }
+        };
+
+        // Generate builder method with or without Into conversion
+        if field.into {
+            Some(quote! {
+                pub fn #with_name(mut self, value: impl Into<#field_type>) -> Self {
+                    #field_access = value.into();
+                    self
+                }
+            })
+        } else {
+            Some(quote! {
+                pub fn #with_name(mut self, value: #field_type) -> Self {
+                    #field_access = value;
+                    self
+                }
+            })
+        }
+    });
+
+    let expanded = quote! {
+        impl #impl_generics #struct_name #ty_generics #where_clause {
+            #(#with_methods)*
+        }
+    };
+
+    TokenStream::from(expanded)
 }

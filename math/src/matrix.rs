@@ -1,452 +1,899 @@
-use crate::vector::{Vector, Vector3};
-use std::ops::{Index, IndexMut, Mul};
+use crate::vector::{Vector, Vector2, Vector3, Vector4};
+use std::ops::{
+    Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAssign,
+};
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Matrix<const R: usize, const C: usize>([[f32; R]; C]);
 
-impl<const R: usize, const C: usize> Index<(usize, usize)> for Matrix<R, C> {
-    type Output = f32;
+pub type Matrix2 = Matrix<2, 2>;
+pub type Matrix3 = Matrix<3, 3>;
+pub type Matrix4 = Matrix<4, 4>;
 
-    fn index(&self, (row, col): (usize, usize)) -> &Self::Output {
-        &self.0[col][row]
+impl<const R: usize, const C: usize> Default for Matrix<R, C> {
+    fn default() -> Self {
+        Self::zeros()
     }
 }
 
-impl<const R: usize, const C: usize> IndexMut<(usize, usize)> for Matrix<R, C> {
-    fn index_mut(&mut self, (row, col): (usize, usize)) -> &mut Self::Output {
-        &mut self.0[col][row]
+impl<const R: usize, const C: usize> Index<usize> for Matrix<R, C> {
+    type Output = [f32; R];
+
+    #[inline]
+    fn index(&self, col: usize) -> &Self::Output {
+        &self.0[col]
+    }
+}
+
+impl<const R: usize, const C: usize> IndexMut<usize> for Matrix<R, C> {
+    #[inline]
+    fn index_mut(&mut self, col: usize) -> &mut Self::Output {
+        &mut self.0[col]
     }
 }
 
 impl<const R: usize, const C: usize> Matrix<R, C> {
-    pub const fn from_array(arr: [[f32; R]; C]) -> Self {
-        Self(arr)
-    }
-
-    pub const fn zero() -> Self {
+    #[inline]
+    pub fn zeros() -> Self {
         Self([[0.0; R]; C])
     }
 
-    pub const fn one() -> Self {
-        Self([[1.0; R]; C])
+    #[inline]
+    pub fn from_cols(cols: [[f32; R]; C]) -> Self {
+        Self(cols)
     }
 
-    pub const fn fill(n: f32) -> Self {
-        Self([[n; R]; C])
+    #[inline]
+    pub fn col(&self, index: usize) -> Vector<R> {
+        Vector::from_array(self.0[index])
     }
 
-    /// Creates a new identity matrix.
-    /// The identity matrix is a square matrix with 1s on the diagonal
-    /// and 0s elsewhere.
-    ///
-    /// If the matrix is not square, the largest square submatrix is filled
-    pub fn identity() -> Self {
-        let mut m = Self::zero();
-
-        for i in 0..R.min(C) {
-            m[(i, i)] = 1.0;
+    #[inline]
+    pub fn set_col(&mut self, index: usize, col: Vector<R>) {
+        for r in 0..R {
+            self.0[index][r] = col[r];
         }
+    }
 
+    #[inline]
+    pub fn row(&self, index: usize) -> Vector<C> {
+        let mut row = [0.0; C];
+        for c in 0..C {
+            row[c] = self.0[c][index];
+        }
+        Vector::from_array(row)
+    }
+
+    #[inline]
+    pub fn set_row(&mut self, index: usize, row: Vector<C>) {
+        for c in 0..C {
+            self.0[c][index] = row[c];
+        }
+    }
+
+    #[inline]
+    pub fn transpose(&self) -> Matrix<C, R> {
+        let mut result = [[0.0; C]; R];
+        for c in 0..C {
+            for r in 0..R {
+                result[r][c] = self.0[c][r];
+            }
+        }
+        Matrix(result)
+    }
+
+    #[inline]
+    pub fn get(&self, row: usize, col: usize) -> f32 {
+        self.0[col][row]
+    }
+
+    #[inline]
+    pub fn set(&mut self, row: usize, col: usize, value: f32) {
+        self.0[col][row] = value;
+    }
+
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        unsafe {
+            std::slice::from_raw_parts(self.0.as_ptr() as *const u8, std::mem::size_of::<Self>())
+        }
+    }
+}
+
+impl<const N: usize> Matrix<N, N> {
+    #[inline]
+    pub fn identity() -> Self {
+        let mut m = Self::zeros();
+        for i in 0..N {
+            m.0[i][i] = 1.0;
+        }
         m
     }
-}
-
-// Matrix * Matrix multiplication: (R × K) * (K × C) = (R × C)
-impl<const R: usize, const K: usize, const C: usize> Mul<Matrix<K, C>> for Matrix<R, K> {
-    type Output = Matrix<R, C>;
 
     #[inline]
-    fn mul(self, rhs: Matrix<K, C>) -> Self::Output {
-        let mut result = Matrix::zero();
+    pub fn from_diagonal(diag: Vector<N>) -> Self {
+        let mut m = Self::zeros();
+        for i in 0..N {
+            m.0[i][i] = diag[i];
+        }
+        m
+    }
 
-        // For column-major storage, iterate over columns of result
-        for j in 0..C {
-            for i in 0..R {
-                let mut sum = 0.0;
-                for k in 0..K {
-                    sum += self[(i, k)] * rhs[(k, j)];
+    #[inline]
+    pub fn diagonal(&self) -> Vector<N> {
+        let mut diag = [0.0; N];
+        for i in 0..N {
+            diag[i] = self.0[i][i];
+        }
+        Vector::from_array(diag)
+    }
+
+    #[inline]
+    pub fn trace(&self) -> f32 {
+        let mut sum = 0.0;
+        for i in 0..N {
+            sum += self.0[i][i];
+        }
+        sum
+    }
+}
+
+impl<const R: usize, const C: usize> Neg for Matrix<R, C> {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        let mut r = [[0.0; R]; C];
+        for c in 0..C {
+            for row in 0..R {
+                r[c][row] = -self.0[c][row];
+            }
+        }
+        Matrix(r)
+    }
+}
+
+macro_rules! impl_matrix_op {
+    ($trait:ident, $method:ident, $op:tt) => {
+        impl<const R: usize, const C: usize> $trait for Matrix<R, C> {
+            type Output = Self;
+            fn $method(self, rhs: Self) -> Self::Output {
+                let mut r = [[0.0; R]; C];
+                for c in 0..C {
+                    for row in 0..R {
+                        r[c][row] = self.0[c][row] $op rhs.0[c][row];
+                    }
                 }
-                result[(i, j)] = sum;
+                Matrix(r)
             }
         }
 
-        result
+        impl<const R: usize, const C: usize> $trait<&Matrix<R, C>> for Matrix<R, C> {
+            type Output = Self;
+            fn $method(self, rhs: &Self) -> Self::Output {
+                let mut r = [[0.0; R]; C];
+                for c in 0..C {
+                    for row in 0..R {
+                        r[c][row] = self.0[c][row] $op rhs.0[c][row];
+                    }
+                }
+                Matrix(r)
+            }
+        }
+
+        impl<const R: usize, const C: usize> $trait for &Matrix<R, C> {
+            type Output = Matrix<R, C>;
+            fn $method(self, rhs: Self) -> Self::Output {
+                let mut r = [[0.0; R]; C];
+                for c in 0..C {
+                    for row in 0..R {
+                        r[c][row] = self.0[c][row] $op rhs.0[c][row];
+                    }
+                }
+                Matrix(r)
+            }
+        }
+    };
+
+    ($trait:ident, $method:ident, $op:tt, scalar) => {
+        impl_matrix_op!($trait, $method, $op);
+
+        impl<const R: usize, const C: usize> $trait<f32> for Matrix<R, C> {
+            type Output = Self;
+            fn $method(self, s: f32) -> Self::Output {
+                let mut r = [[0.0; R]; C];
+                for c in 0..C {
+                    for row in 0..R {
+                        r[c][row] = self.0[c][row] $op s;
+                    }
+                }
+                Matrix(r)
+            }
+        }
+
+        impl<const R: usize, const C: usize> $trait<f32> for &Matrix<R, C> {
+            type Output = Matrix<R, C>;
+            fn $method(self, s: f32) -> Self::Output {
+                let mut r = [[0.0; R]; C];
+                for c in 0..C {
+                    for row in 0..R {
+                        r[c][row] = self.0[c][row] $op s;
+                    }
+                }
+                Matrix(r)
+            }
+        }
+    };
+
+    ($trait:ident, $method:ident, $op:tt, scalar_commutative) => {
+        impl_matrix_op!($trait, $method, $op, scalar);
+
+        impl<const R: usize, const C: usize> $trait<Matrix<R, C>> for f32 {
+            type Output = Matrix<R, C>;
+            fn $method(self, m: Matrix<R, C>) -> Self::Output {
+                let mut r = [[0.0; R]; C];
+                for c in 0..C {
+                    for row in 0..R {
+                        r[c][row] = self $op m.0[c][row];
+                    }
+                }
+                Matrix(r)
+            }
+        }
+    };
+}
+
+macro_rules! impl_matrix_op_assign {
+    (matrix: $trait:ident, $method:ident, $op:tt) => {
+        impl<const R: usize, const C: usize> $trait for Matrix<R, C> {
+            fn $method(&mut self, rhs: Self) {
+                for c in 0..C {
+                    for r in 0..R {
+                        self.0[c][r] $op rhs.0[c][r];
+                    }
+                }
+            }
+        }
+    };
+
+    (scalar: $trait:ident, $method:ident, $op:tt) => {
+        impl<const R: usize, const C: usize> $trait<f32> for Matrix<R, C> {
+            fn $method(&mut self, s: f32) {
+                for c in 0..C {
+                    for r in 0..R {
+                        self.0[c][r] $op s;
+                    }
+                }
+            }
+        }
+    };
+
+    (both: $trait:ident, $method:ident, $op:tt) => {
+        impl_matrix_op_assign!(matrix: $trait, $method, $op);
+        impl_matrix_op_assign!(scalar: $trait, $method, $op);
+    };
+}
+
+impl_matrix_op!(Add, add, +);
+impl_matrix_op!(Sub, sub, -);
+impl_matrix_op!(Div, div, /, scalar);
+
+impl_matrix_op_assign!(matrix: AddAssign, add_assign, +=);
+impl_matrix_op_assign!(matrix: SubAssign, sub_assign, -=);
+impl_matrix_op_assign!(scalar: DivAssign, div_assign, /=);
+
+impl<const R: usize, const C: usize> Mul<f32> for Matrix<R, C> {
+    type Output = Self;
+    fn mul(self, s: f32) -> Self::Output {
+        let mut r = [[0.0; R]; C];
+        for c in 0..C {
+            for row in 0..R {
+                r[c][row] = self.0[c][row] * s;
+            }
+        }
+        Matrix(r)
     }
 }
 
-// Matrix * Vector multiplication: (R × C) * Vector<C> = Vector<R>
-impl<const R: usize, const C: usize> Mul<Vector<C>> for Matrix<R, C> {
-    type Output = Vector<R>;
+impl<const R: usize, const C: usize> Mul<f32> for &Matrix<R, C> {
+    type Output = Matrix<R, C>;
+    fn mul(self, s: f32) -> Self::Output {
+        let mut r = [[0.0; R]; C];
+        for c in 0..C {
+            for row in 0..R {
+                r[c][row] = self.0[c][row] * s;
+            }
+        }
+        Matrix(r)
+    }
+}
+
+impl<const R: usize, const C: usize> Mul<Matrix<R, C>> for f32 {
+    type Output = Matrix<R, C>;
+    fn mul(self, m: Matrix<R, C>) -> Self::Output {
+        m * self
+    }
+}
+
+impl<const R: usize, const C: usize> MulAssign<f32> for Matrix<R, C> {
+    fn mul_assign(&mut self, s: f32) {
+        for c in 0..C {
+            for r in 0..R {
+                self.0[c][r] *= s;
+            }
+        }
+    }
+}
+
+macro_rules! impl_matrix_mul_vector {
+    ($r:literal, $c:literal) => {
+        impl Mul<Vector<$c>> for Matrix<$r, $c> {
+            type Output = Vector<$r>;
+
+            #[inline]
+            fn mul(self, v: Vector<$c>) -> Self::Output {
+                let mut result = [0.0; $r];
+                for c in 0..$c {
+                    for r in 0..$r {
+                        result[r] += self.0[c][r] * v[c];
+                    }
+                }
+                Vector::from_array(result)
+            }
+        }
+
+        impl Mul<Vector<$c>> for &Matrix<$r, $c> {
+            type Output = Vector<$r>;
+
+            #[inline]
+            fn mul(self, v: Vector<$c>) -> Self::Output {
+                let mut result = [0.0; $r];
+                for c in 0..$c {
+                    for r in 0..$r {
+                        result[r] += self.0[c][r] * v[c];
+                    }
+                }
+                Vector::from_array(result)
+            }
+        }
+
+        impl Mul<&Vector<$c>> for Matrix<$r, $c> {
+            type Output = Vector<$r>;
+
+            #[inline]
+            fn mul(self, v: &Vector<$c>) -> Self::Output {
+                let mut result = [0.0; $r];
+                for c in 0..$c {
+                    for r in 0..$r {
+                        result[r] += self.0[c][r] * v[c];
+                    }
+                }
+                Vector::from_array(result)
+            }
+        }
+
+        impl Mul<&Vector<$c>> for &Matrix<$r, $c> {
+            type Output = Vector<$r>;
+
+            #[inline]
+            fn mul(self, v: &Vector<$c>) -> Self::Output {
+                let mut result = [0.0; $r];
+                for c in 0..$c {
+                    for r in 0..$r {
+                        result[r] += self.0[c][r] * v[c];
+                    }
+                }
+                Vector::from_array(result)
+            }
+        }
+    };
+}
+
+macro_rules! impl_matrix_mul_matrix {
+    ($r:literal, $m:literal, $c:literal) => {
+        impl Mul<Matrix<$m, $c>> for Matrix<$r, $m> {
+            type Output = Matrix<$r, $c>;
+
+            #[inline]
+            fn mul(self, rhs: Matrix<$m, $c>) -> Self::Output {
+                let mut result = [[0.0; $r]; $c];
+                for c in 0..$c {
+                    for m in 0..$m {
+                        for r in 0..$r {
+                            result[c][r] += self.0[m][r] * rhs.0[c][m];
+                        }
+                    }
+                }
+                Matrix(result)
+            }
+        }
+
+        impl Mul<&Matrix<$m, $c>> for Matrix<$r, $m> {
+            type Output = Matrix<$r, $c>;
+
+            #[inline]
+            fn mul(self, rhs: &Matrix<$m, $c>) -> Self::Output {
+                let mut result = [[0.0; $r]; $c];
+                for c in 0..$c {
+                    for m in 0..$m {
+                        for r in 0..$r {
+                            result[c][r] += self.0[m][r] * rhs.0[c][m];
+                        }
+                    }
+                }
+                Matrix(result)
+            }
+        }
+
+        impl Mul<Matrix<$m, $c>> for &Matrix<$r, $m> {
+            type Output = Matrix<$r, $c>;
+
+            #[inline]
+            fn mul(self, rhs: Matrix<$m, $c>) -> Self::Output {
+                let mut result = [[0.0; $r]; $c];
+                for c in 0..$c {
+                    for m in 0..$m {
+                        for r in 0..$r {
+                            result[c][r] += self.0[m][r] * rhs.0[c][m];
+                        }
+                    }
+                }
+                Matrix(result)
+            }
+        }
+
+        impl Mul<&Matrix<$m, $c>> for &Matrix<$r, $m> {
+            type Output = Matrix<$r, $c>;
+
+            #[inline]
+            fn mul(self, rhs: &Matrix<$m, $c>) -> Self::Output {
+                let mut result = [[0.0; $r]; $c];
+                for c in 0..$c {
+                    for m in 0..$m {
+                        for r in 0..$r {
+                            result[c][r] += self.0[m][r] * rhs.0[c][m];
+                        }
+                    }
+                }
+                Matrix(result)
+            }
+        }
+    };
+}
+
+impl_matrix_mul_vector!(2, 2);
+impl_matrix_mul_vector!(3, 3);
+impl_matrix_mul_vector!(4, 4);
+
+impl_matrix_mul_matrix!(2, 2, 2);
+impl_matrix_mul_matrix!(3, 3, 3);
+impl_matrix_mul_matrix!(4, 4, 4);
+
+impl Matrix2 {
+    #[inline]
+    pub fn new(m00: f32, m01: f32, m10: f32, m11: f32) -> Self {
+        Self([[m00, m10], [m01, m11]])
+    }
 
     #[inline]
-    fn mul(self, rhs: Vector<C>) -> Self::Output {
-        let mut result = Vector::zero();
-
-        for i in 0..R {
-            let mut sum = 0.0;
-            for j in 0..C {
-                sum += self[(i, j)] * rhs[j];
-            }
-            result[i] = sum;
-        }
-
-        result
+    pub fn from_cols_vec(c0: Vector2, c1: Vector2) -> Self {
+        Self([[c0[0], c0[1]], [c1[0], c1[1]]])
     }
-}
-
-// Vector * Matrix multiplication: Vector<R> (as row vector) * Matrix<R, C> = Vector<C>
-impl<const R: usize, const C: usize> Mul<Matrix<R, C>> for Vector<R> {
-    type Output = Vector<C>;
 
     #[inline]
-    fn mul(self, rhs: Matrix<R, C>) -> Self::Output {
-        let mut result = Vector::zero();
+    pub fn from_scale(scale: Vector2) -> Self {
+        Self([[scale[0], 0.0], [0.0, scale[1]]])
+    }
 
-        for j in 0..C {
-            let mut sum = 0.0;
-            for i in 0..R {
-                sum += self[i] * rhs[(i, j)];
-            }
-            result[j] = sum;
+    #[inline]
+    pub fn from_angle(radians: f32) -> Self {
+        let (sin, cos) = radians.sin_cos();
+        Self([[cos, sin], [-sin, cos]])
+    }
+
+    #[inline]
+    pub fn determinant(&self) -> f32 {
+        self.0[0][0] * self.0[1][1] - self.0[1][0] * self.0[0][1]
+    }
+
+    #[inline]
+    pub fn inverse(&self) -> Option<Self> {
+        let det = self.determinant();
+        if det.abs() < f32::EPSILON {
+            return None;
         }
-
-        result
+        let inv_det = 1.0 / det;
+        Some(Self([
+            [self.0[1][1] * inv_det, -self.0[0][1] * inv_det],
+            [-self.0[1][0] * inv_det, self.0[0][0] * inv_det],
+        ]))
     }
 }
 
-pub type Matrix4 = Matrix<4, 4>;
+impl Matrix3 {
+    #[inline]
+    pub fn from_cols_vec(c0: Vector3, c1: Vector3, c2: Vector3) -> Self {
+        Self([
+            [c0[0], c0[1], c0[2]],
+            [c1[0], c1[1], c1[2]],
+            [c2[0], c2[1], c2[2]],
+        ])
+    }
+
+    #[inline]
+    pub fn from_scale(scale: Vector2) -> Self {
+        Self([[scale[0], 0.0, 0.0], [0.0, scale[1], 0.0], [0.0, 0.0, 1.0]])
+    }
+
+    #[inline]
+    pub fn from_translation(translation: Vector2) -> Self {
+        Self([
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [translation[0], translation[1], 1.0],
+        ])
+    }
+
+    #[inline]
+    pub fn from_angle(radians: f32) -> Self {
+        let (sin, cos) = radians.sin_cos();
+        Self([[cos, sin, 0.0], [-sin, cos, 0.0], [0.0, 0.0, 1.0]])
+    }
+
+    #[inline]
+    pub fn from_scale_angle_translation(scale: Vector2, angle: f32, translation: Vector2) -> Self {
+        let (sin, cos) = angle.sin_cos();
+        Self([
+            [cos * scale[0], sin * scale[0], 0.0],
+            [-sin * scale[1], cos * scale[1], 0.0],
+            [translation[0], translation[1], 1.0],
+        ])
+    }
+
+    #[inline]
+    pub fn to_matrix2(&self) -> Matrix2 {
+        Matrix([[self.0[0][0], self.0[0][1]], [self.0[1][0], self.0[1][1]]])
+    }
+
+    #[inline]
+    pub fn to_matrix4(&self) -> Matrix4 {
+        Matrix([
+            [self.0[0][0], self.0[0][1], self.0[0][2], 0.0],
+            [self.0[1][0], self.0[1][1], self.0[1][2], 0.0],
+            [self.0[2][0], self.0[2][1], self.0[2][2], 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ])
+    }
+
+    #[inline]
+    pub fn determinant(&self) -> f32 {
+        self.0[0][0] * (self.0[1][1] * self.0[2][2] - self.0[2][1] * self.0[1][2])
+            - self.0[1][0] * (self.0[0][1] * self.0[2][2] - self.0[2][1] * self.0[0][2])
+            + self.0[2][0] * (self.0[0][1] * self.0[1][2] - self.0[1][1] * self.0[0][2])
+    }
+
+    pub fn inverse(&self) -> Option<Self> {
+        let det = self.determinant();
+        if det.abs() < f32::EPSILON {
+            return None;
+        }
+        let inv_det = 1.0 / det;
+
+        let m = &self.0;
+        Some(Self([
+            [
+                (m[1][1] * m[2][2] - m[2][1] * m[1][2]) * inv_det,
+                (m[2][1] * m[0][2] - m[0][1] * m[2][2]) * inv_det,
+                (m[0][1] * m[1][2] - m[1][1] * m[0][2]) * inv_det,
+            ],
+            [
+                (m[2][0] * m[1][2] - m[1][0] * m[2][2]) * inv_det,
+                (m[0][0] * m[2][2] - m[2][0] * m[0][2]) * inv_det,
+                (m[1][0] * m[0][2] - m[0][0] * m[1][2]) * inv_det,
+            ],
+            [
+                (m[1][0] * m[2][1] - m[2][0] * m[1][1]) * inv_det,
+                (m[2][0] * m[0][1] - m[0][0] * m[2][1]) * inv_det,
+                (m[0][0] * m[1][1] - m[1][0] * m[0][1]) * inv_det,
+            ],
+        ]))
+    }
+}
 
 impl Matrix4 {
     #[inline]
-    pub fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Self {
-        let mut m = Self::identity();
-
-        m[(0, 0)] = 2.0 / (right - left);
-        m[(1, 1)] = 2.0 / (top - bottom);
-        m[(2, 2)] = -2.0 / (far - near);
-        m[(0, 3)] = -(right + left) / (right - left);
-        m[(1, 3)] = -(top + bottom) / (top - bottom);
-        m[(2, 3)] = -(far + near) / (far - near);
-
-        m
+    pub fn from_cols_vec(c0: Vector4, c1: Vector4, c2: Vector4, c3: Vector4) -> Self {
+        Self([
+            [c0[0], c0[1], c0[2], c0[3]],
+            [c1[0], c1[1], c1[2], c1[3]],
+            [c2[0], c2[1], c2[2], c2[3]],
+            [c3[0], c3[1], c3[2], c3[3]],
+        ])
     }
 
-    pub fn perspective(fov_y: f32, aspect: f32, near: f32, far: f32) -> Self {
-        let f = 1.0 / (fov_y / 2.0).tan();
-        let mut m = Self::zero();
-
-        m[(0, 0)] = f / aspect;
-        m[(1, 1)] = f;
-        m[(2, 2)] = (far + near) / (near - far);
-        m[(2, 3)] = (2.0 * far * near) / (near - far);
-        m[(3, 2)] = -1.0;
-
-        m
+    #[inline]
+    pub fn from_translation(translation: Vector3) -> Self {
+        Self([
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [translation[0], translation[1], translation[2], 1.0],
+        ])
     }
 
-    pub fn translate(v: Vector3) -> Self {
-        let mut m = Self::identity();
-        m[(0, 3)] = v.x;
-        m[(1, 3)] = v.y;
-        m[(2, 3)] = v.z;
-        m
+    #[inline]
+    pub fn from_scale(scale: Vector3) -> Self {
+        Self([
+            [scale[0], 0.0, 0.0, 0.0],
+            [0.0, scale[1], 0.0, 0.0],
+            [0.0, 0.0, scale[2], 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ])
     }
 
-    pub fn scale(v: Vector3) -> Self {
-        let mut m = Self::identity();
-        m[(0, 0)] = v.x;
-        m[(1, 1)] = v.y;
-        m[(2, 2)] = v.z;
-        m
+    #[inline]
+    pub fn from_uniform_scale(scale: f32) -> Self {
+        Self::from_scale(Vector3::splat(scale))
     }
 
-    pub fn rotate_x(angle_rad: f32) -> Self {
-        let mut m = Self::identity();
-        let cos = angle_rad.cos();
-        let sin = angle_rad.sin();
-
-        m[(1, 1)] = cos;
-        m[(1, 2)] = -sin;
-        m[(2, 1)] = sin;
-        m[(2, 2)] = cos;
-
-        m
+    #[inline]
+    pub fn from_rotation_x(radians: f32) -> Self {
+        let (sin, cos) = radians.sin_cos();
+        Self([
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, cos, sin, 0.0],
+            [0.0, -sin, cos, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ])
     }
 
-    pub fn rotate_y(angle_rad: f32) -> Self {
-        let mut m = Self::identity();
-        let cos = angle_rad.cos();
-        let sin = angle_rad.sin();
-
-        m[(0, 0)] = cos;
-        m[(0, 2)] = sin;
-        m[(2, 0)] = -sin;
-        m[(2, 2)] = cos;
-
-        m
+    #[inline]
+    pub fn from_rotation_y(radians: f32) -> Self {
+        let (sin, cos) = radians.sin_cos();
+        Self([
+            [cos, 0.0, -sin, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [sin, 0.0, cos, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ])
     }
 
-    pub fn rotate_z(angle_rad: f32) -> Self {
-        let mut m = Self::identity();
-        let cos = angle_rad.cos();
-        let sin = angle_rad.sin();
+    #[inline]
+    pub fn from_rotation_z(radians: f32) -> Self {
+        let (sin, cos) = radians.sin_cos();
+        Self([
+            [cos, sin, 0.0, 0.0],
+            [-sin, cos, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ])
+    }
 
-        m[(0, 0)] = cos;
-        m[(0, 1)] = -sin;
-        m[(1, 0)] = sin;
-        m[(1, 1)] = cos;
+    pub fn from_axis_angle(axis: Vector3, radians: f32) -> Self {
+        let (sin, cos) = radians.sin_cos();
+        let t = 1.0 - cos;
+        let x = axis[0];
+        let y = axis[1];
+        let z = axis[2];
 
-        m
+        Self([
+            [
+                t * x * x + cos,
+                t * x * y + sin * z,
+                t * x * z - sin * y,
+                0.0,
+            ],
+            [
+                t * x * y - sin * z,
+                t * y * y + cos,
+                t * y * z + sin * x,
+                0.0,
+            ],
+            [
+                t * x * z + sin * y,
+                t * y * z - sin * x,
+                t * z * z + cos,
+                0.0,
+            ],
+            [0.0, 0.0, 0.0, 1.0],
+        ])
+    }
+
+    pub fn perspective(fov_y_radians: f32, aspect: f32, z_near: f32, z_far: f32) -> Self {
+        let f = 1.0 / (fov_y_radians / 2.0).tan();
+        let range = z_near - z_far;
+
+        Self([
+            [f / aspect, 0.0, 0.0, 0.0],
+            [0.0, f, 0.0, 0.0],
+            [0.0, 0.0, z_far / range, -1.0],
+            [0.0, 0.0, (z_near * z_far) / range, 0.0],
+        ])
+    }
+
+    pub fn perspective_infinite(fov_y_radians: f32, aspect: f32, z_near: f32) -> Self {
+        let f = 1.0 / (fov_y_radians / 2.0).tan();
+
+        Self([
+            [f / aspect, 0.0, 0.0, 0.0],
+            [0.0, f, 0.0, 0.0],
+            [0.0, 0.0, -1.0, -1.0],
+            [0.0, 0.0, -z_near, 0.0],
+        ])
+    }
+
+    pub fn orthographic(
+        left: f32,
+        right: f32,
+        bottom: f32,
+        top: f32,
+        z_near: f32,
+        z_far: f32,
+    ) -> Self {
+        let rml = right - left;
+        let tmb = top - bottom;
+        let fmn = z_far - z_near;
+
+        Self([
+            [2.0 / rml, 0.0, 0.0, 0.0],
+            [0.0, 2.0 / tmb, 0.0, 0.0],
+            [0.0, 0.0, -1.0 / fmn, 0.0],
+            [
+                -(right + left) / rml,
+                -(top + bottom) / tmb,
+                -z_near / fmn,
+                1.0,
+            ],
+        ])
+    }
+
+    pub fn orthographic_2d(width: f32, height: f32) -> Self {
+        Self::orthographic(0.0, width, height, 0.0, -1.0, 1.0)
     }
 
     pub fn look_at(eye: Vector3, target: Vector3, up: Vector3) -> Self {
-        let f = (target - eye).normalize();
-        let s = f.cross(&up).normalize();
-        let u = s.cross(&f);
+        let f = (target - eye).normalized();
+        let r = f.cross(&up).normalized();
+        let u = r.cross(&f);
 
-        let mut result = Self::identity();
-        result[(0, 0)] = s.x;
-        result[(1, 0)] = s.y;
-        result[(2, 0)] = s.z;
-        result[(0, 1)] = u.x;
-        result[(1, 1)] = u.y;
-        result[(2, 1)] = u.z;
-        result[(0, 2)] = -f.x;
-        result[(1, 2)] = -f.y;
-        result[(2, 2)] = -f.z;
-        result[(0, 3)] = -s.dot(&eye);
-        result[(1, 3)] = -u.dot(&eye);
-        result[(2, 3)] = f.dot(&eye);
-
-        result
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use nalgebra as na;
-    use std::f32::consts::PI;
-
-    const TOLERANCE: f32 = 1e-6;
-
-    #[test]
-    fn test_ortho() {
-        let left = -1.0;
-        let right = 1.0;
-        let bottom = -2.0;
-        let top = 2.0;
-        let near = 0.1;
-        let far = 100.0;
-
-        let m = Matrix4::orthographic(left, right, bottom, top, near, far);
-        let n = na::Orthographic3::new(left, right, bottom, top, near, far).to_homogeneous();
-
-        for i in 0..4 {
-            for j in 0..4 {
-                assert!(
-                    (m[(i, j)] - n[(i, j)]).abs() < TOLERANCE,
-                    "m[{},{}]={}, n[{},{}]={}",
-                    i,
-                    j,
-                    m[(i, j)],
-                    i,
-                    j,
-                    n[(i, j)]
-                );
-            }
-        }
+        Self([
+            [r[0], u[0], -f[0], 0.0],
+            [r[1], u[1], -f[1], 0.0],
+            [r[2], u[2], -f[2], 0.0],
+            [-r.dot(&eye), -u.dot(&eye), f.dot(&eye), 1.0],
+        ])
     }
 
-    #[test]
-    fn test_perspective() {
-        let fov_y = PI / 2.0; // 90 degrees
-        let aspect = 16.0 / 9.0;
-        let near = 0.1;
-        let far = 100.0;
+    pub fn look_to(eye: Vector3, dir: Vector3, up: Vector3) -> Self {
+        let f = dir.normalized();
+        let r = f.cross(&up).normalized();
+        let u = r.cross(&f);
 
-        let m = Matrix4::perspective(fov_y, aspect, near, far);
-        let n = na::Perspective3::new(aspect, fov_y, near, far).to_homogeneous();
-
-        for i in 0..4 {
-            for j in 0..4 {
-                assert!(
-                    (m[(i, j)] - n[(i, j)]).abs() < TOLERANCE,
-                    "m[{},{}]={}, n[{},{}]={}",
-                    i,
-                    j,
-                    m[(i, j)],
-                    i,
-                    j,
-                    n[(i, j)]
-                );
-            }
-        }
+        Self([
+            [r[0], u[0], -f[0], 0.0],
+            [r[1], u[1], -f[1], 0.0],
+            [r[2], u[2], -f[2], 0.0],
+            [-r.dot(&eye), -u.dot(&eye), f.dot(&eye), 1.0],
+        ])
     }
 
-    #[test]
-    fn test_translate() {
-        let v = Vector3::new(1.0, 2.0, 3.0);
-        let m = Matrix4::translate(v);
-        let n = na::Matrix4::new_translation(&na::Vector3::new(1.0, 2.0, 3.0));
-
-        for i in 0..4 {
-            for j in 0..4 {
-                assert!(
-                    (m[(i, j)] - n[(i, j)]).abs() < TOLERANCE,
-                    "m[{},{}]={}, n[{},{}]={}",
-                    i,
-                    j,
-                    m[(i, j)],
-                    i,
-                    j,
-                    n[(i, j)]
-                );
-            }
-        }
+    #[inline]
+    pub fn translation(&self) -> Vector3 {
+        Vector3::new(self.0[3][0], self.0[3][1], self.0[3][2])
     }
 
-    #[test]
-    fn test_scale() {
-        let v = Vector3::new(2.0, 3.0, 4.0);
-        let m = Matrix4::scale(v);
-        let n = na::Matrix4::new_nonuniform_scaling(&na::Vector3::new(2.0, 3.0, 4.0));
-
-        for i in 0..4 {
-            for j in 0..4 {
-                assert!(
-                    (m[(i, j)] - n[(i, j)]).abs() < TOLERANCE,
-                    "m[{},{}]={}, n[{},{}]={}",
-                    i,
-                    j,
-                    m[(i, j)],
-                    i,
-                    j,
-                    n[(i, j)]
-                );
-            }
-        }
+    #[inline]
+    pub fn to_matrix3(&self) -> Matrix3 {
+        Matrix([
+            [self.0[0][0], self.0[0][1], self.0[0][2]],
+            [self.0[1][0], self.0[1][1], self.0[1][2]],
+            [self.0[2][0], self.0[2][1], self.0[2][2]],
+        ])
     }
 
-    #[test]
-    fn test_rotate_x() {
-        let angle = PI / 4.0; // 45 degrees
-        let m = Matrix4::rotate_x(angle);
-        let n = na::Matrix4::from_axis_angle(&na::Vector3::x_axis(), angle);
-
-        for i in 0..4 {
-            for j in 0..4 {
-                assert!(
-                    (m[(i, j)] - n[(i, j)]).abs() < TOLERANCE,
-                    "m[{},{}]={}, n[{},{}]={}",
-                    i,
-                    j,
-                    m[(i, j)],
-                    i,
-                    j,
-                    n[(i, j)]
-                );
-            }
-        }
+    #[inline]
+    pub fn transform_point(&self, p: Vector3) -> Vector3 {
+        let w = self.0[0][3] * p[0] + self.0[1][3] * p[1] + self.0[2][3] * p[2] + self.0[3][3];
+        Vector3::new(
+            (self.0[0][0] * p[0] + self.0[1][0] * p[1] + self.0[2][0] * p[2] + self.0[3][0]) / w,
+            (self.0[0][1] * p[0] + self.0[1][1] * p[1] + self.0[2][1] * p[2] + self.0[3][1]) / w,
+            (self.0[0][2] * p[0] + self.0[1][2] * p[1] + self.0[2][2] * p[2] + self.0[3][2]) / w,
+        )
     }
 
-    #[test]
-    fn test_rotate_y() {
-        let angle = PI / 3.0; // 60 degrees
-        let m = Matrix4::rotate_y(angle);
-        let n = na::Matrix4::from_axis_angle(&na::Vector3::y_axis(), angle);
-
-        for i in 0..4 {
-            for j in 0..4 {
-                assert!(
-                    (m[(i, j)] - n[(i, j)]).abs() < TOLERANCE,
-                    "m[{},{}]={}, n[{},{}]={}",
-                    i,
-                    j,
-                    m[(i, j)],
-                    i,
-                    j,
-                    n[(i, j)]
-                );
-            }
-        }
+    #[inline]
+    pub fn transform_vector(&self, v: Vector3) -> Vector3 {
+        Vector3::new(
+            self.0[0][0] * v[0] + self.0[1][0] * v[1] + self.0[2][0] * v[2],
+            self.0[0][1] * v[0] + self.0[1][1] * v[1] + self.0[2][1] * v[2],
+            self.0[0][2] * v[0] + self.0[1][2] * v[1] + self.0[2][2] * v[2],
+        )
     }
 
-    #[test]
-    fn test_rotate_z() {
-        let angle = PI / 6.0; // 30 degrees
-        let m = Matrix4::rotate_z(angle);
-        let n = na::Matrix4::from_axis_angle(&na::Vector3::z_axis(), angle);
+    pub fn determinant(&self) -> f32 {
+        let m = &self.0;
 
-        for i in 0..4 {
-            for j in 0..4 {
-                assert!(
-                    (m[(i, j)] - n[(i, j)]).abs() < TOLERANCE,
-                    "m[{},{}]={}, n[{},{}]={}",
-                    i,
-                    j,
-                    m[(i, j)],
-                    i,
-                    j,
-                    n[(i, j)]
-                );
-            }
-        }
+        let s0 = m[0][0] * m[1][1] - m[1][0] * m[0][1];
+        let s1 = m[0][0] * m[2][1] - m[2][0] * m[0][1];
+        let s2 = m[0][0] * m[3][1] - m[3][0] * m[0][1];
+        let s3 = m[1][0] * m[2][1] - m[2][0] * m[1][1];
+        let s4 = m[1][0] * m[3][1] - m[3][0] * m[1][1];
+        let s5 = m[2][0] * m[3][1] - m[3][0] * m[2][1];
+
+        let c5 = m[2][2] * m[3][3] - m[3][2] * m[2][3];
+        let c4 = m[1][2] * m[3][3] - m[3][2] * m[1][3];
+        let c3 = m[1][2] * m[2][3] - m[2][2] * m[1][3];
+        let c2 = m[0][2] * m[3][3] - m[3][2] * m[0][3];
+        let c1 = m[0][2] * m[2][3] - m[2][2] * m[0][3];
+        let c0 = m[0][2] * m[1][3] - m[1][2] * m[0][3];
+
+        s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0
     }
 
-    #[test]
-    fn test_look_at() {
-        let eye = Vector3::new(0.0, 0.0, 5.0);
-        let target = Vector3::new(0.0, 0.0, 0.0);
-        let up = Vector3::new(0.0, 1.0, 0.0);
+    pub fn inverse(&self) -> Option<Self> {
+        let m = &self.0;
 
-        let m = Matrix4::look_at(eye, target, up);
-        let n = na::Matrix4::look_at_rh(
-            &na::Point3::new(0.0, 0.0, 5.0),
-            &na::Point3::new(0.0, 0.0, 0.0),
-            &na::Vector3::new(0.0, 1.0, 0.0),
-        );
+        let s0 = m[0][0] * m[1][1] - m[1][0] * m[0][1];
+        let s1 = m[0][0] * m[2][1] - m[2][0] * m[0][1];
+        let s2 = m[0][0] * m[3][1] - m[3][0] * m[0][1];
+        let s3 = m[1][0] * m[2][1] - m[2][0] * m[1][1];
+        let s4 = m[1][0] * m[3][1] - m[3][0] * m[1][1];
+        let s5 = m[2][0] * m[3][1] - m[3][0] * m[2][1];
 
-        for i in 0..4 {
-            for j in 0..4 {
-                assert!(
-                    (m[(i, j)] - n[(i, j)]).abs() < TOLERANCE,
-                    "m[{},{}]={}, n[{},{}]={}",
-                    i,
-                    j,
-                    m[(i, j)],
-                    i,
-                    j,
-                    n[(i, j)]
-                );
-            }
+        let c5 = m[2][2] * m[3][3] - m[3][2] * m[2][3];
+        let c4 = m[1][2] * m[3][3] - m[3][2] * m[1][3];
+        let c3 = m[1][2] * m[2][3] - m[2][2] * m[1][3];
+        let c2 = m[0][2] * m[3][3] - m[3][2] * m[0][3];
+        let c1 = m[0][2] * m[2][3] - m[2][2] * m[0][3];
+        let c0 = m[0][2] * m[1][3] - m[1][2] * m[0][3];
+
+        let det = s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0;
+
+        if det.abs() < f32::EPSILON {
+            return None;
         }
+
+        let inv_det = 1.0 / det;
+
+        Some(Self([
+            [
+                (m[1][1] * c5 - m[2][1] * c4 + m[3][1] * c3) * inv_det,
+                (-m[0][1] * c5 + m[2][1] * c2 - m[3][1] * c1) * inv_det,
+                (m[0][1] * c4 - m[1][1] * c2 + m[3][1] * c0) * inv_det,
+                (-m[0][1] * c3 + m[1][1] * c1 - m[2][1] * c0) * inv_det,
+            ],
+            [
+                (-m[1][0] * c5 + m[2][0] * c4 - m[3][0] * c3) * inv_det,
+                (m[0][0] * c5 - m[2][0] * c2 + m[3][0] * c1) * inv_det,
+                (-m[0][0] * c4 + m[1][0] * c2 - m[3][0] * c0) * inv_det,
+                (m[0][0] * c3 - m[1][0] * c1 + m[2][0] * c0) * inv_det,
+            ],
+            [
+                (m[1][3] * s5 - m[2][3] * s4 + m[3][3] * s3) * inv_det,
+                (-m[0][3] * s5 + m[2][3] * s2 - m[3][3] * s1) * inv_det,
+                (m[0][3] * s4 - m[1][3] * s2 + m[3][3] * s0) * inv_det,
+                (-m[0][3] * s3 + m[1][3] * s1 - m[2][3] * s0) * inv_det,
+            ],
+            [
+                (-m[1][2] * s5 + m[2][2] * s4 - m[3][2] * s3) * inv_det,
+                (m[0][2] * s5 - m[2][2] * s2 + m[3][2] * s1) * inv_det,
+                (-m[0][2] * s4 + m[1][2] * s2 - m[3][2] * s0) * inv_det,
+                (m[0][2] * s3 - m[1][2] * s1 + m[2][2] * s0) * inv_det,
+            ],
+        ]))
     }
 
-    #[test]
-    fn test_matrix_multiplication() {
-        let m1 = Matrix4::translate(Vector3::new(1.0, 2.0, 3.0));
-        let m2 = Matrix4::scale(Vector3::new(2.0, 3.0, 4.0));
-        let result = m1 * m2;
+    pub fn inverse_affine(&self) -> Self {
+        let m = self.to_matrix3();
+        let inv_m = m.inverse().unwrap_or(Matrix3::identity());
+        let t = self.translation();
+        let inv_t = -(inv_m * t);
 
-        let n1 = na::Matrix4::new_translation(&na::Vector3::new(1.0, 2.0, 3.0));
-        let n2 = na::Matrix4::new_nonuniform_scaling(&na::Vector3::new(2.0, 3.0, 4.0));
-        let expected = n1 * n2;
-
-        for i in 0..4 {
-            for j in 0..4 {
-                assert!(
-                    (result[(i, j)] - expected[(i, j)]).abs() < TOLERANCE,
-                    "result[{},{}]={}, expected[{},{}]={}",
-                    i,
-                    j,
-                    result[(i, j)],
-                    i,
-                    j,
-                    expected[(i, j)]
-                );
-            }
-        }
+        Self([
+            [inv_m.0[0][0], inv_m.0[0][1], inv_m.0[0][2], 0.0],
+            [inv_m.0[1][0], inv_m.0[1][1], inv_m.0[1][2], 0.0],
+            [inv_m.0[2][0], inv_m.0[2][1], inv_m.0[2][2], 0.0],
+            [inv_t[0], inv_t[1], inv_t[2], 1.0],
+        ])
     }
 }

@@ -4,9 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-macros.workspace = true
-macros-derive.workspace = true
 num = "0.4.3"
-
-[dev-dependencies]
-nalgebra = "0.34.1"
+common.workspace = true
+macros.workspace = true
