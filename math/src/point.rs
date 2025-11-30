@@ -1,8 +1,8 @@
-use macros::{Getters, Setters};
+use macros::{Get, Set};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-#[derive(Getters, Setters)]
+#[derive(Get, Set)]
 pub struct Point2 {
     #[get(copied)]
     #[set]
@@ -23,7 +23,7 @@ impl Point2 {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-#[derive(Getters, Setters)]
+#[derive(Get, Set)]
 pub struct Point3 {
     #[get(copied)]
     #[set]
@@ -49,7 +49,7 @@ impl Point3 {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-#[derive(Getters, Setters)]
+#[derive(Get, Set)]
 pub struct Point4 {
     #[get(copied)]
     #[set]

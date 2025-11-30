@@ -7,3 +7,4 @@ edition = "2024"
 num = "0.4.3"
 common.workspace = true
 macros.workspace = true
+winit.workspace = true

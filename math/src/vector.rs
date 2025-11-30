@@ -32,6 +32,24 @@ impl<const N: usize> IndexMut<usize> for Vector<N> {
     }
 }
 
+impl<const N: usize> From<[f32; N]> for Vector<N> {
+    fn from(value: [f32; N]) -> Self {
+        Self(value)
+    }
+}
+
+impl<const N: usize> From<Vector<N>> for [f32; N] {
+    fn from(value: Vector<N>) -> Self {
+        let mut result = [0.0; N];
+
+        for i in 0..N {
+            result[i] = value[i]
+        }
+
+        result
+    }
+}
+
 impl<const N: usize> Vector<N> {
     #[inline]
     pub fn iter(&self) -> Iter<'_, f32> {

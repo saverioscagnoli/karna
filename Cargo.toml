@@ -4,12 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["common","macros","math"]
+members = ["common", "engine","macros","math", "renderer"]
 
 [workspace.dependencies]
 common = { path = "common" }
 macros = { path = "macros" }
 math = { path = "math" }
+winit = "0.30.12"
+wgpu = "27.0.1"
+renderer = { path = "renderer" }
 
 [dependencies]
 math.workspace = true
+engine = { path = "engine" }
+renderer.workspace = true
