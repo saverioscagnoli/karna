@@ -2,19 +2,18 @@ mod camera;
 mod color;
 mod mesh;
 
-use crate::{
-    camera::{Camera, Projection},
-    mesh::{Descriptor, Vertex},
-};
+use crate::camera::{Camera, Projection};
 
 // Re-exports
 pub use crate::color::Color;
 pub use crate::mesh::transform::Transform2D;
+pub use crate::mesh::*;
 
+use common::utils;
 use macros::{Get, Set};
 use math::Size;
 use std::sync::Arc;
-use wgpu::PipelineCompilationOptions;
+use wgpu::{PipelineCompilationOptions, naga::FastHashMap, util::DeviceExt};
 
 #[derive(Debug)]
 #[derive(Get, Set)]
@@ -31,6 +30,9 @@ pub struct Renderer {
     #[get(copied)]
     #[set(into)]
     clear_color: Color,
+
+    meshes: FastHashMap<MeshId, MeshBuffer>,
+    triangle_pipeline: wgpu::RenderPipeline,
 }
 
 impl Renderer {
@@ -97,6 +99,21 @@ impl Renderer {
             },
         );
 
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../../shaders/basic.wgsl").into()),
+        });
+
+        let triangle_pipeline = Self::create_render_pipeline(
+            "mesh pipeline",
+            &device,
+            &shader,
+            &[&camera.view_projection_bind_group_layout],
+            surface_format,
+            wgpu::PrimitiveTopology::TriangleList,
+            wgpu::PolygonMode::Fill,
+        );
+
         Self {
             surface,
             device,
@@ -106,10 +123,12 @@ impl Renderer {
             config,
             camera,
             clear_color: Color::default(),
+            meshes: FastHashMap::default(),
+            triangle_pipeline,
         }
     }
 
-    fn creat_render_pipeline<L: AsRef<str>>(
+    fn create_render_pipeline<L: AsRef<str>>(
         label: L,
         device: &wgpu::Device,
         shader: &wgpu::ShaderModule,
@@ -131,7 +150,7 @@ impl Renderer {
             vertex: wgpu::VertexState {
                 module: shader,
                 entry_point: Some("vs_main"),
-                buffers: &[Vertex::desc()],
+                buffers: &[Vertex::desc(), MeshInstanceGPU::desc()], // Both layouts
                 compilation_options: PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -164,12 +183,73 @@ impl Renderer {
         })
     }
 
+    fn register_mesh<M: Mesh + 'static>(&mut self, mesh: &M) {
+        let mesh_id = MeshId::of::<M>();
+
+        if self.meshes.contains_key(&mesh_id) {
+            return;
+        }
+
+        let vertices = mesh.vertices();
+        let indices = mesh.indices();
+        let index_count = indices.len() as u32;
+
+        let vertex_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("Mesh with id '{:?}' vertex buffer", mesh_id)),
+                contents: utils::as_u8_slice(vertices),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let index_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("Mesh with id '{:?}' index buffer", mesh_id)),
+                contents: utils::as_u8_slice(indices),
+                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let instance_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("instance buffer"),
+            size: (std::mem::size_of::<MeshInstanceGPU>() * M::INITIAL_INSTANCE_CAPACITY) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let mesh_buffer = MeshBuffer {
+            vertex_buffer,
+            index_buffer,
+            index_count,
+            instance_buffer,
+            instances: Vec::new(),
+        };
+
+        self.meshes.insert(mesh_id, mesh_buffer);
+    }
+
+    #[inline]
+    pub fn draw_instance<M: Mesh + 'static>(&mut self, mesh: &M, mesh_instance: &MeshInstance) {
+        let mesh_id = MeshId::of::<M>();
+
+        if !self.meshes.contains_key(&mesh_id) {
+            self.register_mesh::<M>(mesh);
+        }
+
+        self.meshes
+            .get_mut(&mesh_id)
+            .unwrap()
+            .instances
+            .push(mesh_instance.to_gpu());
+    }
+
     #[inline]
     #[doc(hidden)]
     pub fn resize(&mut self, size: Size<u32>) {
         self.config.width = size.width;
         self.config.height = size.height;
         self.surface.configure(&self.device, &self.config);
+        self.camera.update(size, &self.queue);
     }
 
     #[inline]
@@ -183,6 +263,29 @@ impl Renderer {
         let output = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+
+        // Update instance buffers
+        for mesh_buffer in self.meshes.values_mut() {
+            if mesh_buffer.instances.is_empty() {
+                continue;
+            }
+
+            let instance_data = utils::as_u8_slice(&mesh_buffer.instances);
+            let required_size = instance_data.len() as u64;
+
+            // Resize buffer if needed
+            if required_size > mesh_buffer.instance_buffer.size() {
+                mesh_buffer.instance_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("instance buffer"),
+                    size: required_size,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+            }
+
+            self.queue
+                .write_buffer(&mesh_buffer.instance_buffer, 0, instance_data);
+        }
 
         let mut encoder = self
             .device
@@ -201,14 +304,38 @@ impl Renderer {
                     },
                     depth_slice: None,
                 })],
+
                 depth_stencil_attachment: None,
                 label: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+
+            render_pass.set_pipeline(&self.triangle_pipeline);
+            render_pass.set_bind_group(0, &self.camera.view_projection_bind_group, &[]);
+
+            for mesh_buffer in self.meshes.values() {
+                let instance_count = mesh_buffer.instances.len() as u32;
+                if instance_count == 0 {
+                    continue;
+                }
+
+                render_pass.set_vertex_buffer(0, mesh_buffer.vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, mesh_buffer.instance_buffer.slice(..));
+                render_pass.set_index_buffer(
+                    mesh_buffer.index_buffer.slice(..),
+                    wgpu::IndexFormat::Uint32,
+                );
+                render_pass.draw_indexed(0..mesh_buffer.index_count, 0, 0..instance_count);
+            }
         }
 
         self.queue.submit([encoder.finish()]);
         frame.present();
+
+        // Clear instances for next frame
+        for mesh_buffer in self.meshes.values_mut() {
+            mesh_buffer.instances.clear();
+        }
     }
 }

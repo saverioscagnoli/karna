@@ -40,7 +40,7 @@ impl<const R: usize, const C: usize> Matrix<R, C> {
     }
 
     #[inline]
-    pub fn from_cols(cols: [[f32; R]; C]) -> Self {
+    pub const fn from_cols(cols: [[f32; R]; C]) -> Self {
         Self(cols)
     }
 

@@ -1,7 +1,5 @@
 use macros::{Get, Set, With};
-use math::{Vector, Vector2};
-
-use crate::Color;
+use math::Vector2;
 
 #[derive(Debug, Clone, Copy)]
 #[derive(Get, Set, With)]
@@ -18,11 +16,25 @@ pub struct Transform2D {
     pub position: Vector2,
 
     #[get]
+    #[get(prop = x, ty = f32, copied)]
+    #[get(prop = y, ty = f32, copied)]
     #[set(into)]
+    #[set(prop = x, ty = f32)]
+    #[set(prop = y, ty = f32)]
+    #[with]
+    #[with(prop = x, ty = f32)]
+    #[with(prop = y, ty = f32)]
     pub scale: Vector2,
 
     #[get]
+    #[get(prop = x, ty = f32, copied)]
+    #[get(prop = y, ty = f32, copied)]
     #[set(into)]
+    #[set(prop = x, ty = f32)]
+    #[set(prop = y, ty = f32)]
+    #[with]
+    #[with(prop = x, ty = f32)]
+    #[with(prop = y, ty = f32)]
     pub rotation: Vector2,
 }
 

@@ -13,11 +13,13 @@ pub struct Time {
 
     #[get(copied, name = "elapsed")]
     elapsed_time: Duration,
+
     #[get(copied, name = "delta")]
     delta_time: f32,
 
     #[get(pre = round, cast = u32)]
     fps: f32,
+
     #[get(copied)]
     tps: u32,
 

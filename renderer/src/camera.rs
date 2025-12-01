@@ -1,6 +1,6 @@
 use common::utils;
 use macros::Get;
-use math::{Matrix4, Size, Vector3};
+use math::{Matrix, Matrix4, Size, Vector3};
 use winit::dpi::Position;
 
 #[derive(Debug, Clone, Copy)]
@@ -42,14 +42,12 @@ impl Projection {
 }
 
 #[derive(Debug)]
-#[derive(Get)]
 pub struct Camera {
     projection: Projection,
 
     view_projection_buffer: wgpu::Buffer,
-    view_projection_bind_group_layout: wgpu::BindGroupLayout,
+    pub(crate) view_projection_bind_group_layout: wgpu::BindGroupLayout,
 
-    #[get]
     pub(crate) view_projection_bind_group: wgpu::BindGroup,
 
     position: Vector3,
@@ -104,14 +102,21 @@ impl Camera {
             up: Vector3::y(),
         }
     }
+
     #[inline]
     fn view_matrix(&self) -> Matrix4 {
-        Matrix4::look_at(self.position, self.target, self.up)
+        match self.projection {
+            Projection::Orthographic { .. } => {
+                Matrix4::from_translation(Vector3::new(-self.position.x, -self.position.y, 0.0))
+            }
+
+            Projection::Perspective { .. } => Matrix4::look_at(self.position, self.target, self.up),
+        }
     }
 
     #[inline]
     fn view_projection_matrix(&self, window_size: Size<u32>) -> Matrix4 {
-        self.view_matrix() * self.projection.matrix(window_size)
+        self.projection.matrix(window_size) * self.view_matrix()
     }
 
     #[inline]
