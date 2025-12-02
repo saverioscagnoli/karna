@@ -1,14 +1,15 @@
+pub mod dirty;
 pub mod transform;
+
+use crate::{Color, Renderer, Transform2D, mesh::dirty::DirtyTracked};
+use math::{Vector3, Vector4};
+use mini_moka::sync::Cache;
 use std::{
-    any::TypeId,
+    hash::{DefaultHasher, Hash, Hasher},
     ops::{Deref, DerefMut},
+    sync::{Arc, LazyLock},
 };
-
-use common::utils;
-use math::{Vector2, Vector3, Vector4};
-use wgpu::{RenderPass, util::DeviceExt};
-
-use crate::{Color, Renderer, Transform2D};
+use traccia::debug;
 
 pub trait Descriptor {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
@@ -44,18 +45,39 @@ impl Descriptor for Vertex {
 
 #[derive(Debug, Clone, Copy)]
 pub struct MeshInstance {
-    pub position: Vector3,
-    pub scale: Vector3,
-    pub rotation: Vector3,
+    pub transform: Transform2D,
     pub color: Color,
+}
+
+impl Default for MeshInstance {
+    fn default() -> Self {
+        Self {
+            transform: Transform2D::default(),
+            color: Color::White,
+        }
+    }
+}
+
+impl Deref for MeshInstance {
+    type Target = Transform2D;
+
+    fn deref(&self) -> &Self::Target {
+        &self.transform
+    }
+}
+
+impl DerefMut for MeshInstance {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.transform
+    }
 }
 
 impl MeshInstance {
     pub fn to_gpu(&self) -> MeshInstanceGPU {
         MeshInstanceGPU {
-            position: self.position,
-            scale: self.scale,
-            rotation: self.rotation,
+            position: self.transform.position.extend(0.0),
+            scale: self.transform.scale.extend(0.0),
+            rotation: Vector3::new(0.0, 0.0, self.transform.rotation),
             color: self.color.into(),
         }
     }
@@ -112,83 +134,146 @@ pub struct MeshBuffer {
     pub index_count: u32,
     pub instance_buffer: wgpu::Buffer,
     pub instances: Vec<MeshInstanceGPU>,
+    pub topology: wgpu::PrimitiveTopology,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct MeshId(TypeId);
+#[derive(Debug, Clone)]
+pub struct MeshGeometry {
+    pub id: u32,
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+    pub topology: wgpu::PrimitiveTopology,
+}
 
-impl MeshId {
-    pub fn of<M: Mesh + 'static>() -> Self {
-        Self(TypeId::of::<M>())
+static GEOMETRY_CACHE: LazyLock<Cache<u32, Arc<MeshGeometry>>> =
+    LazyLock::new(|| Cache::new(Mesh::INITIAL_INSTANCE_CAPACITY as u64));
+
+impl MeshGeometry {
+    pub fn new(
+        vertices: &[Vertex],
+        indices: &[u32],
+        topology: wgpu::PrimitiveTopology,
+    ) -> Arc<Self> {
+        let id = Self::compute_hash(vertices, indices, &topology);
+
+        match GEOMETRY_CACHE.get(&id) {
+            Some(g) => g,
+            None => {
+                let geometry = Arc::new(Self {
+                    id,
+                    vertices: vertices.to_vec(),
+                    indices: indices.to_vec(),
+                    topology,
+                });
+
+                GEOMETRY_CACHE.insert(id, geometry.clone());
+
+                debug!(
+                    "Creating geometry with id '{}', n. vertices: {}, n. indices:  {}",
+                    id,
+                    vertices.len(),
+                    indices.len()
+                );
+
+                geometry
+            }
+        }
     }
-}
 
-pub trait Mesh: Sized + 'static {
-    const INITIAL_INSTANCE_CAPACITY: usize = 64;
+    fn compute_hash(
+        vertices: &[Vertex],
+        indices: &[u32],
+        topology: &wgpu::PrimitiveTopology,
+    ) -> u32 {
+        let mut hasher = DefaultHasher::new();
 
-    fn vertices(&self) -> &[Vertex];
-    fn indices(&self) -> &[u32];
-    fn instance(&self) -> &MeshInstance;
+        let vertex_bytes = unsafe {
+            std::slice::from_raw_parts(
+                vertices.as_ptr() as *const u8,
+                vertices.len() * std::mem::size_of::<Vertex>(),
+            )
+        };
 
-    fn render(&self, renderer: &mut Renderer) {
-        renderer.draw_instance(self, self.instance());
+        vertex_bytes.hash(&mut hasher);
+        indices.hash(&mut hasher);
+
+        std::mem::discriminant(topology).hash(&mut hasher);
+
+        hasher.finish() as u32
     }
-}
 
-pub struct Rectangle {
-    vertices: [Vertex; 4],
-    indices: [u32; 6],
-    pub instance: MeshInstance,
-}
-
-impl Rectangle {
-    pub fn new(width: f32, height: f32, color: Color) -> Self {
-        let vertices = [
+    pub fn rect() -> Arc<Self> {
+        let vertices = &[
             Vertex {
                 position: Vector3::new(0.0, 0.0, 0.0),
-                color: color.into(),
+                color: Color::White.into(),
             },
             Vertex {
                 position: Vector3::new(1.0, 0.0, 0.0),
-                color: color.into(),
+                color: Color::White.into(),
             },
             Vertex {
                 position: Vector3::new(1.0, 1.0, 0.0),
-                color: color.into(),
+                color: Color::White.into(),
             },
             Vertex {
                 position: Vector3::new(0.0, 1.0, 0.0),
-                color: color.into(),
+                color: Color::White.into(),
             },
         ];
 
-        let indices = [0, 1, 2, 0, 2, 3];
+        let indices = &[0, 1, 2, 2, 3, 0];
 
-        let instance = MeshInstance {
-            position: Vector3::new(0.0, 0.0, 0.0),
-            scale: Vector3::new(width, height, 1.0),
-            rotation: Vector3::new(0.0, 0.0, 0.0),
-            color,
-        };
+        Self::new(vertices, indices, wgpu::PrimitiveTopology::TriangleList)
+    }
 
-        Self {
-            vertices,
-            indices,
-            instance,
-        }
+    pub fn pixel() -> Arc<Self> {
+        let vertices = &[Vertex {
+            position: Vector3::zeros(),
+            color: Color::White.into(),
+        }];
+
+        let indices = &[0];
+
+        Self::new(vertices, indices, wgpu::PrimitiveTopology::PointList)
     }
 }
 
-impl Mesh for Rectangle {
-    fn vertices(&self) -> &[Vertex] {
-        &self.vertices
-    }
+#[derive(Debug, Clone)]
+pub struct Mesh {
+    pub(crate) geometry: Arc<MeshGeometry>,
+    pub instance: DirtyTracked<MeshInstance>,
+}
 
-    fn indices(&self) -> &[u32] {
-        &self.indices
-    }
+impl Deref for Mesh {
+    type Target = MeshInstance;
 
-    fn instance(&self) -> &MeshInstance {
+    fn deref(&self) -> &Self::Target {
         &self.instance
+    }
+}
+
+impl DerefMut for Mesh {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.instance
+    }
+}
+
+impl Mesh {
+    pub const INITIAL_INSTANCE_CAPACITY: usize = 64;
+
+    pub fn new(geometry: Arc<MeshGeometry>, color: Color, transform: Transform2D) -> Self {
+        Self {
+            geometry,
+            instance: MeshInstance { transform, color }.into(),
+        }
+    }
+
+    pub fn render(&mut self, renderer: &mut Renderer) {
+        renderer.draw_instance(self);
+
+        if self.instance.dirty {
+            self.instance.dirty = false;
+        }
     }
 }

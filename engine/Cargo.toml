@@ -12,3 +12,4 @@ common.workspace = true
 wgpu.workspace = true
 pollster = "0.4.0"
 renderer.workspace = true
+traccia.workspace = true

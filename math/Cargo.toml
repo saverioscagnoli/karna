@@ -8,3 +8,4 @@ num = "0.4.3"
 common.workspace = true
 macros.workspace = true
 winit.workspace = true
+rand = "0.9.2"

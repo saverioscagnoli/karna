@@ -1,14 +1,15 @@
+mod input;
 mod time;
 mod window;
 
+use crate::context::{input::Input, time::Time, window::Window};
 use renderer::Renderer;
 use std::sync::Arc;
-
-use crate::context::{time::Time, window::Window};
 
 pub struct Context {
     pub window: Window,
     pub time: Time,
+    pub input: Input,
     pub render: Renderer,
 }
 
@@ -17,6 +18,7 @@ impl Context {
         Self {
             window: Window::from_winit(window.clone()),
             time: Time::new(),
+            input: Input::new(),
             render: pollster::block_on(Renderer::new(window)),
         }
     }

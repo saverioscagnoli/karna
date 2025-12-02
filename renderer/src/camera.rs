@@ -1,7 +1,6 @@
 use common::utils;
-use macros::Get;
-use math::{Matrix, Matrix4, Size, Vector3};
-use winit::dpi::Position;
+use macros::{Get, Set};
+use math::{Matrix4, Size, Vector3};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Projection {
@@ -13,15 +12,12 @@ pub enum Projection {
         z_near: f32,
         z_far: f32,
     },
-    Perspective {
-        fovy: f32,
-        near: f32,
-        far: f32,
-    },
+    #[allow(unused)]
+    Perspective { fovy: f32, near: f32, far: f32 },
 }
 
 impl Projection {
-    fn matrix(&self, window_size: Size<u32>) -> Matrix4 {
+    fn matrix(&self, window_size: &Size<u32>) -> Matrix4 {
         match *self {
             Self::Orthographic {
                 left,
@@ -42,15 +38,20 @@ impl Projection {
 }
 
 #[derive(Debug)]
+#[derive(Get, Set)]
 pub struct Camera {
     projection: Projection,
-
     view_projection_buffer: wgpu::Buffer,
     pub(crate) view_projection_bind_group_layout: wgpu::BindGroupLayout,
-
     pub(crate) view_projection_bind_group: wgpu::BindGroup,
 
-    position: Vector3,
+    #[get]
+    #[get(copied, prop = x, ty = f32)]
+    #[get(copied, prop = y, ty = f32)]
+    #[set(into)]
+    #[set(prop = x, ty = f32)]
+    #[set(prop = y, ty = f32)]
+    pub position: Vector3,
     target: Vector3,
     up: Vector3,
 }
@@ -115,16 +116,16 @@ impl Camera {
     }
 
     #[inline]
-    fn view_projection_matrix(&self, window_size: Size<u32>) -> Matrix4 {
+    fn view_projection_matrix(&self, window_size: &Size<u32>) -> Matrix4 {
         self.projection.matrix(window_size) * self.view_matrix()
     }
 
     #[inline]
-    pub(crate) fn update(&mut self, screen_size: Size<u32>, queue: &wgpu::Queue) {
+    pub(crate) fn update(&mut self, window_size: &Size<u32>, queue: &wgpu::Queue) {
         queue.write_buffer(
             &self.view_projection_buffer,
             0,
-            utils::as_u8_slice(&[self.view_projection_matrix(screen_size)]),
+            utils::as_u8_slice(&[self.view_projection_matrix(window_size)]),
         );
     }
 }

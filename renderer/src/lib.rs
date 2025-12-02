@@ -2,7 +2,10 @@ mod camera;
 mod color;
 mod mesh;
 
-use crate::camera::{Camera, Projection};
+use crate::{
+    camera::{Camera, Projection},
+    mesh::dirty::DirtyTracked,
+};
 
 // Re-exports
 pub use crate::color::Color;
@@ -22,16 +25,20 @@ pub struct Renderer {
     device: wgpu::Device,
     queue: wgpu::Queue,
     adapter: wgpu::Adapter,
+
+    #[allow(unused)]
     surface_format: wgpu::TextureFormat,
     config: wgpu::SurfaceConfiguration,
 
-    pub camera: Camera,
+    pub camera: DirtyTracked<Camera>,
 
     #[get(copied)]
     #[set(into)]
     clear_color: Color,
+    window_size: Size<u32>,
 
-    meshes: FastHashMap<MeshId, MeshBuffer>,
+    meshes: FastHashMap<u32, MeshBuffer>,
+    point_pipeline: wgpu::RenderPipeline,
     triangle_pipeline: wgpu::RenderPipeline,
 }
 
@@ -104,6 +111,16 @@ impl Renderer {
             source: wgpu::ShaderSource::Wgsl(include_str!("../../shaders/basic.wgsl").into()),
         });
 
+        let point_pipeline = Self::create_render_pipeline(
+            "point pipeline",
+            &device,
+            &shader,
+            &[&camera.view_projection_bind_group_layout],
+            surface_format,
+            wgpu::PrimitiveTopology::PointList,
+            wgpu::PolygonMode::Fill,
+        );
+
         let triangle_pipeline = Self::create_render_pipeline(
             "mesh pipeline",
             &device,
@@ -121,10 +138,12 @@ impl Renderer {
             adapter,
             surface_format,
             config,
-            camera,
+            camera: camera.into(),
             clear_color: Color::default(),
+            window_size: Size::new(width, height),
             meshes: FastHashMap::default(),
             triangle_pipeline,
+            point_pipeline,
         }
     }
 
@@ -183,36 +202,38 @@ impl Renderer {
         })
     }
 
-    fn register_mesh<M: Mesh + 'static>(&mut self, mesh: &M) {
-        let mesh_id = MeshId::of::<M>();
-
-        if self.meshes.contains_key(&mesh_id) {
+    fn register_mesh(&mut self, mesh: &Mesh) {
+        if self.meshes.contains_key(&mesh.geometry.id) {
             return;
         }
 
-        let vertices = mesh.vertices();
-        let indices = mesh.indices();
-        let index_count = indices.len() as u32;
+        let index_count = mesh.geometry.indices.len() as u32;
 
         let vertex_buffer = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("Mesh with id '{:?}' vertex buffer", mesh_id)),
-                contents: utils::as_u8_slice(vertices),
+                label: Some(&format!(
+                    "Mesh with id '{:?}' vertex buffer",
+                    mesh.geometry.id
+                )),
+                contents: utils::as_u8_slice(&mesh.geometry.vertices),
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             });
 
         let index_buffer = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("Mesh with id '{:?}' index buffer", mesh_id)),
-                contents: utils::as_u8_slice(indices),
+                label: Some(&format!(
+                    "Mesh with id '{:?}' index buffer",
+                    mesh.geometry.id
+                )),
+                contents: utils::as_u8_slice(&mesh.geometry.indices),
                 usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
             });
 
         let instance_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("instance buffer"),
-            size: (std::mem::size_of::<MeshInstanceGPU>() * M::INITIAL_INSTANCE_CAPACITY) as u64,
+            size: (std::mem::size_of::<MeshInstanceGPU>() * Mesh::INITIAL_INSTANCE_CAPACITY) as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -223,24 +244,23 @@ impl Renderer {
             index_count,
             instance_buffer,
             instances: Vec::new(),
+            topology: mesh.geometry.topology,
         };
 
-        self.meshes.insert(mesh_id, mesh_buffer);
+        self.meshes.insert(mesh.geometry.id, mesh_buffer);
     }
 
     #[inline]
-    pub fn draw_instance<M: Mesh + 'static>(&mut self, mesh: &M, mesh_instance: &MeshInstance) {
-        let mesh_id = MeshId::of::<M>();
-
-        if !self.meshes.contains_key(&mesh_id) {
-            self.register_mesh::<M>(mesh);
+    pub(crate) fn draw_instance(&mut self, mesh: &Mesh) {
+        if !self.meshes.contains_key(&mesh.geometry.id) {
+            self.register_mesh(mesh);
         }
 
         self.meshes
-            .get_mut(&mesh_id)
+            .get_mut(&mesh.geometry.id)
             .unwrap()
             .instances
-            .push(mesh_instance.to_gpu());
+            .push(mesh.instance.to_gpu());
     }
 
     #[inline]
@@ -249,7 +269,13 @@ impl Renderer {
         self.config.width = size.width;
         self.config.height = size.height;
         self.surface.configure(&self.device, &self.config);
-        self.camera.update(size, &self.queue);
+        self.camera.update(&size, &self.queue);
+        self.window_size = size;
+    }
+
+    #[inline]
+    pub fn info(&self) -> wgpu::AdapterInfo {
+        self.adapter.get_info()
     }
 
     #[inline]
@@ -264,7 +290,11 @@ impl Renderer {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Update instance buffers
+        if self.camera.dirty {
+            self.camera.update(&self.window_size, &self.queue);
+            self.camera.dirty = false;
+        }
+
         for mesh_buffer in self.meshes.values_mut() {
             if mesh_buffer.instances.is_empty() {
                 continue;
@@ -273,7 +303,6 @@ impl Renderer {
             let instance_data = utils::as_u8_slice(&mesh_buffer.instances);
             let required_size = instance_data.len() as u64;
 
-            // Resize buffer if needed
             if required_size > mesh_buffer.instance_buffer.size() {
                 mesh_buffer.instance_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("instance buffer"),
@@ -304,36 +333,54 @@ impl Renderer {
                     },
                     depth_slice: None,
                 })],
-
                 depth_stencil_attachment: None,
                 label: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
 
-            render_pass.set_pipeline(&self.triangle_pipeline);
             render_pass.set_bind_group(0, &self.camera.view_projection_bind_group, &[]);
 
+            let mut topology_groups: FastHashMap<wgpu::PrimitiveTopology, Vec<&MeshBuffer>> =
+                FastHashMap::default();
+
             for mesh_buffer in self.meshes.values() {
-                let instance_count = mesh_buffer.instances.len() as u32;
-                if instance_count == 0 {
+                if mesh_buffer.instances.is_empty() {
                     continue;
                 }
+                topology_groups
+                    .entry(mesh_buffer.topology)
+                    .or_default()
+                    .push(mesh_buffer);
+            }
 
-                render_pass.set_vertex_buffer(0, mesh_buffer.vertex_buffer.slice(..));
-                render_pass.set_vertex_buffer(1, mesh_buffer.instance_buffer.slice(..));
-                render_pass.set_index_buffer(
-                    mesh_buffer.index_buffer.slice(..),
-                    wgpu::IndexFormat::Uint32,
-                );
-                render_pass.draw_indexed(0..mesh_buffer.index_count, 0, 0..instance_count);
+            for (topology, buffers) in topology_groups {
+                let pipeline = match topology {
+                    wgpu::PrimitiveTopology::PointList => &self.point_pipeline,
+                    wgpu::PrimitiveTopology::TriangleList => &self.triangle_pipeline,
+                    _ => todo!("?"),
+                };
+
+                render_pass.set_pipeline(pipeline);
+
+                for mesh_buffer in buffers {
+                    let instance_count = mesh_buffer.instances.len() as u32;
+
+                    render_pass.set_vertex_buffer(0, mesh_buffer.vertex_buffer.slice(..));
+                    render_pass.set_vertex_buffer(1, mesh_buffer.instance_buffer.slice(..));
+                    render_pass.set_index_buffer(
+                        mesh_buffer.index_buffer.slice(..),
+                        wgpu::IndexFormat::Uint32,
+                    );
+
+                    render_pass.draw_indexed(0..mesh_buffer.index_count, 0, 0..instance_count);
+                }
             }
         }
 
         self.queue.submit([encoder.finish()]);
         frame.present();
 
-        // Clear instances for next frame
         for mesh_buffer in self.meshes.values_mut() {
             mesh_buffer.instances.clear();
         }

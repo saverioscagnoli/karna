@@ -4,17 +4,44 @@ mod scene;
 use common::{label, utils::Label};
 use math::Size;
 use std::sync::Arc;
+use traccia::info;
 use wgpu::naga::FastHashMap;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
     event::WindowEvent,
     event_loop::{ControlFlow, EventLoop},
+    keyboard::PhysicalKey,
     window::WindowAttributes,
 };
 
 // Re-exports
 pub use crate::{context::Context, scene::Scene};
+pub use winit::{event::MouseButton, keyboard::KeyCode};
+
+struct CustomFormatter;
+
+impl traccia::Formatter for CustomFormatter {
+    fn format(&self, record: &traccia::Record) -> String {
+        format!(
+            "{} {}",
+            record.level.default_coloring().to_lowercase(),
+            record.message
+        )
+    }
+}
+
+fn init_logging() {
+    traccia::init_with_config(traccia::Config {
+        level: if cfg!(debug_assertions) {
+            traccia::LogLevel::Debug
+        } else {
+            traccia::LogLevel::Info
+        },
+        format: Some(Box::new(CustomFormatter)),
+        ..Default::default()
+    });
+}
 
 pub struct App {
     initial_size: Size<u32>,
@@ -36,6 +63,7 @@ impl Default for App {
 
 impl App {
     pub fn new() -> Self {
+        init_logging();
         Self::default()
     }
 
@@ -97,6 +125,13 @@ impl ApplicationHandler<Context> for App {
             scene.load(&mut context);
         }
 
+        let info = context.render.info();
+
+        info!("backend: {}", info.backend);
+        info!("device: {}", info.name);
+        info!("device type: {:?}", info.device_type);
+        info!("driver: {}", info.driver_info);
+
         self.context = Some(context);
 
         window.request_redraw();
@@ -126,6 +161,7 @@ impl ApplicationHandler<Context> for App {
         scene.update(ctx);
 
         ctx.window.request_redraw();
+        ctx.input.flush();
     }
 
     fn window_event(
@@ -143,6 +179,39 @@ impl ApplicationHandler<Context> for App {
 
             WindowEvent::Resized(size) => {
                 ctx.render.resize(size.into());
+            }
+
+            WindowEvent::KeyboardInput { event, .. } => match event.physical_key {
+                PhysicalKey::Code(code) => {
+                    if event.state.is_pressed() {
+                        if !event.repeat {
+                            ctx.input.pressed_keys.insert(code);
+                        }
+
+                        ctx.input.held_keys.insert(code);
+                    } else {
+                        ctx.input.held_keys.remove(&code);
+                    }
+                }
+
+                PhysicalKey::Unidentified(_) => {}
+            },
+
+            WindowEvent::CursorMoved { position, .. } => {
+                ctx.input.mouse_position.x = position.x as f32;
+                ctx.input.mouse_position.y = position.y as f32;
+            }
+
+            WindowEvent::MouseInput { state, button, .. } => {
+                if state.is_pressed() {
+                    if !ctx.input.pressed_mouse.contains(&button) {
+                        ctx.input.pressed_mouse.insert(button);
+                    }
+
+                    ctx.input.held_mouse.insert(button);
+                } else {
+                    ctx.input.held_mouse.remove(&button);
+                }
             }
 
             WindowEvent::RedrawRequested => {

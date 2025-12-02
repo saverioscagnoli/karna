@@ -123,6 +123,7 @@ struct GetConfig {
     ty: Option<Type>,
     name: Option<syn::Ident>,
     copied: bool,
+    dirty: bool,
 }
 
 fn parse_get_attribute(
@@ -137,6 +138,7 @@ fn parse_get_attribute(
         ty: None,
         name: None,
         copied: false,
+        dirty: false,
     };
 
     if let Meta::List(meta_list) = &attr.meta {
@@ -148,6 +150,9 @@ fn parse_get_attribute(
             match meta {
                 Meta::Path(path) if path.is_ident("copied") => {
                     config.copied = true;
+                }
+                Meta::Path(path) if path.is_ident("dirty") => {
+                    config.dirty = true;
                 }
                 Meta::NameValue(MetaNameValue { path, value, .. }) => {
                     if path.is_ident("prop") {
@@ -197,46 +202,89 @@ fn parse_get_attribute(
     });
 
     let return_type = if let Some(ty) = &config.ty {
-        // Explicit type annotation provided
+        // Explicit type annotation provided - use as-is
         quote! { #ty }
     } else if let Some(cast_type) = &config.cast {
         quote! { #cast_type }
     } else if config.copied {
         quote! { #field_type }
     } else {
-        quote! { &#field_type }
+        // Return reference - need to extract inner type if dirty
+        if config.dirty && config.prop.is_none() {
+            // Extract T from DirtyTracked<T> to return &T instead of &DirtyTracked<T>
+            // We need to parse the field_type to get the inner type
+            if let Type::Path(type_path) = field_type {
+                if let Some(segment) = type_path.path.segments.last() {
+                    if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+                        if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
+                            quote! { &#inner_type }
+                        } else {
+                            quote! { &#field_type }
+                        }
+                    } else {
+                        quote! { &#field_type }
+                    }
+                } else {
+                    quote! { &#field_type }
+                }
+            } else {
+                quote! { &#field_type }
+            }
+        } else {
+            quote! { &#field_type }
+        }
     };
 
     let body = if let Some(prop) = &config.prop {
+        let field_access = if config.dirty {
+            quote! { self.#field_name.value.#prop }
+        } else {
+            quote! { self.#field_name.#prop }
+        };
+
         if let Some(pre) = &config.pre {
             if let Some(cast_type) = &config.cast {
-                quote! { self.#field_name.#prop.#pre() as #cast_type }
+                quote! { #field_access.#pre() as #cast_type }
             } else if config.copied {
-                quote! { self.#field_name.#prop.#pre() }
+                quote! { #field_access.#pre() }
             } else {
-                quote! { &self.#field_name.#prop.#pre() }
+                quote! { &#field_access.#pre() }
             }
         } else if let Some(cast_type) = &config.cast {
-            quote! { self.#field_name.#prop as #cast_type }
+            quote! { #field_access as #cast_type }
         } else if config.copied {
-            quote! { self.#field_name.#prop }
+            quote! { #field_access }
         } else {
-            quote! { &self.#field_name.#prop }
+            quote! { &#field_access }
         }
     } else if let Some(pre) = &config.pre {
-        if let Some(cast_type) = &config.cast {
-            quote! { self.#field_name.#pre() as #cast_type }
-        } else if config.copied {
-            quote! { self.#field_name.#pre() }
+        let field_access = if config.dirty {
+            quote! { self.#field_name.value }
         } else {
-            quote! { &self.#field_name.#pre() }
+            quote! { self.#field_name }
+        };
+
+        if let Some(cast_type) = &config.cast {
+            quote! { #field_access.#pre() as #cast_type }
+        } else if config.copied {
+            quote! { #field_access.#pre() }
+        } else {
+            quote! { &#field_access.#pre() }
         }
-    } else if let Some(cast_type) = &config.cast {
-        quote! { self.#field_name as #cast_type }
-    } else if config.copied {
-        quote! { self.#field_name }
     } else {
-        quote! { &self.#field_name }
+        let field_access = if config.dirty {
+            quote! { self.#field_name.value }
+        } else {
+            quote! { self.#field_name }
+        };
+
+        if let Some(cast_type) = &config.cast {
+            quote! { #field_access as #cast_type }
+        } else if config.copied {
+            quote! { #field_access }
+        } else {
+            quote! { &#field_access }
+        }
     };
 
     quote! {
@@ -254,6 +302,7 @@ struct SetConfig {
     ty: Option<Type>,
     name: Option<syn::Ident>,
     into: bool,
+    dirty: bool,
 }
 
 fn parse_set_attribute(
@@ -268,6 +317,7 @@ fn parse_set_attribute(
         ty: None,
         name: None,
         into: false,
+        dirty: false,
     };
 
     if let Meta::List(meta_list) = &attr.meta {
@@ -279,6 +329,9 @@ fn parse_set_attribute(
             match meta {
                 Meta::Path(path) if path.is_ident("into") => {
                     config.into = true;
+                }
+                Meta::Path(path) if path.is_ident("dirty") => {
+                    config.dirty = true;
                 }
                 Meta::NameValue(MetaNameValue { path, value, .. }) => {
                     if path.is_ident("prop") {
@@ -345,15 +398,31 @@ fn parse_set_attribute(
     };
 
     let body = if let Some(prop) = &config.prop {
-        if let Some(cast_type) = &config.cast {
-            quote! { self.#field_name.#prop = #value_expr as #cast_type; }
+        if config.dirty {
+            if let Some(cast_type) = &config.cast {
+                quote! { self.#field_name.value.#prop = #value_expr as #cast_type; }
+            } else {
+                quote! { self.#field_name.value.#prop = #value_expr; }
+            }
         } else {
-            quote! { self.#field_name.#prop = #value_expr; }
+            if let Some(cast_type) = &config.cast {
+                quote! { self.#field_name.#prop = #value_expr as #cast_type; }
+            } else {
+                quote! { self.#field_name.#prop = #value_expr; }
+            }
         }
     } else if let Some(cast_type) = &config.cast {
-        quote! { self.#field_name = #value_expr as #cast_type; }
+        if config.dirty {
+            quote! { self.#field_name = DirtyTracked::new(#value_expr as #cast_type); }
+        } else {
+            quote! { self.#field_name = #value_expr as #cast_type; }
+        }
     } else {
-        quote! { self.#field_name = #value_expr; }
+        if config.dirty {
+            quote! { self.#field_name = DirtyTracked::new(#value_expr); }
+        } else {
+            quote! { self.#field_name = #value_expr; }
+        }
     };
 
     quote! {
@@ -370,6 +439,7 @@ struct WithConfig {
     ty: Option<Type>,
     name: Option<syn::Ident>,
     into: bool,
+    dirty: bool,
 }
 
 fn parse_with_attribute(
@@ -383,6 +453,7 @@ fn parse_with_attribute(
         ty: None,
         name: None,
         into: false,
+        dirty: false,
     };
 
     if let Meta::List(meta_list) = &attr.meta {
@@ -394,6 +465,9 @@ fn parse_with_attribute(
             match meta {
                 Meta::Path(path) if path.is_ident("into") => {
                     config.into = true;
+                }
+                Meta::Path(path) if path.is_ident("dirty") => {
+                    config.dirty = true;
                 }
                 Meta::NameValue(MetaNameValue { path, value, .. }) => {
                     if path.is_ident("prop") {
@@ -456,26 +530,54 @@ fn parse_with_attribute(
     };
 
     let body = if let Some(prop) = &config.prop {
-        if let Some(cast_type) = &config.cast {
+        if config.dirty {
+            if let Some(cast_type) = &config.cast {
+                quote! {
+                    self.#field_name.value.#prop = #value_expr as #cast_type;
+                    self
+                }
+            } else {
+                quote! {
+                    self.#field_name.value.#prop = #value_expr;
+                    self
+                }
+            }
+        } else {
+            if let Some(cast_type) = &config.cast {
+                quote! {
+                    self.#field_name.#prop = #value_expr as #cast_type;
+                    self
+                }
+            } else {
+                quote! {
+                    self.#field_name.#prop = #value_expr;
+                    self
+                }
+            }
+        }
+    } else if let Some(cast_type) = &config.cast {
+        if config.dirty {
             quote! {
-                self.#field_name.#prop = #value_expr as #cast_type;
+                self.#field_name = DirtyTracked::new(#value_expr as #cast_type);
                 self
             }
         } else {
             quote! {
-                self.#field_name.#prop = #value_expr;
+                self.#field_name = #value_expr as #cast_type;
                 self
             }
         }
-    } else if let Some(cast_type) = &config.cast {
-        quote! {
-            self.#field_name = #value_expr as #cast_type;
-            self
-        }
     } else {
-        quote! {
-            self.#field_name = #value_expr;
-            self
+        if config.dirty {
+            quote! {
+                self.#field_name = DirtyTracked::new(#value_expr);
+                self
+            }
+        } else {
+            quote! {
+                self.#field_name = #value_expr;
+                self
+            }
         }
     };
 
