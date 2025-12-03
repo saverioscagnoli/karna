@@ -3,6 +3,7 @@ mod scene;
 
 use common::{label, utils::Label};
 use math::Size;
+use renderer::SharedGPU;
 use std::sync::Arc;
 use traccia::info;
 use wgpu::naga::FastHashMap;
@@ -15,7 +16,6 @@ use winit::{
     window::WindowAttributes,
 };
 
-// Re-exports
 pub use crate::{context::Context, scene::Scene};
 pub use winit::{event::MouseButton, keyboard::KeyCode};
 
@@ -45,7 +45,9 @@ fn init_logging() {
 
 pub struct App {
     initial_size: Size<u32>,
-    context: Option<Context>,
+    gpu: Option<Arc<SharedGPU>>,
+    contexts: FastHashMap<winit::window::WindowId, (Context, Label)>,
+    pending_windows: Vec<(Label, WindowAttributes)>,
     scenes: FastHashMap<Label, Box<dyn Scene>>,
     current_scene: Option<Label>,
 }
@@ -54,7 +56,9 @@ impl Default for App {
     fn default() -> Self {
         Self {
             initial_size: Size::new(800, 600),
-            context: None,
+            gpu: None,
+            contexts: FastHashMap::default(),
+            pending_windows: Vec::new(),
             scenes: FastHashMap::default(),
             current_scene: None,
         }
@@ -77,6 +81,25 @@ impl App {
 
         self.scenes.insert(label!(label), scene);
         self.current_scene = Some(label!(label));
+
+        self.pending_windows.push((
+            label!(label),
+            WindowAttributes::default()
+                .with_inner_size(PhysicalSize::from(self.initial_size))
+                .with_resizable(false),
+        ));
+
+        self
+    }
+
+    pub fn with_window<L: AsRef<str>, S: Into<Size<u32>>>(mut self, label: L, size: S) -> Self {
+        let label = label.as_ref();
+        self.pending_windows.push((
+            label!(label),
+            WindowAttributes::default()
+                .with_inner_size(PhysicalSize::from(size.into()))
+                .with_resizable(false),
+        ));
         self
     }
 
@@ -92,6 +115,16 @@ impl App {
         }
     }
 
+    /// Access the shared GPU for loading atlas images before windows are created
+    pub fn gpu(&self) -> Option<&Arc<SharedGPU>> {
+        self.gpu.as_ref()
+    }
+
+    /// Mutably access the shared GPU
+    pub fn gpu_mut(&mut self) -> Option<&mut Arc<SharedGPU>> {
+        self.gpu.as_mut()
+    }
+
     pub fn run(mut self) {
         let event_loop = EventLoop::with_user_event().build().expect(":(");
 
@@ -102,79 +135,74 @@ impl App {
 
 impl ApplicationHandler<Context> for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let attributes = WindowAttributes::default()
-            .with_inner_size(PhysicalSize::from(self.initial_size))
-            .with_resizable(false);
+        // Initialize shared GPU on first resume if not already done
+        if self.gpu.is_none() {
+            self.gpu = Some(Arc::new(pollster::block_on(SharedGPU::new())));
 
-        let window = event_loop
-            .create_window(attributes)
-            .expect("Failed to create winow");
-
-        let window = Arc::new(window);
-        let mut context = Context::new(window.clone());
-
-        let label = match self.current_scene {
-            Some(l) => l,
-            None => {
-                event_loop.exit();
-                return;
-            }
-        };
-
-        if let Some(scene) = self.scenes.get_mut(&label) {
-            scene.load(&mut context);
+            let info = self.gpu.as_ref().unwrap().info();
+            info!("backend: {}", info.backend);
+            info!("device: {}", info.name);
+            info!("device type: {:?}", info.device_type);
+            info!("driver: {}", info.driver_info);
         }
 
-        let info = context.render.info();
+        let gpu = self.gpu.clone().unwrap();
+        let pending_windows = std::mem::take(&mut self.pending_windows);
 
-        info!("backend: {}", info.backend);
-        info!("device: {}", info.name);
-        info!("device type: {:?}", info.device_type);
-        info!("driver: {}", info.driver_info);
+        for (label, attributes) in pending_windows {
+            let window = event_loop
+                .create_window(attributes)
+                .expect("Failed to create window");
 
-        self.context = Some(context);
+            let window = Arc::new(window);
+            let mut context = Context::new(window.clone(), gpu.clone());
 
-        window.request_redraw();
+            if let Some(scene) = self.scenes.get_mut(&label) {
+                scene.load(&mut context);
+            }
+
+            self.contexts.insert(window.id(), (context, label));
+            window.request_redraw();
+        }
     }
 
     fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-        let Some(ctx) = &mut self.context else { return };
-        let Some(scene) = self.scenes.get_mut(&self.current_scene.unwrap()) else {
-            return;
-        };
+        for (ctx, label) in self.contexts.values_mut() {
+            let Some(scene) = self.scenes.get_mut(label) else {
+                continue;
+            };
 
-        ctx.time.frame_start();
+            ctx.time.frame_start();
+            ctx.time.update();
 
-        // First, update delta time, timers, etc.
-        ctx.time.update();
+            while let Some(update_start) = ctx.time.should_tick() {
+                scene.fixed_update(ctx);
+                ctx.time.do_tick(update_start);
+            }
 
-        // Then, fixed tick until the accumulator allows it
-        while let Some(update_start) = ctx.time.should_tick() {
-            scene.fixed_update(ctx);
-            ctx.time.do_tick(update_start);
+            scene.update(ctx);
+
+            ctx.window.request_redraw();
+            ctx.input.flush();
         }
-
-        // Then, update the scene with an unrestricted update
-        // Give the opportunity  for things that should be updated
-        // with a fixed time to be updated first, like physics,
-        // then update as fast as the fps allow
-        scene.update(ctx);
-
-        ctx.window.request_redraw();
-        ctx.input.flush();
     }
 
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
-        _window_id: winit::window::WindowId,
+        window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        let Some(ctx) = &mut self.context else { return };
+        let Some((ctx, label)) = self.contexts.get_mut(&window_id) else {
+            return;
+        };
 
         match event {
             WindowEvent::CloseRequested => {
-                event_loop.exit();
+                self.contexts.remove(&window_id);
+                if self.contexts.is_empty() {
+                    event_loop.exit();
+                }
             }
 
             WindowEvent::Resized(size) => {
@@ -187,13 +215,11 @@ impl ApplicationHandler<Context> for App {
                         if !event.repeat {
                             ctx.input.pressed_keys.insert(code);
                         }
-
                         ctx.input.held_keys.insert(code);
                     } else {
                         ctx.input.held_keys.remove(&code);
                     }
                 }
-
                 PhysicalKey::Unidentified(_) => {}
             },
 
@@ -207,7 +233,6 @@ impl ApplicationHandler<Context> for App {
                     if !ctx.input.pressed_mouse.contains(&button) {
                         ctx.input.pressed_mouse.insert(button);
                     }
-
                     ctx.input.held_mouse.insert(button);
                 } else {
                     ctx.input.held_mouse.remove(&button);
@@ -215,7 +240,7 @@ impl ApplicationHandler<Context> for App {
             }
 
             WindowEvent::RedrawRequested => {
-                if let Some(scene) = self.scenes.get_mut(&self.current_scene.unwrap()) {
+                if let Some(scene) = self.scenes.get_mut(label) {
                     scene.render(ctx);
                 }
 

@@ -6,7 +6,6 @@ mod vector;
 
 pub use matrix::*;
 pub use point::*;
+pub use random::*;
 pub use size::*;
 pub use vector::*;
-
-pub use random::*;

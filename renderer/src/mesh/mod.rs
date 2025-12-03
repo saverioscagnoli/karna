@@ -1,8 +1,9 @@
 pub mod dirty;
+pub mod material;
 pub mod transform;
 
-use crate::{Color, Renderer, Transform2D, mesh::dirty::DirtyTracked};
-use math::{Vector3, Vector4};
+use crate::{Color, Renderer, Transform2D, material::Material, mesh::dirty::DirtyTracked};
+use math::{Vector2, Vector3, Vector4};
 use mini_moka::sync::Cache;
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
@@ -19,7 +20,7 @@ pub trait Descriptor {
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Vertex {
     pub position: Vector3,
-    pub color: Vector4,
+    pub uv: Vector2,
 }
 
 impl Descriptor for Vertex {
@@ -36,7 +37,7 @@ impl Descriptor for Vertex {
                 wgpu::VertexAttribute {
                     offset: std::mem::size_of::<Vector3>() as wgpu::BufferAddress,
                     shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x4,
+                    format: wgpu::VertexFormat::Float32x2,
                 },
             ],
         }
@@ -47,6 +48,8 @@ impl Descriptor for Vertex {
 pub struct MeshInstance {
     pub transform: Transform2D,
     pub color: Color,
+    pub uv_offset: Vector2,
+    pub uv_scale: Vector2,
 }
 
 impl Default for MeshInstance {
@@ -54,6 +57,8 @@ impl Default for MeshInstance {
         Self {
             transform: Transform2D::default(),
             color: Color::White,
+            uv_offset: Vector2::zeros(),
+            uv_scale: Vector2::new(1.0, 1.0),
         }
     }
 }
@@ -76,9 +81,11 @@ impl MeshInstance {
     pub fn to_gpu(&self) -> MeshInstanceGPU {
         MeshInstanceGPU {
             position: self.transform.position.extend(0.0),
-            scale: self.transform.scale.extend(0.0),
+            scale: self.transform.scale.extend(1.0),
             rotation: Vector3::new(0.0, 0.0, self.transform.rotation),
             color: self.color.into(),
+            uv_offset: self.uv_offset,
+            uv_scale: self.uv_scale,
         }
     }
 }
@@ -90,6 +97,8 @@ pub struct MeshInstanceGPU {
     pub scale: Vector3,
     pub rotation: Vector3,
     pub color: Vector4,
+    pub uv_offset: Vector2,
+    pub uv_scale: Vector2,
 }
 
 impl Descriptor for MeshInstanceGPU {
@@ -122,6 +131,22 @@ impl Descriptor for MeshInstanceGPU {
                     shader_location: 5,
                     format: wgpu::VertexFormat::Float32x4,
                 },
+                // uv_offset
+                wgpu::VertexAttribute {
+                    offset: (std::mem::size_of::<Vector3>() * 3 + std::mem::size_of::<Vector4>())
+                        as wgpu::BufferAddress,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                // uv_scale
+                wgpu::VertexAttribute {
+                    offset: (std::mem::size_of::<Vector3>() * 3
+                        + std::mem::size_of::<Vector4>()
+                        + std::mem::size_of::<Vector2>())
+                        as wgpu::BufferAddress,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
             ],
         }
     }
@@ -135,6 +160,7 @@ pub struct MeshBuffer {
     pub instance_buffer: wgpu::Buffer,
     pub instances: Vec<MeshInstanceGPU>,
     pub topology: wgpu::PrimitiveTopology,
+    pub material: Material,
 }
 
 #[derive(Debug, Clone)]
@@ -187,16 +213,13 @@ impl MeshGeometry {
     ) -> u32 {
         let mut hasher = DefaultHasher::new();
 
-        let vertex_bytes = unsafe {
-            std::slice::from_raw_parts(
-                vertices.as_ptr() as *const u8,
-                vertices.len() * std::mem::size_of::<Vertex>(),
-            )
-        };
+        for vertex in vertices {
+            vertex.position.x.to_bits().hash(&mut hasher);
+            vertex.position.y.to_bits().hash(&mut hasher);
+            vertex.position.z.to_bits().hash(&mut hasher);
+        }
 
-        vertex_bytes.hash(&mut hasher);
         indices.hash(&mut hasher);
-
         std::mem::discriminant(topology).hash(&mut hasher);
 
         hasher.finish() as u32
@@ -206,42 +229,82 @@ impl MeshGeometry {
         let vertices = &[
             Vertex {
                 position: Vector3::new(0.0, 0.0, 0.0),
-                color: Color::White.into(),
+                uv: Vector2::new(0.0, 0.0),
             },
             Vertex {
                 position: Vector3::new(1.0, 0.0, 0.0),
-                color: Color::White.into(),
+                uv: Vector2::new(1.0, 0.0),
             },
             Vertex {
                 position: Vector3::new(1.0, 1.0, 0.0),
-                color: Color::White.into(),
+                uv: Vector2::new(1.0, 1.0),
             },
             Vertex {
                 position: Vector3::new(0.0, 1.0, 0.0),
-                color: Color::White.into(),
+                uv: Vector2::new(0.0, 1.0),
             },
         ];
 
         let indices = &[0, 1, 2, 2, 3, 0];
-
         Self::new(vertices, indices, wgpu::PrimitiveTopology::TriangleList)
     }
 
     pub fn pixel() -> Arc<Self> {
         let vertices = &[Vertex {
             position: Vector3::zeros(),
-            color: Color::White.into(),
+            uv: Vector2::zeros(),
         }];
 
         let indices = &[0];
 
         Self::new(vertices, indices, wgpu::PrimitiveTopology::PointList)
     }
+
+    pub fn circle(radius: f32, segments: u32) -> Arc<Self> {
+        let segments = segments.max(3);
+        let num_vertices = 1 + segments as usize;
+
+        let mut vertices = Vec::with_capacity(num_vertices);
+        let mut indices = Vec::with_capacity(segments as usize * 3); // 3 indices per segment
+
+        vertices.push(Vertex {
+            position: Vector3::zeros(),
+            uv: Vector2::new(0.5, 0.5),
+        });
+
+        let center_index: u32 = 0;
+        let angle_step = std::f32::consts::TAU / segments as f32; // TAU = 2 * PI
+
+        for i in 0..segments {
+            let angle = i as f32 * angle_step;
+
+            let x = radius * angle.cos();
+            let y = radius * angle.sin();
+
+            let uv_x = (x / (2.0 * radius)) + 0.5;
+            let uv_y = (y / (2.0 * radius)) + 0.5;
+
+            vertices.push(Vertex {
+                position: Vector3::new(x, y, 0.0),
+                uv: Vector2::new(uv_x, uv_y),
+            });
+
+            let current_vertex_index = i + 1;
+            let next_vertex_index = if i == segments - 1 { 1 } else { i + 2 };
+
+            indices.push(center_index);
+            indices.push(current_vertex_index);
+            indices.push(next_vertex_index);
+        }
+
+        Self::new(&vertices, &indices, wgpu::PrimitiveTopology::TriangleList)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Mesh {
     pub(crate) geometry: Arc<MeshGeometry>,
+    pub(crate) material: Material,
     pub instance: DirtyTracked<MeshInstance>,
 }
 
@@ -262,10 +325,38 @@ impl DerefMut for Mesh {
 impl Mesh {
     pub const INITIAL_INSTANCE_CAPACITY: usize = 64;
 
-    pub fn new(geometry: Arc<MeshGeometry>, color: Color, transform: Transform2D) -> Self {
+    pub fn new(geometry: Arc<MeshGeometry>, material: Material, transform: Transform2D) -> Self {
         Self {
             geometry,
-            instance: MeshInstance { transform, color }.into(),
+            instance: MeshInstance {
+                transform,
+                color: material.tint,
+                uv_offset: Vector2::zeros(),
+                uv_scale: Vector2::new(1.0, 1.0),
+            }
+            .into(),
+            material,
+        }
+    }
+
+    /// Create a mesh with a specific atlas region for UV mapping
+    pub fn with_atlas_region(
+        geometry: Arc<MeshGeometry>,
+        material: Material,
+        transform: Transform2D,
+        uv_offset: Vector2,
+        uv_scale: Vector2,
+    ) -> Self {
+        Self {
+            geometry,
+            instance: MeshInstance {
+                transform,
+                color: material.tint,
+                uv_offset,
+                uv_scale,
+            }
+            .into(),
+            material,
         }
     }
 

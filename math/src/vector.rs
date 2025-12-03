@@ -87,7 +87,7 @@ impl<const N: usize> Vector<N> {
 
     #[inline]
     pub fn dot(&self, rhs: &Self) -> f32 {
-        self.iter().zip(rhs.iter()).map(|(a, b)| a + b).sum()
+        self.iter().zip(rhs.iter()).map(|(a, b)| a * b).sum()
     }
 
     #[inline]
