@@ -1,4 +1,5 @@
 use crate::mesh::material::Texture;
+use common::utils::Label;
 use image::GenericImageView;
 use math::{Size, Vector2};
 use std::collections::HashMap;
@@ -46,7 +47,7 @@ pub struct TextureAtlas {
     // Packing state
     shelves: Vec<Shelf>,
     current_y: u32,
-    regions: HashMap<String, AtlasRegion>,
+    regions: HashMap<Label, AtlasRegion>,
     padding: u32,
 }
 
@@ -96,13 +97,13 @@ impl TextureAtlas {
     pub fn pack(
         &mut self,
         queue: &wgpu::Queue,
-        name: String,
+        label: Label,
         image_data: &[u8],
         width: u32,
         height: u32,
     ) -> Result<AtlasRegion, String> {
         // Check if already packed
-        if let Some(region) = self.regions.get(&name) {
+        if let Some(region) = self.regions.get(&label) {
             return Ok(*region);
         }
 
@@ -184,7 +185,7 @@ impl TextureAtlas {
             },
         );
 
-        self.regions.insert(name, region);
+        self.regions.insert(label, region);
         Ok(region)
     }
 
@@ -192,7 +193,7 @@ impl TextureAtlas {
     pub fn load_image(
         &mut self,
         queue: &wgpu::Queue,
-        name: String,
+        name: Label,
         bytes: &[u8],
     ) -> Result<AtlasRegion, String> {
         let img =
@@ -205,13 +206,13 @@ impl TextureAtlas {
     }
 
     /// Get a previously packed region by name
-    pub fn get_region(&self, name: &str) -> Option<AtlasRegion> {
-        self.regions.get(name).copied()
+    pub fn get_region(&self, label: &Label) -> Option<AtlasRegion> {
+        self.regions.get(label).copied()
     }
 
     /// Get UV coordinates for a region by name
-    pub fn get_uv(&self, name: &str) -> Option<(Vector2, Vector2)> {
-        self.get_region(name)
+    pub fn get_uv(&self, label: &Label) -> Option<(Vector2, Vector2)> {
+        self.get_region(label)
             .map(|region| region.to_uv(self.size.width, self.size.height))
     }
 
