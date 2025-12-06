@@ -1,12 +1,9 @@
-use crate::context::ScopedContext;
-use std::fmt::Debug;
+use crate::context::Context;
 
-pub trait Scene {
-    fn load(&mut self, ctx: &mut ScopedContext);
-    fn update(&mut self, ctx: &mut ScopedContext);
-
+pub trait Scene: Send {
+    fn load(&mut self, ctx: &mut Context);
     #[allow(unused)]
-    fn fixed_update(&mut self, ctx: &mut ScopedContext) {}
-
-    fn render(&mut self, ctx: &mut ScopedContext);
+    fn fixed_update(&mut self, ctx: &mut Context) {}
+    fn update(&mut self, ctx: &mut Context);
+    fn render(&mut self, ctx: &mut Context);
 }

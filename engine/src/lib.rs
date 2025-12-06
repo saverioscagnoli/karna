@@ -1,20 +1,31 @@
-pub mod context;
-pub mod scene;
+mod builder;
+mod context;
+mod scene;
 
-use crate::{context::Context, scene::Scene};
-use common::{label, utils::Label};
+use common::label;
+use common::utils::Label;
+use crossbeam_channel::{Sender, bounded};
 use math::Size;
-use renderer::{Renderer, SurfaceState};
-use std::{intrinsics::ctlz, sync::Arc};
-use traccia::fatal;
-use wgpu::{ContextBlasTriangleGeometry, naga::FastHashMap};
+use renderer::GPU;
+use std::sync::Arc;
+use std::thread::{self, JoinHandle};
+use traccia::{info, warn};
+use wgpu::naga::FastHashMap;
+use wgpu::wgc::command::RenderPassColorAttachment;
+use winit::event::{self, InnerSizeWriter};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::{
     application::ApplicationHandler,
-    dpi::PhysicalSize,
     event::WindowEvent,
-    event_loop::{ControlFlow, EventLoop},
-    window::{Window, WindowAttributes},
+    window::{WindowAttributes, WindowId},
 };
+
+// Re-exports
+pub use crate::context::Context;
+use crate::context::{Monitor, Monitors, Window};
+pub use builder::{AppBuilder, WindowBuilder};
+pub use context::input;
+pub use scene::Scene;
 
 struct CustomFormatter;
 
@@ -40,122 +51,246 @@ fn init_logging() {
     });
 }
 
-pub struct App {
-    context: Context,
-    initial_size: Size<u32>,
+pub enum WindowCommand {
+    Event(WindowEvent),
+    Redraw,
+    Close,
+    MonitorsChanged(Vec<Monitor>),
+}
+
+struct WindowHandle {
+    sender: Sender<WindowCommand>,
+    handle: JoinHandle<()>,
+}
+
+struct PendingWindow {
+    attributes: WindowAttributes,
     scenes: FastHashMap<Label, Box<dyn Scene>>,
-    current_scene: Label,
+}
+
+pub struct App {
+    gpu: Arc<GPU>,
+    windows: FastHashMap<WindowId, WindowHandle>,
+    pending_windows: Vec<PendingWindow>,
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         init_logging();
+        let gpu = Arc::new(pollster::block_on(GPU::init()));
+        let info = gpu.info();
+
+        info!("backend: {}", info.backend);
+        info!("device: {}", info.name);
+        info!("device type: {:?}", info.device_type);
+        info!("driver: {}", info.driver_info);
 
         Self {
-            context: Context::new(),
-            initial_size: Size::new(800, 600),
-            scenes: FastHashMap::default(),
-            current_scene: label!("initial"),
+            gpu,
+            windows: FastHashMap::default(),
+            pending_windows: Vec::new(),
         }
     }
 
-    pub fn with_size<S: Into<Size<u32>>>(mut self, size: S) -> Self {
-        self.initial_size = size.into();
-        self
+    fn add_pending_window(
+        &mut self,
+        attributes: WindowAttributes,
+        scenes: FastHashMap<Label, Box<dyn Scene>>,
+    ) {
+        self.pending_windows
+            .push(PendingWindow { attributes, scenes });
     }
 
-    pub fn with_initial_scene(mut self, scene: Box<dyn Scene>) -> Self {
-        self.scenes.insert(label!("initial"), scene);
-        self
-    }
+    fn spawn_window(
+        &mut self,
+        window: Arc<winit::window::Window>,
+        scenes: FastHashMap<Label, Box<dyn Scene>>,
+        recommended_fps: u32,
+    ) {
+        let (tx, rx) = bounded::<WindowCommand>(64);
+        let gpu = Arc::clone(&self.gpu);
+        let window_id = window.id();
+        let window = Window::new(window);
 
-    pub fn with_scene(mut self, label: Label, scene: Box<dyn Scene>) -> Self {
-        self.scenes.insert(label, scene);
-        self
-    }
+        let handle = thread::spawn(move || {
+            let mut ctx = Context::new(gpu, window, recommended_fps);
+            let mut scenes = scenes;
+            let mut active_scene = label!("initial");
 
-    pub fn add_window(&mut self, label: Label, window: Arc<Window>) {
-        let surface = self
-            .context
-            .render
-            .create_surface_for_window(window.clone());
+            scenes
+                .get_mut(&active_scene)
+                .expect("cannot fail")
+                .load(&mut ctx);
 
-        self.context.windows.insert(label, (window, surface));
-    }
+            // Kickstart the loop
+            ctx.window.request_redraw();
 
-    pub fn render(&mut self) {
-        for (_, surface_state) in &mut self.context.windows.values_mut() {
-            self.context.render.render_to_surface(surface_state);
-        }
+            loop {
+                match rx.recv() {
+                    Ok(WindowCommand::Close) => return,
+
+                    Ok(WindowCommand::Event(event)) => {
+                        ctx.handle_event(event);
+                    }
+
+                    Ok(WindowCommand::MonitorsChanged(monitors)) => {
+                        ctx.monitors.update(monitors);
+                    }
+
+                    Ok(WindowCommand::Redraw) => {
+                        ctx.time.frame_start();
+                        ctx.time.update();
+
+                        while let Some(tick_start) = ctx.time.should_tick() {
+                            if let Some(scene) = scenes.get_mut(&active_scene) {
+                                scene.fixed_update(&mut ctx);
+                            }
+
+                            ctx.time.do_tick(tick_start);
+                        }
+
+                        if let Some(scene) = scenes.get_mut(&active_scene) {
+                            scene.update(&mut ctx);
+                            scene.render(&mut ctx);
+                        }
+
+                        match ctx.render.present(&ctx.gpu) {
+                            Ok(_) => {}
+                            Err(wgpu::SurfaceError::OutOfMemory) => return,
+                            Err(e) => eprintln!("Render error: {:?}", e),
+                        }
+
+                        ctx.time.frame_end();
+                        ctx.input.flush();
+
+                        let sleep_duration = ctx.time.until_next_frame();
+                        if !sleep_duration.is_zero() {
+                            spin_sleep::sleep(sleep_duration);
+                        }
+
+                        ctx.window.request_redraw();
+                    }
+
+                    Err(_) => return, // Channel closed
+                }
+            }
+        });
+
+        self.windows
+            .insert(window_id, WindowHandle { sender: tx, handle });
     }
 
     pub fn run(mut self) {
-        let event_loop = EventLoop::with_user_event().build().expect(":(");
+        let event_loop = EventLoop::new().expect("Failed to create event loop");
 
-        event_loop.set_control_flow(ControlFlow::Poll);
-        event_loop
-            .run_app(&mut self)
-            .expect("Failed to run application");
+        // Don't poll because the main thread doesnt have the game loop, so just wait for events
+        event_loop.set_control_flow(ControlFlow::Wait);
+        event_loop.run_app(&mut self).expect("Failed to run app");
     }
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let attributes = WindowAttributes::default()
-            .with_inner_size(PhysicalSize::new(800, 600))
-            .with_resizable(false);
-        let window = event_loop
-            .create_window(attributes.clone())
-            .expect("Failed to create window");
+        let pending = std::mem::take(&mut self.pending_windows);
 
-        self.add_window(label!("main"), Arc::new(window));
+        let recommended_fps = event_loop
+            .available_monitors()
+            .max_by(|a, b| {
+                let a_hz = a.refresh_rate_millihertz().unwrap_or(60_000);
+                let b_hz = b.refresh_rate_millihertz().unwrap_or(60_000);
 
-        match self.scenes.get_mut(&self.current_scene) {
-            Some(scene) => scene.load(&mut self.context.for_window(&label!("main"))),
-            None => {
-                fatal!("You must set an initial scene with 'with_initial_scene'!");
-                event_loop.exit();
-                return;
+                match a_hz.cmp(&b_hz) {
+                    std::cmp::Ordering::Equal => {
+                        // If refresh rates are equal, compare resolution (area)
+                        let a_size: Size<u32> = a.size().into();
+                        let b_size: Size<u32> = b.size().into();
+
+                        a_size.area().cmp(&b_size.area())
+                    }
+
+                    other => other,
+                }
+            })
+            .and_then(|m| {
+                let size = m.size();
+                let hz =
+                    (m.refresh_rate_millihertz().unwrap_or(60_000) as f32 / 1000.0).round() as u32;
+
+                info!(
+                    "setting as recommended monitor: '{}' {}x{}@{}hz",
+                    m.name().unwrap_or(String::from("unknown")),
+                    size.width,
+                    size.height,
+                    hz,
+                );
+
+                Some(hz)
+            })
+            .unwrap_or(60);
+
+        for window_config in pending {
+            match event_loop.create_window(window_config.attributes) {
+                Ok(window) => {
+                    let window = Arc::new(window);
+                    self.spawn_window(window, window_config.scenes, recommended_fps);
+                }
+                Err(e) => {
+                    eprintln!("Failed to create window: {}", e);
+                }
             }
-        };
-    }
-
-    fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let Some(scene) = self.scenes.get_mut(&self.current_scene) else {
-            return;
-        };
-
-        let mut context = self.context.for_window(&label!("main"));
-
-        context.time.frame_start();
-        context.time.update();
-
-        while let Some(update_start) = context.time.should_tick() {
-            scene.fixed_update(&mut context);
-            context.time.do_tick(update_start);
         }
-
-        scene.update(&mut context);
-
-        context.input.flush();
     }
 
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
-        window_id: winit::window::WindowId,
-        event: winit::event::WindowEvent,
+        window_id: WindowId,
+        event: WindowEvent,
     ) {
         match event {
             WindowEvent::CloseRequested => {
-                event_loop.exit();
+                if let Some(handle) = self.windows.remove(&window_id) {
+                    let _ = handle.sender.send(WindowCommand::Close);
+                    let _ = handle.handle.join();
+                }
+
+                if self.windows.is_empty() {
+                    event_loop.exit();
+                }
+            }
+
+            WindowEvent::ScaleFactorChanged { .. } => {
+                if let Some(handle) = self.windows.get(&window_id) {
+                    let monitors = Monitors::collect(event_loop);
+
+                    warn!("Monitors changed. {} detected", monitors.len());
+
+                    let _ = handle
+                        .sender
+                        .try_send(WindowCommand::MonitorsChanged(monitors));
+                }
             }
 
             WindowEvent::RedrawRequested => {
-                self.render();
+                if let Some(handle) = self.windows.get(&window_id) {
+                    let _ = handle.sender.try_send(WindowCommand::Redraw);
+                }
             }
 
-            _ => {}
+            _ => {
+                if let Some(handle) = self.windows.get(&window_id) {
+                    let _ = handle.sender.try_send(WindowCommand::Event(event));
+                }
+            }
+        }
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        for (_, handle) in self.windows.drain() {
+            let _ = handle.sender.send(WindowCommand::Close);
+            let _ = handle.handle.join();
         }
     }
 }

@@ -45,6 +45,11 @@ impl<T: Num + Copy> Size<T> {
     pub fn new(width: T, height: T) -> Self {
         Self { width, height }
     }
+
+    #[inline]
+    pub fn area(&self) -> T {
+        self.width * self.height
+    }
 }
 
 impl<T: Num + Copy> From<PhysicalSize<T>> for Size<T> {

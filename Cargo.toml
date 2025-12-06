@@ -19,3 +19,4 @@ traccia = "2.2.5"
 math.workspace = true
 engine = { path = "engine" }
 renderer.workspace = true
+winit.workspace = true

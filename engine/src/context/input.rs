@@ -1,7 +1,9 @@
 use macros::Get;
 use math::Vector2;
 use wgpu::naga::FastHashSet;
-use winit::{event::MouseButton, keyboard::KeyCode};
+
+// Re-exports
+pub use winit::{event::MouseButton, keyboard::KeyCode};
 
 #[derive(Debug)]
 #[derive(Get)]
