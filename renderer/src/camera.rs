@@ -114,7 +114,6 @@ impl Camera {
             Projection::Perspective { .. } => Matrix4::look_at(self.position, self.target, self.up),
         }
     }
-
     #[inline]
     fn view_projection_matrix(&self, window_size: &Size<u32>) -> Matrix4 {
         self.projection.matrix(window_size) * self.view_matrix()
@@ -122,6 +121,15 @@ impl Camera {
 
     #[inline]
     pub(crate) fn update(&mut self, window_size: &Size<u32>, queue: &wgpu::Queue) {
+        self.projection = Projection::Orthographic {
+            left: 0.0,
+            right: window_size.width as f32,
+            bottom: window_size.height as f32,
+            top: 0.0,
+            z_near: -1.0,
+            z_far: 1.0,
+        };
+
         queue.write_buffer(
             &self.view_projection_buffer,
             0,

@@ -9,11 +9,9 @@ use math::Size;
 use renderer::GPU;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use traccia::{info, warn};
+use traccia::{error, info, warn};
 use wgpu::naga::FastHashMap;
-use wgpu::wgc::command::RenderPassColorAttachment;
-use winit::event::{self, InnerSizeWriter};
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::event_loop::{ControlFlow, EventLoop};
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -136,6 +134,24 @@ impl App {
                     }
 
                     Ok(WindowCommand::Redraw) => {
+                        // Drain all pending events before rendering to avoid lag
+                        while let Ok(cmd) = rx.try_recv() {
+                            match cmd {
+                                WindowCommand::Close => return,
+                                WindowCommand::Event(event) => {
+                                    ctx.handle_event(event);
+                                }
+
+                                WindowCommand::MonitorsChanged(monitors) => {
+                                    ctx.monitors.update(monitors);
+                                }
+                                WindowCommand::Redraw => {
+                                    // Skip redundant redraw commands
+                                    break;
+                                }
+                            }
+                        }
+
                         ctx.time.frame_start();
                         ctx.time.update();
 
@@ -155,7 +171,7 @@ impl App {
                         match ctx.render.present(&ctx.gpu) {
                             Ok(_) => {}
                             Err(wgpu::SurfaceError::OutOfMemory) => return,
-                            Err(e) => eprintln!("Render error: {:?}", e),
+                            Err(e) => error!("Render error: {:?}", e),
                         }
 
                         ctx.time.frame_end();
@@ -181,7 +197,7 @@ impl App {
     pub fn run(mut self) {
         let event_loop = EventLoop::new().expect("Failed to create event loop");
 
-        // Don't poll because the main thread doesnt have the game loop, so just wait for events
+        // Don't poll because the main thread doesnt have the window loop, so just wait for events
         event_loop.set_control_flow(ControlFlow::Wait);
         event_loop.run_app(&mut self).expect("Failed to run app");
     }
@@ -230,10 +246,11 @@ impl ApplicationHandler for App {
             match event_loop.create_window(window_config.attributes) {
                 Ok(window) => {
                     let window = Arc::new(window);
+
                     self.spawn_window(window, window_config.scenes, recommended_fps);
                 }
                 Err(e) => {
-                    eprintln!("Failed to create window: {}", e);
+                    error!("Failed to create window: {}", e);
                 }
             }
         }
@@ -271,13 +288,17 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 if let Some(handle) = self.windows.get(&window_id) {
-                    let _ = handle.sender.try_send(WindowCommand::Redraw);
+                    if let Err(_) = handle.sender.try_send(WindowCommand::Redraw) {
+                        // Redraw events can be safely dropped - next frame will render anyway
+                    }
                 }
             }
 
             _ => {
                 if let Some(handle) = self.windows.get(&window_id) {
-                    let _ = handle.sender.try_send(WindowCommand::Event(event));
+                    if let Err(_) = handle.sender.try_send(WindowCommand::Event(event)) {
+                        warn!("Event dropped - channel full. Consider processing events faster.");
+                    }
                 }
             }
         }

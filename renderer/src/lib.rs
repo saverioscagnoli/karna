@@ -37,6 +37,7 @@ pub struct Renderer {
     triangle_pipeline: wgpu::RenderPipeline,
 
     mesh_cache: FastHashMap<u32, MeshBuffer>,
+    needs_camera_update: bool,
 }
 
 impl Renderer {
@@ -106,6 +107,7 @@ impl Renderer {
             camera,
             triangle_pipeline,
             mesh_cache: FastHashMap::default(),
+            needs_camera_update: false,
         }
     }
 
@@ -230,11 +232,22 @@ impl Renderer {
         self.config.height = size.height;
         self.surface.configure(&self.gpu.device, &self.config);
 
-        self.camera.update(&size, &self.gpu.queue);
+        self.needs_camera_update = true;
     }
 
     #[inline]
     pub fn present(&mut self, gpu: &GPU) -> Result<(), wgpu::SurfaceError> {
+        // Update camera if window was resized
+        if self.needs_camera_update {
+            let size = Size {
+                width: self.config.width,
+                height: self.config.height,
+            };
+
+            self.camera.update(&size, &gpu.queue);
+            self.needs_camera_update = false;
+        }
+
         // Write instance data to GPU buffers and resize if needed
         for mesh_buffer in self.mesh_cache.values_mut() {
             if mesh_buffer.instances.is_empty() {
