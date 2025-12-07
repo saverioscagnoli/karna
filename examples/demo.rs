@@ -1,6 +1,8 @@
 use karna::{
-    App, AppBuilder, Context, FullscreenMode, Scene, WindowBuilder, input::KeyCode, render::Color,
-    render::Mesh,
+    App, AppBuilder, Context, FullscreenMode, Label, Scene, WindowBuilder,
+    input::KeyCode,
+    label,
+    render::{Color, Mesh},
 };
 use math::Vector2;
 use renderer::{MeshGeometry, Transform};
@@ -13,10 +15,12 @@ pub struct S {
 impl Scene for S {
     fn load(&mut self, ctx: &mut Context) {
         ctx.render.set_clear_color(Color::Gray);
+        ctx.audio
+            .load_from_bytes(label!("mammamia"), include_bytes!("assets/mamma-mia.mp3"));
     }
 
     fn update(&mut self, ctx: &mut Context) {
-        if ctx.input.key_pressed(&KeyCode::Space) {
+        if ctx.input.key_pressed(&KeyCode::F11) {
             if ctx.window.is_fullscreen() {
                 ctx.window.set_windowed();
             } else {
@@ -44,6 +48,10 @@ impl Scene for S {
 
         self.rect.position += self.vel * ctx.time.delta();
         self.vel *= 0.9;
+
+        if ctx.input.key_pressed(&KeyCode::Space) {
+            ctx.audio.play(label!("mammamia"));
+        }
     }
 
     fn render(&mut self, ctx: &mut Context) {

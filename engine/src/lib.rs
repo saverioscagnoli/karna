@@ -2,8 +2,6 @@ mod builder;
 mod context;
 mod scene;
 
-use common::label;
-use common::utils::Label;
 use crossbeam_channel::{Sender, bounded};
 use math::Size;
 use renderer::GPU;
@@ -21,6 +19,7 @@ use winit::{
 // Re-exports
 pub use crate::context::*;
 pub use builder::{AppBuilder, WindowBuilder};
+pub use common::{label, utils::Label};
 pub use scene::Scene;
 
 struct CustomFormatter;
@@ -35,7 +34,7 @@ impl traccia::Formatter for CustomFormatter {
     }
 }
 
-fn init_logging() {
+pub(crate) fn init_logging() {
     traccia::init_with_config(traccia::Config {
         level: if cfg!(debug_assertions) {
             traccia::LogLevel::Debug
@@ -72,7 +71,6 @@ pub struct App {
 
 impl App {
     pub(crate) fn new() -> Self {
-        init_logging();
         let gpu = Arc::new(pollster::block_on(GPU::init()));
         let info = gpu.info();
 

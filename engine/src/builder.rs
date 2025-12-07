@@ -1,4 +1,4 @@
-use crate::{App, Scene};
+use crate::{App, Scene, init_logging};
 use common::{label, utils::Label};
 use math::Size;
 use wgpu::naga::FastHashMap;
@@ -64,6 +64,7 @@ pub struct AppBuilder {
 
 impl AppBuilder {
     pub fn new() -> Self {
+        init_logging();
         Self {
             windows: Vec::new(),
         }

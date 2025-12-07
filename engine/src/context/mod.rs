@@ -1,10 +1,12 @@
-// Export input as a separate module
-pub mod input;
+mod audio;
 mod monitors;
 mod time;
 mod window;
 
-use crate::context::input::Input;
+// Export input as a separate module
+pub mod input;
+
+use crate::context::{audio::Audio, input::Input};
 use renderer::{GPU, Renderer};
 use std::sync::Arc;
 use winit::{event::WindowEvent, keyboard::PhysicalKey};
@@ -20,6 +22,7 @@ pub struct Context {
     pub time: Time,
     pub input: Input,
     pub render: Renderer,
+    pub audio: Audio,
     pub monitors: Monitors,
 }
 
@@ -36,6 +39,7 @@ impl Context {
             time: Time::new(recommended_fps),
             input: Input::new(),
             render,
+            audio: Audio::new(),
             monitors,
         }
     }

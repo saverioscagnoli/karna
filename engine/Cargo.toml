@@ -14,3 +14,4 @@ spin_sleep = "1.3.3"
 renderer = { path = "../renderer" }
 pollster = "0.4.0"
 traccia.workspace = true
+rodio = "0.21.1"
