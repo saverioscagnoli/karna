@@ -1,5 +1,6 @@
 use wgpu::Backends;
 
+#[derive(Debug)]
 pub struct GPU {
     pub(crate) instance: wgpu::Instance,
     pub(crate) adapter: wgpu::Adapter,

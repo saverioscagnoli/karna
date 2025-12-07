@@ -21,10 +21,8 @@ use winit::{
 };
 
 // Re-exports
-pub use crate::context::Context;
-use crate::context::{Monitor, Monitors, Window};
+pub use crate::context::*;
 pub use builder::{AppBuilder, WindowBuilder};
-pub use context::input;
 pub use scene::Scene;
 
 struct CustomFormatter;

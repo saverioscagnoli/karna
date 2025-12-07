@@ -66,3 +66,18 @@ impl<T: Num + Copy> From<Size<T>> for PhysicalSize<T> {
         Self::new(value.width, value.height)
     }
 }
+
+impl From<winit::dpi::Size> for Size<u32> {
+    fn from(value: winit::dpi::Size) -> Self {
+        match value {
+            winit::dpi::Size::Physical(size) => Self::new(size.width, size.height),
+            winit::dpi::Size::Logical(size) => Self::new(size.width as u32, size.height as u32),
+        }
+    }
+}
+
+impl From<Size<u32>> for winit::dpi::Size {
+    fn from(value: Size<u32>) -> Self {
+        Self::Physical(value.into())
+    }
+}

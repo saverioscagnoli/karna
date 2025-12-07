@@ -12,7 +12,7 @@ use winit::{event::WindowEvent, keyboard::PhysicalKey};
 // Re-exports
 pub use monitors::{Monitor, Monitors};
 pub use time::Time;
-pub use window::Window;
+pub use window::{FullscreenMode, Window};
 
 pub struct Context {
     pub gpu: Arc<GPU>,
@@ -25,7 +25,7 @@ pub struct Context {
 
 impl Context {
     pub fn new(gpu: Arc<GPU>, window: Window, recommended_fps: u32) -> Self {
-        let render = Renderer::new(&gpu, Arc::clone(window.inner()));
+        let render = Renderer::new(Arc::clone(&gpu), Arc::clone(window.inner()));
 
         // We can clone cause it's an Arc
         let monitors = Monitors::new(window.clone());
@@ -43,7 +43,9 @@ impl Context {
     #[inline]
     pub(crate) fn handle_event(&mut self, event: WindowEvent) {
         match event {
-            WindowEvent::Resized(size) => {}
+            WindowEvent::Resized(size) => {
+                self.render.resize(size.into());
+            }
 
             WindowEvent::KeyboardInput { event, .. } => match event.physical_key {
                 PhysicalKey::Code(code) => {

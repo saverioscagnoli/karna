@@ -8,3 +8,5 @@ wgpu.workspace = true
 winit.workspace = true
 macros.workspace = true
 math.workspace = true
+traccia.workspace = true
+common.workspace = true
