@@ -64,7 +64,7 @@ impl Scene for S {
             ctx.audio.play(label!("mammamia"));
         }
 
-        self.debug_text.content = format!("fps: {}\ndt: {}", ctx.time.fps(), ctx.time.delta());
+        self.debug_text.content = format!("fps: {}\ndt: {} è", ctx.time.fps(), ctx.time.delta());
     }
 
     fn render(&mut self, ctx: &mut Context) {

@@ -7,7 +7,10 @@ mod sprite;
 mod text;
 mod texture;
 
-use common::utils::{self, Label};
+use common::{
+    label,
+    utils::{self, Label},
+};
 use fontdue::layout::Layout;
 use image::imageops::FilterType::Lanczos3;
 use macros::{Get, Set};
@@ -186,6 +189,19 @@ impl Renderer {
             needs_camera_update: false,
             white_texture,
         }
+    }
+
+    #[inline]
+    #[doc(hidden)]
+    pub fn init(&self) {
+        self.load_font(
+            label!("debug"),
+            include_bytes!("../../assets/DOS-V.ttf"),
+            16,
+        );
+
+        info!("Loaded debug font with label 'debug'");
+        info!("Renderer initalized");
     }
 
     #[inline]

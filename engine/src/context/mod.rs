@@ -29,6 +29,9 @@ pub struct Context {
 impl Context {
     pub fn new(gpu: Arc<GPU>, window: Window, recommended_fps: u32) -> Self {
         let render = Renderer::new(Arc::clone(&gpu), Arc::clone(window.inner()));
+
+        render.init();
+
         let monitors = Monitors::new(Arc::clone(window.inner()));
 
         Self {
