@@ -3,10 +3,15 @@ mod color;
 mod gpu;
 mod mesh;
 mod shader;
+mod sprite;
+mod text;
+mod texture;
 
-use common::utils;
+use common::utils::{self, Label};
+use fontdue::layout::Layout;
+use image::imageops::FilterType::Lanczos3;
 use macros::{Get, Set};
-use math::Size;
+use math::{Size, Vector2};
 use mesh::RawMesh;
 use std::sync::Arc;
 use traccia::{info, warn};
@@ -15,12 +20,19 @@ use winit::window::Window;
 
 // Re-exports
 pub use crate::camera::{Camera, Projection};
+use crate::{text::Font, texture::Texture};
 pub use color::Color;
 pub use gpu::*;
 pub use mesh::{
-    Descriptor, Mesh, MeshBuffer, Vertex, geometry::MeshGeometry, transform::Transform,
+    Descriptor, Mesh, MeshBuffer, Vertex,
+    geometry::MeshGeometry,
+    material::{Material, TextureKind, TextureRegion},
+    transform::Transform,
 };
 pub use shader::*;
+pub use sprite::{Frame, Sprite};
+pub use text::Text;
+pub use texture::atlas::TextureAtlas;
 
 #[derive(Debug)]
 #[derive(Get, Set)]
@@ -38,9 +50,11 @@ pub struct Renderer {
 
     mesh_cache: FastHashMap<u32, MeshBuffer>,
     needs_camera_update: bool,
+    white_texture: Arc<Texture>,
 }
 
 impl Renderer {
+    #[doc(hidden)]
     pub fn new(gpu: Arc<GPU>, window: Arc<Window>) -> Self {
         let size = window.inner_size();
 
@@ -84,18 +98,80 @@ impl Renderer {
 
         let shader = shader::create_default_shader(&gpu.device);
 
-        let triangle_pipeline = Self::create_render_pipeline(
-            "triangle pipeline",
+        // Create a separate 1x1 white texture for untextured meshes
+        let white_bind_group_layout =
+            gpu.device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("white texture bind group layout"),
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                    ],
+                });
+
+        let white_texture = Arc::new(texture::Texture::new_empty(
+            "White Pixel",
             &gpu.device,
-            &shader,
-            &[&camera.view_projection_bind_group_layout],
-            format,
-            wgpu::PrimitiveTopology::TriangleList,
-            wgpu::PolygonMode::Fill,
+            Size::new(1, 1),
+            &white_bind_group_layout,
+        ));
+
+        gpu.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                aspect: wgpu::TextureAspect::All,
+                texture: &white_texture.inner,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            &[255u8, 255u8, 255u8, 255u8],
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4),
+                rows_per_image: Some(1),
+            },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
         );
 
+        let triangle_pipeline = {
+            let texture_atlas = gpu
+                .texture_atlas
+                .read()
+                .expect("Texture atlas lock is poisoned");
+
+            Self::create_render_pipeline(
+                "triangle pipeline",
+                &gpu.device,
+                &shader,
+                &[
+                    &camera.view_projection_bind_group_layout,
+                    &texture_atlas.bind_group_layout,
+                ],
+                format,
+                wgpu::PrimitiveTopology::TriangleList,
+                wgpu::PolygonMode::Fill,
+            )
+        };
+
         Self {
-            gpu,
+            gpu: Arc::clone(&gpu),
             surface,
             config,
             clear_color: Color {
@@ -108,7 +184,67 @@ impl Renderer {
             triangle_pipeline,
             mesh_cache: FastHashMap::default(),
             needs_camera_update: false,
+            white_texture,
         }
+    }
+
+    #[inline]
+    pub fn get_texture_size(&self, label: &Label) -> Option<Size<u32>> {
+        let lock = self
+            .gpu
+            .texture_atlas
+            .read()
+            .expect("Texture atlas lock is poisoned");
+
+        lock.get_texture_size(label)
+    }
+
+    /// Draws the entire texture atlas at the specified position.
+    /// Useful for debugging and visualizing atlas contents.
+    #[inline]
+    pub fn draw_texture_atlas<P: Into<Vector2>>(&mut self, pos: P) {
+        let pos = pos.into();
+        let atlas_size = {
+            let lock = self
+                .gpu
+                .texture_atlas
+                .read()
+                .expect("Texture atlas lock is poisoned");
+
+            lock.size
+        };
+
+        let mesh = Mesh {
+            geometry: MeshGeometry::rect(),
+            material: Material {
+                color: Some(Color::White),
+                texture: None,
+            },
+            transform: Transform::default()
+                .with_position(pos)
+                .with_scale(Vector2::from(atlas_size)),
+        };
+
+        if !self.mesh_cache.contains_key(&mesh.geometry.id) {
+            self.register_mesh(&mesh);
+        }
+
+        let raw_mesh = RawMesh {
+            position: pos.extend(0.0).into(),
+            scale: math::Vector2::new(atlas_size.width as f32, atlas_size.height as f32)
+                .extend(1.0)
+                .into(),
+            rotation: [0.0, 0.0, 0.0],
+            color: Color::White.into(),
+            uv_offset: [0.0, 0.0],
+            uv_scale: [1.0, 1.0],
+        };
+
+        self.mesh_cache
+            .get_mut(&mesh.geometry.id)
+            .unwrap()
+            .textured_instances
+            .push(raw_mesh);
     }
 
     fn create_render_pipeline<L: AsRef<str>>(
@@ -199,7 +335,8 @@ impl Renderer {
             index_buffer,
             index_count,
             instance_buffer,
-            instances: Vec::new(),
+            textured_instances: Vec::new(),
+            untextured_instances: Vec::new(),
             topology: mesh.geometry.topology,
         };
 
@@ -212,14 +349,116 @@ impl Renderer {
             self.register_mesh(mesh);
         }
 
-        self.mesh_cache
-            .get_mut(&mesh.geometry.id)
-            .unwrap()
-            .instances
-            .push(mesh.to_raw());
+        let mut raw_mesh = mesh.to_raw();
+        let mesh_buffer = self.mesh_cache.get_mut(&mesh.geometry.id).unwrap();
+
+        if let Some(texture_kind) = &mesh.material.texture {
+            let lock = self
+                .gpu
+                .texture_atlas
+                .read()
+                .expect("Texture atlas lock is poisoned");
+
+            match texture_kind {
+                TextureKind::Full(label) => {
+                    // Use the entire texture from the atlas
+                    if let Some(uv_coords) = lock.get_uv_coords(label) {
+                        raw_mesh.uv_offset = [uv_coords.min_x, uv_coords.min_y];
+                        raw_mesh.uv_scale = [
+                            uv_coords.max_x - uv_coords.min_x,
+                            uv_coords.max_y - uv_coords.min_y,
+                        ];
+                    }
+                }
+                TextureKind::Partial(label, region) => {
+                    // Use a specific region of the texture
+                    if let Some(base_uv) = lock.get_uv_coords(label) {
+                        // Calculate the atlas size
+                        let atlas_size = lock.size;
+
+                        // Convert pixel coordinates to normalized texture coordinates within the atlas
+                        let region_start_x = region.x as f32 / atlas_size.width as f32;
+                        let region_start_y = region.y as f32 / atlas_size.height as f32;
+                        let region_width = region.width as f32 / atlas_size.width as f32;
+                        let region_height = region.height as f32 / atlas_size.height as f32;
+
+                        // Offset from the base texture position in the atlas
+                        raw_mesh.uv_offset = [
+                            base_uv.min_x + region_start_x,
+                            base_uv.min_y + region_start_y,
+                        ];
+                        raw_mesh.uv_scale = [region_width, region_height];
+                    }
+                }
+            }
+
+            mesh_buffer.textured_instances.push(raw_mesh);
+        } else {
+            mesh_buffer.untextured_instances.push(raw_mesh);
+        }
     }
 
     #[inline]
+    pub fn draw_text(&mut self, text: &Text) {
+        // Get the rect geometry for rendering each character as a quad
+        let rect_geometry = MeshGeometry::rect();
+
+        if !self.mesh_cache.contains_key(&rect_geometry.id) {
+            let temp_mesh = Mesh {
+                geometry: rect_geometry.clone(),
+                material: Material {
+                    color: Some(Color::White),
+                    texture: None,
+                },
+                transform: Transform::default(),
+            };
+            self.register_mesh(&temp_mesh);
+        }
+
+        let atlas_lock = self
+            .gpu
+            .texture_atlas
+            .read()
+            .expect("Texture atlas lock is poisoned");
+
+        let mesh_buffer = self.mesh_cache.get_mut(&rect_geometry.id).unwrap();
+
+        // Render each glyph from the layout
+        for glyph in text.layout.glyphs() {
+            let glyph_label =
+                Label::new(&format!("{}_char_{}", text.font.raw(), glyph.parent as u32));
+
+            if let Some(uv_coords) = atlas_lock.get_uv_coords(&glyph_label) {
+                // Position includes the text transform
+                let char_position = Vector2::new(
+                    text.transform.position.x + glyph.x * text.transform.scale.x,
+                    text.transform.position.y + glyph.y * text.transform.scale.y,
+                );
+
+                let char_scale = Vector2::new(
+                    glyph.width as f32 * text.transform.scale.x,
+                    glyph.height as f32 * text.transform.scale.y,
+                );
+
+                let raw_mesh = RawMesh {
+                    position: char_position.extend(0.0).into(),
+                    scale: char_scale.extend(1.0).into(),
+                    rotation: [0.0, 0.0, text.transform.rotation],
+                    color: text.color.into(),
+                    uv_offset: [uv_coords.min_x, uv_coords.min_y],
+                    uv_scale: [
+                        uv_coords.max_x - uv_coords.min_x,
+                        uv_coords.max_y - uv_coords.min_y,
+                    ],
+                };
+
+                mesh_buffer.textured_instances.push(raw_mesh);
+            }
+        }
+    }
+
+    #[inline]
+    #[doc(hidden)]
     pub fn resize(&mut self, size: Size<u32>) {
         if size.width == 0 || size.height == 0 {
             warn!("cannot set witdth or height to 0");
@@ -236,31 +475,61 @@ impl Renderer {
     }
 
     #[inline]
+    pub fn load_texture(&self, label: Label, bytes: &[u8]) {
+        let mut lock = self
+            .gpu
+            .texture_atlas
+            .write()
+            .expect("Texture atlas lock is poisoned");
+
+        lock.load_image(&self.gpu.queue, label, bytes)
+            .expect("Failed to load texture");
+    }
+
+    #[inline]
+    pub fn load_font(&self, label: Label, bytes: &[u8], size: u8) {
+        let font = Font::new(label, bytes, size);
+
+        let mut fonts_lock = self.gpu.fonts.write().expect("Fonts lock is poisoned");
+        let mut atlas_lock = self
+            .gpu
+            .texture_atlas
+            .write()
+            .expect("Texture atlas lock is poisoned");
+
+        atlas_lock.load_font(&font,  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()-_=+[]{}|;:'\",.<>/?", &self.gpu.queue).expect("Failed to load font");
+
+        fonts_lock.insert(label, Arc::new(font));
+    }
+
+    #[inline]
     pub fn present(&mut self, gpu: &GPU) -> Result<(), wgpu::SurfaceError> {
-        // Update camera if window was resized
         if self.needs_camera_update {
             let size = Size {
                 width: self.config.width,
                 height: self.config.height,
             };
-
             self.camera.update(&size, &gpu.queue);
             self.needs_camera_update = false;
         }
 
-        // Write instance data to GPU buffers and resize if needed
+        // Write instance data to GPU buffers
         for mesh_buffer in self.mesh_cache.values_mut() {
-            if mesh_buffer.instances.is_empty() {
+            let all_instances: Vec<_> = mesh_buffer
+                .textured_instances
+                .iter()
+                .chain(mesh_buffer.untextured_instances.iter())
+                .copied()
+                .collect();
+
+            if all_instances.is_empty() {
                 continue;
             }
 
-            let instance_count = mesh_buffer.instances.len();
-            let required_size = (std::mem::size_of::<RawMesh>() * instance_count) as u64;
-            let current_size = mesh_buffer.instance_buffer.size();
+            let required_size = (std::mem::size_of::<RawMesh>() * all_instances.len()) as u64;
 
-            // Resize buffer if needed
-            if required_size > current_size {
-                let new_capacity = instance_count.next_power_of_two();
+            if required_size > mesh_buffer.instance_buffer.size() {
+                let new_capacity = all_instances.len().next_power_of_two();
                 mesh_buffer.instance_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("instance buffer"),
                     size: (std::mem::size_of::<RawMesh>() * new_capacity) as u64,
@@ -269,11 +538,10 @@ impl Renderer {
                 });
             }
 
-            // Write instance data to GPU
             gpu.queue.write_buffer(
                 &mesh_buffer.instance_buffer,
                 0,
-                utils::as_u8_slice(&mesh_buffer.instances),
+                utils::as_u8_slice(&all_instances),
             );
         }
 
@@ -305,40 +573,48 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            let mut topology_groups: FastHashMap<wgpu::PrimitiveTopology, Vec<&MeshBuffer>> =
-                FastHashMap::default();
+            let atlas_lock = self
+                .gpu
+                .texture_atlas
+                .read()
+                .expect("Texture atlas lock is poisoned");
 
             for mesh_buffer in self.mesh_cache.values() {
-                if mesh_buffer.instances.is_empty() {
+                let textured_count = mesh_buffer.textured_instances.len() as u32;
+                let untextured_count = mesh_buffer.untextured_instances.len() as u32;
+
+                if textured_count == 0 && untextured_count == 0 {
                     continue;
                 }
 
-                topology_groups
-                    .entry(mesh_buffer.topology)
-                    .or_default()
-                    .push(mesh_buffer);
-            }
-
-            for (topology, buffers) in topology_groups {
-                let pipeline = match topology {
+                let pipeline = match mesh_buffer.topology {
                     wgpu::PrimitiveTopology::TriangleList => &self.triangle_pipeline,
-                    _ => todo!("?"),
+                    _ => todo!("Unsupported topology"),
                 };
 
                 render_pass.set_pipeline(pipeline);
                 render_pass.set_bind_group(0, &self.camera.view_projection_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, mesh_buffer.vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, mesh_buffer.instance_buffer.slice(..));
+                render_pass.set_index_buffer(
+                    mesh_buffer.index_buffer.slice(..),
+                    wgpu::IndexFormat::Uint32,
+                );
 
-                for mesh_buffer in buffers {
-                    let instance_count = mesh_buffer.instances.len() as u32;
+                // Draw textured instances (first in buffer)
+                if textured_count > 0 {
+                    render_pass.set_bind_group(1, &atlas_lock.texture.bind_group, &[]);
+                    render_pass.draw_indexed(0..mesh_buffer.index_count, 0, 0..textured_count);
+                }
 
-                    render_pass.set_vertex_buffer(0, mesh_buffer.vertex_buffer.slice(..));
-                    render_pass.set_vertex_buffer(1, mesh_buffer.instance_buffer.slice(..));
-                    render_pass.set_index_buffer(
-                        mesh_buffer.index_buffer.slice(..),
-                        wgpu::IndexFormat::Uint32,
+                // Draw untextured instances (after textured in buffer)
+                if untextured_count > 0 {
+                    render_pass.set_bind_group(1, &self.white_texture.bind_group, &[]);
+                    render_pass.draw_indexed(
+                        0..mesh_buffer.index_count,
+                        0,
+                        textured_count..(textured_count + untextured_count),
                     );
-
-                    render_pass.draw_indexed(0..mesh_buffer.index_count, 0, 0..instance_count);
                 }
             }
         }
@@ -346,9 +622,9 @@ impl Renderer {
         gpu.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
-        // Clear instances after rendering
         for mesh_buffer in self.mesh_cache.values_mut() {
-            mesh_buffer.instances.clear();
+            mesh_buffer.textured_instances.clear();
+            mesh_buffer.untextured_instances.clear();
         }
 
         Ok(())

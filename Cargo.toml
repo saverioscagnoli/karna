@@ -20,3 +20,7 @@ math.workspace = true
 engine = { path = "engine" }
 renderer.workspace = true
 winit.workspace = true
+
+[dev-dependencies]
+image = "0.25.9"
+rand = "0.8"

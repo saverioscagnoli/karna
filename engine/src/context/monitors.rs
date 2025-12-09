@@ -1,15 +1,15 @@
-use crate::context::Window;
 use math::Size;
 use std::{
     fmt::Debug,
     ops::{Deref, DerefMut},
+    sync::Arc,
 };
 use winit::{event_loop::ActiveEventLoop, monitor::MonitorHandle};
 
 pub struct Monitors {
     /// Doesn't matter because window wraps an Arc<winit window>
     /// so we can keep a reference for consistency when getting the current monitor
-    window: Window,
+    window: Arc<winit::window::Window>,
 
     /// A list of all available monitors
     /// Accessible through deref.
@@ -40,7 +40,7 @@ impl DerefMut for Monitors {
 }
 
 impl Monitors {
-    pub(crate) fn new(window: Window) -> Self {
+    pub(crate) fn new(window: Arc<winit::window::Window>) -> Self {
         Self {
             window,
             monitors: Vec::new(),
@@ -69,7 +69,7 @@ impl Monitors {
     #[inline]
     /// Returns the current monitor that the window is on.
     pub fn current(&self) -> Option<Monitor> {
-        self.window.inner().current_monitor().map(Monitor::new)
+        self.window.current_monitor().map(Monitor::new)
     }
 }
 

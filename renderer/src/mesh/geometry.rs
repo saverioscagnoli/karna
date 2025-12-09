@@ -1,11 +1,11 @@
 use crate::{Color, mesh::Vertex};
-use math::{Vector3, Vector4};
+use math::{Vector2, Vector3, Vector4};
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
     sync::{Arc, LazyLock, RwLock},
 };
 use traccia::debug;
-use wgpu::naga::{FastHashMap, FastHashSet};
+use wgpu::naga::FastHashMap;
 
 static GEOMETRY_CACHE: LazyLock<RwLock<FastHashMap<u32, Arc<MeshGeometry>>>> =
     LazyLock::new(|| RwLock::new(FastHashMap::default()));
@@ -90,18 +90,22 @@ impl MeshGeometry {
             Vertex {
                 position: Vector3::new(0.0, 0.0, 0.0),
                 color,
+                uv: Vector2::new(0.0, 0.0),
             },
             Vertex {
                 position: Vector3::new(1.0, 0.0, 0.0),
                 color,
+                uv: Vector2::new(1.0, 0.0),
             },
             Vertex {
                 position: Vector3::new(1.0, 1.0, 0.0),
                 color,
+                uv: Vector2::new(1.0, 1.0),
             },
             Vertex {
                 position: Vector3::new(0.0, 1.0, 0.0),
                 color,
+                uv: Vector2::new(0.0, 1.0),
             },
         ];
 
@@ -113,6 +117,7 @@ impl MeshGeometry {
         let vertices = &[Vertex {
             position: Vector3::zeros(),
             color: Color::White.into(),
+            uv: Vector2::zeros(),
         }];
 
         let indices = &[0];
@@ -131,6 +136,7 @@ impl MeshGeometry {
         vertices.push(Vertex {
             position: Vector3::zeros(),
             color,
+            uv: Vector2::new(0.5, 0.5),
         });
 
         let center_index: u32 = 0;
@@ -145,6 +151,7 @@ impl MeshGeometry {
             vertices.push(Vertex {
                 position: Vector3::new(x, y, 0.0),
                 color,
+                uv: Vector2::new((x / radius + 1.0) * 0.5, (y / radius + 1.0) * 0.5),
             });
 
             let current_vertex_index = i + 1;

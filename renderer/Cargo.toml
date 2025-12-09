@@ -10,3 +10,6 @@ macros.workspace = true
 math.workspace = true
 traccia.workspace = true
 common.workspace = true
+image = "0.25.9"
+crunch = "0.5.3"
+fontdue = "0.9.3"

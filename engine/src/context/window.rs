@@ -1,13 +1,7 @@
 use math::Size;
 use std::sync::Arc;
-use traccia::{error, warn};
+use traccia::warn;
 use winit::window::Fullscreen;
-
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub enum FullscreenMode {
-    Exclusive,
-    Borderless,
-}
 
 #[derive(Debug, Clone)]
 pub struct Window(Arc<winit::window::Window>);

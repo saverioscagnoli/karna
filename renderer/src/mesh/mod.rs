@@ -1,13 +1,13 @@
 pub mod geometry;
+pub mod material;
 pub mod transform;
 
 use crate::{
     Color, Renderer,
-    mesh::{geometry::MeshGeometry, transform::Transform},
+    mesh::{geometry::MeshGeometry, material::Material, transform::Transform},
 };
-use math::{Vector3, Vector4};
+use math::{Vector2, Vector3, Vector4};
 use std::{
-    hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -21,6 +21,7 @@ pub trait Descriptor {
 pub struct Vertex {
     position: Vector3,
     color: Vector4,
+    uv: Vector2,
 }
 
 impl Descriptor for Vertex {
@@ -39,6 +40,12 @@ impl Descriptor for Vertex {
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x4,
                 },
+                wgpu::VertexAttribute {
+                    offset: (std::mem::size_of::<Vector3>() + std::mem::size_of::<Vector4>())
+                        as wgpu::BufferAddress,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
             ],
         }
     }
@@ -50,14 +57,15 @@ pub struct MeshBuffer {
     pub index_buffer: wgpu::Buffer,
     pub index_count: u32,
     pub instance_buffer: wgpu::Buffer,
-    pub instances: Vec<RawMesh>,
+    pub textured_instances: Vec<RawMesh>,
+    pub untextured_instances: Vec<RawMesh>,
     pub topology: wgpu::PrimitiveTopology,
 }
 
 #[derive(Debug, Clone)]
 pub struct Mesh {
     pub geometry: Arc<MeshGeometry>,
-    pub color: Color,
+    pub material: Material,
     pub transform: Transform,
 }
 
@@ -83,7 +91,9 @@ impl Mesh {
             position: self.position.extend(0.0).into(),
             scale: self.scale.extend(1.0).into(),
             rotation: [0.0, 0.0, self.rotation],
-            color: self.color.into(),
+            color: self.material.color.unwrap_or(Color::White).into(),
+            uv_offset: [0.0, 0.0],
+            uv_scale: [1.0, 1.0],
         }
     }
 
@@ -100,6 +110,8 @@ pub struct RawMesh {
     pub scale: [f32; 3],
     pub rotation: [f32; 3],
     pub color: [f32; 4],
+    pub uv_offset: [f32; 2],
+    pub uv_scale: [f32; 2],
 }
 
 impl Descriptor for RawMesh {
@@ -111,26 +123,42 @@ impl Descriptor for RawMesh {
                 // position
                 wgpu::VertexAttribute {
                     offset: 0,
-                    shader_location: 2,
+                    shader_location: 3,
                     format: wgpu::VertexFormat::Float32x3,
                 },
                 // scale
                 wgpu::VertexAttribute {
                     offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 3,
+                    shader_location: 4,
                     format: wgpu::VertexFormat::Float32x3,
                 },
                 // rotation
                 wgpu::VertexAttribute {
                     offset: (std::mem::size_of::<[f32; 3]>() * 2) as wgpu::BufferAddress,
-                    shader_location: 4,
+                    shader_location: 5,
                     format: wgpu::VertexFormat::Float32x3,
                 },
                 // color
                 wgpu::VertexAttribute {
                     offset: (std::mem::size_of::<[f32; 3]>() * 3) as wgpu::BufferAddress,
-                    shader_location: 5,
+                    shader_location: 6,
                     format: wgpu::VertexFormat::Float32x4,
+                },
+                // uv_offset
+                wgpu::VertexAttribute {
+                    offset: (std::mem::size_of::<[f32; 3]>() * 3 + std::mem::size_of::<[f32; 4]>())
+                        as wgpu::BufferAddress,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                // uv_scale
+                wgpu::VertexAttribute {
+                    offset: (std::mem::size_of::<[f32; 3]>() * 3
+                        + std::mem::size_of::<[f32; 4]>()
+                        + std::mem::size_of::<[f32; 2]>())
+                        as wgpu::BufferAddress,
+                    shader_location: 8,
+                    format: wgpu::VertexFormat::Float32x2,
                 },
             ],
         }

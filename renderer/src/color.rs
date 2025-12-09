@@ -1,5 +1,5 @@
 use macros::{Get, Set, With};
-use math::Vector4;
+use math::{Vector4, rng};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[derive(Get, Set, With)]
@@ -41,12 +41,24 @@ impl Color {
     pub const Brown: Self = Self::rgb(0.6, 0.3, 0.0);
     pub const Pink: Self = Self::rgb(1.0, 0.75, 0.8);
 
+    #[inline]
     pub const fn rgb(r: f32, g: f32, b: f32) -> Self {
         Self { r, g, b, a: 1.0 }
     }
 
+    #[inline]
     pub const fn rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self { r, g, b, a }
+    }
+
+    #[inline]
+    /// Generate a random color with full opacity
+    pub fn random() -> Self {
+        let r = rng(0.0..=1.0);
+        let g = rng(0.0..=1.0);
+        let b = rng(0.0..=1.0);
+
+        Self { r, g, b, a: 1.0 }
     }
 }
 

@@ -1,5 +1,5 @@
 use macros::{Get, Set, With};
-use math::Vector2;
+use math::{Size, Vector2};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -50,5 +50,16 @@ impl Transform {
             scale,
             rotation,
         }
+    }
+
+    /// Set the scale to match the given dimensions
+    pub fn with_size(mut self, size: Size<u32>) -> Self {
+        self.scale = Vector2::new(size.width as f32, size.height as f32);
+        self
+    }
+
+    /// Set the scale to match the given dimensions
+    pub fn set_size(&mut self, size: Size<u32>) {
+        self.scale = Vector2::new(size.width as f32, size.height as f32);
     }
 }

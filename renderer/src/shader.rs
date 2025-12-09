@@ -24,21 +24,30 @@ struct Camera {
 @group(0) @binding(0)
 var<uniform> camera: Camera;
 
+@group(1) @binding(0)
+var texture_atlas: texture_2d<f32>;
+@group(1) @binding(1)
+var texture_sampler: sampler;
+
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) color: vec4<f32>,
+    @location(2) uv: vec2<f32>,
 }
 
 struct InstanceInput {
-    @location(2) instance_position: vec3<f32>,
-    @location(3) instance_scale: vec3<f32>,
-    @location(4) instance_rotation: vec3<f32>,
-    @location(5) instance_color: vec4<f32>,
+    @location(3) instance_position: vec3<f32>,
+    @location(4) instance_scale: vec3<f32>,
+    @location(5) instance_rotation: vec3<f32>,
+    @location(6) instance_color: vec4<f32>,
+    @location(7) uv_offset: vec2<f32>,
+    @location(8) uv_scale: vec2<f32>,
 }
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec4<f32>,
+    @location(1) uv: vec2<f32>,
 }
 
 fn rotation_matrix_z(angle: f32) -> mat4x4<f32> {
@@ -110,12 +119,20 @@ fn vs_main(
     // Multiply vertex color by instance color for tinting
     out.color = vertex.color * instance.instance_color;
 
+    // Apply UV transform for texture atlas region mapping
+    out.uv = instance.uv_offset + vertex.uv * instance.uv_scale;
+
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return in.color;
+    // Sample texture if UV coordinates are valid (non-zero or within bounds)
+    let tex_color = textureSample(texture_atlas, texture_sampler, in.uv);
+
+    // Multiply texture color by vertex color for tinting
+    // If no texture is used (UVs are 0), the color will be just the vertex color
+    return tex_color * in.color;
 }
 "#;
 

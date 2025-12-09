@@ -1,6 +1,8 @@
 use macros::{Get, Set, With};
-use num::Num;
+use num::{Num, cast::AsPrimitive};
 use winit::dpi::PhysicalSize;
+
+use crate::Vector2;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -76,8 +78,20 @@ impl From<winit::dpi::Size> for Size<u32> {
     }
 }
 
-impl From<Size<u32>> for winit::dpi::Size {
-    fn from(value: Size<u32>) -> Self {
-        Self::Physical(value.into())
+impl<T: Num + Copy + AsPrimitive<u32>> From<Size<T>> for winit::dpi::Size {
+    fn from(value: Size<T>) -> Self {
+        Self::Physical(PhysicalSize::new(value.width.as_(), value.height.as_()))
+    }
+}
+
+impl<T: Num + Copy + AsPrimitive<f32>> From<Size<T>> for Vector2 {
+    fn from(value: Size<T>) -> Self {
+        Vector2::new(value.width.as_(), value.height.as_())
+    }
+}
+
+impl From<Vector2> for Size<f32> {
+    fn from(value: Vector2) -> Self {
+        Size::new(value.x, value.y)
     }
 }

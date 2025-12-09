@@ -57,7 +57,7 @@ impl Label {
 #[macro_export]
 macro_rules! label {
     ($s:expr) => {
-        Label::new($s)
+        $crate::utils::Label::new($s)
     };
 }
 

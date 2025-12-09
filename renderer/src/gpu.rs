@@ -1,11 +1,17 @@
-use wgpu::Backends;
+use crate::{TextureAtlas, text::Font};
+use common::utils::Label;
+use math::Size;
+use std::sync::{Arc, RwLock};
+use wgpu::{Backends, naga::FastHashMap};
 
 #[derive(Debug)]
 pub struct GPU {
-    pub(crate) instance: wgpu::Instance,
-    pub(crate) adapter: wgpu::Adapter,
-    pub(crate) device: wgpu::Device,
-    pub(crate) queue: wgpu::Queue,
+    pub instance: wgpu::Instance,
+    pub adapter: wgpu::Adapter,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    pub texture_atlas: RwLock<TextureAtlas>,
+    pub fonts: RwLock<FastHashMap<Label, Arc<Font>>>,
 }
 
 impl GPU {
@@ -35,11 +41,16 @@ impl GPU {
             .await
             .expect("Failed to request device");
 
+        let texture_atlas = RwLock::new(TextureAtlas::new(&device, &queue, Size::new(1024, 1024)));
+        let fonts = RwLock::new(FastHashMap::default());
+
         Self {
             instance,
             adapter,
             device,
             queue,
+            texture_atlas,
+            fonts,
         }
     }
 
