@@ -1,7 +1,7 @@
+use macros::Get;
 use std::time::{Duration, Instant};
 
-use macros::Get;
-use wgpu::InstanceFlags;
+const FPS_SAMPLE_COUNT: usize = 60;
 
 #[derive(Debug)]
 #[derive(Get)]
@@ -18,6 +18,7 @@ pub struct Time {
     #[get(copied, name = "tick")]
     tick_time: Duration,
 
+    #[get(copied)]
     recommended_fps: u32,
     #[get(copied, pre = round, cast = u32)]
     fps: f32,
@@ -27,16 +28,20 @@ pub struct Time {
     frame_step: Duration,
     tick_step: Duration,
 
+    frame_timer: f32,
+    /// Used to calculate the fps each x seconds
+    fps_interval: f32,
+    // Ring buffer for FPS calculation
+    frame_times: [f32; FPS_SAMPLE_COUNT],
+    frame_time_index: usize,
+    frame_count: usize,
+
     tick_accumulator: f32,
     tick_timer: f32,
     tick_counter: u32,
 }
 
 impl Time {
-    /// Smoothing factor used when calculating FPS each frame.
-    /// Higher = less smoothing
-    const FPS_SMOOTHING: f32 = 0.1;
-
     pub(crate) fn new(recommended_fps: u32) -> Self {
         Self {
             this_frame: Instant::now(),
@@ -50,6 +55,11 @@ impl Time {
             tps: 0,
             frame_step: Duration::from_secs_f32(1.0 / 60.0),
             tick_step: Duration::from_secs_f32(1.0 / 60.0),
+            frame_timer: 0.0,
+            fps_interval: Duration::from_millis(500).as_secs_f32(),
+            frame_times: [0.0; FPS_SAMPLE_COUNT],
+            frame_time_index: 0,
+            frame_count: 0,
             tick_accumulator: 0.0,
             tick_timer: 0.0,
             tick_counter: 0,
@@ -73,11 +83,24 @@ impl Time {
 
         let dt = dt.as_secs_f32();
 
+        self.frame_timer += dt;
         self.tick_timer += dt;
         self.tick_accumulator += dt;
         self.delta_time = dt;
 
-        self.fps = self.fps * (1.0 - Self::FPS_SMOOTHING) + (1.0 / dt) * Self::FPS_SMOOTHING;
+        self.frame_times[self.frame_time_index] = dt;
+        self.frame_time_index = (self.frame_time_index + 1) % FPS_SAMPLE_COUNT;
+        self.frame_count = (self.frame_count + 1).min(FPS_SAMPLE_COUNT);
+
+        if self.frame_timer >= self.fps_interval {
+            let sum: f32 = self.frame_times[..self.frame_count].iter().sum();
+            let avg_frame_time = sum / self.frame_count as f32;
+            self.fps = if avg_frame_time > 0.0 {
+                1.0 / avg_frame_time
+            } else {
+                0.0
+            };
+        }
 
         if self.tick_timer >= 1.0 {
             self.tps = self.tick_counter;
@@ -133,6 +156,13 @@ impl Time {
     /// recommended monitor found at startup
     pub fn set_recommended_fps(&mut self) {
         self.frame_step = Duration::from_secs_f32(1.0 / self.recommended_fps as f32);
+    }
+
+    #[inline]
+    /// Sets the interval duration at which the frames are calculated
+    /// Default is 500ms, so fps value will be updated every 500ms
+    pub fn set_fps_interval(&mut self, interval: Duration) {
+        self.fps_interval = interval.as_secs_f32();
     }
 
     #[inline]

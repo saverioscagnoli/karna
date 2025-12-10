@@ -61,6 +61,7 @@ impl WindowBuilder {
         );
 
         (
+            // Im on sway, current workaround to make the window spawn floating
             self.attributes.with_resizable(false),
             self.label,
             self.scenes,
@@ -75,6 +76,7 @@ pub struct AppBuilder {
 impl AppBuilder {
     pub fn new() -> Self {
         init_logging();
+
         Self {
             windows: Vec::new(),
         }

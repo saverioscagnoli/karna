@@ -7,10 +7,10 @@ mod window;
 pub mod input;
 
 use crate::context::{audio::Audio, input::Input};
-use renderer::{GPU, Renderer};
+use renderer::Renderer;
 use spin_sleep::SpinSleeper;
 use std::sync::Arc;
-use winit::{event::WindowEvent, keyboard::PhysicalKey, window::WindowId};
+use winit::{event::WindowEvent, keyboard::PhysicalKey};
 
 // Re-exports
 pub use monitors::{Monitor, Monitors};

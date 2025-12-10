@@ -74,11 +74,11 @@ impl Scene for S {
 
         self.debug_text.render(&mut ctx.render);
     }
+
+    fn on_resize(&mut self, _ctx: &mut Context) {}
 }
 
-pub struct S2 {
-    circle: Mesh,
-}
+pub struct S2;
 
 impl Scene for S2 {
     fn load(&mut self, ctx: &mut Context) {
@@ -88,7 +88,6 @@ impl Scene for S2 {
     fn update(&mut self, _ctx: &mut Context) {}
 
     fn render(&mut self, ctx: &mut Context) {
-        ctx.render.draw_mesh(&self.circle);
         ctx.render.draw_texture_atlas([0.0, 0.0]);
     }
 }
@@ -122,16 +121,7 @@ fn main() {
         .with_window(
             WindowBuilder::new()
                 .with_size((1024, 1024))
-                .with_initial_scene(Box::new(S2 {
-                    circle: Mesh {
-                        geometry: MeshGeometry::circle(50.0, 32),
-                        material: Material {
-                            texture: None,
-                            color: Some(Color::Cyan),
-                        },
-                        transform: Transform::default().with_position([250.0, 250.0]),
-                    },
-                })),
+                .with_initial_scene(Box::new(S2)),
         )
         .build()
         .run();

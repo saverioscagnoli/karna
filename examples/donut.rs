@@ -132,8 +132,10 @@ impl Scene for Donut {
     fn render(&mut self, ctx: &mut karna::Context) {
         ctx.render.draw_text(&self.text);
 
-        ctx.render
-            .draw_debug_text(format!("fps: {}", ctx.time.fps()), [10.0, 10.0]);
+        ctx.render.draw_debug_text(
+            format!("fps: {} dt: {}", ctx.time.fps(), ctx.time.delta()),
+            [10.0, 10.0],
+        );
     }
 }
 

@@ -158,12 +158,20 @@ impl App {
                             match cmd {
                                 WindowCommand::Close => return,
                                 WindowCommand::Event(event) => {
-                                    ctx.handle_event(event);
+                                    if let WindowEvent::Resized(size) = event {
+                                        ctx.render.resize(size.into());
+                                        if let Some(scene) = scenes.get_mut(&active_scene) {
+                                            scene.on_resize(&mut ctx);
+                                        }
+                                    } else {
+                                        ctx.handle_event(event);
+                                    }
                                 }
 
                                 WindowCommand::MonitorsChanged(monitors) => {
                                     ctx.monitors.update(monitors);
                                 }
+
                                 WindowCommand::Redraw => {
                                     // Skip redundant redraw commands
                                     break;
