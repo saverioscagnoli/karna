@@ -1,71 +1,80 @@
+use macros::Get;
 use math::Size;
 use std::sync::Arc;
 use traccia::warn;
 use winit::window::Fullscreen;
 
 #[derive(Debug, Clone)]
-pub struct Window(Arc<winit::window::Window>);
+#[derive(Get)]
+pub struct Window {
+    #[get(ty = &str)]
+    label: String,
+    inner: Arc<winit::window::Window>,
+}
 
 impl Window {
-    pub(crate) fn new(inner: Arc<winit::window::Window>) -> Self {
-        Self(inner)
+    pub(crate) fn new<L: Into<String>>(label: L, inner: Arc<winit::window::Window>) -> Self {
+        Self {
+            label: label.into(),
+            inner,
+        }
     }
 
     #[inline]
     pub(crate) fn request_redraw(&self) {
-        self.0.request_redraw();
+        self.inner.request_redraw();
     }
 
     #[inline]
     #[doc(hidden)]
     pub(crate) fn inner(&self) -> &Arc<winit::window::Window> {
-        &self.0
+        &self.inner
     }
 
     #[inline]
     /// Returns the size of the inner window viewport.
     /// (Size of the window without decorations)
     pub fn size(&self) -> Size<u32> {
-        self.0.inner_size().into()
+        self.inner.inner_size().into()
     }
 
     #[inline]
     /// Returns the width of the inner window viewport.
     /// (Width of the window without decorations)
     pub fn width(&self) -> u32 {
-        self.0.inner_size().width
+        self.inner.inner_size().width
     }
 
     #[inline]
     /// Returns the height of the inner window viewport.
     /// (Height of the window without decorations)
     pub fn height(&self) -> u32 {
-        self.0.inner_size().height
+        self.inner.inner_size().height
     }
 
     #[inline]
     /// Sets the size of the inner window viewport.
     /// (Size of the window without decorations)
     pub fn set_size<S: Into<Size<u32>>>(&self, size: S) -> bool {
-        self.0.request_inner_size(size.into()).is_some()
+        self.inner.request_inner_size(size.into()).is_some()
     }
 
     #[inline]
     /// Checks if the window is in windowed mode.
     pub fn is_windowed(&self) -> bool {
-        self.0.fullscreen().is_none()
+        self.inner.fullscreen().is_none()
     }
 
     #[inline]
     /// Sets the window to windowed mode.
     pub fn set_windowed(&self) {
-        self.0.set_fullscreen(None);
+        self.inner.set_fullscreen(None);
     }
 
     #[inline]
     /// Checks if the window is in fullscreen mode.
     pub fn is_fullscreen(&self) -> bool {
-        self.0.fullscreen().is_some()
+        self.inner.fullscreen().is_some()
     }
 
     #[inline]
@@ -80,17 +89,19 @@ impl Window {
                 warn!(
                     "Exclusive fullscreen is not supported on wayland. Setting borderless fullscreen instead."
                 );
-                self.0.set_fullscreen(Some(Fullscreen::Borderless(None)));
+                self.inner
+                    .set_fullscreen(Some(Fullscreen::Borderless(None)));
                 return;
             }
         }
 
-        let Some(monitor) = self.0.current_monitor() else {
+        let Some(monitor) = self.inner.current_monitor() else {
             warn!(
                 "couldnt set fullscreen: window.current_monitor() returned None. Setting borderless fullscreen instead."
             );
 
-            self.0.set_fullscreen(Some(Fullscreen::Borderless(None)));
+            self.inner
+                .set_fullscreen(Some(Fullscreen::Borderless(None)));
             return;
         };
 
@@ -99,19 +110,19 @@ impl Window {
                 "couldnt set fullscreen: monitor.video_modes().next() returned None. Setting borderless fullscreen instead."
             );
 
-            self.0
+            self.inner
                 .set_fullscreen(Some(Fullscreen::Borderless(Some(monitor))));
             return;
         };
 
-        self.0
+        self.inner
             .set_fullscreen(Some(Fullscreen::Exclusive(video_mode)));
     }
 
     #[inline]
     /// Checks if the window is in borderless fullscreen mode.
     pub fn is_borderless_fullscreen(&self) -> bool {
-        match self.0.fullscreen() {
+        match self.inner.fullscreen() {
             Some(Fullscreen::Borderless(_)) => true,
             _ => false,
         }
@@ -122,11 +133,12 @@ impl Window {
     ///
     /// **NOTE**: This function will fail silently if the window is not in a valid state.
     pub fn set_borderless_fullscreen(&self) {
-        if let Some(monitor) = self.0.current_monitor() {
-            self.0
+        if let Some(monitor) = self.inner.current_monitor() {
+            self.inner
                 .set_fullscreen(Some(Fullscreen::Borderless(Some(monitor))));
         } else {
-            self.0.set_fullscreen(Some(Fullscreen::Borderless(None)));
+            self.inner
+                .set_fullscreen(Some(Fullscreen::Borderless(None)));
         }
     }
 }

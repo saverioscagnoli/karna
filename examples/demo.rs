@@ -64,14 +64,15 @@ impl Scene for S {
             ctx.audio.play(label!("mammamia"));
         }
 
-        self.debug_text.content = format!("fps: {}\ndt: {} è", ctx.time.fps(), ctx.time.delta());
+        self.debug_text.content =
+            format!("fps: {}\ndt: {} è", ctx.time.fps(), ctx.time.delta()).into();
     }
 
     fn render(&mut self, ctx: &mut Context) {
         self.rect.render(&mut ctx.render);
         ctx.render.draw_mesh(&self.circle);
 
-        self.debug_text.render(&ctx.gpu, &mut ctx.render);
+        self.debug_text.render(&mut ctx.render);
     }
 }
 
@@ -84,7 +85,7 @@ impl Scene for S2 {
         ctx.render.set_clear_color(Color::Black);
     }
 
-    fn update(&mut self, ctx: &mut Context) {}
+    fn update(&mut self, _ctx: &mut Context) {}
 
     fn render(&mut self, ctx: &mut Context) {
         ctx.render.draw_mesh(&self.circle);

@@ -1,4 +1,4 @@
-use crate::{GPU, text::Font, texture::Texture};
+use crate::{text::Font, texture::Texture};
 use common::utils::Label;
 use math::Size;
 use std::sync::Arc;
@@ -32,10 +32,10 @@ pub struct UvCoords {
     pub max_y: f32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TextureAtlas {
     pub texture: Arc<Texture>,
-    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub bind_group_layout: Arc<wgpu::BindGroupLayout>,
     pub size: Size<u32>,
     regions: FastHashMap<Label, AtlasRegion>,
     /// Store original image data for repacking (using HashMap to avoid duplicates)
@@ -65,6 +65,8 @@ impl TextureAtlas {
                 },
             ],
         });
+
+        let bind_group_layout = Arc::new(bind_group_layout);
 
         let texture = Arc::new(Texture::new_empty(
             "Texture Atlas",

@@ -13,7 +13,7 @@ math = { path = "math" }
 winit = "0.30.12"
 wgpu = "27.0.1"
 renderer = { path = "renderer" }
-traccia = "2.2.5"
+traccia = "3.0.0"
 
 [dependencies]
 math.workspace = true

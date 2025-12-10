@@ -3,11 +3,12 @@ mod context;
 mod scene;
 
 use crossbeam_channel::{Sender, bounded};
+use ctor::ctor;
 use math::Size;
-use renderer::GPU;
+use renderer::{GPU, gpu};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use traccia::{error, info, warn};
+use traccia::{FormatterBuilder, error, info, span, warn};
 use wgpu::naga::FastHashMap;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::{
@@ -22,18 +23,6 @@ pub use builder::{AppBuilder, WindowBuilder};
 pub use common::{label, utils::Label};
 pub use scene::Scene;
 
-struct CustomFormatter;
-
-impl traccia::Formatter for CustomFormatter {
-    fn format(&self, record: &traccia::Record) -> String {
-        format!(
-            "{} {}",
-            record.level.default_coloring().to_lowercase(),
-            record.message
-        )
-    }
-}
-
 pub(crate) fn init_logging() {
     traccia::init_with_config(traccia::Config {
         level: if cfg!(debug_assertions) {
@@ -41,9 +30,38 @@ pub(crate) fn init_logging() {
         } else {
             traccia::LogLevel::Info
         },
-        format: Some(Box::new(CustomFormatter)),
+        format: Some(Box::new(
+            FormatterBuilder::new()
+                .with_span_position(traccia::SpanPosition::AfterLevel)
+                .build(|record, span| {
+                    if span.is_empty() {
+                        format!(
+                            "{} {}",
+                            record.level.default_coloring().to_lowercase(),
+                            record.message
+                        )
+                    } else {
+                        format!(
+                            "{} {} {}",
+                            record.level.default_coloring().to_lowercase(),
+                            span,
+                            record.message
+                        )
+                    }
+                }),
+        )),
         ..Default::default()
     });
+}
+
+#[ctor]
+/// The gpu will be initialized before the app starts, so that things like
+/// font cache, geometry cache can be used during scene creation.
+///
+/// Maybe in the future i can implement a scenebuilder with the
+/// gpu available, or make the user explicitly call something like karna::init();
+fn init_gpu() {
+    pollster::block_on(GPU::init());
 }
 
 pub enum WindowCommand {
@@ -60,19 +78,18 @@ struct WindowHandle {
 
 struct PendingWindow {
     attributes: WindowAttributes,
+    label: String,
     scenes: FastHashMap<Label, Box<dyn Scene>>,
 }
 
 pub struct App {
-    gpu: Arc<GPU>,
     windows: FastHashMap<WindowId, WindowHandle>,
     pending_windows: Vec<PendingWindow>,
 }
 
 impl App {
     pub(crate) fn new() -> Self {
-        let gpu = Arc::new(pollster::block_on(GPU::init()));
-        let info = gpu.info();
+        let info = gpu().info();
 
         info!("backend: {}", info.backend);
         info!("device: {}", info.name);
@@ -80,7 +97,6 @@ impl App {
         info!("driver: {}", info.driver_info);
 
         Self {
-            gpu,
             windows: FastHashMap::default(),
             pending_windows: Vec::new(),
         }
@@ -89,25 +105,30 @@ impl App {
     fn add_pending_window(
         &mut self,
         attributes: WindowAttributes,
+        label: String,
         scenes: FastHashMap<Label, Box<dyn Scene>>,
     ) {
-        self.pending_windows
-            .push(PendingWindow { attributes, scenes });
+        self.pending_windows.push(PendingWindow {
+            attributes,
+            label,
+            scenes,
+        });
     }
 
     fn spawn_window(
         &mut self,
+        label: String,
         window: Arc<winit::window::Window>,
         scenes: FastHashMap<Label, Box<dyn Scene>>,
         recommended_fps: u32,
     ) {
         let (tx, rx) = bounded::<WindowCommand>(64);
-        let gpu = Arc::clone(&self.gpu);
         let window_id = window.id();
-        let window = Window::new(window);
+        let window = Window::new(label, window);
 
         let handle = thread::spawn(move || {
-            let mut ctx = Context::new(gpu, window, recommended_fps);
+            let _span = span!("window", "id" => window.label());
+            let mut ctx = Context::new(window, recommended_fps);
             let mut scenes = scenes;
             let mut active_scene = label!("initial");
 
@@ -166,7 +187,7 @@ impl App {
                             scene.render(&mut ctx);
                         }
 
-                        match ctx.render.present(&ctx.gpu) {
+                        match ctx.render.present() {
                             Ok(_) => {}
                             Err(wgpu::SurfaceError::OutOfMemory) => return,
                             Err(e) => error!("Render error: {:?}", e),
@@ -177,7 +198,7 @@ impl App {
 
                         let sleep_duration = ctx.time.until_next_frame();
                         if !sleep_duration.is_zero() {
-                            spin_sleep::sleep(sleep_duration);
+                            ctx.sleeper.sleep(sleep_duration);
                         }
 
                         ctx.window.request_redraw();
@@ -245,7 +266,12 @@ impl ApplicationHandler for App {
                 Ok(window) => {
                     let window = Arc::new(window);
 
-                    self.spawn_window(window, window_config.scenes, recommended_fps);
+                    self.spawn_window(
+                        window_config.label,
+                        window,
+                        window_config.scenes,
+                        recommended_fps,
+                    );
                 }
                 Err(e) => {
                     error!("Failed to create window: {}", e);

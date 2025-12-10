@@ -9,11 +9,15 @@ struct S {
 impl Scene for S {
     fn load(&mut self, ctx: &mut karna::Context) {
         ctx.render.set_clear_color(Color::Black);
+        ctx.time.set_recommended_fps();
 
+        self.text.color = Color::Cyan;
         self.text.position = Vector2::new(10.0, 10.0)
     }
 
-    fn update(&mut self, ctx: &mut karna::Context) {
+    fn update(&mut self, _ctx: &mut karna::Context) {}
+
+    fn fixed_update(&mut self, ctx: &mut karna::Context) {
         self.text.content = format!(
             "fps: {}\ndt: {}\ntps: {}\nframe time: {:?}\ntick time: {:?}",
             ctx.time.fps(),
@@ -21,18 +25,19 @@ impl Scene for S {
             ctx.time.tps(),
             ctx.time.frame(),
             ctx.time.tick()
-        );
+        )
+        .into();
     }
 
     fn render(&mut self, ctx: &mut karna::Context) {
-        self.text.render(&ctx.gpu, &mut ctx.render);
+        self.text.render(&mut ctx.render);
     }
 }
 
 fn main() {
     AppBuilder::new()
         .with_window(WindowBuilder::new().with_initial_scene(Box::new(S {
-            text: Text::new(label!("debug"), ""),
+            text: Text::new(label!("debug"), "Hello world!"),
         })))
         .build()
         .run();

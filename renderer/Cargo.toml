@@ -13,3 +13,4 @@ common.workspace = true
 image = "0.25.9"
 crunch = "0.5.3"
 fontdue = "0.9.3"
+arc-swap = "1.7.1"
