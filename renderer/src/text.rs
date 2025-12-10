@@ -1,6 +1,11 @@
-use crate::{Color, GPU, Renderer, Transform};
-use common::utils::Label;
+use crate::{Color, Renderer, Transform, gpu};
+use common::{dirty::DirtyTracked, utils::Label};
 use fontdue::layout::{CoordinateSystem, GlyphPosition, Layout, TextStyle};
+use macros::{Get, Set, With};
+use std::{
+    cell::{Ref, RefCell},
+    ops::{Deref, DerefMut},
+};
 
 #[derive(Debug)]
 pub struct Font {
@@ -27,15 +32,26 @@ impl Font {
     }
 }
 
+#[derive(Get, Set, With)]
 pub struct Text {
     pub font: Label,
-    pub layout: Layout,
-    pub content: String,
+    layout: RefCell<Layout>,
+
+    #[get]
+    #[set(into)]
+    #[with]
+    pub content: DirtyTracked<String>,
+
+    #[get]
+    #[set(into)]
+    #[with]
     pub color: Color,
+
+    #[with]
     pub transform: Transform,
 }
 
-impl std::ops::Deref for Text {
+impl Deref for Text {
     type Target = Transform;
 
     fn deref(&self) -> &Self::Target {
@@ -43,7 +59,7 @@ impl std::ops::Deref for Text {
     }
 }
 
-impl std::ops::DerefMut for Text {
+impl DerefMut for Text {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.transform
     }
@@ -53,39 +69,34 @@ impl Text {
     pub fn new(font: Label, content: impl Into<String>) -> Self {
         Self {
             font,
-            content: content.into(),
-            layout: Layout::new(CoordinateSystem::PositiveYDown),
+            content: DirtyTracked::new(content.into()),
+            layout: RefCell::new(Layout::new(CoordinateSystem::PositiveYDown)),
             color: Color::White,
             transform: Transform::default(),
         }
     }
 
-    pub fn with_color(mut self, color: Color) -> Self {
-        self.color = color;
-        self
-    }
+    #[inline]
+    pub(crate) fn compute_glyphs(&self) -> Ref<'_, [GlyphPosition]> {
+        if self.content.is_dirty() {
+            let mut layout = self.layout.borrow_mut();
+            let guard = gpu().fonts.load();
+            let font = guard.get(&self.font).expect("Failed to get font");
 
-    pub fn with_transform(mut self, transform: Transform) -> Self {
-        self.transform = transform;
-        self
-    }
+            layout.clear();
+            layout.append(
+                &[&font.inner],
+                &TextStyle::new(&self.content, font.size as f32, 0),
+            );
 
-    pub fn set_content(&mut self, content: impl Into<String>) {
-        self.content = content.into();
+            self.content.clean();
+        }
+
+        Ref::map(self.layout.borrow(), |layout| layout.glyphs().as_slice())
     }
 
     #[inline]
-    pub fn render(&mut self, gpu: &GPU, renderer: &mut Renderer) {
-        let lock = gpu.fonts.read().expect("Fonts lock is poisoned");
-        let font = lock.get(&self.font).expect("Failed to get font");
-
-        self.layout.append(
-            &[&font.inner],
-            &TextStyle::new(&self.content, font.size as f32, 0),
-        );
-
+    pub fn render(&self, renderer: &mut Renderer) {
         renderer.draw_text(self);
-
-        self.layout.clear()
     }
 }

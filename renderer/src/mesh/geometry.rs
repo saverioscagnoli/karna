@@ -1,14 +1,10 @@
-use crate::{Color, mesh::Vertex};
+use crate::{Color, gpu, mesh::Vertex};
 use math::{Vector2, Vector3, Vector4};
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
-    sync::{Arc, LazyLock, RwLock},
+    sync::Arc,
 };
 use traccia::debug;
-use wgpu::naga::FastHashMap;
-
-static GEOMETRY_CACHE: LazyLock<RwLock<FastHashMap<u32, Arc<MeshGeometry>>>> =
-    LazyLock::new(|| RwLock::new(FastHashMap::default()));
 
 #[derive(Debug, Clone)]
 pub struct MeshGeometry {
@@ -25,26 +21,18 @@ impl MeshGeometry {
         topology: wgpu::PrimitiveTopology,
     ) -> Arc<Self> {
         let id = Self::compute_hash(vertices, indices, &topology);
+        let gpu = gpu();
 
         // Try to get from cache first
         {
-            let read_lock = GEOMETRY_CACHE
-                .read()
-                .expect("Failed to get geometry cache lock");
+            let cache_guard = gpu.geometry_cache.load();
 
-            if let Some(g) = read_lock.get(&id) {
+            if let Some(g) = cache_guard.get(&id) {
                 return Arc::clone(g);
             }
-        } // Drop read lock here
-
-        let mut write_lock = GEOMETRY_CACHE
-            .write()
-            .expect("Failed to get geometry cache write lock");
-
-        if let Some(g) = write_lock.get(&id) {
-            return Arc::clone(g);
         }
 
+        // Update cache using RCU (Read-Copy-Update)
         let geometry = Arc::new(Self {
             id,
             vertices: vertices.to_vec(),
@@ -52,7 +40,11 @@ impl MeshGeometry {
             topology,
         });
 
-        write_lock.insert(id, Arc::clone(&geometry));
+        gpu.geometry_cache.rcu(|cache| {
+            let mut new_cache = (**cache).clone();
+            new_cache.insert(id, Arc::clone(&geometry));
+            new_cache
+        });
 
         debug!(
             "Creating geometry with id '{}', n. vertices: {}, n. indices:  {}",

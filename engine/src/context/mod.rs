@@ -8,8 +8,9 @@ pub mod input;
 
 use crate::context::{audio::Audio, input::Input};
 use renderer::{GPU, Renderer};
+use spin_sleep::SpinSleeper;
 use std::sync::Arc;
-use winit::{event::WindowEvent, keyboard::PhysicalKey};
+use winit::{event::WindowEvent, keyboard::PhysicalKey, window::WindowId};
 
 // Re-exports
 pub use monitors::{Monitor, Monitors};
@@ -17,31 +18,33 @@ pub use time::Time;
 pub use window::Window;
 
 pub struct Context {
-    pub gpu: Arc<GPU>,
     pub window: Window,
     pub time: Time,
     pub input: Input,
     pub render: Renderer,
     pub audio: Audio,
     pub monitors: Monitors,
+
+    pub(crate) sleeper: SpinSleeper,
 }
 
 impl Context {
-    pub fn new(gpu: Arc<GPU>, window: Window, recommended_fps: u32) -> Self {
-        let render = Renderer::new(Arc::clone(&gpu), Arc::clone(window.inner()));
+    pub fn new(window: Window, recommended_fps: u32) -> Self {
+        let render = Renderer::new(Arc::clone(window.inner()));
 
         render.init();
 
         let monitors = Monitors::new(Arc::clone(window.inner()));
+        let sleeper = SpinSleeper::default();
 
         Self {
-            gpu,
             window,
             time: Time::new(recommended_fps),
             input: Input::new(),
             render,
             audio: Audio::new(),
             monitors,
+            sleeper,
         }
     }
 

@@ -1,11 +1,16 @@
 use crate::{App, Scene, init_logging};
 use common::{label, utils::Label};
+use macros::With;
 use math::Size;
 use wgpu::naga::FastHashMap;
 use winit::window::WindowAttributes;
 
+#[derive(With)]
 pub struct WindowBuilder {
     attributes: WindowAttributes,
+
+    #[with(into)]
+    label: String,
     scenes: FastHashMap<Label, Box<dyn Scene>>,
 }
 
@@ -15,6 +20,7 @@ impl Default for WindowBuilder {
             attributes: WindowAttributes::default()
                 .with_title("My Window")
                 .with_inner_size(winit::dpi::LogicalSize::new(800, 600)),
+            label: String::from(""),
             scenes: FastHashMap::default(),
         }
     }
@@ -48,13 +54,17 @@ impl WindowBuilder {
         self
     }
 
-    pub(crate) fn build(self) -> (WindowAttributes, FastHashMap<Label, Box<dyn Scene>>) {
+    pub(crate) fn build(self) -> (WindowAttributes, String, FastHashMap<Label, Box<dyn Scene>>) {
         assert!(
             self.scenes.contains_key(&label!("initial")),
             "WindowBuilder must have an initial scene. Use with_initial_scene() or with_scene(label!(\"initial\"), scene)"
         );
 
-        (self.attributes.with_resizable(false), self.scenes)
+        (
+            self.attributes.with_resizable(false),
+            self.label,
+            self.scenes,
+        )
     }
 }
 
@@ -78,10 +88,15 @@ impl AppBuilder {
     pub fn build(self) -> App {
         let mut app = App::new();
 
-        // Add all windows as pending - they'll be created in resumed()
-        for window_builder in self.windows {
-            let (attributes, scenes) = window_builder.build();
-            app.add_pending_window(attributes, scenes);
+        for (i, window_builder) in self.windows.into_iter().enumerate() {
+            let (attributes, label, scenes) = window_builder.build();
+            let label = if label.is_empty() {
+                format!("window_{}", i + 1)
+            } else {
+                label
+            };
+
+            app.add_pending_window(attributes, label, scenes);
         }
 
         app

@@ -1,2 +1,2 @@
-pub mod slotmap;
+pub mod dirty;
 pub mod utils;

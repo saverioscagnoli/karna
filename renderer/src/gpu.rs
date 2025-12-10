@@ -1,22 +1,33 @@
-use crate::{TextureAtlas, text::Font};
+use crate::{MeshGeometry, TextureAtlas, text::Font};
+use arc_swap::ArcSwap;
 use common::utils::Label;
 use math::Size;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock};
 use wgpu::{Backends, naga::FastHashMap};
+
+static GPU: OnceLock<GPU> = OnceLock::new();
+
+pub fn gpu() -> &'static GPU {
+    GPU.get()
+        .expect("Trying to get gpu while not being initialized")
+}
 
 #[derive(Debug)]
 pub struct GPU {
-    pub instance: wgpu::Instance,
-    pub adapter: wgpu::Adapter,
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
-    pub texture_atlas: RwLock<TextureAtlas>,
-    pub fonts: RwLock<FastHashMap<Label, Arc<Font>>>,
+    pub(crate) instance: wgpu::Instance,
+    pub(crate) adapter: wgpu::Adapter,
+    pub(crate) device: wgpu::Device,
+    pub(crate) queue: wgpu::Queue,
+    pub(crate) texture_atlas: ArcSwap<TextureAtlas>,
+    pub(crate) fonts: ArcSwap<FastHashMap<Label, Arc<Font>>>,
+
+    // Caches
+    pub(crate) geometry_cache: ArcSwap<FastHashMap<u32, Arc<MeshGeometry>>>,
 }
 
 impl GPU {
     #[doc(hidden)]
-    pub async fn init() -> Self {
+    pub async fn init() {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: Backends::PRIMARY,
             ..Default::default()
@@ -41,17 +52,22 @@ impl GPU {
             .await
             .expect("Failed to request device");
 
-        let texture_atlas = RwLock::new(TextureAtlas::new(&device, &queue, Size::new(1024, 1024)));
-        let fonts = RwLock::new(FastHashMap::default());
+        let texture_atlas =
+            ArcSwap::from_pointee(TextureAtlas::new(&device, &queue, Size::new(1024, 1024)));
 
-        Self {
+        let fonts = ArcSwap::from_pointee(FastHashMap::default());
+        let geometry_cache = ArcSwap::from_pointee(FastHashMap::default());
+
+        GPU.set(Self {
             instance,
             adapter,
             device,
             queue,
             texture_atlas,
             fonts,
-        }
+            geometry_cache,
+        })
+        .expect("Failed to set gpu");
     }
 
     #[inline]
