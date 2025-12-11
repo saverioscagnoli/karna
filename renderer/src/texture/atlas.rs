@@ -1,4 +1,7 @@
-use crate::{text::Font, texture::Texture};
+use crate::{
+    text::{Font, GlyphKey},
+    texture::Texture,
+};
 use common::utils::Label;
 use math::Size;
 use std::sync::Arc;
@@ -40,6 +43,9 @@ pub struct TextureAtlas {
     regions: FastHashMap<Label, AtlasRegion>,
     /// Store original image data for repacking (using HashMap to avoid duplicates)
     images: FastHashMap<Label, image::RgbaImage>,
+    glyphs: FastHashMap<GlyphKey, UvCoords>,
+    /// Store glyph label mappings to rebuild cache after repacking
+    glyph_mappings: FastHashMap<GlyphKey, Label>,
 }
 
 impl TextureAtlas {
@@ -104,6 +110,8 @@ impl TextureAtlas {
             size,
             regions: FastHashMap::default(),
             images: FastHashMap::default(),
+            glyphs: FastHashMap::default(),
+            glyph_mappings: FastHashMap::default(),
         }
     }
 
@@ -138,31 +146,35 @@ impl TextureAtlas {
         chars: &str,
         queue: &wgpu::Queue,
     ) -> Result<(), String> {
-        for ch in chars.chars() {
-            let (metrics, bitmap) = font.rasterize(ch);
+        let char_labels: Vec<(char, Label)> = chars
+            .chars()
+            .filter_map(|ch| {
+                let (metrics, bitmap) = font.rasterize(ch);
+                if metrics.width == 0 || metrics.height == 0 {
+                    return None;
+                }
 
-            // Skip empty glyphs (like spaces)
-            if metrics.width == 0 || metrics.height == 0 {
-                continue;
-            }
+                let mut rgba_data = Vec::with_capacity(bitmap.len() * 4);
+                for &alpha in &bitmap {
+                    rgba_data.extend_from_slice(&[255, 255, 255, alpha]);
+                }
 
-            // Convert grayscale bitmap to white RGBA texture
-            let mut rgba_data = Vec::with_capacity(bitmap.len() * 4);
-            for &alpha in &bitmap {
-                rgba_data.push(255); // R - white
-                rgba_data.push(255); // G - white
-                rgba_data.push(255); // B - white
-                rgba_data.push(alpha); // A - from glyph coverage
-            }
+                let rgba_image = image::RgbaImage::from_raw(
+                    metrics.width as u32,
+                    metrics.height as u32,
+                    rgba_data,
+                )?;
 
-            let rgba_image =
-                image::RgbaImage::from_raw(metrics.width as u32, metrics.height as u32, rgba_data)
-                    .ok_or_else(|| format!("Failed to create image for character '{}'", ch))?;
+                let label = Label::new(&format!("{}_char_{}", font.label.raw(), ch as u32));
+                self.images.insert(label, rgba_image);
+                Some((ch, label))
+            })
+            .collect();
 
-            let label = Label::new(&format!("{}_char_{}", font.label.raw(), ch as u32,));
-
-            // Store the image in the atlas
-            self.images.insert(label, rgba_image);
+        // Store glyph mappings before repacking
+        for (ch, label) in char_labels {
+            let key = GlyphKey::new(&font.label, ch as u32);
+            self.glyph_mappings.insert(key, label);
         }
 
         self.repack_all(queue)?;
@@ -210,6 +222,14 @@ impl TextureAtlas {
             }
         }
 
+        // Rebuild glyph cache with new UV coordinates after repacking
+        self.glyphs.clear();
+        for (key, label) in &self.glyph_mappings {
+            if let Some(uv) = self.get_uv_coords(label) {
+                self.glyphs.insert(*key, uv);
+            }
+        }
+
         Ok(())
     }
 
@@ -250,6 +270,11 @@ impl TextureAtlas {
     #[inline]
     pub(crate) fn get_uv_coords(&self, label: &Label) -> Option<UvCoords> {
         self.regions.get(label).map(|r| r.uv_coords(self.size))
+    }
+
+    #[inline]
+    pub(crate) fn get_glyph_uv_coords(&self, key: &GlyphKey) -> Option<&UvCoords> {
+        self.glyphs.get(key)
     }
 
     #[inline]

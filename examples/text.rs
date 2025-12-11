@@ -11,7 +11,7 @@ impl Scene for S {
         ctx.render.set_clear_color(Color::Black);
         ctx.time.set_recommended_fps();
 
-        self.text.color = Color::Cyan;
+        self.text.color = Color::Cyan.into();
         self.text.position = Vector2::new(10.0, 10.0)
     }
 

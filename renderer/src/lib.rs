@@ -8,6 +8,7 @@ mod text;
 mod texture;
 
 use common::{
+    dirty::DirtyTracked,
     label,
     utils::{self, Label},
 };
@@ -16,16 +17,12 @@ use math::{Size, Vector2};
 use mesh::RawMesh;
 use std::sync::Arc;
 use traccia::{info, warn};
-use wgpu::{
-    Surface, SurfaceConfiguration,
-    naga::{FastHashMap, back::RayIntersectionType},
-    util::DeviceExt,
-};
-use winit::window::{Window, WindowId};
+use wgpu::{Surface, SurfaceConfiguration, naga::FastHashMap, util::DeviceExt};
+use winit::window::Window;
 
 // Re-exports
 pub use crate::camera::{Camera, Projection};
-use crate::texture::atlas;
+use crate::text::GlyphKey;
 pub use crate::{text::Font, texture::Texture};
 pub use color::Color;
 pub use gpu::gpu;
@@ -402,118 +399,37 @@ impl Renderer {
 
     #[inline]
     pub fn draw_debug_text<T: Into<String>, P: Into<Vector2>>(&mut self, text: T, position: P) {
-        let rect_geometry = MeshGeometry::rect();
-        let rect_id = rect_geometry.id;
-
-        if !self.mesh_cache.contains_key(&rect_id) {
-            let temp_mesh = Mesh {
-                geometry: rect_geometry,
-                material: Material {
-                    color: Some(Color::White),
-                    texture: None,
-                },
-                transform: Transform::default(),
-            };
-
-            self.register_mesh(&temp_mesh);
-        }
-
-        let atlas_guard = gpu().texture_atlas.load();
-        let mesh_buffer = self.mesh_cache.get_mut(&rect_id).unwrap();
-        let text = Text::new(label!("debug"), text)
-            .with_transform(Transform::default().with_position(position));
-
-        let glyphs = text.compute_glyphs();
-
-        // Render each glyph from the layout
-        for glyph in &*glyphs {
-            let glyph_label =
-                Label::new(&format!("{}_char_{}", text.font.raw(), glyph.parent as u32));
-
-            if let Some(uv_coords) = atlas_guard.get_uv_coords(&glyph_label) {
-                // Position includes the text transform
-                let char_position = Vector2::new(
-                    text.position.x + glyph.x * text.scale.x,
-                    text.position.y + glyph.y * text.scale.y,
-                );
-
-                let char_scale = Vector2::new(
-                    glyph.width as f32 * text.scale.x,
-                    glyph.height as f32 * text.scale.y,
-                );
-
-                let raw_mesh = RawMesh {
-                    position: char_position.extend(0.0).into(),
-                    scale: char_scale.extend(1.0).into(),
-                    rotation: [0.0, 0.0, text.rotation],
-                    color: text.color.into(),
-                    uv_offset: [uv_coords.min_x, uv_coords.min_y],
-                    uv_scale: [
-                        uv_coords.max_x - uv_coords.min_x,
-                        uv_coords.max_y - uv_coords.min_y,
-                    ],
-                };
-
-                mesh_buffer.textured_instances.push(raw_mesh);
-            }
-        }
+        self.draw_text(
+            &Text::new(label!("debug"), text).with_transform(DirtyTracked::new(
+                Transform::default().with_position(position),
+            )),
+        );
     }
 
     #[inline]
     pub fn draw_text(&mut self, text: &Text) {
-        // Get the rect geometry for rendering each character as a quad
-        let rect_geometry = MeshGeometry::rect();
-        let rect_id = rect_geometry.id;
+        if text.is_dirty() {
+            text.invalidate_cache();
+            text.clean();
+        }
+
+        let rect_id = MeshGeometry::rect().id;
 
         if !self.mesh_cache.contains_key(&rect_id) {
-            let temp_mesh = Mesh {
-                geometry: rect_geometry,
+            self.register_mesh(&Mesh {
+                geometry: MeshGeometry::rect(),
                 material: Material {
                     color: Some(Color::White),
                     texture: None,
                 },
                 transform: Transform::default(),
-            };
-
-            self.register_mesh(&temp_mesh);
+            });
         }
 
-        let atlas_guard = gpu().texture_atlas.load();
+        let cached = text.get_cached_instances();
         let mesh_buffer = self.mesh_cache.get_mut(&rect_id).unwrap();
-        let glyphs = text.compute_glyphs();
 
-        // Render each glyph from the layout
-        for glyph in &*glyphs {
-            let glyph_label =
-                Label::new(&format!("{}_char_{}", text.font.raw(), glyph.parent as u32));
-
-            if let Some(uv_coords) = atlas_guard.get_uv_coords(&glyph_label) {
-                // Position includes the text transform
-                let char_position = Vector2::new(
-                    text.position.x + glyph.x * text.scale.x,
-                    text.position.y + glyph.y * text.scale.y,
-                );
-
-                let char_scale = Vector2::new(
-                    glyph.width as f32 * text.scale.x,
-                    glyph.height as f32 * text.scale.y,
-                );
-
-                let raw_mesh = RawMesh {
-                    position: char_position.extend(0.0).into(),
-                    scale: char_scale.extend(1.0).into(),
-                    rotation: [0.0, 0.0, text.rotation],
-                    color: text.color.into(),
-                    uv_offset: [uv_coords.min_x, uv_coords.min_y],
-                    uv_scale: [
-                        uv_coords.max_x - uv_coords.min_x,
-                        uv_coords.max_y - uv_coords.min_y,
-                    ],
-                };
-
-                mesh_buffer.textured_instances.push(raw_mesh);
-            }
-        }
+        mesh_buffer.textured_instances.extend_from_slice(&cached);
     }
 
     #[inline]

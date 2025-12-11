@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::ops::{Deref, DerefMut};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirtyTracked<T> {
     value: T,
     dirty: Cell<bool>,
@@ -16,6 +17,11 @@ impl<T> From<T> for DirtyTracked<T> {
 }
 
 impl<T> DirtyTracked<T> {
+    #[inline]
+    pub fn into_inner(self) -> T {
+        self.value
+    }
+
     pub fn new(value: T) -> Self {
         Self {
             value,

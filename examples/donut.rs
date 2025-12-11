@@ -124,7 +124,7 @@ impl Scene for Donut {
         self.color_timer += 2.0 * dt;
 
         self.text.content = self.generate_frame().into();
-        self.text.color = self.get_rainbow_color();
+        self.text.color = self.get_rainbow_color().into();
     }
 
     fn fixed_update(&mut self, _ctx: &mut karna::Context) {}

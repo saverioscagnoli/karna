@@ -95,11 +95,14 @@ impl Time {
         if self.frame_timer >= self.fps_interval {
             let sum: f32 = self.frame_times[..self.frame_count].iter().sum();
             let avg_frame_time = sum / self.frame_count as f32;
+
             self.fps = if avg_frame_time > 0.0 {
                 1.0 / avg_frame_time
             } else {
                 0.0
             };
+
+            self.frame_timer = 0.0;
         }
 
         if self.tick_timer >= 1.0 {
