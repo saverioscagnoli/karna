@@ -99,7 +99,7 @@ impl Donut {
 impl Scene for Donut {
     fn load(&mut self, ctx: &mut karna::Context) {
         ctx.render.set_clear_color(Color::Black);
-        ctx.time.set_recommended_fps();
+        ctx.time.uncap_fps();
 
         ctx.render.load_font(
             label!("jetbrains mono"),

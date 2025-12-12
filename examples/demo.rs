@@ -11,7 +11,6 @@ pub struct S {
     rect: Mesh,
     vel: Vector2,
     circle: Mesh,
-    debug_text: Text,
 }
 
 impl Scene for S {
@@ -63,16 +62,11 @@ impl Scene for S {
         if ctx.input.key_pressed(&KeyCode::Space) {
             ctx.audio.play(label!("mammamia"));
         }
-
-        self.debug_text.content =
-            format!("fps: {}\ndt: {} è", ctx.time.fps(), ctx.time.delta()).into();
     }
 
     fn render(&mut self, ctx: &mut Context) {
         self.rect.render(&mut ctx.render);
         ctx.render.draw_mesh(&self.circle);
-
-        self.debug_text.render(&mut ctx.render);
     }
 
     fn on_resize(&mut self, _ctx: &mut Context) {}
@@ -97,25 +91,29 @@ fn main() {
         .with_window(
             WindowBuilder::new().with_initial_scene(Box::new(S {
                 rect: Mesh {
+                    instance_id: 1,
                     geometry: MeshGeometry::rect(),
                     material: Material {
                         texture: Some(TextureKind::Full(label!("cat"))),
                         color: None,
-                    },
+                    }
+                    .into(),
                     transform: Transform::default()
                         .with_position([10.0, 10.0])
-                        .with_scale([50.0, 50.0]),
+                        .with_scale([50.0, 50.0])
+                        .into(),
                 },
                 vel: Vector2::zeros(),
                 circle: Mesh {
+                    instance_id: 2,
                     geometry: MeshGeometry::circle(50.0, 32),
                     material: Material {
                         texture: None,
                         color: Some(Color::Cyan),
-                    },
-                    transform: Transform::default().with_position([200.0, 200.0]),
+                    }
+                    .into(),
+                    transform: Transform::default().with_position([200.0, 200.0]).into(),
                 },
-                debug_text: Text::new(label!("jetbrains mono"), ""),
             })),
         )
         .with_window(

@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirtyTracked<T> {
-    value: T,
+    pub(crate) value: T,
     dirty: Cell<bool>,
 }
 

@@ -1,4 +1,3 @@
-use crate::{MeshGeometry, TextureAtlas, text::Font};
 use arc_swap::ArcSwap;
 use common::utils::Label;
 use math::Size;
@@ -18,11 +17,6 @@ pub struct GPU {
     pub(crate) adapter: wgpu::Adapter,
     pub(crate) device: wgpu::Device,
     pub(crate) queue: wgpu::Queue,
-    pub(crate) texture_atlas: ArcSwap<TextureAtlas>,
-    pub(crate) fonts: ArcSwap<FastHashMap<Label, Arc<Font>>>,
-
-    // Caches
-    pub(crate) geometry_cache: ArcSwap<FastHashMap<u32, Arc<MeshGeometry>>>,
 }
 
 impl GPU {
@@ -52,20 +46,11 @@ impl GPU {
             .await
             .expect("Failed to request device");
 
-        let texture_atlas =
-            ArcSwap::from_pointee(TextureAtlas::new(&device, &queue, Size::new(1024, 1024)));
-
-        let fonts = ArcSwap::from_pointee(FastHashMap::default());
-        let geometry_cache = ArcSwap::from_pointee(FastHashMap::default());
-
         GPU.set(Self {
             instance,
             adapter,
             device,
             queue,
-            texture_atlas,
-            fonts,
-            geometry_cache,
         })
         .expect("Failed to set gpu");
     }

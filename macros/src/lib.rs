@@ -1,6 +1,11 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Data, DeriveInput, Fields, Lit, Meta, MetaNameValue, Type, parse_macro_input};
+use syn::{
+    Data, DeriveInput, Expr, Fields, Lit, Meta, MetaNameValue, Token, Type, Visibility,
+    parse::{Parse, ParseStream, Parser},
+    parse_macro_input,
+    punctuated::Punctuated,
+};
 
 #[proc_macro_derive(Get, attributes(get))]
 pub fn derive_get(input: TokenStream) -> TokenStream {
@@ -122,8 +127,26 @@ struct GetConfig {
     cast: Option<Type>,
     ty: Option<Type>,
     name: Option<syn::Ident>,
+    vis: Option<Visibility>,
     copied: bool,
-    dirty: bool,
+    mutable: bool,
+}
+
+enum GetMeta {
+    Mut,
+    Meta(Meta),
+}
+
+impl Parse for GetMeta {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        if input.peek(Token![mut]) {
+            let _ = input.parse::<Token![mut]>()?;
+            Ok(GetMeta::Mut)
+        } else {
+            let meta = input.parse()?;
+            Ok(GetMeta::Meta(meta))
+        }
+    }
 }
 
 fn parse_get_attribute(
@@ -137,114 +160,113 @@ fn parse_get_attribute(
         cast: None,
         ty: None,
         name: None,
+        vis: None,
         copied: false,
-        dirty: false,
+        mutable: false,
     };
 
     if let Meta::List(meta_list) = &attr.meta {
         let nested = meta_list
-            .parse_args_with(syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated)
+            .parse_args_with(Punctuated::<GetMeta, Token![,]>::parse_terminated)
             .unwrap();
 
         for meta in nested {
             match meta {
-                Meta::Path(path) if path.is_ident("copied") => {
-                    config.copied = true;
+                GetMeta::Mut => {
+                    config.mutable = true;
                 }
-                Meta::Path(path) if path.is_ident("dirty") => {
-                    config.dirty = true;
-                }
-                Meta::NameValue(MetaNameValue { path, value, .. }) => {
-                    if path.is_ident("prop") {
-                        if let syn::Expr::Path(expr_path) = value {
-                            config.prop = Some(expr_path.path.get_ident().unwrap().clone());
-                        }
-                    } else if path.is_ident("pre") {
-                        if let syn::Expr::Path(expr_path) = value {
-                            config.pre = Some(expr_path.path.get_ident().unwrap().clone());
-                        }
-                    } else if path.is_ident("cast") {
-                        if let syn::Expr::Path(expr_path) = value {
-                            config.cast = Some(Type::Path(syn::TypePath {
-                                qself: None,
-                                path: expr_path.path.clone(),
-                            }));
-                        }
-                    } else if path.is_ident("ty") {
-                        if let syn::Expr::Path(expr_path) = value {
-                            config.ty = Some(Type::Path(syn::TypePath {
-                                qself: None,
-                                path: expr_path.path.clone(),
-                            }));
-                        }
-                    } else if path.is_ident("name") {
-                        if let syn::Expr::Lit(expr_lit) = value {
-                            if let Lit::Str(lit_str) = &expr_lit.lit {
-                                config.name =
-                                    Some(syn::Ident::new(&lit_str.value(), lit_str.span()));
+                GetMeta::Meta(m) => match m {
+                    Meta::Path(path) if path.is_ident("copied") => {
+                        config.copied = true;
+                    }
+                    Meta::NameValue(MetaNameValue { path, value, .. }) => {
+                        if path.is_ident("prop") {
+                            if let Expr::Path(expr_path) = value {
+                                config.prop = Some(expr_path.path.get_ident().unwrap().clone());
+                            }
+                        } else if path.is_ident("pre") {
+                            if let Expr::Path(expr_path) = value {
+                                config.pre = Some(expr_path.path.get_ident().unwrap().clone());
+                            }
+                        } else if path.is_ident("cast") {
+                            if let Expr::Path(expr_path) = value {
+                                config.cast = Some(Type::Path(syn::TypePath {
+                                    qself: None,
+                                    path: expr_path.path.clone(),
+                                }));
+                            }
+                        } else if path.is_ident("ty") {
+                            if let Expr::Path(expr_path) = value {
+                                config.ty = Some(Type::Path(syn::TypePath {
+                                    qself: None,
+                                    path: expr_path.path.clone(),
+                                }));
+                            }
+                        } else if path.is_ident("name") {
+                            if let Expr::Lit(expr_lit) = value {
+                                if let Lit::Str(lit_str) = &expr_lit.lit {
+                                    config.name =
+                                        Some(syn::Ident::new(&lit_str.value(), lit_str.span()));
+                                }
+                            }
+                        } else if path.is_ident("visibility") {
+                            if let Expr::Lit(expr_lit) = value {
+                                if let Lit::Str(lit_str) = &expr_lit.lit {
+                                    config.vis = syn::parse_str(&lit_str.value()).ok();
+                                }
                             }
                         }
                     }
-                }
-                _ => {}
+                    _ => {}
+                },
             }
         }
-    } else if matches!(attr.meta, Meta::Path(_)) {
-        // Just #[get] with no parameters
     }
 
     let method_name = config.name.clone().unwrap_or_else(|| {
-        if let Some(prop) = &config.prop {
-            syn::Ident::new(&format!("{}_{}", field_name, prop), field_name.span())
+        let base_name_str = if let Some(prop) = &config.prop {
+            format!("{}_{}", field_name, prop)
         } else {
-            field_name.clone()
-        }
+            field_name.to_string()
+        };
+
+        let final_name_str = if config.mutable {
+            format!("{}_mut", base_name_str)
+        } else {
+            base_name_str
+        };
+
+        syn::Ident::new(&final_name_str, field_name.span())
     });
 
+    let vis = config.vis.unwrap_or_else(|| syn::parse_quote! { pub });
+
     let return_type = if let Some(ty) = &config.ty {
-        // Explicit type annotation provided - use as-is
         quote! { #ty }
     } else if let Some(cast_type) = &config.cast {
         quote! { #cast_type }
+    } else if config.mutable {
+        quote! { &mut #field_type }
     } else if config.copied {
         quote! { #field_type }
     } else {
-        // Return reference - need to extract inner type if dirty
-        if config.dirty && config.prop.is_none() {
-            // Extract T from DirtyTracked<T> to return &T instead of &DirtyTracked<T>
-            // We need to parse the field_type to get the inner type
-            if let Type::Path(type_path) = field_type {
-                if let Some(segment) = type_path.path.segments.last() {
-                    if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                        if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
-                            quote! { &#inner_type }
-                        } else {
-                            quote! { &#field_type }
-                        }
-                    } else {
-                        quote! { &#field_type }
-                    }
-                } else {
-                    quote! { &#field_type }
-                }
-            } else {
-                quote! { &#field_type }
-            }
-        } else {
-            quote! { &#field_type }
-        }
+        quote! { &#field_type }
+    };
+
+    let self_arg = if config.mutable {
+        quote! { &mut self }
+    } else {
+        quote! { &self }
     };
 
     let body = if let Some(prop) = &config.prop {
-        let field_access = if config.dirty {
-            quote! { self.#field_name.value.#prop }
-        } else {
-            quote! { self.#field_name.#prop }
-        };
+        let field_access = quote! { self.#field_name.#prop };
 
         if let Some(pre) = &config.pre {
             if let Some(cast_type) = &config.cast {
                 quote! { #field_access.#pre() as #cast_type }
+            } else if config.mutable {
+                quote! { &mut #field_access.#pre() }
             } else if config.copied {
                 quote! { #field_access.#pre() }
             } else {
@@ -252,34 +274,32 @@ fn parse_get_attribute(
             }
         } else if let Some(cast_type) = &config.cast {
             quote! { #field_access as #cast_type }
+        } else if config.mutable {
+            quote! { &mut #field_access }
         } else if config.copied {
             quote! { #field_access }
         } else {
             quote! { &#field_access }
         }
     } else if let Some(pre) = &config.pre {
-        let field_access = if config.dirty {
-            quote! { self.#field_name.value }
-        } else {
-            quote! { self.#field_name }
-        };
+        let field_access = quote! { self.#field_name };
 
         if let Some(cast_type) = &config.cast {
             quote! { #field_access.#pre() as #cast_type }
+        } else if config.mutable {
+            quote! { &mut #field_access.#pre() }
         } else if config.copied {
             quote! { #field_access.#pre() }
         } else {
             quote! { &#field_access.#pre() }
         }
     } else {
-        let field_access = if config.dirty {
-            quote! { self.#field_name.value }
-        } else {
-            quote! { self.#field_name }
-        };
+        let field_access = quote! { self.#field_name };
 
         if let Some(cast_type) = &config.cast {
             quote! { #field_access as #cast_type }
+        } else if config.mutable {
+            quote! { &mut #field_access }
         } else if config.copied {
             quote! { #field_access }
         } else {
@@ -289,7 +309,7 @@ fn parse_get_attribute(
 
     quote! {
         #[inline]
-        pub fn #method_name(&self) -> #return_type {
+        #vis fn #method_name(#self_arg) -> #return_type {
             #body
         }
     }
@@ -301,8 +321,9 @@ struct SetConfig {
     cast: Option<Type>,
     ty: Option<Type>,
     name: Option<syn::Ident>,
+    vis: Option<Visibility>,
+    also: Option<Expr>,
     into: bool,
-    dirty: bool,
 }
 
 fn parse_set_attribute(
@@ -316,13 +337,14 @@ fn parse_set_attribute(
         cast: None,
         ty: None,
         name: None,
+        vis: None,
+        also: None,
         into: false,
-        dirty: false,
     };
 
     if let Meta::List(meta_list) = &attr.meta {
         let nested = meta_list
-            .parse_args_with(syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated)
+            .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
             .unwrap();
 
         for meta in nested {
@@ -330,39 +352,44 @@ fn parse_set_attribute(
                 Meta::Path(path) if path.is_ident("into") => {
                     config.into = true;
                 }
-                Meta::Path(path) if path.is_ident("dirty") => {
-                    config.dirty = true;
-                }
                 Meta::NameValue(MetaNameValue { path, value, .. }) => {
                     if path.is_ident("prop") {
-                        if let syn::Expr::Path(expr_path) = value {
+                        if let Expr::Path(expr_path) = value {
                             config.prop = Some(expr_path.path.get_ident().unwrap().clone());
                         }
                     } else if path.is_ident("pre") {
-                        if let syn::Expr::Path(expr_path) = value {
+                        if let Expr::Path(expr_path) = value {
                             config.pre = Some(expr_path.path.get_ident().unwrap().clone());
                         }
                     } else if path.is_ident("cast") {
-                        if let syn::Expr::Path(expr_path) = value {
+                        if let Expr::Path(expr_path) = value {
                             config.cast = Some(Type::Path(syn::TypePath {
                                 qself: None,
                                 path: expr_path.path.clone(),
                             }));
                         }
                     } else if path.is_ident("ty") {
-                        if let syn::Expr::Path(expr_path) = value {
+                        if let Expr::Path(expr_path) = value {
                             config.ty = Some(Type::Path(syn::TypePath {
                                 qself: None,
                                 path: expr_path.path.clone(),
                             }));
                         }
                     } else if path.is_ident("name") {
-                        if let syn::Expr::Lit(expr_lit) = value {
+                        if let Expr::Lit(expr_lit) = value {
                             if let Lit::Str(lit_str) = &expr_lit.lit {
                                 config.name =
                                     Some(syn::Ident::new(&lit_str.value(), lit_str.span()));
                             }
                         }
+                    } else if path.is_ident("visibility") {
+                        if let Expr::Lit(expr_lit) = value {
+                            if let Lit::Str(lit_str) = &expr_lit.lit {
+                                config.vis = syn::parse_str(&lit_str.value()).ok();
+                            }
+                        }
+                    } else if path.is_ident("also") {
+                        config.also = Some(value);
                     }
                 }
                 _ => {}
@@ -378,8 +405,9 @@ fn parse_set_attribute(
         }
     });
 
+    let vis = config.vis.unwrap_or_else(|| syn::parse_quote! { pub });
+
     let param_type = if let Some(ty) = &config.ty {
-        // Explicit type annotation provided
         if config.into {
             quote! { impl Into<#ty> }
         } else {
@@ -397,37 +425,28 @@ fn parse_set_attribute(
         quote! { value }
     };
 
+    let also_stmt = if let Some(also) = config.also {
+        quote! { #also; }
+    } else {
+        quote! {}
+    };
+
     let body = if let Some(prop) = &config.prop {
-        if config.dirty {
-            if let Some(cast_type) = &config.cast {
-                quote! { self.#field_name.value.#prop = #value_expr as #cast_type; }
-            } else {
-                quote! { self.#field_name.value.#prop = #value_expr; }
-            }
+        if let Some(cast_type) = &config.cast {
+            quote! { self.#field_name.#prop = #value_expr as #cast_type; }
         } else {
-            if let Some(cast_type) = &config.cast {
-                quote! { self.#field_name.#prop = #value_expr as #cast_type; }
-            } else {
-                quote! { self.#field_name.#prop = #value_expr; }
-            }
+            quote! { self.#field_name.#prop = #value_expr; }
         }
     } else if let Some(cast_type) = &config.cast {
-        if config.dirty {
-            quote! { self.#field_name = DirtyTracked::new(#value_expr as #cast_type); }
-        } else {
-            quote! { self.#field_name = #value_expr as #cast_type; }
-        }
+        quote! { self.#field_name = #value_expr as #cast_type; }
     } else {
-        if config.dirty {
-            quote! { self.#field_name = DirtyTracked::new(#value_expr); }
-        } else {
-            quote! { self.#field_name = #value_expr; }
-        }
+        quote! { self.#field_name = #value_expr; }
     };
 
     quote! {
         #[inline]
-        pub fn #method_name(&mut self, value: #param_type) {
+        #vis fn #method_name(&mut self, value: #param_type) {
+            #also_stmt
             #body
         }
     }
@@ -438,8 +457,9 @@ struct WithConfig {
     cast: Option<Type>,
     ty: Option<Type>,
     name: Option<syn::Ident>,
+    vis: Option<Visibility>,
+    also: Option<Expr>,
     into: bool,
-    dirty: bool,
 }
 
 fn parse_with_attribute(
@@ -452,13 +472,14 @@ fn parse_with_attribute(
         cast: None,
         ty: None,
         name: None,
+        vis: None,
+        also: None,
         into: false,
-        dirty: false,
     };
 
     if let Meta::List(meta_list) = &attr.meta {
         let nested = meta_list
-            .parse_args_with(syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated)
+            .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
             .unwrap();
 
         for meta in nested {
@@ -466,35 +487,40 @@ fn parse_with_attribute(
                 Meta::Path(path) if path.is_ident("into") => {
                     config.into = true;
                 }
-                Meta::Path(path) if path.is_ident("dirty") => {
-                    config.dirty = true;
-                }
                 Meta::NameValue(MetaNameValue { path, value, .. }) => {
                     if path.is_ident("prop") {
-                        if let syn::Expr::Path(expr_path) = value {
+                        if let Expr::Path(expr_path) = value {
                             config.prop = Some(expr_path.path.get_ident().unwrap().clone());
                         }
                     } else if path.is_ident("cast") {
-                        if let syn::Expr::Path(expr_path) = value {
+                        if let Expr::Path(expr_path) = value {
                             config.cast = Some(Type::Path(syn::TypePath {
                                 qself: None,
                                 path: expr_path.path.clone(),
                             }));
                         }
                     } else if path.is_ident("ty") {
-                        if let syn::Expr::Path(expr_path) = value {
+                        if let Expr::Path(expr_path) = value {
                             config.ty = Some(Type::Path(syn::TypePath {
                                 qself: None,
                                 path: expr_path.path.clone(),
                             }));
                         }
                     } else if path.is_ident("name") {
-                        if let syn::Expr::Lit(expr_lit) = value {
+                        if let Expr::Lit(expr_lit) = value {
                             if let Lit::Str(lit_str) = &expr_lit.lit {
                                 config.name =
                                     Some(syn::Ident::new(&lit_str.value(), lit_str.span()));
                             }
                         }
+                    } else if path.is_ident("visibility") {
+                        if let Expr::Lit(expr_lit) = value {
+                            if let Lit::Str(lit_str) = &expr_lit.lit {
+                                config.vis = syn::parse_str(&lit_str.value()).ok();
+                            }
+                        }
+                    } else if path.is_ident("also") {
+                        config.also = Some(value);
                     }
                 }
                 _ => {}
@@ -510,8 +536,9 @@ fn parse_with_attribute(
         }
     });
 
+    let vis = config.vis.unwrap_or_else(|| syn::parse_quote! { pub });
+
     let param_type = if let Some(ty) = &config.ty {
-        // Explicit type annotation provided
         if config.into {
             quote! { impl Into<#ty> }
         } else {
@@ -529,62 +556,190 @@ fn parse_with_attribute(
         quote! { value }
     };
 
+    let also_stmt = if let Some(also) = config.also {
+        quote! { #also; }
+    } else {
+        quote! {}
+    };
+
     let body = if let Some(prop) = &config.prop {
-        if config.dirty {
-            if let Some(cast_type) = &config.cast {
-                quote! {
-                    self.#field_name.value.#prop = #value_expr as #cast_type;
-                    self
-                }
-            } else {
-                quote! {
-                    self.#field_name.value.#prop = #value_expr;
-                    self
-                }
+        if let Some(cast_type) = &config.cast {
+            quote! {
+                self.#field_name.#prop = #value_expr as #cast_type;
+                self
             }
         } else {
-            if let Some(cast_type) = &config.cast {
-                quote! {
-                    self.#field_name.#prop = #value_expr as #cast_type;
-                    self
-                }
-            } else {
-                quote! {
-                    self.#field_name.#prop = #value_expr;
-                    self
-                }
+            quote! {
+                self.#field_name.#prop = #value_expr;
+                self
             }
         }
     } else if let Some(cast_type) = &config.cast {
-        if config.dirty {
-            quote! {
-                self.#field_name = DirtyTracked::new(#value_expr as #cast_type);
-                self
-            }
-        } else {
-            quote! {
-                self.#field_name = #value_expr as #cast_type;
-                self
-            }
+        quote! {
+            self.#field_name = #value_expr as #cast_type;
+            self
         }
     } else {
-        if config.dirty {
-            quote! {
-                self.#field_name = DirtyTracked::new(#value_expr);
-                self
-            }
-        } else {
-            quote! {
-                self.#field_name = #value_expr;
-                self
-            }
+        quote! {
+            self.#field_name = #value_expr;
+            self
         }
     };
 
     quote! {
         #[inline]
-        pub fn #method_name(mut self, value: #param_type) -> Self {
+        #vis fn #method_name(mut self, value: #param_type) -> Self {
+            #also_stmt
             #body
         }
     }
+}
+
+#[proc_macro_attribute]
+pub fn dirty(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+    let name = &input.ident;
+    let vis = &input.vis;
+    let generics = &input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let fields = match &input.data {
+        Data::Struct(data) => match &data.fields {
+            Fields::Named(fields) => &fields.named,
+            _ => panic!("dirty only supports structs with named fields"),
+        },
+        _ => panic!("dirty only supports structs"),
+    };
+
+    let mut new_fields = Vec::new();
+    let mut dirty_fields = Vec::new();
+    let mut bit_index = 0usize;
+
+    // Process fields
+    for field in fields {
+        let field_name = field.ident.as_ref().unwrap();
+        let field_type = &field.ty;
+        let field_vis = &field.vis;
+
+        let mut is_dirty = false;
+        let mut use_into = false;
+
+        // Check for #[dirty] or #[dirty(into)] attribute
+        for attr in &field.attrs {
+            if attr.path().is_ident("dirty") {
+                is_dirty = true;
+
+                // Check if it has (into) parameter
+                if let Meta::List(meta_list) = &attr.meta {
+                    if let Ok(ident) = syn::parse2::<syn::Ident>(meta_list.tokens.clone()) {
+                        if ident == "into" {
+                            use_into = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Keep the field without the dirty attribute
+        let mut new_field = field.clone();
+        new_field
+            .attrs
+            .retain(|attr| !attr.path().is_ident("dirty"));
+        new_fields.push(new_field);
+
+        if is_dirty {
+            dirty_fields.push((
+                field_name.clone(),
+                field_type.clone(),
+                bit_index,
+                use_into,
+                field_vis.clone(),
+            ));
+            bit_index += 1;
+        }
+    }
+
+    // Add __tracker field
+    new_fields.push(
+        syn::Field::parse_named
+            .parse2(quote! {
+                __tracker: u8
+            })
+            .unwrap(),
+    );
+
+    // Generate const functions for bit masks
+    let bit_consts: Vec<_> = dirty_fields
+        .iter()
+        .map(|(field_name, _, index, _, _)| {
+            let const_name = field_name;
+            quote! {
+                #[inline]
+                pub const fn #const_name() -> u8 {
+                    1 << #index
+                }
+            }
+        })
+        .collect();
+
+    // Generate setter methods
+    let setters: Vec<_> = dirty_fields
+        .iter()
+        .map(|(field_name, field_type, _, use_into, field_vis)| {
+            let setter_name = syn::Ident::new(&format!("set_{}", field_name), field_name.span());
+
+            if *use_into {
+                quote! {
+                    #[inline]
+                    #field_vis fn #setter_name(&mut self, value: impl Into<#field_type>) {
+                        let value = value.into();
+                        if self.#field_name != value {
+                            self.__tracker |= Self::#field_name();
+                            self.#field_name = value;
+                        }
+                    }
+                }
+            } else {
+                quote! {
+                    #[inline]
+                    #field_vis fn #setter_name(&mut self, value: #field_type) {
+                        if self.#field_name != value {
+                            self.__tracker |= Self::#field_name();
+                            self.#field_name = value;
+                        }
+                    }
+                }
+            }
+        })
+        .collect();
+
+    // Generate _mut methods
+    let mut_getters: Vec<_> = dirty_fields
+        .iter()
+        .map(|(field_name, field_type, _, _, field_vis)| {
+            let mut_name = syn::Ident::new(&format!("{}_mut", field_name), field_name.span());
+
+            quote! {
+                #[inline]
+                #field_vis fn #mut_name(&mut self) -> &mut #field_type {
+                    self.__tracker |= Self::#field_name();
+                    &mut self.#field_name
+                }
+            }
+        })
+        .collect();
+
+    let expanded = quote! {
+        #vis struct #name #generics {
+            #(#new_fields),*
+        }
+
+        impl #impl_generics #name #ty_generics #where_clause {
+            #(#bit_consts)*
+            #(#setters)*
+            #(#mut_getters)*
+        }
+    };
+
+    TokenStream::from(expanded)
 }

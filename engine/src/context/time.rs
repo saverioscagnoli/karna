@@ -162,6 +162,12 @@ impl Time {
     }
 
     #[inline]
+    /// Uncaps the frame rate
+    pub fn uncap_fps(&mut self) {
+        self.frame_step = Duration::ZERO;
+    }
+
+    #[inline]
     /// Sets the interval duration at which the frames are calculated
     /// Default is 500ms, so fps value will be updated every 500ms
     pub fn set_fps_interval(&mut self, interval: Duration) {
