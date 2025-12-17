@@ -1,42 +1,40 @@
 use crate::Color;
-use common::utils::Label;
+use utils::map::Label;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Material {
-    pub texture: Option<TextureKind>,
-    pub color: Option<Color>,
+    pub color: Color,
+    pub texture: Option<Label>,
 }
 
-/// Defines how a texture should be rendered
-#[derive(Debug, Clone, Copy)]
-pub enum TextureKind {
-    /// Render the full texture
-    Full(Label),
-    /// Render a subregion of the texture
-    Partial(Label, TextureRegion),
-}
-
-/// Defines a rectangular region within a texture in pixel coordinates
-#[derive(Debug, Clone, Copy)]
-pub struct TextureRegion {
-    /// X coordinate of the top-left corner in pixels
-    pub x: u32,
-    /// Y coordinate of the top-left corner in pixels
-    pub y: u32,
-    /// Width of the region in pixels
-    pub width: u32,
-    /// Height of the region in pixels
-    pub height: u32,
-}
-
-impl TextureRegion {
-    /// Create a new texture region
-    pub fn new(x: u32, y: u32, width: u32, height: u32) -> Self {
+impl Default for Material {
+    fn default() -> Self {
         Self {
-            x,
-            y,
-            width,
-            height,
+            color: Color::White,
+            texture: None,
+        }
+    }
+}
+
+impl Material {
+    #[inline]
+    pub fn new(color: Color, texture: Option<Label>) -> Self {
+        Self { color, texture }
+    }
+
+    #[inline]
+    pub fn new_texture(label: Label) -> Self {
+        Self {
+            color: Color::White,
+            texture: Some(label),
+        }
+    }
+
+    #[inline]
+    pub fn new_color(color: Color) -> Self {
+        Self {
+            color,
+            texture: None,
         }
     }
 }

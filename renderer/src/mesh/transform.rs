@@ -1,36 +1,24 @@
 use macros::{Get, Set, With};
-use math::{Size, Vector2};
+use math::Vector2;
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy)]
 #[derive(Get, Set, With)]
 pub struct Transform {
     #[get]
-    #[get(prop = x, ty = f32, copied)]
-    #[get(prop = y, ty = f32, copied)]
-    #[set(into)]
-    #[set(prop = x, ty = f32)]
-    #[set(prop = y, ty = f32)]
     #[with(into)]
     #[with(prop = x, ty = f32)]
     #[with(prop = y, ty = f32)]
-    pub position: Vector2,
+    pub(crate) position: Vector2,
 
     #[get]
-    #[get(prop = x, ty = f32, copied)]
-    #[get(prop = y, ty = f32, copied)]
-    #[set(into)]
-    #[set(prop = x, ty = f32)]
-    #[set(prop = y, ty = f32)]
     #[with(into)]
     #[with(prop = x, ty = f32)]
     #[with(prop = y, ty = f32)]
-    pub scale: Vector2,
+    pub(crate) scale: Vector2,
 
     #[get(copied)]
-    #[set]
     #[with]
-    pub rotation: f32,
+    pub(crate) rotation: f32,
 }
 
 impl Default for Transform {
@@ -44,22 +32,11 @@ impl Default for Transform {
 }
 
 impl Transform {
-    pub fn new(position: Vector2, scale: Vector2, rotation: f32) -> Self {
+    pub fn new<P: Into<Vector2>, S: Into<Vector2>>(position: P, scale: S, rotation: f32) -> Self {
         Self {
-            position,
-            scale,
+            position: position.into(),
+            scale: scale.into(),
             rotation,
         }
-    }
-
-    /// Set the scale to match the given dimensions
-    pub fn with_size(mut self, size: Size<u32>) -> Self {
-        self.scale = Vector2::new(size.width as f32, size.height as f32);
-        self
-    }
-
-    /// Set the scale to match the given dimensions
-    pub fn set_size(&mut self, size: Size<u32>) {
-        self.scale = Vector2::new(size.width as f32, size.height as f32);
     }
 }

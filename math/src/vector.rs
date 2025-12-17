@@ -1,5 +1,4 @@
 use crate::point::{Point2, Point3, Point4};
-use common::impl_deref_to;
 use std::f32;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::{
@@ -7,6 +6,7 @@ use std::{
     ops::{Index, IndexMut},
     slice::{Iter, IterMut},
 };
+use utils::impl_deref_to;
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]

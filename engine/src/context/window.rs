@@ -4,16 +4,20 @@ use std::sync::Arc;
 use traccia::warn;
 use winit::window::Fullscreen;
 
+pub type WinitWindow = Arc<winit::window::Window>;
+
 #[derive(Debug, Clone)]
 #[derive(Get)]
 pub struct Window {
     #[get(ty = &str)]
     label: String,
-    inner: Arc<winit::window::Window>,
+
+    #[get(visibility = "pub(crate)")]
+    inner: WinitWindow,
 }
 
 impl Window {
-    pub(crate) fn new<L: Into<String>>(label: L, inner: Arc<winit::window::Window>) -> Self {
+    pub(crate) fn new<L: Into<String>>(label: L, inner: WinitWindow) -> Self {
         Self {
             label: label.into(),
             inner,
@@ -23,12 +27,6 @@ impl Window {
     #[inline]
     pub(crate) fn request_redraw(&self) {
         self.inner.request_redraw();
-    }
-
-    #[inline]
-    #[doc(hidden)]
-    pub(crate) fn inner(&self) -> &Arc<winit::window::Window> {
-        &self.inner
     }
 
     #[inline]
@@ -86,6 +84,8 @@ impl Window {
         #[cfg(target_os = "linux")]
         {
             if std::env::var("WAYLAND_DISPLAY").is_ok() {
+                use winit::window::Fullscreen;
+
                 warn!(
                     "Exclusive fullscreen is not supported on wayland. Setting borderless fullscreen instead."
                 );

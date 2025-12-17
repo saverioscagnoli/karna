@@ -9,7 +9,6 @@ impl Scene for TextureAtlasDemo {
         ctx.render
             .set_clear_color(Color::rgb(30.0 / 255.0, 30.0 / 255.0, 40.0 / 255.0));
 
-        let mut images = Vec::new();
         for i in 0..500 {
             let width = rng(5..=64);
             let height = rng(5..=64);
@@ -30,10 +29,8 @@ impl Scene for TextureAtlasDemo {
 
             let texture_label = Label::new(&format!("rect_{}", i));
 
-            images.push((texture_label, png_bytes));
+            ctx.render.load_image(texture_label, png_bytes);
         }
-
-        ctx.render.load_images(images);
     }
 
     fn update(&mut self, _ctx: &mut Context) {}

@@ -1,6 +1,5 @@
-use common::utils;
 use macros::{Get, Set};
-use math::{Matrix4, Size, Vector3};
+use math::{Matrix4, Vector3};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Projection {
@@ -17,7 +16,7 @@ pub enum Projection {
 }
 
 impl Projection {
-    fn matrix(&self, window_size: &Size<u32>) -> Matrix4 {
+    fn matrix(&self, width: u32, height: u32) -> Matrix4 {
         match *self {
             Self::Orthographic {
                 left,
@@ -27,12 +26,9 @@ impl Projection {
                 z_near,
                 z_far,
             } => Matrix4::orthographic(left, right, bottom, top, z_near, z_far),
-            Self::Perspective { fovy, near, far } => Matrix4::perspective(
-                fovy,
-                window_size.width as f32 / window_size.height as f32,
-                near,
-                far,
-            ),
+            Self::Perspective { fovy, near, far } => {
+                Matrix4::perspective(fovy, width as f32 / height as f32, near, far)
+            }
         }
     }
 }
@@ -42,8 +38,12 @@ impl Projection {
 pub struct Camera {
     projection: Projection,
     view_projection_buffer: wgpu::Buffer,
-    pub(crate) view_projection_bind_group_layout: wgpu::BindGroupLayout,
-    pub(crate) view_projection_bind_group: wgpu::BindGroup,
+
+    #[get(visibility = "pub(crate)")]
+    view_projection_bind_group_layout: wgpu::BindGroupLayout,
+
+    #[get(visibility = "pub(crate)")]
+    view_projection_bind_group: wgpu::BindGroup,
 
     #[get]
     #[get(copied, prop = x, ty = f32)]
@@ -57,7 +57,8 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub(crate) fn new(device: &wgpu::Device, projection: Projection) -> Self {
+    pub(crate) fn new(projection: Projection) -> Self {
+        let device = gpu::device();
         let view_projection_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("camera vp buffer"),
             size: std::mem::size_of::<Matrix4>() as wgpu::BufferAddress,
@@ -115,25 +116,25 @@ impl Camera {
         }
     }
     #[inline]
-    fn view_projection_matrix(&self, window_size: &Size<u32>) -> Matrix4 {
-        self.projection.matrix(window_size) * self.view_matrix()
+    fn view_projection_matrix(&self, width: u32, height: u32) -> Matrix4 {
+        self.projection.matrix(width, height) * self.view_matrix()
     }
 
     #[inline]
-    pub(crate) fn update(&mut self, window_size: &Size<u32>, queue: &wgpu::Queue) {
+    pub(crate) fn update(&mut self, width: u32, height: u32) {
         self.projection = Projection::Orthographic {
             left: 0.0,
-            right: window_size.width as f32,
-            bottom: window_size.height as f32,
+            right: width as f32,
+            bottom: height as f32,
             top: 0.0,
             z_near: -1.0,
             z_far: 1.0,
         };
 
-        queue.write_buffer(
+        gpu::queue().write_buffer(
             &self.view_projection_buffer,
             0,
-            utils::as_u8_slice(&[self.view_projection_matrix(window_size)]),
+            utils::as_u8_slice(&[self.view_projection_matrix(width, height)]),
         );
     }
 }

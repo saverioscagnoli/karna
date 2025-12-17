@@ -1,23 +1,28 @@
-pub mod atlas;
-
 use image::GenericImageView;
+use macros::Get;
 use math::Size;
 
 #[derive(Debug)]
+#[derive(Get)]
 pub struct Texture {
-    pub(crate) inner: wgpu::Texture,
-    pub view: wgpu::TextureView,
-    pub sampler: wgpu::Sampler,
+    #[get]
+    inner: wgpu::Texture,
+    view: wgpu::TextureView,
+    sampler: wgpu::Sampler,
+
+    #[get]
     pub bind_group: wgpu::BindGroup,
+
+    #[get]
     pub size: Size<u32>,
 }
 
 impl Texture {
     pub fn new_empty<L: AsRef<str>>(
         label: L,
-        device: &wgpu::Device,
         size: Size<u32>,
         bind_group_layout: &wgpu::BindGroupLayout,
+        device: &wgpu::Device,
     ) -> Self {
         let texture_size = wgpu::Extent3d {
             width: size.width,

@@ -1,3 +1,4 @@
+use crate::context::WinitWindow;
 use math::Size;
 use std::{
     fmt::Debug,
@@ -7,9 +8,9 @@ use std::{
 use winit::{event_loop::ActiveEventLoop, monitor::MonitorHandle};
 
 pub struct Monitors {
-    /// Doesn't matter because window wraps an Arc<winit window>
+    /// Doesn't matter because winitwindow wraps an Arc<winit window>
     /// so we can keep a reference for consistency when getting the current monitor
-    window: Arc<winit::window::Window>,
+    window: WinitWindow,
 
     /// A list of all available monitors
     /// Accessible through deref.

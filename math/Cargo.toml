@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 num = "0.4.3"
-common.workspace = true
+utils.workspace = true
 macros.workspace = true
 winit.workspace = true
 rand = "0.9.2"

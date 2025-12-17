@@ -1,104 +1,103 @@
-use crate::{App, Scene, init_logging};
-use common::{label, utils::Label};
+use crate::{App, scene::Scene};
 use macros::With;
 use math::Size;
-use wgpu::naga::FastHashMap;
+use utils::{
+    label,
+    map::{Label, LabelMap},
+};
 use winit::window::WindowAttributes;
 
+#[derive(Default)]
 #[derive(With)]
 pub struct WindowBuilder {
-    attributes: WindowAttributes,
+    pub(crate) attributes: WindowAttributes,
 
     #[with(into)]
-    label: String,
-    scenes: FastHashMap<Label, Box<dyn Scene>>,
-}
-
-impl Default for WindowBuilder {
-    fn default() -> Self {
-        Self {
-            attributes: WindowAttributes::default()
-                .with_title("My Window")
-                .with_inner_size(winit::dpi::LogicalSize::new(800, 600)),
-            label: String::from(""),
-            scenes: FastHashMap::default(),
-        }
-    }
+    /// Used for debugging purposes,
+    /// such as distinguish logs between windows
+    pub(crate) label: String,
+    pub(crate) scenes: LabelMap<Box<dyn Scene>>,
 }
 
 impl WindowBuilder {
+    /// Creates a new `WindowBuilder`
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+    /// Sets the window title before creation
+    pub fn with_title<T: Into<String>>(mut self, title: T) -> Self {
         self.attributes = self.attributes.with_title(title);
         self
     }
 
+    /// Sets the size of the window before creation
     pub fn with_size<S: Into<Size<u32>>>(mut self, size: S) -> Self {
-        let size = size.into();
-        self.attributes = self
-            .attributes
-            .with_inner_size(winit::dpi::LogicalSize::new(size.width, size.height));
+        let size: Size<u32> = size.into();
+
+        self.attributes = self.attributes.with_inner_size(size);
         self
     }
 
-    pub fn with_initial_scene(mut self, scene: Box<dyn Scene>) -> Self {
-        self.scenes.insert(label!("initial"), scene);
+    /// Sets whether the window should be resizable before creation.
+    ///
+    /// NOTE: on tiling window managers, setting this to `true`
+    /// will spawn the window as floating, overriding the tiling rules
+    pub fn with_resizable(mut self, resizable: bool) -> Self {
+        self.attributes = self.attributes.with_resizable(resizable);
         self
     }
 
-    pub fn with_scene(mut self, label: Label, scene: Box<dyn Scene>) -> Self {
-        self.scenes.insert(label, scene);
+    /// Adds a scene to the window
+    ///
+    /// NOTE: To add an intial scene when the window spawns,
+    /// use `with_initial_scene`, which is mandatory to do
+    /// for each window
+    pub fn with_scene<S: Scene + 'static>(mut self, label: Label, scene: S) -> Self {
+        self.scenes.insert(label, Box::new(scene));
         self
     }
 
-    pub(crate) fn build(self) -> (WindowAttributes, String, FastHashMap<Label, Box<dyn Scene>>) {
-        assert!(
-            self.scenes.contains_key(&label!("initial")),
-            "WindowBuilder must have an initial scene. Use with_initial_scene() or with_scene(label!(\"initial\"), scene)"
-        );
-
-        (
-            // Im on sway, current workaround to make the window spawn floating
-            self.attributes.with_resizable(false),
-            self.label,
-            self.scenes,
-        )
+    /// Sets the initial scene of the window
+    pub fn with_initial_scene<S: Scene + 'static>(mut self, scene: S) -> Self {
+        self.scenes.insert(label!("initial"), Box::new(scene));
+        self
     }
 }
 
+#[derive(Default)]
 pub struct AppBuilder {
     windows: Vec<WindowBuilder>,
 }
 
 impl AppBuilder {
     pub fn new() -> Self {
-        init_logging();
-
-        Self {
-            windows: Vec::new(),
-        }
+        Self::default()
     }
 
+    /// Creates a new window
     pub fn with_window(mut self, window: WindowBuilder) -> Self {
         self.windows.push(window);
         self
     }
 
+    /// Creates a new app
     pub fn build(self) -> App {
         let mut app = App::new();
 
-        for (i, window_builder) in self.windows.into_iter().enumerate() {
-            let (attributes, label, scenes) = window_builder.build();
-            let label = if label.is_empty() {
-                format!("window_{}", i + 1)
+        for (i, mut builder) in self.windows.into_iter().enumerate() {
+            assert!(
+                builder.scenes.contains_key(&label!("initial")),
+                "WindowBuilder must have an initial scene. Use with_initial_scene() or with_scene(label!(\"initial\"), scene)"
+            );
+
+            builder.label = if builder.label.is_empty() {
+                format!("window {}", i + 1)
             } else {
-                label
+                builder.label
             };
 
-            app.add_pending_window(attributes, label, scenes);
+            app.add_window_builder(builder);
         }
 
         app

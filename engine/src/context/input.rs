@@ -18,8 +18,8 @@ pub struct Input {
     pub(crate) pressed_mouse: FastHashSet<MouseButton>,
 }
 
-impl Input {
-    pub(crate) fn new() -> Self {
+impl Default for Input {
+    fn default() -> Self {
         Self {
             held_keys: FastHashSet::default(),
             pressed_keys: FastHashSet::default(),
@@ -28,7 +28,9 @@ impl Input {
             pressed_mouse: FastHashSet::default(),
         }
     }
+}
 
+impl Input {
     #[inline]
     pub fn key_held(&self, key: &KeyCode) -> bool {
         self.held_keys.contains(key)
@@ -49,6 +51,7 @@ impl Input {
         self.pressed_mouse.contains(button)
     }
 
+    #[inline]
     pub(crate) fn flush(&mut self) {
         self.pressed_keys.clear();
         self.pressed_mouse.clear();

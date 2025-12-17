@@ -1,58 +1,50 @@
-mod audio;
+pub mod input;
+
 mod monitors;
 mod time;
 mod window;
 
-// Export input as a separate module
-pub mod input;
-
-use crate::context::{audio::Audio, input::Input};
+use crate::context::input::Input;
+use assets::AssetManager;
 use renderer::Renderer;
-use spin_sleep::SpinSleeper;
 use std::sync::Arc;
 use winit::{event::WindowEvent, keyboard::PhysicalKey};
 
 // Re-exports
+pub use crate::context::time::Time;
 pub use monitors::{Monitor, Monitors};
-pub use time::Time;
 pub use window::Window;
+pub(crate) use window::WinitWindow;
 
 pub struct Context {
     pub window: Window,
     pub time: Time,
     pub input: Input,
     pub render: Renderer,
-    pub audio: Audio,
     pub monitors: Monitors,
-
-    pub(crate) sleeper: SpinSleeper,
+    pub assets: Arc<AssetManager>,
 }
 
 impl Context {
-    pub fn new(window: Window, recommended_fps: u32) -> Self {
-        let render = Renderer::new(Arc::clone(window.inner()));
-
-        render.init();
-
+    pub(crate) fn new(window: Window) -> Self {
+        let assets = Arc::new(AssetManager::new());
+        let render = Renderer::new(Arc::clone(window.inner()), Arc::clone(&assets));
         let monitors = Monitors::new(Arc::clone(window.inner()));
-        let sleeper = SpinSleeper::default();
 
         Self {
             window,
-            time: Time::new(recommended_fps),
-            input: Input::new(),
+            time: Time::default(),
+            input: Input::default(),
             render,
-            audio: Audio::new(),
             monitors,
-            sleeper,
+            assets,
         }
     }
 
-    #[inline]
     pub(crate) fn handle_event(&mut self, event: WindowEvent) {
         match event {
             WindowEvent::Resized(size) => {
-                self.render.resize(size.into());
+                self.render.resize(size.width, size.height);
             }
 
             WindowEvent::KeyboardInput { event, .. } => match event.physical_key {

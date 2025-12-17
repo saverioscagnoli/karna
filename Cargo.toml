@@ -4,22 +4,26 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["common", "engine","macros","math", "renderer"]
+members = ["assets", "utils", "engine", "gpu","macros","math", "renderer"]
 
 [workspace.dependencies]
-common = { path = "common" }
+utils = { path = "utils" }
 macros = { path = "macros" }
 math = { path = "math" }
 winit = "0.30.12"
 wgpu = "27.0.1"
 renderer = { path = "renderer" }
 traccia = "3.0.0"
+image = "0.25.9"
+gpu = { path = "gpu" }
+assets = { path = "assets" }
 
 [dependencies]
 math.workspace = true
 engine = { path = "engine" }
 renderer.workspace = true
 winit.workspace = true
+pollster = "0.4"
 
 [dev-dependencies]
 image = "0.25.9"

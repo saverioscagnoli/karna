@@ -2,28 +2,33 @@ mod builder;
 mod context;
 mod scene;
 
-use crossbeam_channel::{Sender, bounded};
+use crate::context::WinitWindow;
+use crossbeam_channel::{Receiver, Sender};
 use ctor::ctor;
 use math::Size;
-use renderer::{GPU, gpu};
-use std::sync::Arc;
-use std::thread::{self, JoinHandle};
-use traccia::{FormatterBuilder, error, info, span, warn};
+use std::{
+    sync::Arc,
+    thread::{self, JoinHandle},
+};
+use traccia::{error, info, warn};
 use wgpu::naga::FastHashMap;
-use winit::event_loop::{ControlFlow, EventLoop};
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
-    window::{WindowAttributes, WindowId},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    window::WindowId,
 };
 
 // Re-exports
-pub use crate::context::*;
 pub use builder::{AppBuilder, WindowBuilder};
-pub use common::{label, utils::Label};
+pub use context::{Context, Monitor, Monitors, Time, Window, input};
 pub use scene::Scene;
+pub use utils::{
+    label,
+    map::{Label, LabelMap},
+};
 
-pub(crate) fn init_logging() {
+fn init_logging() {
     traccia::init_with_config(traccia::Config {
         level: if cfg!(debug_assertions) {
             traccia::LogLevel::Debug
@@ -31,7 +36,7 @@ pub(crate) fn init_logging() {
             traccia::LogLevel::Info
         },
         format: Some(Box::new(
-            FormatterBuilder::new()
+            traccia::FormatterBuilder::new()
                 .with_span_position(traccia::SpanPosition::AfterLevel)
                 .build(|record, span| {
                     if span.is_empty() {
@@ -60,165 +65,174 @@ pub(crate) fn init_logging() {
 ///
 /// Maybe in the future i can implement a scenebuilder with the
 /// gpu available, or make the user explicitly call something like karna::init();
-fn init_gpu() {
-    pollster::block_on(GPU::init());
+fn init() {
+    gpu::init();
+    init_logging();
 }
 
-pub enum WindowCommand {
-    Event(WindowEvent),
-    Redraw,
+enum WindowMessage {
     Close,
     MonitorsChanged(Vec<Monitor>),
+    StartFrame,
+    WinitEvent(WindowEvent),
 }
 
 struct WindowHandle {
-    sender: Sender<WindowCommand>,
-    handle: JoinHandle<()>,
-}
-
-struct PendingWindow {
-    attributes: WindowAttributes,
-    label: String,
-    scenes: FastHashMap<Label, Box<dyn Scene>>,
+    sender: Sender<WindowMessage>,
+    thread: JoinHandle<()>,
 }
 
 pub struct App {
     windows: FastHashMap<WindowId, WindowHandle>,
-    pending_windows: Vec<PendingWindow>,
+    window_builders: Vec<WindowBuilder>,
 }
 
+/// Internal
+/// App creation
+/// Game loop
 impl App {
     pub(crate) fn new() -> Self {
-        let info = gpu().info();
-
-        info!("backend: {}", info.backend);
-        info!("device: {}", info.name);
-        info!("device type: {:?}", info.device_type);
-        info!("driver: {}", info.driver_info);
-
         Self {
             windows: FastHashMap::default(),
-            pending_windows: Vec::new(),
+            window_builders: Vec::new(),
         }
     }
 
-    fn add_pending_window(
-        &mut self,
-        attributes: WindowAttributes,
-        label: String,
-        scenes: FastHashMap<Label, Box<dyn Scene>>,
-    ) {
-        self.pending_windows.push(PendingWindow {
-            attributes,
-            label,
-            scenes,
-        });
+    pub(crate) fn add_window_builder(&mut self, builder: WindowBuilder) {
+        self.window_builders.push(builder);
     }
 
-    fn spawn_window(
+    fn spawn_window_thread(
         &mut self,
         label: String,
-        window: Arc<winit::window::Window>,
-        scenes: FastHashMap<Label, Box<dyn Scene>>,
-        recommended_fps: u32,
+        window: WinitWindow,
+        scenes: LabelMap<Box<dyn Scene>>,
     ) {
-        let (tx, rx) = bounded::<WindowCommand>(64);
+        let (tx, rx) = crossbeam_channel::bounded::<WindowMessage>(64);
         let window_id = window.id();
         let window = Window::new(label, window);
 
         let handle = thread::spawn(move || {
-            let _span = span!("window", "id" => window.label());
-            let mut ctx = Context::new(window, recommended_fps);
-            let mut scenes = scenes;
-            let mut active_scene = label!("initial");
+            let _span = traccia::span!("window", "label" => window.label());
+            Self::window_loop(window, rx, scenes);
+        });
 
-            scenes
-                .get_mut(&active_scene)
-                .expect("cannot fail")
-                .load(&mut ctx);
+        let window_handle = WindowHandle {
+            sender: tx,
+            thread: handle,
+        };
 
-            // Kickstart the loop
-            ctx.window.request_redraw();
+        self.windows.insert(window_id, window_handle);
+    }
 
-            loop {
-                match rx.recv() {
-                    Ok(WindowCommand::Close) => return,
+    fn window_loop(
+        window: Window,
+        rx: Receiver<WindowMessage>,
+        mut scenes: LabelMap<Box<dyn Scene>>,
+    ) {
+        let mut context = Context::new(window);
+        let active_scene = label!("initial");
 
-                    Ok(WindowCommand::Event(event)) => {
-                        ctx.handle_event(event);
-                    }
+        scenes
+            .get_mut(&active_scene)
+            .expect("Cannot fail")
+            .load(&mut context);
 
-                    Ok(WindowCommand::MonitorsChanged(monitors)) => {
-                        ctx.monitors.update(monitors);
-                    }
+        // Kickstart
+        context.window.request_redraw();
 
-                    Ok(WindowCommand::Redraw) => {
-                        // Drain all pending events before rendering to avoid lag
-                        while let Ok(cmd) = rx.try_recv() {
-                            match cmd {
-                                WindowCommand::Close => return,
-                                WindowCommand::Event(event) => {
-                                    if let WindowEvent::Resized(size) = event {
-                                        ctx.render.resize(size.into());
-                                        if let Some(scene) = scenes.get_mut(&active_scene) {
-                                            scene.on_resize(&mut ctx);
-                                        }
-                                    } else {
-                                        ctx.handle_event(event);
+        loop {
+            match rx.recv() {
+                Ok(WindowMessage::Close) => {
+                    info!("Close requested");
+                    return;
+                }
+
+                Ok(WindowMessage::MonitorsChanged(monitors)) => {
+                    context.monitors.update(monitors);
+                }
+
+                Ok(WindowMessage::StartFrame) => {
+                    // Drain all events before rendering
+                    while let Ok(message) = rx.try_recv() {
+                        match message {
+                            WindowMessage::Close => {
+                                info!("Close requested");
+                                return;
+                            }
+
+                            WindowMessage::StartFrame => {
+                                // Skip
+                                break;
+                            }
+
+                            WindowMessage::MonitorsChanged(monitors) => {
+                                context.monitors.update(monitors);
+                            }
+
+                            WindowMessage::WinitEvent(event) => {
+                                if let WindowEvent::Resized(size) = event {
+                                    let size: Size<u32> = size.into();
+
+                                    if let Some(scene) = scenes.get_mut(&active_scene) {
+                                        scene.on_resize(size, &mut context);
                                     }
                                 }
 
-                                WindowCommand::MonitorsChanged(monitors) => {
-                                    ctx.monitors.update(monitors);
-                                }
-
-                                WindowCommand::Redraw => {
-                                    // Skip redundant redraw commands
-                                    break;
-                                }
+                                context.handle_event(event);
                             }
                         }
-
-                        ctx.time.frame_start();
-                        ctx.time.update();
-
-                        while let Some(tick_start) = ctx.time.should_tick() {
-                            if let Some(scene) = scenes.get_mut(&active_scene) {
-                                scene.fixed_update(&mut ctx);
-                            }
-
-                            ctx.time.do_tick(tick_start);
-                        }
-
-                        if let Some(scene) = scenes.get_mut(&active_scene) {
-                            scene.update(&mut ctx);
-                            scene.render(&mut ctx);
-                        }
-
-                        match ctx.render.present() {
-                            Ok(_) => {}
-                            Err(wgpu::SurfaceError::OutOfMemory) => return,
-                            Err(e) => error!("Render error: {:?}", e),
-                        }
-
-                        ctx.time.frame_end();
-                        ctx.input.flush();
-
-                        let sleep_duration = ctx.time.until_next_frame();
-                        if !sleep_duration.is_zero() {
-                            ctx.sleeper.sleep(sleep_duration);
-                        }
-
-                        ctx.window.request_redraw();
                     }
 
-                    Err(_) => return, // Channel closed
-                }
-            }
-        });
+                    context.time.frame_start();
+                    context.time.update();
 
-        self.windows
-            .insert(window_id, WindowHandle { sender: tx, handle });
+                    while let Some(tick_start) = context.time.next_tick() {
+                        if let Some(scene) = scenes.get_mut(&active_scene) {
+                            scene.fixed_update(&mut context);
+                        }
+
+                        context.time.do_tick(tick_start);
+                    }
+
+                    if let Some(scene) = scenes.get_mut(&active_scene) {
+                        scene.update(&mut context);
+                        scene.render(&mut context);
+                    }
+
+                    match context.render.present() {
+                        Ok(_) => {}
+                        Err(wgpu::SurfaceError::OutOfMemory) => return,
+                        Err(e) => error!("Render error: {:?}", e),
+                    }
+
+                    context.time.frame_end();
+                    context.input.flush();
+                    context.time.wait_for_next_frame();
+                    context.window.request_redraw();
+                }
+
+                Ok(WindowMessage::WinitEvent(event)) => {
+                    if let WindowEvent::Resized(size) = event {
+                        let size: Size<u32> = size.into();
+
+                        if let Some(scene) = scenes.get_mut(&active_scene) {
+                            scene.on_resize(size, &mut context);
+                        }
+                    }
+
+                    context.handle_event(event);
+                }
+
+                Err(_) => return,
+            }
+        }
+    }
+}
+
+impl App {
+    pub fn builder() -> AppBuilder {
+        AppBuilder::new()
     }
 
     pub fn run(mut self) {
@@ -231,58 +245,19 @@ impl App {
 }
 
 impl ApplicationHandler for App {
-    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let pending = std::mem::take(&mut self.pending_windows);
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        let windows = std::mem::take(&mut self.window_builders);
 
-        let recommended_fps = event_loop
-            .available_monitors()
-            .max_by(|a, b| {
-                let a_hz = a.refresh_rate_millihertz().unwrap_or(60_000);
-                let b_hz = b.refresh_rate_millihertz().unwrap_or(60_000);
-
-                match a_hz.cmp(&b_hz) {
-                    std::cmp::Ordering::Equal => {
-                        // If refresh rates are equal, compare resolution (area)
-                        let a_size: Size<u32> = a.size().into();
-                        let b_size: Size<u32> = b.size().into();
-
-                        a_size.area().cmp(&b_size.area())
-                    }
-
-                    other => other,
-                }
-            })
-            .and_then(|m| {
-                let size = m.size();
-                let hz =
-                    (m.refresh_rate_millihertz().unwrap_or(60_000) as f32 / 1000.0).round() as u32;
-
-                info!(
-                    "setting as recommended monitor: '{}' {}x{}@{}hz",
-                    m.name().unwrap_or(String::from("unknown")),
-                    size.width,
-                    size.height,
-                    hz,
-                );
-
-                Some(hz)
-            })
-            .unwrap_or(60);
-
-        for window_config in pending {
-            match event_loop.create_window(window_config.attributes) {
+        for builder in windows {
+            match event_loop.create_window(builder.attributes) {
                 Ok(window) => {
-                    let window = Arc::new(window);
-
-                    self.spawn_window(
-                        window_config.label,
-                        window,
-                        window_config.scenes,
-                        recommended_fps,
-                    );
+                    self.spawn_window_thread(builder.label, Arc::new(window), builder.scenes);
                 }
                 Err(e) => {
-                    error!("Failed to create window: {}", e);
+                    error!(
+                        "Failed to spawn window with label: '{}': {}",
+                        builder.label, e
+                    );
                 }
             }
         }
@@ -290,46 +265,48 @@ impl ApplicationHandler for App {
 
     fn window_event(
         &mut self,
-        event_loop: &winit::event_loop::ActiveEventLoop,
+        event_loop: &ActiveEventLoop,
         window_id: WindowId,
         event: WindowEvent,
     ) {
         match event {
             WindowEvent::CloseRequested => {
-                if let Some(handle) = self.windows.remove(&window_id) {
-                    let _ = handle.sender.send(WindowCommand::Close);
-                    let _ = handle.handle.join();
+                if let Some(window) = self.windows.remove(&window_id) {
+                    let _ = window.sender.send(WindowMessage::Close);
+                    let _ = window.thread.join();
                 }
 
                 if self.windows.is_empty() {
+                    warn!("All windows were closed. Exiting");
                     event_loop.exit();
                 }
             }
 
             WindowEvent::ScaleFactorChanged { .. } => {
-                if let Some(handle) = self.windows.get(&window_id) {
+                if let Some(window) = self.windows.get(&window_id) {
                     let monitors = Monitors::collect(event_loop);
 
-                    warn!("Monitors changed. {} detected", monitors.len());
+                    warn!("Monitors changed");
+                    warn!("{} monitors detected", monitors.len());
 
-                    let _ = handle
+                    let _ = window
                         .sender
-                        .try_send(WindowCommand::MonitorsChanged(monitors));
+                        .try_send(WindowMessage::MonitorsChanged(monitors));
                 }
             }
 
             WindowEvent::RedrawRequested => {
-                if let Some(handle) = self.windows.get(&window_id) {
-                    if let Err(_) = handle.sender.try_send(WindowCommand::Redraw) {
+                if let Some(window) = self.windows.get(&window_id) {
+                    if let Err(_) = window.sender.try_send(WindowMessage::StartFrame) {
                         // Redraw events can be safely dropped - next frame will render anyway
                     }
                 }
             }
 
             _ => {
-                if let Some(handle) = self.windows.get(&window_id) {
-                    if let Err(_) = handle.sender.try_send(WindowCommand::Event(event)) {
-                        warn!("Event dropped - channel full. Consider processing events faster.");
+                if let Some(window) = self.windows.get(&window_id) {
+                    if let Err(_) = window.sender.try_send(WindowMessage::WinitEvent(event)) {
+                        warn!("Event dropped: channel full.");
                     }
                 }
             }
@@ -339,9 +316,9 @@ impl ApplicationHandler for App {
 
 impl Drop for App {
     fn drop(&mut self) {
-        for (_, handle) in self.windows.drain() {
-            let _ = handle.sender.send(WindowCommand::Close);
-            let _ = handle.handle.join();
+        for (_, window) in self.windows.drain() {
+            let _ = window.sender.send(WindowMessage::Close);
+            let _ = window.thread.join();
         }
     }
 }
