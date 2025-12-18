@@ -2,23 +2,12 @@ use gpu::Texture;
 use image::{DynamicImage, GenericImageView};
 use macros::Get;
 use math::Size;
-use rect_packer::{Packer, Rect};
-use std::sync::{Mutex, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use utils::map::{Label, LabelMap};
-
-static TEXTURE_ATLAS: OnceLock<TextureAtlas> = OnceLock::new();
-
-pub fn init() {
-    TEXTURE_ATLAS
-        .set(TextureAtlas::new((1024, 1024)))
-        .map_err(|_| "Failed to initialize texture atlas")
-        .unwrap()
-}
-
-#[inline]
-pub fn get() -> &'static TextureAtlas {
-    TEXTURE_ATLAS.get().unwrap()
-}
+use rect_packer::Packer;
+use std::sync::{Mutex, RwLock};
+use utils::{
+    label,
+    map::{Label, LabelMap},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct AtlasRegion {
@@ -42,7 +31,7 @@ impl From<rect_packer::Rect> for AtlasRegion {
 impl AtlasRegion {
     #[inline]
     /// (min_x, min_y, max_x, max_y)
-    pub fn uv_coordinates(&self, atlas_size: Size<u32>) -> (f32, f32, f32, f32) {
+    pub fn uv_coordinates(&self, atlas_size: &Size<u32>) -> (f32, f32, f32, f32) {
         let x = self.x as f32 / atlas_size.width() as f32;
         let y = self.y as f32 / atlas_size.height() as f32;
         let width = self.width as f32 / atlas_size.width() as f32;
@@ -54,10 +43,15 @@ impl AtlasRegion {
 
 #[derive(Get)]
 pub struct TextureAtlas {
+    #[get]
     texture: Texture,
+
     #[get]
     bind_group_layout: wgpu::BindGroupLayout,
+
+    #[get]
     size: Size<u32>,
+
     /// Can be a mutex, since it's mainly used for writing (lock, but it's ok, loading images takes time),
     /// when getting a texture we don't need to lock it
     packer: Mutex<rect_packer::Packer>,
@@ -93,19 +87,66 @@ impl TextureAtlas {
 
         let texture = Texture::new_empty("texture atlas", size, &bind_group_layout, device);
 
-        let packer = Packer::new(rect_packer::Config {
+        let mut packer = Packer::new(rect_packer::Config {
             width: size.width() as i32,
             height: size.height() as i32,
             border_padding: 0,
             rectangle_padding: 0,
         });
 
+        // Reserve a 1x1 region for white pixel
+        let white_region: AtlasRegion = packer
+            .pack(1, 1, false)
+            .expect("Failed to pack white pixel")
+            .into();
+
+        // Write white pixel to the atlas
+        gpu::queue().write_texture(
+            wgpu::TexelCopyTextureInfo {
+                aspect: wgpu::TextureAspect::All,
+                texture: texture.inner(),
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: white_region.x,
+                    y: white_region.y,
+                    z: 0,
+                },
+            },
+            &[255u8, 255u8, 255u8, 255u8], // White RGBA pixel
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4),
+                rows_per_image: Some(1),
+            },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        let mut regions = LabelMap::default();
+
+        // Store the white pixel region
+        regions.insert(label!("_white"), white_region);
+
+        // Store the entire atlas region for debugging
+        regions.insert(
+            label!("_atlas"),
+            AtlasRegion {
+                x: 0,
+                y: 0,
+                width: size.width(),
+                height: size.height(),
+            },
+        );
+
         Self {
             texture,
             bind_group_layout,
             size,
             packer: Mutex::new(packer),
-            regions: RwLock::new(LabelMap::default()),
+            regions: RwLock::new(regions),
         }
     }
 
@@ -121,7 +162,7 @@ impl TextureAtlas {
                     z: 0,
                 },
             },
-            image.as_rgba8().expect("Failed to get rgba8"),
+            image.to_rgba8().as_raw(),
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * size.width()),
@@ -133,6 +174,21 @@ impl TextureAtlas {
                 depth_or_array_layers: 1,
             },
         );
+    }
+
+    pub fn get_region(&self, label: Label) -> AtlasRegion {
+        *self
+            .regions
+            .read()
+            .expect("Texture atlas lock is poisoned")
+            .get(&label)
+            .expect("Failed to get region")
+    }
+
+    #[inline]
+    /// Returns UV coordinates for the white pixel in the atlas
+    pub fn get_white_uv_coords(&self) -> (f32, f32, f32, f32) {
+        self.get_region(label!("_white")).uv_coordinates(&self.size)
     }
 
     #[inline]

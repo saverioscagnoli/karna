@@ -3,6 +3,7 @@ mod material;
 mod transform;
 
 use crate::Color;
+use assets::AssetManager;
 use macros::{Get, Set};
 use math::{Vector2, Vector3, Vector4};
 use std::{cell::Cell, sync::Arc};
@@ -19,6 +20,7 @@ pub trait Descriptor {
 pub struct Vertex {
     pub position: Vector3,
     pub color: Vector4,
+    pub uv_coords: Vector2,
 }
 
 impl Descriptor for Vertex {
@@ -39,6 +41,12 @@ impl Descriptor for Vertex {
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x4,
                 },
+                wgpu::VertexAttribute {
+                    offset: (std::mem::size_of::<Vector3>() + std::mem::size_of::<Vector4>())
+                        as wgpu::BufferAddress,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
             ],
         }
     }
@@ -51,7 +59,8 @@ pub struct GpuMesh {
     scale: Vector3,
     rotation: Vector3,
     color: Vector4,
-    _padding: f32, // Padding for alignment
+    uv_offset: Vector2,
+    uv_scale: Vector2,
 }
 
 impl Descriptor for GpuMesh {
@@ -83,6 +92,22 @@ impl Descriptor for GpuMesh {
                     offset: (std::mem::size_of::<Vector3>() * 3) as wgpu::BufferAddress,
                     shader_location: 6,
                     format: wgpu::VertexFormat::Float32x4,
+                },
+                // UV offset attribute at location 7
+                wgpu::VertexAttribute {
+                    offset: (std::mem::size_of::<Vector3>() * 3 + std::mem::size_of::<Vector4>())
+                        as wgpu::BufferAddress,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                // UV scale attribute at location 8
+                wgpu::VertexAttribute {
+                    offset: (std::mem::size_of::<Vector3>() * 3
+                        + std::mem::size_of::<Vector4>()
+                        + std::mem::size_of::<Vector2>())
+                        as wgpu::BufferAddress,
+                    shader_location: 8,
+                    format: wgpu::VertexFormat::Float32x2,
                 },
             ],
         }
@@ -214,13 +239,29 @@ impl Mesh {
     }
 
     #[inline]
-    pub(crate) fn for_gpu(&self) -> GpuMesh {
+    pub(crate) fn for_gpu(&self, assets: &AssetManager) -> GpuMesh {
+        // Get UV coordinates from the texture atlas if a texture is specified
+        let (uv_offset, uv_scale) = if let Some(texture_label) = self.material.texture {
+            let coords = assets.get_texture_coords(texture_label);
+            (
+                Vector2::new(coords.0, coords.1),
+                Vector2::new(coords.2, coords.3),
+            )
+        } else {
+            let coords = assets.get_white_texture_coords();
+            (
+                Vector2::new(coords.0, coords.1),
+                Vector2::new(coords.2, coords.3),
+            )
+        };
+
         GpuMesh {
             position: self.position().extend(0.0),
             scale: self.scale().extend(0.0),
             rotation: Vector3::new(0.0, 0.0, self.rotation()),
             color: self.material.color.into(),
-            _padding: 0.0,
+            uv_offset,
+            uv_scale,
         }
     }
 }

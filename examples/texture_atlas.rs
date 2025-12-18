@@ -1,18 +1,23 @@
 use image::{Rgba, RgbaImage};
-use karna::{AppBuilder, Context, Label, Scene, WindowBuilder, math::rng, render::Color};
+use karna::{
+    AppBuilder, Context, Label, Scene, WindowBuilder, label,
+    math::rng,
+    render::{Color, Geometry, Material, Mesh, Transform},
+};
 use std::io::Cursor;
 
-pub struct TextureAtlasDemo;
+pub struct TextureAtlasDemo {
+    atlas: Mesh,
+}
 
 impl Scene for TextureAtlasDemo {
     fn load(&mut self, ctx: &mut Context) {
         ctx.render
             .set_clear_color(Color::rgb(30.0 / 255.0, 30.0 / 255.0, 40.0 / 255.0));
 
-        let mut images = Vec::new();
         for i in 0..500 {
-            let width = rng(5..=64);
-            let height = rng(5..=64);
+            let width = rng(10..=70);
+            let height = rng(10..=70);
 
             let r = rng(50..=255);
             let g = rng(50..=255);
@@ -30,17 +35,14 @@ impl Scene for TextureAtlasDemo {
 
             let texture_label = Label::new(&format!("rect_{}", i));
 
-            images.push((texture_label, png_bytes));
+            ctx.assets.load_image(texture_label, png_bytes);
         }
-
-        ctx.render.load_images(images);
     }
 
     fn update(&mut self, _ctx: &mut Context) {}
 
     fn render(&mut self, ctx: &mut Context) {
-        // Visualize the packed texture atlas
-        ctx.render.draw_texture_atlas();
+        ctx.render.draw_mesh(&self.atlas);
     }
 }
 
@@ -51,7 +53,13 @@ fn main() {
                 .with_title("Texture Atlas Demo - Efficient Batch Loading")
                 .with_size((1024, 1024))
                 .with_resizable(false)
-                .with_initial_scene(TextureAtlasDemo),
+                .with_initial_scene(TextureAtlasDemo {
+                    atlas: Mesh::new(
+                        Geometry::rect(1024.0, 1024.0),
+                        Material::new_texture(label!("_atlas")),
+                        Transform::default(),
+                    ),
+                }),
         )
         .build()
         .run();

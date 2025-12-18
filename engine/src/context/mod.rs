@@ -26,8 +26,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub(crate) fn new(window: Window) -> Self {
-        let assets = Arc::new(AssetManager::new());
+    pub(crate) fn new(window: Window, assets: Arc<AssetManager>) -> Self {
         let render = Renderer::new(Arc::clone(window.inner()), Arc::clone(&assets));
         let monitors = Monitors::new(Arc::clone(window.inner()));
 

@@ -2,6 +2,7 @@
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) color: vec4<f32>,
+    @location(2) uv_coords: vec2<f32>,
 }
 
 // Instance data (per-instance data)
@@ -10,17 +11,27 @@ struct InstanceInput {
     @location(4) instance_scale: vec3<f32>,
     @location(5) instance_rotation: vec3<f32>,
     @location(6) instance_color: vec4<f32>,
+    @location(7) uv_offset: vec2<f32>,
+    @location(8) uv_scale: vec2<f32>,
 }
 
 // Vertex shader output / Fragment shader input
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec4<f32>,
+    @location(1) uv_coords: vec2<f32>,
 }
 
 // Camera view-projection matrix
 @group(0) @binding(0)
 var<uniform> view_projection: mat4x4<f32>;
+
+// Texture atlas
+@group(1) @binding(0)
+var texture_atlas: texture_2d<f32>;
+
+@group(1) @binding(1)
+var texture_sampler: sampler;
 
 // Helper function to create a 2D rotation matrix around Z axis
 fn rotation_z(angle: f32) -> mat4x4<f32> {
@@ -75,10 +86,17 @@ fn vs_main(vertex: VertexInput, instance: InstanceInput) -> VertexOutput {
     // Blend vertex color with instance color
     out.color = vertex.color * instance.instance_color;
 
+    // Remap UV coordinates to atlas region
+    out.uv_coords = vertex.uv_coords * instance.uv_scale + instance.uv_offset;
+
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return in.color;
+    // Sample the texture
+    let texture_color = textureSample(texture_atlas, texture_sampler, in.uv_coords);
+
+    // Multiply texture color with vertex/instance color
+    return texture_color * in.color;
 }

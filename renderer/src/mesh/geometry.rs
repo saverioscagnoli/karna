@@ -92,18 +92,22 @@ impl Geometry {
             Vertex {
                 position: Vector3::new(0.0, 0.0, 0.0),
                 color,
+                uv_coords: math::Vector2::new(0.0, 0.0),
             },
             Vertex {
                 position: Vector3::new(w, 0.0, 0.0),
                 color,
+                uv_coords: math::Vector2::new(1.0, 0.0),
             },
             Vertex {
                 position: Vector3::new(w, h, 0.0),
                 color,
+                uv_coords: math::Vector2::new(1.0, 1.0),
             },
             Vertex {
                 position: Vector3::new(0.0, h, 0.0),
                 color,
+                uv_coords: math::Vector2::new(0.0, 1.0),
             },
         ];
 
@@ -120,35 +124,43 @@ impl Geometry {
             Vertex {
                 position: Vector3::new(0.0, 0.0, 1.0),
                 color,
+                uv_coords: math::Vector2::new(0.0, 0.0),
             },
             Vertex {
                 position: Vector3::new(1.0, 0.0, 1.0),
                 color,
+                uv_coords: math::Vector2::new(1.0, 0.0),
             },
             Vertex {
                 position: Vector3::new(1.0, 1.0, 1.0),
                 color,
+                uv_coords: math::Vector2::new(1.0, 1.0),
             },
             Vertex {
                 position: Vector3::new(0.0, 1.0, 1.0),
                 color,
+                uv_coords: math::Vector2::new(0.0, 1.0),
             },
             // Back face (z = 0.0)
             Vertex {
                 position: Vector3::new(0.0, 0.0, 0.0),
                 color,
+                uv_coords: math::Vector2::new(0.0, 0.0),
             },
             Vertex {
                 position: Vector3::new(1.0, 0.0, 0.0),
                 color,
+                uv_coords: math::Vector2::new(1.0, 0.0),
             },
             Vertex {
                 position: Vector3::new(1.0, 1.0, 0.0),
                 color,
+                uv_coords: math::Vector2::new(1.0, 1.0),
             },
             Vertex {
                 position: Vector3::new(0.0, 1.0, 0.0),
                 color,
+                uv_coords: math::Vector2::new(0.0, 1.0),
             },
         ];
 
@@ -170,6 +182,7 @@ impl Geometry {
         let vertices = &[Vertex {
             position: Vector3::zeros(),
             color: Color::White.into(),
+            uv_coords: math::Vector2::new(0.0, 0.0),
         }];
 
         let indices = &[0];

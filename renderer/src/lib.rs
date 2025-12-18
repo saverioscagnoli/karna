@@ -89,7 +89,10 @@ impl Renderer {
             .topology(wgpu::PrimitiveTopology::TriangleList)
             .build(
                 surface_format,
-                &[camera.view_projection_bind_group_layout()],
+                &[
+                    camera.view_projection_bind_group_layout(),
+                    assets.bind_group_layout(),
+                ],
                 &[Vertex::desc(), GpuMesh::desc()],
             );
 
@@ -134,6 +137,7 @@ impl Renderer {
     fn register_mesh(&mut self, mesh: &Mesh) {
         let gpu = gpu::get();
         let index_count = mesh.geometry().indices.len() as u32;
+
         let vertex_buffer = gpu
             .device()
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -186,7 +190,7 @@ impl Renderer {
         if let Some(instance_idx) = mesh.instance_index() {
             // Mesh already has a slot, update it if dirty
             if mesh.is_dirty() {
-                mesh_buffer.instances[instance_idx] = mesh.for_gpu();
+                mesh_buffer.instances[instance_idx] = mesh.for_gpu(&self.assets);
                 mesh_buffer.dirty_indices.push(instance_idx);
                 mesh.clean();
             }
@@ -196,9 +200,9 @@ impl Renderer {
             mesh.set_instance_index(instance_idx);
 
             if instance_idx >= mesh_buffer.instances.len() {
-                mesh_buffer.instances.push(mesh.for_gpu());
+                mesh_buffer.instances.push(mesh.for_gpu(&self.assets));
             } else {
-                mesh_buffer.instances[instance_idx] = mesh.for_gpu();
+                mesh_buffer.instances[instance_idx] = mesh.for_gpu(&self.assets);
             }
 
             mesh_buffer.dirty_indices.push(instance_idx);
@@ -240,6 +244,7 @@ impl Renderer {
 
             render_pass.set_pipeline(&self.triangle_pipeline);
             render_pass.set_bind_group(0, self.camera.view_projection_bind_group(), &[]);
+            render_pass.set_bind_group(1, self.assets.bind_group(), &[]);
 
             for mesh_buffer in self.mesh_buffers.values() {
                 // Only write buffer for dirty instances using partial writes

@@ -3,6 +3,7 @@ mod context;
 mod scene;
 
 use crate::context::WinitWindow;
+use assets::AssetManager;
 use crossbeam_channel::{Receiver, Sender};
 use ctor::ctor;
 use math::Size;
@@ -85,6 +86,7 @@ struct WindowHandle {
 pub struct App {
     windows: FastHashMap<WindowId, WindowHandle>,
     window_builders: Vec<WindowBuilder>,
+    assets: Option<Arc<AssetManager>>,
 }
 
 /// Internal
@@ -95,6 +97,7 @@ impl App {
         Self {
             windows: FastHashMap::default(),
             window_builders: Vec::new(),
+            assets: None,
         }
     }
 
@@ -111,10 +114,11 @@ impl App {
         let (tx, rx) = crossbeam_channel::bounded::<WindowMessage>(64);
         let window_id = window.id();
         let window = Window::new(label, window);
+        let assets = Arc::clone(self.assets.as_ref().expect("Cannot fail"));
 
         let handle = thread::spawn(move || {
             let _span = traccia::span!("window", "label" => window.label());
-            Self::window_loop(window, rx, scenes);
+            Self::window_loop(window, assets, rx, scenes);
         });
 
         let window_handle = WindowHandle {
@@ -127,10 +131,11 @@ impl App {
 
     fn window_loop(
         window: Window,
+        assets: Arc<AssetManager>,
         rx: Receiver<WindowMessage>,
         mut scenes: LabelMap<Box<dyn Scene>>,
     ) {
-        let mut context = Context::new(window);
+        let mut context = Context::new(window, assets);
         let active_scene = label!("initial");
 
         scenes
@@ -202,7 +207,15 @@ impl App {
 
                     match context.render.present() {
                         Ok(_) => {}
-                        Err(wgpu::SurfaceError::OutOfMemory) => return,
+                        Err(wgpu::SurfaceError::OutOfMemory) => {
+                            error!("Out of memory error, closing window");
+                            return;
+                        }
+                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                            warn!("Surface lost or outdated, reconfiguring");
+                            let size = context.window.size();
+                            context.render.resize(size.width, size.height);
+                        }
                         Err(e) => error!("Render error: {:?}", e),
                     }
 
@@ -247,6 +260,9 @@ impl App {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let windows = std::mem::take(&mut self.window_builders);
+        let assets = Arc::new(AssetManager::new());
+
+        self.assets = Some(assets);
 
         for builder in windows {
             match event_loop.create_window(builder.attributes) {
