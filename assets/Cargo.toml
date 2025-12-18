@@ -11,3 +11,4 @@ rect_packer = "0.2.1"
 math.workspace = true
 macros.workspace = true
 wgpu.workspace = true
+fontdue = "0.9.3"

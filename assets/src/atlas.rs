@@ -1,5 +1,5 @@
 use gpu::Texture;
-use image::{DynamicImage, GenericImageView};
+use image::{DynamicImage, GenericImageView, RgbaImage};
 use macros::Get;
 use math::Size;
 use rect_packer::Packer;
@@ -8,6 +8,8 @@ use utils::{
     label,
     map::{Label, LabelMap},
 };
+
+use crate::font::Font;
 
 #[derive(Debug, Clone, Copy)]
 pub struct AtlasRegion {
@@ -30,7 +32,7 @@ impl From<rect_packer::Rect> for AtlasRegion {
 
 impl AtlasRegion {
     #[inline]
-    /// (min_x, min_y, max_x, max_y)
+    /// (x, y, width, height)
     pub fn uv_coordinates(&self, atlas_size: &Size<u32>) -> (f32, f32, f32, f32) {
         let x = self.x as f32 / atlas_size.width() as f32;
         let y = self.y as f32 / atlas_size.height() as f32;
@@ -150,7 +152,7 @@ impl TextureAtlas {
         }
     }
 
-    fn write_image(&self, image: DynamicImage, size: Size<u32>, region: AtlasRegion) {
+    fn write_texture(&self, image: DynamicImage, size: Size<u32>, region: AtlasRegion) {
         gpu::queue().write_texture(
             wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,
@@ -203,7 +205,7 @@ impl TextureAtlas {
             .expect("Failed to pack image")
             .into();
 
-        self.write_image(image, size, region);
+        self.write_texture(image, size, region);
 
         let mut regions = self
             .regions
@@ -211,5 +213,63 @@ impl TextureAtlas {
             .expect("Texture atlas lock is poisoned");
 
         regions.insert(label, region);
+    }
+
+    #[inline]
+    /// Helper method to load characters textures.
+    ///
+    /// Cannot use `add_image` before its meant for the end user to load
+    /// images when reading files
+    fn add_raw_image(&self, label: Label, image: RgbaImage) {
+        let (width, height) = image.dimensions();
+        let size = Size::new(width, height);
+        let mut packer = self.packer.lock().expect("Failed to write to packer");
+        let region: AtlasRegion = packer
+            .pack(size.width() as i32, size.height() as i32, false)
+            .expect("Failed to pack image")
+            .into();
+
+        self.write_texture(DynamicImage::ImageRgba8(image), size, region);
+
+        let mut regions = self
+            .regions
+            .write()
+            .expect("Texture atlas lock is poisoned");
+
+        regions.insert(label, region);
+    }
+
+    #[inline]
+    pub fn rasterize_characters(&self, font_label: Label, font: &mut Font, size: f32) {
+        let chars = font.chars().keys().copied().collect::<Vec<_>>();
+
+        for ch in chars {
+            let (metrics, bitmap) = font.rasterize(ch, size);
+            let (width, height) = (metrics.width as u32, metrics.height as u32);
+
+            if width == 0 || height == 0 {
+                continue;
+            }
+
+            font.add_glyph(ch, width, height);
+
+            // Just load a white sample of the character,
+            // Keeping only the alpha values that define the character.
+            // Color and transform can be handled via transforms
+            // and material changes
+            let mut rgba_buffer = Vec::with_capacity(bitmap.len() * 4);
+
+            for &alpha in &bitmap {
+                rgba_buffer.extend_from_slice(&[255, 255, 255, alpha]);
+            }
+
+            let texture = RgbaImage::from_raw(width, height, rgba_buffer)
+                .expect("Failed to create char texture");
+
+            // Store the character with label {font_label}_{ch}
+            let label = Label::new(&format!("{}_{}", font_label.raw(), ch));
+
+            self.add_raw_image(label, texture);
+        }
     }
 }

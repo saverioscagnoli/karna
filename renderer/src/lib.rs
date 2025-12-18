@@ -2,6 +2,7 @@ mod camera;
 mod color;
 mod mesh;
 mod shader;
+mod text;
 
 use crate::{
     camera::{Camera, Projection},
@@ -9,8 +10,10 @@ use crate::{
 };
 use assets::AssetManager;
 use macros::{Get, Set};
+use math::Vector2;
 use std::sync::Arc;
 use traccia::info;
+use utils::map::{Label, LabelMap};
 use wgpu::{naga::FastHashMap, util::DeviceExt};
 use winit::window::Window;
 
@@ -19,6 +22,7 @@ pub use color::Color;
 pub use gpu::GpuState;
 pub use mesh::{Geometry, Material, Mesh, Transform, Vertex};
 pub use shader::Shader;
+pub use text::Text;
 
 #[derive(Get, Set)]
 pub struct Renderer {
@@ -35,6 +39,7 @@ pub struct Renderer {
     camera: Camera,
 
     mesh_buffers: FastHashMap<u32, MeshBuffer>,
+    glyph_meshes: LabelMap<Mesh>,
     triangle_pipeline: wgpu::RenderPipeline,
 }
 
@@ -108,6 +113,7 @@ impl Renderer {
             camera,
             assets,
             mesh_buffers: FastHashMap::default(),
+            glyph_meshes: LabelMap::default(),
             triangle_pipeline,
         }
     }
@@ -208,6 +214,54 @@ impl Renderer {
             mesh_buffer.dirty_indices.push(instance_idx);
             mesh_buffer.instance_count += 1;
             mesh.clean();
+        }
+    }
+
+    #[inline]
+    pub fn draw_text(&mut self, text: &Text) {
+        let font_label = text.font_label();
+        let font = self.assets.get_font(font_label);
+        let mut pos = Vector2::new(0.0, 0.0);
+
+        let chars = text
+            .content()
+            .chars()
+            .filter(|ch| !ch.is_whitespace())
+            .collect::<Vec<_>>();
+
+        // Collect labels first
+        let texture_labels: Vec<Label> = text
+            .content()
+            .chars()
+            .filter(|ch| !ch.is_whitespace())
+            .map(|ch| Label::new(&format!("{}_{}", font_label.raw(), ch)))
+            .collect();
+
+        // Ensure all meshes exist
+        for (ch, texture_label) in chars.into_iter().zip(&texture_labels) {
+            if !self.glyph_meshes.contains_key(texture_label) {
+                let glyph = font.get_glyph(&ch);
+                let mesh = Mesh::new(
+                    Geometry::unit_rect(),
+                    Material::new_texture(texture_label.clone()),
+                    Transform::default()
+                        .with_scale(Vector2::new(glyph.width as f32, glyph.height as f32)),
+                );
+                self.glyph_meshes.insert(texture_label.clone(), mesh);
+            }
+        }
+
+        // Now draw - get raw pointer to avoid borrow checker issues
+        for texture_label in texture_labels {
+            // SAFETY: We know the mesh exists and we're not modifying glyph_meshes in draw_mesh
+            let mesh_ptr = self
+                .glyph_meshes
+                .get(&texture_label)
+                .expect("Mesh must exist") as *const Mesh;
+            unsafe {
+                self.draw_mesh(&*mesh_ptr);
+            }
+            pos += 16.0;
         }
     }
 

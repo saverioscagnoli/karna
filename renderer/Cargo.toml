@@ -11,6 +11,5 @@ math.workspace = true
 traccia.workspace = true
 gpu.workspace = true
 utils.workspace = true
-fontdue = "0.9.3"
 arc-swap = "1.7.1"
 assets.workspace = true

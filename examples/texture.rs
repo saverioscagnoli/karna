@@ -11,6 +11,12 @@ impl Scene for ImageDemo {
     fn load(&mut self, ctx: &mut karna::Context) {
         ctx.assets
             .load_image(label!("cat"), include_bytes!("assets/cat.jpg").to_vec());
+
+        ctx.assets.load_font(
+            label!("jetbrains mono"),
+            include_bytes!("assets/JetBrainsMono-Regular.ttf").to_vec(),
+            16,
+        );
     }
 
     fn update(&mut self, ctx: &mut karna::Context) {}
