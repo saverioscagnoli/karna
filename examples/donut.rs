@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use karna::{AppBuilder, Scene, WindowBuilder, label, render::Text};
+use karna::{AppBuilder, Scene, WindowBuilder, input::KeyCode, label, render::Text};
 use math::Vector2;
 use renderer::Color;
 use utils::Timer;
@@ -140,6 +140,14 @@ impl Scene for Donut {
                 format!("fps: {} dt: {}", ctx.time.fps(), ctx.time.delta());
 
             self.debug_timer.reset();
+        }
+
+        if ctx.input.key_pressed(&KeyCode::Space) {
+            if self.text.font() == label!("debug") {
+                self.text.set_font(label!("jetbrains mono"));
+            } else {
+                self.text.set_font(label!("debug"));
+            }
         }
     }
 

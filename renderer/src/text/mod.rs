@@ -14,6 +14,8 @@ pub use renderer::TextRenderer;
 #[derive(Get, Set, With)]
 pub struct Text {
     #[get(visibility = "pub(crate)")]
+    #[get(copied, name = "font")]
+    #[set(name = "set_font")]
     font_label: Label,
 
     #[get(ty = &str)]

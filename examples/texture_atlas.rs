@@ -4,6 +4,7 @@ use karna::{
     math::rng,
     render::{Color, Geometry, Material, Mesh, Transform},
 };
+use renderer::TextureKind;
 use std::io::Cursor;
 
 pub struct TextureAtlasDemo {
@@ -56,7 +57,7 @@ fn main() {
                 .with_initial_scene(TextureAtlasDemo {
                     atlas: Mesh::new(
                         Geometry::rect(1024.0, 1024.0),
-                        Material::new_texture(label!("_atlas")),
+                        Material::new_texture(TextureKind::Full(label!("_atlas"))),
                         Transform::default(),
                     ),
                 }),
