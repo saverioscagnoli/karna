@@ -1,4 +1,5 @@
 use crate::{Color, Vertex};
+use macros::Get;
 use math::{Vector3, Vector4};
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
@@ -11,11 +12,19 @@ static GEOMETRY_CACHE: LazyLock<RwLock<FastHashMap<u32, Arc<Geometry>>>> =
     LazyLock::new(|| RwLock::new(FastHashMap::default()));
 
 #[derive(Debug)]
+#[derive(Get)]
 pub struct Geometry {
-    pub id: u32,
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u32>,
-    pub topology: wgpu::PrimitiveTopology,
+    #[get(copied)]
+    id: u32,
+
+    #[get]
+    vertices: Vec<Vertex>,
+
+    #[get]
+    indices: Vec<u32>,
+
+    #[get(copied)]
+    topology: wgpu::PrimitiveTopology,
 }
 
 impl Geometry {
@@ -30,12 +39,6 @@ impl Geometry {
             vertex.position.x.to_bits().hash(&mut hasher);
             vertex.position.y.to_bits().hash(&mut hasher);
             vertex.position.z.to_bits().hash(&mut hasher);
-            vertex.color.x.to_bits().hash(&mut hasher);
-            vertex.color.y.to_bits().hash(&mut hasher);
-            vertex.color.z.to_bits().hash(&mut hasher);
-            vertex.color.w.to_bits().hash(&mut hasher);
-            vertex.uv_coords.x.to_bits().hash(&mut hasher);
-            vertex.uv_coords.y.to_bits().hash(&mut hasher);
         }
 
         indices.hash(&mut hasher);

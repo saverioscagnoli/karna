@@ -9,7 +9,11 @@ use math::{Vector2, Vector3, Vector4};
 use std::{cell::Cell, sync::Arc};
 
 // Re-exports
-pub use crate::mesh::{geometry::Geometry, material::Material, transform::Transform};
+pub use crate::mesh::{
+    geometry::Geometry,
+    material::{Material, TextureKind},
+    transform::Transform,
+};
 
 pub trait Descriptor {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
@@ -114,12 +118,12 @@ impl Descriptor for GpuMesh {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MeshBuffer {
-    pub vertex_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
+    pub vertex_buffer: gpu::core::Buffer<Vertex>,
+    pub index_buffer: gpu::core::Buffer<u32>,
     pub index_count: u32,
-    pub instance_buffer: wgpu::Buffer,
+    pub instance_buffer: gpu::core::Buffer<GpuMesh>,
     pub instances: Vec<GpuMesh>,
     pub topology: wgpu::PrimitiveTopology,
     pub dirty_indices: Vec<usize>,
@@ -246,20 +250,44 @@ impl Mesh {
 
     #[inline]
     pub(crate) fn for_gpu(&self, assets: &AssetManager) -> GpuMesh {
-        let (uv_offset, uv_scale) = if let Some(texture_label) = self.material.texture {
-            let coords = assets.get_texture_coords(texture_label);
+        let (uv_offset, uv_scale) = if let Some(texture) = self.material.texture {
+            match texture {
+                TextureKind::Full(label) => {
+                    let coords = assets.get_texture_coords(label);
+                    (
+                        Vector2::new(coords.0, coords.1),
+                        Vector2::new(coords.2, coords.3),
+                    )
+                }
+
+                TextureKind::Partial(label, x, y, width, height) => {
+                    let coords = assets.get_texture_coords(label);
+                    let region = assets.get_region(label);
+
+                    (
+                        Vector2::new(
+                            coords.0 + (x / region.width as f32) * coords.2,
+                            coords.1 + (y / region.height as f32) * coords.3,
+                        ),
+                        Vector2::new(
+                            (width / region.width as f32) * coords.2,
+                            (height / region.height as f32) * coords.3,
+                        ),
+                    )
+                }
+            }
+        } else {
+            // Use white pixel from atlas so non-textured meshes show their color
+            let coords = assets.get_white_uv_coords();
             (
                 Vector2::new(coords.0, coords.1),
                 Vector2::new(coords.2, coords.3),
             )
-        } else {
-            // IDENTITY TRANSFORM: Pass through baked vertex UVs as-is
-            (Vector2::new(0.0, 0.0), Vector2::new(1.0, 1.0))
         };
 
         GpuMesh {
             position: self.position().extend(0.0),
-            scale: self.scale().extend(1.0), // Use 1.0 for Z scale
+            scale: self.scale().extend(1.0),
             rotation: Vector3::new(0.0, 0.0, self.rotation()),
             color: self.material.color.into(),
             uv_offset,

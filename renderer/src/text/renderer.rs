@@ -1,17 +1,16 @@
 use crate::{camera::Camera, mesh::Descriptor, shader::Shader};
 use assets::AssetManager;
-use wgpu::util::DeviceExt;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct QuadVertex {
+struct TextVertex {
     position: [f32; 2],
 }
 
-impl Descriptor for QuadVertex {
+impl Descriptor for TextVertex {
     fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<QuadVertex>() as wgpu::BufferAddress,
+            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[wgpu::VertexAttribute {
                 offset: 0,
@@ -96,12 +95,12 @@ pub struct TextRenderer {
     pipeline: wgpu::RenderPipeline,
 
     // Shared quad geometry for all glyphs
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
+    vertex_buffer: gpu::core::Buffer<TextVertex>,
+    index_buffer: gpu::core::Buffer<u32>,
     index_count: u32,
 
     // Instance buffer containing per-glyph data
-    glyph_instance_buffer: wgpu::Buffer,
+    glyph_instance_buffer: gpu::core::Buffer<GlyphInstance>,
     glyph_instances: Vec<GlyphInstance>,
     instance_capacity: usize,
 }
@@ -114,10 +113,10 @@ impl TextRenderer {
         camera: &Camera,
         assets: &AssetManager,
     ) -> Self {
-        let gpu = gpu::get();
-
-        let shader =
-            Shader::from_wgsl_file(include_str!("../../shaders/text.wgsl"), Some("text_shader"));
+        let shader = Shader::from_wgsl_file(
+            include_str!("../../../shaders/text.wgsl"),
+            Some("text_shader"),
+        );
 
         let pipeline = shader
             .pipeline_builder()
@@ -132,49 +131,44 @@ impl TextRenderer {
                     camera.view_projection_bind_group_layout(),
                     assets.bind_group_layout(),
                 ],
-                &[QuadVertex::desc(), GlyphInstance::desc()],
+                &[TextVertex::desc(), GlyphInstance::desc()],
             );
 
         // Unit rect
         let vertices = [
-            QuadVertex {
+            TextVertex {
                 position: [0.0, 0.0],
             }, // Bottom-left
-            QuadVertex {
+            TextVertex {
                 position: [1.0, 0.0],
             }, // Bottom-right
-            QuadVertex {
+            TextVertex {
                 position: [1.0, 1.0],
             }, // Top-right
-            QuadVertex {
+            TextVertex {
                 position: [0.0, 1.0],
             }, // Top-left
         ];
 
         let indices: [u32; 6] = [0, 1, 2, 0, 2, 3];
 
-        let vertex_buffer = gpu
-            .device()
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("text quad vertex buffer"),
-                contents: utils::as_u8_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let vertex_buffer = gpu::core::Buffer::new(
+            "text quad vertex buffer",
+            wgpu::BufferUsages::VERTEX,
+            &vertices,
+        );
 
-        let index_buffer = gpu
-            .device()
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("text quad index buffer"),
-                contents: utils::as_u8_slice(&indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        let index_buffer = gpu::core::Buffer::new(
+            "text quad index buffer",
+            wgpu::BufferUsages::INDEX,
+            &indices,
+        );
 
-        let glyph_instance_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
-            label: Some("text glyph instance buffer"),
-            size: (std::mem::size_of::<GlyphInstance>() * Self::INITIAL_INSTANCE_CAPACITY) as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let glyph_instance_buffer = gpu::core::Buffer::new_with_capacity(
+            "glyph instance buffer",
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            Self::INITIAL_INSTANCE_CAPACITY,
+        );
 
         Self {
             pipeline,
@@ -199,32 +193,20 @@ impl TextRenderer {
         self.glyph_instances.clear();
     }
 
+    #[inline]
     fn update_instance_buffer(&mut self) {
         if self.glyph_instances.is_empty() {
             return;
         }
 
-        let gpu = gpu::get();
-
-        // Resize buffer if needed
         if self.glyph_instances.len() > self.instance_capacity {
-            self.instance_capacity = self.glyph_instances.len().next_power_of_two();
-
-            self.glyph_instance_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
-                label: Some("text glyph instance buffer"),
-                size: (std::mem::size_of::<GlyphInstance>() * self.instance_capacity) as u64,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
+            self.glyph_instance_buffer.resize(self.instance_capacity);
         }
 
-        gpu.queue().write_buffer(
-            &self.glyph_instance_buffer,
-            0,
-            utils::as_u8_slice(&self.glyph_instances),
-        );
+        self.glyph_instance_buffer.write(&self.glyph_instances);
     }
 
+    #[inline]
     pub fn render<'a>(
         &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,

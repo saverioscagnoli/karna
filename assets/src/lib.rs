@@ -2,7 +2,7 @@ mod atlas;
 mod font;
 mod texture;
 
-use crate::atlas::TextureAtlas;
+use crate::atlas::{AtlasRegion, TextureAtlas};
 use std::sync::{Arc, RwLock};
 use utils::{
     label,
@@ -49,14 +49,6 @@ impl AssetManager {
         self.atlas
             .rasterize_characters(label, &mut font, size as f32);
         font_cache.insert(label, Arc::new(font));
-
-        // Submit GPU queue to ensure textures are uploaded before rendering
-        self.flush();
-    }
-
-    #[inline]
-    pub fn flush(&self) {
-        gpu::queue().submit([]);
     }
 
     #[inline]
@@ -69,8 +61,14 @@ impl AssetManager {
 
     #[inline]
     #[doc(hidden)]
-    pub fn get_white_texture_coords(&self) -> (f32, f32, f32, f32) {
+    pub fn get_white_uv_coords(&self) -> (f32, f32, f32, f32) {
         self.atlas.get_white_uv_coords()
+    }
+
+    #[inline]
+    #[doc(hidden)]
+    pub fn get_region(&self, label: Label) -> AtlasRegion {
+        self.atlas.get_region(label)
     }
 
     #[inline]

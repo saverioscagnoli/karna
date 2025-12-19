@@ -69,6 +69,13 @@ fn init_logging() {
 fn init() {
     gpu::init();
     init_logging();
+
+    let info = gpu::adapter().get_info();
+
+    info!("backend: {}", info.backend);
+    info!("device: {}", info.name);
+    info!("device type: {:?}", info.device_type);
+    info!("driver: {}", info.driver_info);
 }
 
 enum WindowMessage {

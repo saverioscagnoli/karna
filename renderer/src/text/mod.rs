@@ -1,11 +1,15 @@
-use crate::Color;
-use crate::text_renderer::GlyphInstance;
+mod renderer;
+
+use crate::{Color, text::renderer::GlyphInstance};
 use assets::AssetManager;
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
 use macros::{Get, Set, With};
 use math::Vector2;
 use std::cell::Cell;
 use utils::map::Label;
+
+// Re-exports
+pub use renderer::TextRenderer;
 
 #[derive(Get, Set, With)]
 pub struct Text {

@@ -1,10 +1,16 @@
 use crate::Color;
 use utils::map::Label;
 
+#[derive(Debug, Clone, Copy)]
+pub enum TextureKind {
+    Full(Label),
+    Partial(Label, f32, f32, f32, f32),
+}
+
 #[derive(Debug, Clone)]
 pub struct Material {
     pub color: Color,
-    pub texture: Option<Label>,
+    pub texture: Option<TextureKind>,
 }
 
 impl Default for Material {
@@ -18,15 +24,18 @@ impl Default for Material {
 
 impl Material {
     #[inline]
-    pub fn new(color: Color, texture: Option<Label>) -> Self {
-        Self { color, texture }
+    pub fn new(color: Color, texture: TextureKind) -> Self {
+        Self {
+            color,
+            texture: Some(texture),
+        }
     }
 
     #[inline]
-    pub fn new_texture(label: Label) -> Self {
+    pub fn new_texture(texture: TextureKind) -> Self {
         Self {
             color: Color::White,
-            texture: Some(label),
+            texture: Some(texture),
         }
     }
 
@@ -39,8 +48,8 @@ impl Material {
     }
 
     #[inline]
-    pub fn with_texture(mut self, label: Label) -> Self {
-        self.texture = Some(label);
+    pub fn with_texture(mut self, texture: TextureKind) -> Self {
+        self.texture = Some(texture);
         self
     }
 }

@@ -2,29 +2,27 @@ mod camera;
 mod color;
 mod mesh;
 mod shader;
+mod sprite;
 mod text;
-mod text_renderer;
 
 use crate::{
     camera::{Camera, Projection},
     mesh::{Descriptor, GpuMesh, MeshBuffer},
+    text::TextRenderer,
 };
 use assets::AssetManager;
 use macros::{Get, Set};
 use std::sync::Arc;
 use traccia::info;
-use wgpu::{naga::FastHashMap, util::DeviceExt};
+use wgpu::naga::FastHashMap;
 use winit::window::Window;
 
 // Re-exports
 pub use color::Color;
-pub use mesh::{Geometry, Material, Mesh, Transform, Vertex};
+pub use mesh::{Geometry, Material, Mesh, TextureKind, Transform, Vertex};
 pub use shader::Shader;
+pub use sprite::{Frame, Sprite};
 pub use text::Text;
-
-pub fn flush() {
-    gpu::queue().submit([]);
-}
 
 #[derive(Get, Set)]
 pub struct Renderer {
@@ -43,7 +41,7 @@ pub struct Renderer {
     mesh_buffers: FastHashMap<u32, MeshBuffer>,
     triangle_pipeline: wgpu::RenderPipeline,
 
-    text_renderer: text_renderer::TextRenderer,
+    text_renderer: TextRenderer,
 }
 
 impl Renderer {
@@ -105,7 +103,7 @@ impl Renderer {
                 &[Vertex::desc(), GpuMesh::desc()],
             );
 
-        let text_renderer = text_renderer::TextRenderer::new(surface_format, &camera, &assets);
+        let text_renderer = TextRenderer::new(surface_format, &camera, &assets);
 
         Self {
             surface,
@@ -156,31 +154,25 @@ impl Renderer {
 
     #[inline]
     fn register_mesh(&mut self, mesh: &Mesh) {
-        let gpu = gpu::get();
-        let index_count = mesh.geometry().indices.len() as u32;
+        let index_count = mesh.geometry().indices().len() as u32;
 
-        let vertex_buffer = gpu
-            .device()
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("Mesh id '{:?}' vertex buffer", mesh.geometry().id)),
-                contents: utils::as_u8_slice(&mesh.geometry().vertices),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            });
+        let vertex_buffer = gpu::core::Buffer::new(
+            &format!("Mesh id '{:?}' vertex buffer", mesh.geometry().id()),
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            &mesh.geometry().vertices(),
+        );
 
-        let index_buffer = gpu
-            .device()
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("Mesh id '{:?}' index buffer", mesh.geometry().id)),
-                contents: utils::as_u8_slice(&mesh.geometry().indices),
-                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-            });
+        let index_buffer = gpu::core::Buffer::new(
+            &format!("Mesh id '{:?}' index buffer", mesh.geometry().id()),
+            wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            &mesh.geometry().indices(),
+        );
 
-        let instance_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
-            label: Some("instance buffer"),
-            size: (std::mem::size_of::<GpuMesh>() * Mesh::INITIAL_INSTANCE_CAPACITY) as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let instance_buffer = gpu::core::Buffer::new_with_capacity(
+            "mesh instance buffer",
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            Mesh::INITIAL_INSTANCE_CAPACITY,
+        );
 
         let mesh_buffer = MeshBuffer {
             vertex_buffer,
@@ -188,23 +180,23 @@ impl Renderer {
             index_count,
             instance_buffer,
             instances: Vec::with_capacity(Mesh::INITIAL_INSTANCE_CAPACITY),
-            topology: mesh.geometry().topology,
+            topology: mesh.geometry().topology(),
             dirty_indices: Vec::new(),
             instance_count: 0,
         };
 
-        self.mesh_buffers.insert(mesh.geometry().id, mesh_buffer);
+        self.mesh_buffers.insert(mesh.geometry().id(), mesh_buffer);
     }
 
     #[inline]
     pub fn draw_mesh(&mut self, mesh: &Mesh) {
-        if !self.mesh_buffers.contains_key(&mesh.geometry().id) {
+        if !self.mesh_buffers.contains_key(&mesh.geometry().id()) {
             self.register_mesh(mesh);
         }
 
         let mesh_buffer = self
             .mesh_buffers
-            .get_mut(&mesh.geometry().id)
+            .get_mut(&mesh.geometry().id())
             .expect("Cannot fail");
 
         // Check if this mesh already has an instance slot AND it's still valid
@@ -230,21 +222,15 @@ impl Renderer {
             // Check if we need to resize the instance buffer
             if instance_idx >= mesh_buffer.instances.capacity() {
                 let new_capacity = mesh_buffer.instances.capacity() * 2;
+
+                mesh_buffer.instance_buffer.resize(new_capacity);
                 mesh_buffer
                     .instances
                     .reserve(new_capacity - mesh_buffer.instances.len());
 
-                // Recreate the instance buffer with larger capacity
-                let gpu = gpu::get();
-                mesh_buffer.instance_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("instance buffer"),
-                    size: (std::mem::size_of::<GpuMesh>() * new_capacity) as u64,
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                });
-
                 // Mark all existing instances as dirty to ensure they're written to the new buffer
                 mesh_buffer.dirty_indices.clear();
+
                 for i in 0..mesh_buffer.instances.len() {
                     mesh_buffer.dirty_indices.push(i);
                 }
@@ -313,11 +299,10 @@ impl Renderer {
                 if !mesh_buffer.dirty_indices.is_empty() {
                     for &dirty_idx in &mesh_buffer.dirty_indices {
                         let offset = (dirty_idx * std::mem::size_of::<GpuMesh>()) as u64;
-                        gpu.queue().write_buffer(
-                            &mesh_buffer.instance_buffer,
-                            offset,
-                            utils::as_u8_slice(&[mesh_buffer.instances[dirty_idx]]),
-                        );
+
+                        mesh_buffer
+                            .instance_buffer
+                            .write_at(offset, &[mesh_buffer.instances[dirty_idx]]);
                     }
                 }
 
