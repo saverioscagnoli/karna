@@ -18,6 +18,7 @@ image = "0.25.9"
 gpu = { path = "gpu" }
 assets = { path = "assets" }
 fontdue = "0.9.3"
+rand = "0.9.2"
 
 [dependencies]
 math.workspace = true
@@ -25,6 +26,7 @@ engine = { path = "engine" }
 renderer.workspace = true
 winit.workspace = true
 pollster = "0.4"
+utils = { path = "utils" }
 
 [dev-dependencies]
 image = "0.25.9"

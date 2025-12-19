@@ -767,3 +767,41 @@ pub fn dirty(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     TokenStream::from(expanded)
 }
+
+/// Derive the random function for enums with fieldless variants
+///
+/// Just returns a random variant of the enum. Ignores fieldful variants.
+#[proc_macro_derive(Random)]
+pub fn derive_random(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = &input.ident;
+    let generics = &input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    // Ensure it's an enum
+    let variants = match &input.data {
+        Data::Enum(data) => &data.variants,
+        _ => panic!("Random can only be derived for enums"),
+    };
+
+    // Collect only fieldless variant names
+    let variant_names: Vec<_> = variants
+        .iter()
+        .filter(|v| matches!(v.fields, Fields::Unit))
+        .map(|v| &v.ident)
+        .collect();
+    let variant_count = variant_names.len();
+
+    let expanded = quote! {
+        impl #impl_generics #name #ty_generics #where_clause {
+            pub fn random() -> Self {
+                let variants = [
+                    #(Self::#variant_names,)*
+                ];
+                variants[rand::random_range(0..#variant_count)]
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
