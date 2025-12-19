@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 pub mod map;
 
@@ -60,5 +60,11 @@ impl<T> Deref for Lazy<T> {
 
     fn deref(&self) -> &Self::Target {
         self.0.as_ref().expect("Not initialized")
+    }
+}
+
+impl<T> DerefMut for Lazy<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0.as_mut().expect("Not initialized")
     }
 }
