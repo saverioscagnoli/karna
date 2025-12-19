@@ -37,4 +37,10 @@ impl Material {
             texture: None,
         }
     }
+
+    #[inline]
+    pub fn with_texture(mut self, label: Label) -> Self {
+        self.texture = Some(label);
+        self
+    }
 }

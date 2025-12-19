@@ -30,6 +30,12 @@ impl Geometry {
             vertex.position.x.to_bits().hash(&mut hasher);
             vertex.position.y.to_bits().hash(&mut hasher);
             vertex.position.z.to_bits().hash(&mut hasher);
+            vertex.color.x.to_bits().hash(&mut hasher);
+            vertex.color.y.to_bits().hash(&mut hasher);
+            vertex.color.z.to_bits().hash(&mut hasher);
+            vertex.color.w.to_bits().hash(&mut hasher);
+            vertex.uv_coords.x.to_bits().hash(&mut hasher);
+            vertex.uv_coords.y.to_bits().hash(&mut hasher);
         }
 
         indices.hash(&mut hasher);

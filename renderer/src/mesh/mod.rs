@@ -130,6 +130,7 @@ pub struct MeshBuffer {
 #[derive(Get, Set)]
 pub struct Mesh {
     #[get]
+    #[get(mut)]
     geometry: Arc<Geometry>,
 
     #[get]
@@ -227,6 +228,11 @@ impl Mesh {
     }
 
     #[inline]
+    pub(crate) fn reset_instance_index(&self) {
+        self.instance_index.set(None);
+    }
+
+    #[inline]
     pub fn update_position<F: Fn(&mut Vector2)>(&mut self, f: F) {
         self.mark();
         f(&mut self.transform.position);
@@ -240,7 +246,6 @@ impl Mesh {
 
     #[inline]
     pub(crate) fn for_gpu(&self, assets: &AssetManager) -> GpuMesh {
-        // Get UV coordinates from the texture atlas if a texture is specified
         let (uv_offset, uv_scale) = if let Some(texture_label) = self.material.texture {
             let coords = assets.get_texture_coords(texture_label);
             (
@@ -248,16 +253,13 @@ impl Mesh {
                 Vector2::new(coords.2, coords.3),
             )
         } else {
-            let coords = assets.get_white_texture_coords();
-            (
-                Vector2::new(coords.0, coords.1),
-                Vector2::new(coords.2, coords.3),
-            )
+            // IDENTITY TRANSFORM: Pass through baked vertex UVs as-is
+            (Vector2::new(0.0, 0.0), Vector2::new(1.0, 1.0))
         };
 
         GpuMesh {
             position: self.position().extend(0.0),
-            scale: self.scale().extend(0.0),
+            scale: self.scale().extend(1.0), // Use 1.0 for Z scale
             rotation: Vector3::new(0.0, 0.0, self.rotation()),
             color: self.material.color.into(),
             uv_offset,

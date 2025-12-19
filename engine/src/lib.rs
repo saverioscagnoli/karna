@@ -202,6 +202,7 @@ impl App {
 
                     if let Some(scene) = scenes.get_mut(&active_scene) {
                         scene.update(&mut context);
+                        context.render.begin_frame();
                         scene.render(&mut context);
                     }
 

@@ -37,6 +37,7 @@ pub struct PipelineBuilder<'a> {
     label: Option<&'static str>,
     cull_mode: Option<wgpu::Face>,
     topology: wgpu::PrimitiveTopology,
+    blend_state: Option<wgpu::BlendState>,
 }
 
 impl<'a> PipelineBuilder<'a> {
@@ -48,6 +49,7 @@ impl<'a> PipelineBuilder<'a> {
             label: None,
             cull_mode: None,
             topology: wgpu::PrimitiveTopology::TriangleList,
+            blend_state: Some(wgpu::BlendState::ALPHA_BLENDING),
         }
     }
 
@@ -73,6 +75,11 @@ impl<'a> PipelineBuilder<'a> {
 
     pub fn topology(mut self, topology: wgpu::PrimitiveTopology) -> Self {
         self.topology = topology;
+        self
+    }
+
+    pub fn blend_state(mut self, blend_state: Option<wgpu::BlendState>) -> Self {
+        self.blend_state = blend_state;
         self
     }
 
@@ -104,7 +111,7 @@ impl<'a> PipelineBuilder<'a> {
                 entry_point: Some(self.fragment_entry),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    blend: self.blend_state,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
                 compilation_options: Default::default(),

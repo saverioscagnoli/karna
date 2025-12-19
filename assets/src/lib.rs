@@ -49,6 +49,14 @@ impl AssetManager {
         self.atlas
             .rasterize_characters(label, &mut font, size as f32);
         font_cache.insert(label, Arc::new(font));
+
+        // Submit GPU queue to ensure textures are uploaded before rendering
+        self.flush();
+    }
+
+    #[inline]
+    pub fn flush(&self) {
+        gpu::queue().submit([]);
     }
 
     #[inline]
