@@ -4,6 +4,7 @@ use math::Size;
 
 #[derive(Debug)]
 #[derive(Get)]
+#[allow(unused)]
 pub struct Texture {
     #[get]
     inner: wgpu::Texture,
