@@ -38,17 +38,8 @@ pub struct Time {
 
     // COUNTERS
     #[get(copied, pre = round, cast = u32)]
-    /// Average frames per second based on the last 60 frames
+    /// Average frames per second using exponential smoothing
     fps: f32,
-    /// Interval at which the fps are calculated
-    ///
-    /// Default is 500ms
-    fps_interval: f32,
-    // usize so that FRAME_SAMPLES doest have to be converted to u32
-    frame_counter: usize,
-    frame_times: [f32; Self::FRAME_SAMPLES],
-    frame_time_index: usize,
-    frame_timer: f32,
 
     #[get(copied)]
     /// Average ticks per second
@@ -79,11 +70,6 @@ impl Default for Time {
             frame_time: Duration::ZERO,
             tick_time: Duration::ZERO,
             fps: 0.0,
-            fps_interval: Duration::from_millis(500).as_secs_f32(),
-            frame_counter: 0,
-            frame_times: [0.0; Self::FRAME_SAMPLES],
-            frame_time_index: 0,
-            frame_timer: 0.0,
             tps: 0,
             tick_counter: 0,
             tick_timer: 0.0,
@@ -98,8 +84,8 @@ impl Default for Time {
 }
 
 impl Time {
-    const FRAME_SAMPLES: usize = 60;
     const DELTA_SMOOTHING: f32 = 0.2;
+    const FPS_SMOOTHING: f32 = 0.1;
 
     #[inline]
     /// Marks the start of the frame
@@ -122,7 +108,6 @@ impl Time {
 
         // Update timers
         self.elapsed_time += dt;
-        self.frame_timer += dtf;
         self.tick_timer += dtf;
 
         self.delta_time = (Self::DELTA_SMOOTHING * raw_dt
@@ -130,24 +115,9 @@ impl Time {
             * self.time_scale;
         self.tick_accumulator += raw_dt;
 
-        // Take the frame sample
-        self.frame_times[self.frame_time_index] = dtf;
-        self.frame_time_index = (self.frame_time_index + 1) % Self::FRAME_SAMPLES;
-        self.frame_counter = (self.frame_counter + 1).min(Self::FRAME_SAMPLES);
-
-        // Check timers
-        if self.frame_timer >= self.fps_interval {
-            let sum: f32 = self.frame_times[..self.frame_counter].iter().sum();
-            let avg_time = sum / self.frame_counter as f32;
-
-            self.fps = if avg_time > f32::EPSILON {
-                1.0 / avg_time
-            } else {
-                0.0
-            };
-
-            self.frame_timer = 0.0;
-        }
+        // Calculate FPS using exponential smoothing
+        let instant_fps = if dtf > f32::EPSILON { 1.0 / dtf } else { 0.0 };
+        self.fps = Self::FPS_SMOOTHING * instant_fps + (1.0 - Self::FPS_SMOOTHING) * self.fps;
 
         if self.tick_timer >= 1.0 {
             self.tps = self.tick_counter;
@@ -201,13 +171,6 @@ impl Time {
 
         self.frame_step = Duration::from_secs_f32(target);
         self.frame_step_f32 = target;
-    }
-
-    #[inline]
-    /// Sets the interval duration at which the frames are calculated
-    /// Default is 500ms, so fps value will be updated every 500ms
-    pub fn set_fps_interval(&mut self, interval: Duration) {
-        self.fps_interval = interval.as_secs_f32();
     }
 
     #[inline]
