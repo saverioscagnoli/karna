@@ -3,7 +3,7 @@ use macros::{Get, Random, Set, With};
 use std::{f32::consts::PI, fmt, time::Duration};
 
 pub trait Lerp: Copy {
-    fn lerp(start: &Self, end: &Self, t: f32) -> Self;
+    fn lerp(&self, end: &Self, t: f32) -> Self;
 }
 
 /// Implements Lerp for types that support Add, Sub, and Mul<f32>
@@ -17,8 +17,8 @@ pub trait Lerp: Copy {
 macro_rules! impl_lerp {
     ($type:ty) => {
         impl Lerp for $type {
-            fn lerp(start: &Self, end: &Self, t: f32) -> Self {
-                let start_f = num::ToPrimitive::to_f32(start).unwrap();
+            fn lerp(&self, end: &Self, t: f32) -> Self {
+                let start_f = num::ToPrimitive::to_f32(self).unwrap();
                 let end_f = num::ToPrimitive::to_f32(end).unwrap();
                 let result = start_f + (end_f - start_f) * t;
                 num::FromPrimitive::from_f32(result).unwrap()
@@ -43,8 +43,8 @@ impl_lerp!(usize);
 impl_lerp!(isize);
 
 impl<const N: usize> Lerp for Vector<N> {
-    fn lerp(start: &Self, end: &Self, t: f32) -> Self {
-        start + (end - start) * t
+    fn lerp(&self, end: &Self, t: f32) -> Self {
+        self + (end - self) * t
     }
 }
 
@@ -349,7 +349,7 @@ impl<T: Lerp> Tween<T> {
     #[inline]
     pub fn sample(&self, t: f32) -> T {
         let t = self.easing.apply(t.clamp(0.0, 1.0));
-        T::lerp(&self.a, &self.b, t)
+        self.a.lerp(&self.b, t)
     }
 
     /// Update with delta time, returns current value

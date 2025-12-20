@@ -103,6 +103,9 @@ pub struct TextRenderer {
     glyph_instance_buffer: gpu::core::Buffer<GlyphInstance>,
     glyph_instances: Vec<GlyphInstance>,
     instance_capacity: usize,
+
+    // Store debug text instances
+    debug_text_instances: Vec<GlyphInstance>,
 }
 
 impl TextRenderer {
@@ -178,6 +181,7 @@ impl TextRenderer {
             glyph_instance_buffer,
             glyph_instances: Vec::with_capacity(Self::INITIAL_INSTANCE_CAPACITY),
             instance_capacity: Self::INITIAL_INSTANCE_CAPACITY,
+            debug_text_instances: Vec::with_capacity(Self::INITIAL_INSTANCE_CAPACITY),
         }
     }
 
@@ -205,7 +209,6 @@ impl TextRenderer {
 
         self.glyph_instance_buffer.write(&self.glyph_instances);
     }
-
     #[inline]
     pub fn render<'a>(
         &'a mut self,

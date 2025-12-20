@@ -1,5 +1,5 @@
 use macros::{Get, Set};
-use math::{Matrix4, Vector3};
+use math::{Matrix4, Vector2, Vector3};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Projection {
@@ -46,12 +46,19 @@ pub struct Camera {
     view_projection_bind_group: wgpu::BindGroup,
 
     #[get]
-    #[get(copied, prop = x, ty = f32)]
-    #[get(copied, prop = y, ty = f32)]
-    #[set(into)]
-    #[set(prop = x, ty = f32)]
-    #[set(prop = y, ty = f32)]
-    pub position: Vector3,
+    #[get(copied, prop = "x", ty = f32)]
+    #[get(copied, prop = "y", ty = f32)]
+    #[get(mut, also = self.mark())]
+    #[get(mut, prop = "x", ty = &mut f32, also = self.mark())]
+    #[get(mut, prop = "y", ty = &mut f32, also = self.mark())]
+    #[set(into, also = self.mark())]
+    #[set(prop = x, ty = f32, also = self.mark())]
+    #[set(prop = y, ty = f32, also = self.mark())]
+    position: Vector2,
+
+    #[get(copied, visibility = "pub(crate)")]
+    dirty: bool,
+
     target: Vector3,
     up: Vector3,
 }
@@ -99,8 +106,11 @@ impl Camera {
             view_projection_buffer,
             view_projection_bind_group_layout,
             view_projection_bind_group,
-            position: Vector3::new(0.0, 0.0, -5.0),
+            position: Vector2::new(0.0, 0.0),
             target: Vector3::z(),
+            // No need to set as dirty initially,
+            // as the winit loop sends a resize event at startup
+            dirty: false,
             up: Vector3::y(),
         }
     }
@@ -112,12 +122,24 @@ impl Camera {
                 Matrix4::from_translation(Vector3::new(-self.position.x, -self.position.y, 0.0))
             }
 
-            Projection::Perspective { .. } => Matrix4::look_at(self.position, self.target, self.up),
+            Projection::Perspective { .. } => {
+                Matrix4::look_at(self.position.extend(-5.0), self.target, self.up)
+            }
         }
     }
     #[inline]
     fn view_projection_matrix(&self, width: u32, height: u32) -> Matrix4 {
         self.projection.matrix(width, height) * self.view_matrix()
+    }
+
+    #[inline]
+    fn mark(&mut self) {
+        self.dirty = true;
+    }
+
+    #[inline]
+    fn clean(&mut self) {
+        self.dirty = false;
     }
 
     #[inline]
@@ -136,5 +158,7 @@ impl Camera {
             0,
             utils::as_u8_slice(&[self.view_projection_matrix(width, height)]),
         );
+
+        self.clean();
     }
 }

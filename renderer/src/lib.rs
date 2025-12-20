@@ -12,8 +12,11 @@ use crate::{
 };
 use assets::AssetManager;
 use macros::{Get, Set};
+use math::{Size, Vector2};
+use std::collections::HashMap;
 use std::sync::Arc;
 use traccia::info;
+use utils::label;
 use wgpu::naga::FastHashMap;
 use winit::window::Window;
 
@@ -36,12 +39,27 @@ pub struct Renderer {
     /// Asset manager
     assets: Arc<AssetManager>,
 
-    camera: Camera,
+    pub camera: Camera,
+
+    /// UI camera for fixed-position elements (always at 0,0)
+    pub ui_camera: Camera,
+
+    // Cache window size for camera updates
+    window_size: Size<u32>,
 
     mesh_buffers: FastHashMap<u32, MeshBuffer>,
     triangle_pipeline: wgpu::RenderPipeline,
 
     text_renderer: TextRenderer,
+    ui_text_renderer: TextRenderer,
+
+    /// Very simple Debug text implementation
+    /// Just for showing things on the screen
+    /// Cached by a unique key (content + position hash)
+    debug_texts: HashMap<String, Text>,
+
+    /// Tracks which debug texts were used this frame
+    debug_texts_used: Vec<String>,
 }
 
 impl Renderer {
@@ -105,6 +123,18 @@ impl Renderer {
 
         let text_renderer = TextRenderer::new(surface_format, &camera, &assets);
 
+        // UI camera stays fixed at origin for screen-space rendering
+        let ui_camera = Camera::new(Projection::Orthographic {
+            left: 0.0,
+            right: size.width as f32,
+            bottom: size.height as f32,
+            top: 0.0,
+            z_near: -1.0,
+            z_far: 1.0,
+        });
+
+        let ui_text_renderer = TextRenderer::new(surface_format, &ui_camera, &assets);
+
         Self {
             surface,
             config,
@@ -115,10 +145,15 @@ impl Renderer {
                 a: 1.0,
             },
             camera,
+            ui_camera,
+            window_size: Size::new(size.width, size.height),
             assets,
             mesh_buffers: FastHashMap::default(),
             triangle_pipeline,
             text_renderer,
+            ui_text_renderer: TextRenderer::new(surface_format, &ui_camera, &assets),
+            debug_texts: HashMap::new(),
+            debug_texts_used: Vec::new(),
         }
     }
 
@@ -141,6 +176,9 @@ impl Renderer {
         self.config.height = height;
         self.surface.configure(&gpu::device(), &self.config);
         self.camera.update(width, height);
+        self.ui_camera.update(width, height);
+        self.window_size.width = width;
+        self.window_size.height = height;
     }
 
     #[inline]
@@ -259,12 +297,65 @@ impl Renderer {
     }
 
     #[inline]
+    pub fn draw_debug_text<T: Into<String>, P: Into<Vector2>>(&mut self, text: T, pos: P) {
+        let content = text.into();
+        let pos = pos.into();
+
+        let key = format!("{}:{}", pos.x.round() as i32, pos.y.round() as i32);
+
+        let text = self
+            .debug_texts
+            .entry(key.clone())
+            .or_insert_with(|| Text::new(label!("debug")));
+
+        // Trigger dirty if content or
+        if text.content() != content {
+            text.set_content(content);
+        }
+
+        if text.position() != &pos {
+            text.set_position(pos);
+        }
+
+        text.rebuild(&self.assets);
+
+        for glyph_instance in text.glyph_instances() {
+            self.text_renderer.add_glyph(*glyph_instance);
+        }
+
+        // Mark this debug text as used this frame
+        self.debug_texts_used.push(key);
+    }
+
+    #[inline]
+    /// Draw text using the UI camera (fixed position on screen, unaffected by main camera)
+    pub fn draw_ui_text(&mut self, text: &mut Text) {
+        text.rebuild(&self.assets);
+
+        // Add all glyphs to the UI text renderer
+        for glyph_instance in text.glyph_instances() {
+            self.ui_text_renderer.add_glyph(*glyph_instance);
+        }
+    }
+
+    #[inline]
     pub fn present(&mut self) -> Result<(), wgpu::SurfaceError> {
         let gpu = gpu::get();
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+
+        // Update cameras if needed
+        if self.camera.dirty() {
+            self.camera
+                .update(self.window_size.width, self.window_size.height);
+        }
+
+        if self.ui_camera.dirty() {
+            self.ui_camera
+                .update(self.window_size.width, self.window_size.height);
+        }
 
         let mut encoder = gpu
             .device()
@@ -323,10 +414,23 @@ impl Renderer {
             // Render all text in a single batched draw call
             self.text_renderer
                 .render(&mut render_pass, &self.camera, &self.assets);
+
+            // Render UI text with the UI camera (fixed on screen)
+            self.ui_text_renderer
+                .render(&mut render_pass, &self.ui_camera, &self.assets);
         }
 
         // Clear text instances for next frame
         self.text_renderer.clear();
+        self.ui_text_renderer.clear();
+</text>
+
+
+        // Remove debug texts that weren't used this frame to avoid memory leaks
+        // This keeps the cache lean while still benefiting from frame-to-frame reuse
+        self.debug_texts
+            .retain(|key, _| self.debug_texts_used.contains(key));
+        self.debug_texts_used.clear();
 
         for mesh_buffer in self.mesh_buffers.values_mut() {
             mesh_buffer.dirty_indices.clear();
