@@ -352,11 +352,6 @@ impl Renderer {
                 .update(self.window_size.width, self.window_size.height);
         }
 
-        if self.ui_camera.dirty() {
-            self.ui_camera
-                .update(self.window_size.width, self.window_size.height);
-        }
-
         let mut encoder = gpu
             .device()
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
