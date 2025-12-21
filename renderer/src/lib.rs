@@ -40,8 +40,6 @@ pub struct Renderer {
     assets: Arc<AssetManager>,
 
     pub camera: Camera,
-
-    /// UI camera for fixed-position elements (always at 0,0)
     pub ui_camera: Camera,
 
     // Cache window size for camera updates
@@ -57,9 +55,11 @@ pub struct Renderer {
     /// Just for showing things on the screen
     /// Cached by a unique key (content + position hash)
     debug_texts: HashMap<String, Text>,
+    ui_debug_texts: HashMap<String, Text>,
 
     /// Tracks which debug texts were used this frame
     debug_texts_used: Vec<String>,
+    ui_debug_texts_used: Vec<String>,
 }
 
 impl Renderer {
@@ -102,6 +102,15 @@ impl Renderer {
             z_far: 1.0,
         });
 
+        let ui_camera = Camera::new(Projection::Orthographic {
+            left: 0.0,
+            right: size.width as f32,
+            bottom: 0.0,
+            top: size.height as f32,
+            z_near: -1.0,
+            z_far: 1.0,
+        });
+
         let shader =
             Shader::from_wgsl_file(include_str!("../../shaders/basic_2d.wgsl"), Some("shader"));
 
@@ -122,17 +131,6 @@ impl Renderer {
             );
 
         let text_renderer = TextRenderer::new(surface_format, &camera, &assets);
-
-        // UI camera stays fixed at origin for screen-space rendering
-        let ui_camera = Camera::new(Projection::Orthographic {
-            left: 0.0,
-            right: size.width as f32,
-            bottom: size.height as f32,
-            top: 0.0,
-            z_near: -1.0,
-            z_far: 1.0,
-        });
-
         let ui_text_renderer = TextRenderer::new(surface_format, &ui_camera, &assets);
 
         Self {
@@ -151,9 +149,11 @@ impl Renderer {
             mesh_buffers: FastHashMap::default(),
             triangle_pipeline,
             text_renderer,
-            ui_text_renderer: TextRenderer::new(surface_format, &ui_camera, &assets),
+            ui_text_renderer,
             debug_texts: HashMap::new(),
+            ui_debug_texts: HashMap::new(),
             debug_texts_used: Vec::new(),
+            ui_debug_texts_used: Vec::new(),
         }
     }
 
@@ -290,9 +290,17 @@ impl Renderer {
     pub fn draw_text(&mut self, text: &mut Text) {
         text.rebuild(&self.assets);
 
-        // Add all glyphs to the text renderer
         for glyph_instance in text.glyph_instances() {
             self.text_renderer.add_glyph(*glyph_instance);
+        }
+    }
+
+    #[inline]
+    pub fn draw_ui_text(&mut self, text: &mut Text) {
+        text.rebuild(&self.assets);
+
+        for glyph_instance in text.glyph_instances() {
+            self.ui_text_renderer.add_glyph(*glyph_instance);
         }
     }
 
@@ -328,14 +336,34 @@ impl Renderer {
     }
 
     #[inline]
-    /// Draw text using the UI camera (fixed position on screen, unaffected by main camera)
-    pub fn draw_ui_text(&mut self, text: &mut Text) {
+    pub fn draw_ui_debug_text<T: Into<String>, P: Into<Vector2>>(&mut self, text: T, pos: P) {
+        let content = text.into();
+        let pos = pos.into();
+
+        let key = format!("{}:{}", pos.x.round() as i32, pos.y.round() as i32);
+
+        let text = self
+            .ui_debug_texts
+            .entry(key.clone())
+            .or_insert_with(|| Text::new(label!("debug")));
+
+        // Trigger dirty if content or
+        if text.content() != content {
+            text.set_content(content);
+        }
+
+        if text.position() != &pos {
+            text.set_position(pos);
+        }
+
         text.rebuild(&self.assets);
 
-        // Add all glyphs to the UI text renderer
         for glyph_instance in text.glyph_instances() {
             self.ui_text_renderer.add_glyph(*glyph_instance);
         }
+
+        // Mark this debug text as used this frame
+        self.ui_debug_texts_used.push(key);
     }
 
     #[inline]
@@ -348,6 +376,11 @@ impl Renderer {
 
         // Update cameras if needed
         if self.camera.dirty() {
+            self.camera
+                .update(self.window_size.width, self.window_size.height);
+        }
+
+        if self.ui_camera.dirty() {
             self.camera
                 .update(self.window_size.width, self.window_size.height);
         }
@@ -375,7 +408,7 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            // Render meshes
+            // Render world meshes
             render_pass.set_pipeline(&self.triangle_pipeline);
             render_pass.set_bind_group(0, self.camera.view_projection_bind_group(), &[]);
             render_pass.set_bind_group(1, self.assets.bind_group(), &[]);
@@ -409,17 +442,12 @@ impl Renderer {
             // Render all text in a single batched draw call
             self.text_renderer
                 .render(&mut render_pass, &self.camera, &self.assets);
-
-            // Render UI text with the UI camera (fixed on screen)
             self.ui_text_renderer
                 .render(&mut render_pass, &self.ui_camera, &self.assets);
         }
 
-        // Clear text instances for next frame
         self.text_renderer.clear();
         self.ui_text_renderer.clear();
-</text>
-
 
         // Remove debug texts that weren't used this frame to avoid memory leaks
         // This keeps the cache lean while still benefiting from frame-to-frame reuse

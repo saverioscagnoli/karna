@@ -50,14 +50,12 @@ impl Scene for CameraDemo {
             *self.player.position_x_mut() += vel;
         }
 
-        // Camera smoothly follows player
         let player_center = *self.player.position() + Vector2::new(25.0, 25.0);
         let screen_center_offset = ctx.window.size().to_f32().center();
         let target_camera_pos = player_center - screen_center_offset;
 
-        // Lower lerp value = slower catch-up, higher = faster catch-up
         let current_camera_pos = ctx.render.camera.position();
-        let new_pos = current_camera_pos.lerp(&target_camera_pos, 0.08);
+        let new_pos = current_camera_pos.lerp(&target_camera_pos, 0.05);
         ctx.render.camera.set_position(new_pos);
     }
 
@@ -71,17 +69,17 @@ impl Scene for CameraDemo {
         // Debug text examples - text objects are cached and only rebuilt when content changes
         let fps = ctx.time.fps();
         ctx.render
-            .draw_debug_text(format!("FPS: {:.0}", fps), Vector2::new(10.0, 10.0));
+            .draw_ui_debug_text(format!("FPS: {:.0}", fps), Vector2::new(10.0, 10.0));
 
         let pos = self.player.position();
-        ctx.render.draw_debug_text(
+        ctx.render.draw_ui_debug_text(
             format!("Player: ({:.1}, {:.1})", pos.x, pos.y),
             Vector2::new(10.0, 30.0),
         );
 
         let cam_pos = ctx.render.camera.position();
 
-        ctx.render.draw_debug_text(
+        ctx.render.draw_ui_debug_text(
             format!("Camera: ({:.1}, {:.1})", cam_pos.x, cam_pos.y),
             Vector2::new(10.0, 50.0),
         );
