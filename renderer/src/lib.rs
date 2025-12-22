@@ -1,5 +1,6 @@
 mod camera;
 mod color;
+mod layer;
 mod mesh;
 mod shader;
 mod sprite;
@@ -7,14 +8,15 @@ mod text;
 
 use crate::{
     camera::{Camera, Projection},
+    layer::RenderLayer,
     mesh::{Descriptor, GpuMesh, MeshBuffer},
     text::TextRenderer,
 };
 use assets::AssetManager;
 use macros::{Get, Set};
 use math::{Size, Vector2};
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, ops::Deref};
+use std::{ops::DerefMut, sync::Arc};
 use traccia::info;
 use utils::label;
 use wgpu::naga::FastHashMap;
@@ -38,28 +40,28 @@ pub struct Renderer {
 
     /// Asset manager
     assets: Arc<AssetManager>,
-
-    pub camera: Camera,
-    pub ui_camera: Camera,
+    world: RenderLayer,
+    pub ui: RenderLayer,
 
     // Cache window size for camera updates
     window_size: Size<u32>,
 
     mesh_buffers: FastHashMap<u32, MeshBuffer>,
     triangle_pipeline: wgpu::RenderPipeline,
+}
 
-    text_renderer: TextRenderer,
-    ui_text_renderer: TextRenderer,
+impl Deref for Renderer {
+    type Target = RenderLayer;
 
-    /// Very simple Debug text implementation
-    /// Just for showing things on the screen
-    /// Cached by a unique key (content + position hash)
-    debug_texts: HashMap<String, Text>,
-    ui_debug_texts: HashMap<String, Text>,
+    fn deref(&self) -> &Self::Target {
+        &self.world
+    }
+}
 
-    /// Tracks which debug texts were used this frame
-    debug_texts_used: Vec<String>,
-    ui_debug_texts_used: Vec<String>,
+impl DerefMut for Renderer {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.world
+    }
 }
 
 impl Renderer {
@@ -133,6 +135,9 @@ impl Renderer {
         let text_renderer = TextRenderer::new(surface_format, &camera, &assets);
         let ui_text_renderer = TextRenderer::new(surface_format, &ui_camera, &assets);
 
+        let world = RenderLayer::new(assets.clone(), camera, text_renderer);
+        let ui = RenderLayer::new(assets.clone(), ui_camera, ui_text_renderer);
+
         Self {
             surface,
             config,
@@ -142,18 +147,12 @@ impl Renderer {
                 b: 0.3,
                 a: 1.0,
             },
-            camera,
-            ui_camera,
             window_size: Size::new(size.width, size.height),
             assets,
             mesh_buffers: FastHashMap::default(),
             triangle_pipeline,
-            text_renderer,
-            ui_text_renderer,
-            debug_texts: HashMap::new(),
-            ui_debug_texts: HashMap::new(),
-            debug_texts_used: Vec::new(),
-            ui_debug_texts_used: Vec::new(),
+            world,
+            ui,
         }
     }
 
@@ -175,8 +174,8 @@ impl Renderer {
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&gpu::device(), &self.config);
-        self.camera.update(width, height);
-        self.ui_camera.update(width, height);
+        self.world.resize(width, height);
+        self.ui.resize(width, height);
         self.window_size.width = width;
         self.window_size.height = height;
     }
@@ -287,86 +286,6 @@ impl Renderer {
     }
 
     #[inline]
-    pub fn draw_text(&mut self, text: &mut Text) {
-        text.rebuild(&self.assets);
-
-        for glyph_instance in text.glyph_instances() {
-            self.text_renderer.add_glyph(*glyph_instance);
-        }
-    }
-
-    #[inline]
-    pub fn draw_ui_text(&mut self, text: &mut Text) {
-        text.rebuild(&self.assets);
-
-        for glyph_instance in text.glyph_instances() {
-            self.ui_text_renderer.add_glyph(*glyph_instance);
-        }
-    }
-
-    #[inline]
-    pub fn draw_debug_text<T: Into<String>, P: Into<Vector2>>(&mut self, text: T, pos: P) {
-        let content = text.into();
-        let pos = pos.into();
-
-        let key = format!("{}:{}", pos.x.round() as i32, pos.y.round() as i32);
-
-        let text = self
-            .debug_texts
-            .entry(key.clone())
-            .or_insert_with(|| Text::new(label!("debug")));
-
-        // Trigger dirty if content or
-        if text.content() != content {
-            text.set_content(content);
-        }
-
-        if text.position() != &pos {
-            text.set_position(pos);
-        }
-
-        text.rebuild(&self.assets);
-
-        for glyph_instance in text.glyph_instances() {
-            self.text_renderer.add_glyph(*glyph_instance);
-        }
-
-        // Mark this debug text as used this frame
-        self.debug_texts_used.push(key);
-    }
-
-    #[inline]
-    pub fn draw_ui_debug_text<T: Into<String>, P: Into<Vector2>>(&mut self, text: T, pos: P) {
-        let content = text.into();
-        let pos = pos.into();
-
-        let key = format!("{}:{}", pos.x.round() as i32, pos.y.round() as i32);
-
-        let text = self
-            .ui_debug_texts
-            .entry(key.clone())
-            .or_insert_with(|| Text::new(label!("debug")));
-
-        // Trigger dirty if content or
-        if text.content() != content {
-            text.set_content(content);
-        }
-
-        if text.position() != &pos {
-            text.set_position(pos);
-        }
-
-        text.rebuild(&self.assets);
-
-        for glyph_instance in text.glyph_instances() {
-            self.ui_text_renderer.add_glyph(*glyph_instance);
-        }
-
-        // Mark this debug text as used this frame
-        self.ui_debug_texts_used.push(key);
-    }
-
-    #[inline]
     pub fn present(&mut self, dt: f32) -> Result<(), wgpu::SurfaceError> {
         let gpu = gpu::get();
         let output = self.surface.get_current_texture()?;
@@ -374,19 +293,11 @@ impl Renderer {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Update cameras if needed
-        if self.camera.dirty() {
-            self.camera
-                .update(self.window_size.width, self.window_size.height);
-        }
+        self.world
+            .update(self.window_size.width, self.window_size.height, dt);
 
-        if self.ui_camera.dirty() {
-            self.camera
-                .update(self.window_size.width, self.window_size.height);
-        }
-
-        self.camera.update_shake(dt);
-        self.ui_camera.update_shake(dt);
+        self.ui
+            .update(self.window_size.width, self.window_size.height, dt);
 
         let mut encoder = gpu
             .device()
@@ -413,7 +324,7 @@ impl Renderer {
 
             // Render world meshes
             render_pass.set_pipeline(&self.triangle_pipeline);
-            render_pass.set_bind_group(0, self.camera.view_projection_bind_group(), &[]);
+            render_pass.set_bind_group(0, self.world.camera.view_projection_bind_group(), &[]);
             render_pass.set_bind_group(1, self.assets.bind_group(), &[]);
 
             for mesh_buffer in self.mesh_buffers.values() {
@@ -442,24 +353,12 @@ impl Renderer {
                 );
             }
 
-            // Render all text in a single batched draw call
-            self.text_renderer
-                .render(&mut render_pass, &self.camera, &self.assets);
-            self.ui_text_renderer
-                .render(&mut render_pass, &self.ui_camera, &self.assets);
+            self.world.present(&mut render_pass);
+            self.ui.present(&mut render_pass);
         }
 
-        self.text_renderer.clear();
-        self.ui_text_renderer.clear();
-
-        self.camera.clean();
-        self.ui_camera.clean();
-
-        // Remove debug texts that weren't used this frame to avoid memory leaks
-        // This keeps the cache lean while still benefiting from frame-to-frame reuse
-        self.debug_texts
-            .retain(|key, _| self.debug_texts_used.contains(key));
-        self.debug_texts_used.clear();
+        self.world.clear();
+        self.ui.clear();
 
         for mesh_buffer in self.mesh_buffers.values_mut() {
             mesh_buffer.dirty_indices.clear();
