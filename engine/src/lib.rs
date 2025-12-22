@@ -2,7 +2,7 @@ mod builder;
 mod context;
 mod scene;
 
-use crate::context::WinitWindow;
+use crate::context::{WinitWindow, states::States};
 use assets::AssetManager;
 use crossbeam_channel::{Receiver, Sender};
 use ctor::ctor;
@@ -94,6 +94,7 @@ pub struct App {
     windows: FastHashMap<WindowId, WindowHandle>,
     window_builders: Vec<WindowBuilder>,
     assets: Option<Arc<AssetManager>>,
+    states: Option<Arc<States>>,
 }
 
 /// Internal
@@ -105,6 +106,7 @@ impl App {
             windows: FastHashMap::default(),
             window_builders: Vec::new(),
             assets: None,
+            states: None,
         }
     }
 
@@ -122,10 +124,11 @@ impl App {
         let window_id = window.id();
         let window = Window::new(label, window);
         let assets = Arc::clone(self.assets.as_ref().expect("Cannot fail"));
+        let states = Arc::clone(self.states.as_ref().expect("Cannot fail"));
 
         let handle = thread::spawn(move || {
             let _span = traccia::span!("window", "label" => window.label());
-            Self::window_loop(window, assets, rx, scenes);
+            Self::window_loop(window, assets, states, rx, scenes);
         });
 
         let window_handle = WindowHandle {
@@ -139,10 +142,11 @@ impl App {
     fn window_loop(
         window: Window,
         assets: Arc<AssetManager>,
+        states: Arc<States>,
         rx: Receiver<WindowMessage>,
         mut scenes: LabelMap<Box<dyn Scene>>,
     ) {
-        let mut context = Context::new(window, assets);
+        let mut context = Context::new(window, assets, states);
         let active_scene = label!("initial");
 
         scenes
@@ -269,8 +273,10 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let windows = std::mem::take(&mut self.window_builders);
         let assets = Arc::new(AssetManager::new());
+        let states = Arc::new(States::new());
 
         self.assets = Some(assets);
+        self.states = Some(states);
 
         for builder in windows {
             match event_loop.create_window(builder.attributes) {
