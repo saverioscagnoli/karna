@@ -217,7 +217,7 @@ impl App {
                         scene.render(&mut context);
                     }
 
-                    match context.render.present() {
+                    match context.render.present(context.time.delta()) {
                         Ok(_) => {}
                         Err(wgpu::SurfaceError::OutOfMemory) => {
                             error!("Out of memory error, closing window");

@@ -367,7 +367,7 @@ impl Renderer {
     }
 
     #[inline]
-    pub fn present(&mut self) -> Result<(), wgpu::SurfaceError> {
+    pub fn present(&mut self, dt: f32) -> Result<(), wgpu::SurfaceError> {
         let gpu = gpu::get();
         let output = self.surface.get_current_texture()?;
         let view = output
@@ -384,6 +384,9 @@ impl Renderer {
             self.camera
                 .update(self.window_size.width, self.window_size.height);
         }
+
+        self.camera.update_shake(dt);
+        self.ui_camera.update_shake(dt);
 
         let mut encoder = gpu
             .device()
@@ -448,6 +451,9 @@ impl Renderer {
 
         self.text_renderer.clear();
         self.ui_text_renderer.clear();
+
+        self.camera.clean();
+        self.ui_camera.clean();
 
         // Remove debug texts that weren't used this frame to avoid memory leaks
         // This keeps the cache lean while still benefiting from frame-to-frame reuse

@@ -3,7 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
     sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
-use wgpu::naga::{FastHashMap, Statement};
+use wgpu::naga::FastHashMap;
 
 pub type StateMap = FastHashMap<TypeId, Box<dyn Any + Send + Sync>>;
 
@@ -54,7 +54,8 @@ impl States {
             .map(|boxed| *boxed)
     }
 
-    pub fn get<T: 'static>(&self) -> Option<StateRef<T>> {
+    #[inline]
+    pub fn get<'a, T: 'static>(&'a self) -> Option<StateRef<'a, T>> {
         let lock = self.0.read().expect("State lock is poisoned");
 
         let ptr = lock
@@ -68,7 +69,8 @@ impl States {
         })
     }
 
-    pub fn get_mut<T: 'static>(&self) -> Option<StateRefMut<T>> {
+    #[inline]
+    pub fn get_mut<'a, T: 'static>(&'a self) -> Option<StateRefMut<'a, T>> {
         let mut lock = self.0.write().expect("State lock is poisoned");
 
         let ptr = lock

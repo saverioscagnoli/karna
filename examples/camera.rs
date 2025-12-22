@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use karna::{App, Scene, WindowBuilder, input::KeyCode, math::Lerp};
 use math::Vector2;
 use renderer::{Color, Geometry, Material, Mesh, Transform};
@@ -50,6 +52,10 @@ impl Scene for CameraDemo {
             *self.player.position_x_mut() += vel;
         }
 
+        if ctx.input.key_pressed(&KeyCode::Space) {
+            ctx.render.camera.shake(25.0, Duration::from_secs(2));
+        }
+
         let player_center = *self.player.position() + Vector2::new(25.0, 25.0);
         let screen_center_offset = ctx.window.size().to_f32().center();
         let target_camera_pos = player_center - screen_center_offset;
@@ -82,6 +88,11 @@ impl Scene for CameraDemo {
         ctx.render.draw_ui_debug_text(
             format!("Camera: ({:.1}, {:.1})", cam_pos.x, cam_pos.y),
             Vector2::new(10.0, 50.0),
+        );
+
+        ctx.render.draw_ui_debug_text(
+            "Press space to start a camera shake!",
+            Vector2::new(10.0, 70.0),
         );
     }
 }

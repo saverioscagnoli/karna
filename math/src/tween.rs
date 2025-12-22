@@ -60,7 +60,7 @@ pub enum LoopMode {
     YoyoN(u32),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 #[derive(Default)]
 #[derive(Random)]
 pub enum Easing {
@@ -93,11 +93,51 @@ pub enum Easing {
     BounceIn,
     BounceOut,
     BounceInOut,
+    Custom(fn(f32) -> f32),
+}
+
+impl fmt::Debug for Easing {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Custom(_) => write!(f, "Custom"),
+            _ => write!(f, "{}", self),
+        }
+    }
 }
 
 impl fmt::Display for Easing {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            Self::Linear => write!(f, "Linear"),
+            Self::QuadIn => write!(f, "QuadIn"),
+            Self::QuadOut => write!(f, "QuadOut"),
+            Self::QuadInOut => write!(f, "QuadInOut"),
+            Self::CubicIn => write!(f, "CubicIn"),
+            Self::CubicOut => write!(f, "CubicOut"),
+            Self::CubicInOut => write!(f, "CubicInOut"),
+            Self::QuartIn => write!(f, "QuartIn"),
+            Self::QuartOut => write!(f, "QuartOut"),
+            Self::QuartInOut => write!(f, "QuartInOut"),
+            Self::QuintIn => write!(f, "QuintIn"),
+            Self::QuintOut => write!(f, "QuintOut"),
+            Self::QuintInOut => write!(f, "QuintInOut"),
+            Self::ExpoIn => write!(f, "ExpoIn"),
+            Self::ExpoOut => write!(f, "ExpoOut"),
+            Self::ExpoInOut => write!(f, "ExpoInOut"),
+            Self::CircIn => write!(f, "CircIn"),
+            Self::CircOut => write!(f, "CircOut"),
+            Self::CircInOut => write!(f, "CircInOut"),
+            Self::BackIn => write!(f, "BackIn"),
+            Self::BackOut => write!(f, "BackOut"),
+            Self::BackInOut => write!(f, "BackInOut"),
+            Self::ElasticIn => write!(f, "ElasticIn"),
+            Self::ElasticOut => write!(f, "ElasticOut"),
+            Self::ElasticInOut => write!(f, "ElasticInOut"),
+            Self::BounceIn => write!(f, "BounceIn"),
+            Self::BounceOut => write!(f, "BounceOut"),
+            Self::BounceInOut => write!(f, "BounceInOut"),
+            Self::Custom(_) => write!(f, "Custom"),
+        }
     }
 }
 
@@ -276,6 +316,8 @@ impl Easing {
                     (1.0 + Self::BounceOut.apply(2.0 * t - 1.0)) / 2.0
                 }
             }
+
+            Self::Custom(f) => f(t),
         }
     }
 }
@@ -316,6 +358,22 @@ pub struct Tween<T: Lerp> {
     // Callbacks
     on_start: Option<Box<dyn FnMut(&mut Self) + Send>>,
     on_complete: Option<Box<dyn FnMut(&mut Self) + Send>>,
+}
+
+impl<T: Lerp + std::fmt::Debug> std::fmt::Debug for Tween<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tween")
+            .field("a", &self.a)
+            .field("b", &self.b)
+            .field("easing", &self.easing)
+            .field("duration", &self.duration)
+            .field("elapsed", &self.elapsed)
+            .field("paused", &self.paused)
+            .field("loop_mode", &self.loop_mode)
+            .field("loop_counter", &self.loop_counter)
+            .field("yoyo_forward", &self.yoyo_forward)
+            .finish()
+    }
 }
 
 impl<T: Lerp> Tween<T> {

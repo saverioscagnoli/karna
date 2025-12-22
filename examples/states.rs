@@ -1,5 +1,8 @@
+#![allow(unused)]
+
 use karna::{App, Scene, WindowBuilder, input::KeyCode};
-use renderer::Color;
+use renderer::{Color, Text};
+use utils::label;
 
 struct SharedState {
     value: bool,
@@ -24,14 +27,23 @@ impl Scene for StatesDemo {
     fn render(&mut self, ctx: &mut karna::Context) {}
 }
 
-struct StatesDemo2;
+struct StatesDemo2 {
+    text: Text,
+    color: Color,
+}
 
 impl Scene for StatesDemo2 {
     fn load(&mut self, ctx: &mut karna::Context) {
         ctx.render.set_clear_color(Color::Black);
     }
 
-    fn update(&mut self, ctx: &mut karna::Context) {}
+    fn update(&mut self, ctx: &mut karna::Context) {
+        let t = ctx.time.elapsed().as_secs_f32();
+
+        self.color.set_red((t * 2.0).sin() * 0.5 + 0.5);
+        self.color.set_green(((t * 2.0) + 2.0).sin() * 0.5 + 0.5);
+        self.color.set_blue(((t * 2.0) + 4.0).sin() * 0.5 + 0.5);
+    }
 
     fn render(&mut self, ctx: &mut karna::Context) {
         let state = ctx.states.get::<SharedState>().unwrap();
@@ -41,14 +53,15 @@ impl Scene for StatesDemo2 {
             [10.0, 10.0],
         );
 
-        ctx.render.draw_debug_text(
-            if state.value {
-                "state is true"
-            } else {
-                "state is false"
-            },
-            [10.0, 30.0],
-        );
+        if state.value {
+            self.text.set_color(self.color);
+            self.text.set_content("state is true");
+        } else if self.text.content() != "state is false" {
+            self.text.set_color(Color::White);
+            self.text.set_content("state is false");
+        };
+
+        ctx.render.draw_text(&mut self.text);
     }
 }
 
@@ -66,7 +79,10 @@ fn main() {
                 .with_label("secondart")
                 .with_title("states demo secondary window")
                 .with_resizable(false)
-                .with_initial_scene(StatesDemo2),
+                .with_initial_scene(StatesDemo2 {
+                    text: Text::new(label!("debug")).with_position([10.0, 30.0]),
+                    color: Color::White,
+                }),
         )
         .build()
         .run();

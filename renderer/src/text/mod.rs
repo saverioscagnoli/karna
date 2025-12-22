@@ -31,6 +31,7 @@ pub struct Text {
     #[set(into, also = self.mark_visuals())]
     #[set(prop = "x", ty = f32, also = self.mark_visuals())]
     #[set(prop = "y", ty = f32, also = self.mark_visuals())]
+    #[with(into)]
     position: Vector2,
 
     #[get]
@@ -40,11 +41,13 @@ pub struct Text {
     #[set(into, also = self.mark_visuals())]
     #[set(prop = "x", ty = f32, also = self.mark_visuals())]
     #[set(prop = "y", ty = f32, also = self.mark_visuals())]
+    #[with(into)]
     scale: Vector2,
 
     #[get(copied)]
     #[get(mut, also = self.mark_visuals())]
     #[set(also = self.mark_visuals())]
+    #[with(into)]
     rotation: f32,
 
     #[get]
@@ -58,6 +61,7 @@ pub struct Text {
     #[set(prop = "g", ty = f32, also = self.mark_visuals())]
     #[set(prop = "b", ty = f32, also = self.mark_visuals())]
     #[set(prop = "a", ty = f32, also = self.mark_visuals())]
+    #[with(into)]
     color: Color,
 
     dirty_layout: Cell<bool>,

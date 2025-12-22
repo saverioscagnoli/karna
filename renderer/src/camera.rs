@@ -1,5 +1,7 @@
 use macros::{Get, Set};
-use math::{Matrix4, Vector2, Vector3};
+use math::{Easing, rng};
+use math::{Matrix4, Tween, Vector2, Vector3};
+use std::time::Duration;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Projection {
@@ -61,6 +63,9 @@ pub struct Camera {
 
     target: Vector3,
     up: Vector3,
+
+    shake_offset: Vector2,
+    shake_tween: Option<Tween<Vector2>>,
 }
 
 impl Camera {
@@ -112,21 +117,27 @@ impl Camera {
             // as the winit loop sends a resize event at startup
             dirty: false,
             up: Vector3::y(),
+            shake_offset: Vector2::zeros(),
+            shake_tween: None,
         }
     }
 
     #[inline]
     fn view_matrix(&self) -> Matrix4 {
         match self.projection {
-            Projection::Orthographic { .. } => {
-                Matrix4::from_translation(Vector3::new(-self.position.x, -self.position.y, 0.0))
-            }
-
-            Projection::Perspective { .. } => {
-                Matrix4::look_at(self.position.extend(-5.0), self.target, self.up)
-            }
+            Projection::Orthographic { .. } => Matrix4::from_translation(Vector3::new(
+                -(self.position.x + self.shake_offset.x),
+                -(self.position.y + self.shake_offset.y),
+                0.0,
+            )),
+            Projection::Perspective { .. } => Matrix4::look_at(
+                (self.position + self.shake_offset).extend(-5.0),
+                self.target,
+                self.up,
+            ),
         }
     }
+
     #[inline]
     fn view_projection_matrix(&self, width: u32, height: u32) -> Matrix4 {
         self.projection.matrix(width, height) * self.view_matrix()
@@ -138,8 +149,23 @@ impl Camera {
     }
 
     #[inline]
-    fn clean(&mut self) {
+    pub(crate) fn clean(&mut self) {
         self.dirty = false;
+    }
+
+    #[inline]
+    pub(crate) fn update_shake(&mut self, dt: f32) {
+        if let Some(ref mut tween) = self.shake_tween {
+            tween.update(dt);
+            self.shake_offset = tween.value();
+
+            if tween.is_complete() {
+                self.shake_offset = Vector2::zeros();
+                self.shake_tween = None;
+            }
+
+            self.mark();
+        }
     }
 
     #[inline]
@@ -158,7 +184,24 @@ impl Camera {
             0,
             utils::as_u8_slice(&[self.view_projection_matrix(width, height)]),
         );
+    }
 
-        self.clean();
+    #[inline]
+    pub fn shake(&mut self, intensity: f32, duration: Duration) {
+        let angle = rng(0.0..std::f32::consts::TAU);
+        let target_offset = Vector2::new(angle.cos() * intensity, angle.sin() * intensity);
+
+        let easing = Easing::Custom(|t: f32| {
+            let freq = 15.0;
+            let decay = 3.0;
+            (1.0 - t).powf(decay) * (t * freq * std::f32::consts::TAU).sin()
+        });
+
+        let mut tween = Tween::new(Vector2::zeros(), target_offset, easing, duration);
+
+        tween.start();
+
+        self.shake_offset = Vector2::zeros();
+        self.shake_tween = Some(tween);
     }
 }
