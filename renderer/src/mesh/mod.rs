@@ -118,16 +118,49 @@ impl Descriptor for GpuMesh {
     }
 }
 
+/// Shared geometry buffer (vertices and indices) for a mesh
+/// This is shared across all layers that render the same mesh
 #[derive(Debug)]
-pub struct MeshBuffer {
+pub struct GeometryBuffer {
     pub vertex_buffer: gpu::core::Buffer<Vertex>,
     pub index_buffer: gpu::core::Buffer<u32>,
     pub index_count: u32,
+    pub topology: wgpu::PrimitiveTopology,
+}
+
+/// Per-layer instance buffer for a mesh
+/// Each layer maintains its own instances of the same mesh
+#[derive(Debug)]
+pub struct InstanceBuffer {
     pub instance_buffer: gpu::core::Buffer<GpuMesh>,
     pub instances: Vec<GpuMesh>,
-    pub topology: wgpu::PrimitiveTopology,
     pub dirty_indices: Vec<usize>,
     pub instance_count: usize,
+}
+
+impl InstanceBuffer {
+    pub fn new(capacity: usize) -> Self {
+        let instance_buffer = gpu::core::Buffer::new_with_capacity(
+            "mesh instance buffer",
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            capacity,
+        );
+
+        Self {
+            instance_buffer,
+            instances: Vec::with_capacity(capacity),
+            dirty_indices: Vec::new(),
+            instance_count: 0,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.instance_count = 0;
+    }
+
+    pub fn clear_dirty(&mut self) {
+        self.dirty_indices.clear();
+    }
 }
 
 #[derive(Debug, Clone)]

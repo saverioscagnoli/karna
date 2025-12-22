@@ -201,6 +201,7 @@ impl App {
                     }
 
                     context.time.frame_start();
+                    context.render.frame_start();
                     context.time.update();
 
                     while let Some(tick_start) = context.time.next_tick() {
