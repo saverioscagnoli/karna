@@ -169,7 +169,7 @@ impl Camera {
     }
 
     #[inline]
-    pub(crate) fn update(&mut self, width: u32, height: u32) {
+    pub(crate) fn resize(&mut self, width: u32, height: u32) {
         self.projection = Projection::Orthographic {
             left: 0.0,
             right: width as f32,

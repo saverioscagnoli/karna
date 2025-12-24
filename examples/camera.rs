@@ -75,22 +75,23 @@ impl Scene for CameraDemo {
         // Debug text examples - text objects are cached and only rebuilt when content changes
         let fps = ctx.time.fps();
         ctx.render
-            .draw_ui_debug_text(format!("FPS: {:.0}", fps), Vector2::new(10.0, 10.0));
+            .ui
+            .draw_debug_text(format!("FPS: {:.0}", fps), Vector2::new(10.0, 10.0));
 
         let pos = self.player.position();
-        ctx.render.draw_ui_debug_text(
+        ctx.render.ui.draw_debug_text(
             format!("Player: ({:.1}, {:.1})", pos.x, pos.y),
             Vector2::new(10.0, 30.0),
         );
 
         let cam_pos = ctx.render.camera.position();
 
-        ctx.render.draw_ui_debug_text(
+        ctx.render.ui.draw_debug_text(
             format!("Camera: ({:.1}, {:.1})", cam_pos.x, cam_pos.y),
             Vector2::new(10.0, 50.0),
         );
 
-        ctx.render.draw_ui_debug_text(
+        ctx.render.ui.draw_debug_text(
             "Press space to start a camera shake!",
             Vector2::new(10.0, 70.0),
         );

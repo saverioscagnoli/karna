@@ -24,11 +24,11 @@ pub struct Context {
     pub render: Renderer,
     pub monitors: Monitors,
     pub assets: Arc<AssetManager>,
-    pub states: Arc<States>,
+    pub globals: Arc<States>,
 }
 
 impl Context {
-    pub(crate) fn new(window: Window, assets: Arc<AssetManager>, states: Arc<States>) -> Self {
+    pub(crate) fn new(window: Window, assets: Arc<AssetManager>, globals: Arc<States>) -> Self {
         let render = Renderer::new(Arc::clone(window.inner()), Arc::clone(&assets));
         let monitors = Monitors::new(Arc::clone(window.inner()));
 
@@ -39,7 +39,7 @@ impl Context {
             render,
             monitors,
             assets,
-            states,
+            globals,
         }
     }
 

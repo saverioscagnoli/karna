@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use macros::{Get, Set, With};
 use num::{Num, cast::AsPrimitive};
 use winit::dpi::PhysicalSize;
@@ -69,18 +67,18 @@ impl<T: Num + Copy + AsPrimitive<f32>> Size<T> {
     }
 }
 
-impl Size<f32> {
+impl<T: Num + Copy + AsPrimitive<f32>> Size<T> {
     /// Returns the center of the size
     #[inline]
     pub fn center(&self) -> Vector2 {
-        Vector2::new(self.width / 2.0, self.height / 2.0)
+        Vector2::new(self.width.as_() / 2.0, self.height.as_() / 2.0)
     }
 
     /// Centers another size within `self`, top-left aligned
     #[inline]
-    pub fn centered_tl(&self, other: &Size<f32>) -> Vector2 {
-        let x = self.width / 2.0 - other.width / 2.0;
-        let y = self.height / 2.0 - other.height / 2.0;
+    pub fn centered_tl(&self, other: &Size<T>) -> Vector2 {
+        let x = self.width.as_() / 2.0 - other.width.as_() / 2.0;
+        let y = self.height.as_() / 2.0 - other.height.as_() / 2.0;
 
         Vector2::new(x, y)
     }

@@ -1,5 +1,12 @@
 #![allow(unused)]
 
+//! The 'globals' field is used to store global struct instances across
+//! all scenes and windows. Thread-safe
+//!
+//! NOTE: To write or mutably access a global state shouldnt be done
+//! frequently, as it involves acquiring a write lock.
+//! On the other hand, getting a normal reference is faster, because of read-locking.
+
 use karna::{App, Scene, WindowBuilder, input::KeyCode};
 use renderer::{Color, Text};
 use utils::label;
@@ -12,13 +19,13 @@ struct StatesDemo;
 
 impl Scene for StatesDemo {
     fn load(&mut self, ctx: &mut karna::Context) {
-        ctx.states.insert(SharedState { value: false });
+        ctx.globals.insert(SharedState { value: false });
         ctx.render.set_clear_color(Color::Cyan);
     }
 
     fn update(&mut self, ctx: &mut karna::Context) {
         if ctx.input.key_pressed(&KeyCode::Space)
-            && let Some(ref mut state) = ctx.states.get_mut::<SharedState>()
+            && let Some(ref mut state) = ctx.globals.get_mut::<SharedState>()
         {
             state.value = !state.value;
         }
@@ -46,7 +53,7 @@ impl Scene for StatesDemo2 {
     }
 
     fn render(&mut self, ctx: &mut karna::Context) {
-        let state = ctx.states.get::<SharedState>().unwrap();
+        let state = ctx.globals.get::<SharedState>().unwrap();
 
         ctx.render.draw_debug_text(
             "Press space on the cyan window to toggle the state",
