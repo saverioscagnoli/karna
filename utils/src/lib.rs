@@ -1,6 +1,6 @@
 use std::{
     ops::{Deref, DerefMut},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 pub mod map;

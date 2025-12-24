@@ -6,18 +6,14 @@ mod scene_changer;
 mod time;
 mod window;
 
-use crate::{
-    Scene,
-    context::{
-        input::Input,
-        scene_changer::SceneChanger,
-        states::{GlobalStates, ScopedStates},
-    },
+use crate::context::{
+    input::Input,
+    scene_changer::SceneChanger,
+    states::{GlobalStates, ScopedStates},
 };
 use assets::AssetManager;
 use renderer::Renderer;
 use std::sync::Arc;
-use utils::map::LabelMap;
 use winit::{event::WindowEvent, keyboard::PhysicalKey};
 
 // Re-exports
