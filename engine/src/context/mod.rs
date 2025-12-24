@@ -2,13 +2,22 @@ pub mod input;
 pub mod states;
 
 mod monitors;
+mod scene_changer;
 mod time;
 mod window;
 
-use crate::context::{input::Input, states::States};
+use crate::{
+    Scene,
+    context::{
+        input::Input,
+        scene_changer::SceneChanger,
+        states::{GlobalStates, ScopedStates},
+    },
+};
 use assets::AssetManager;
 use renderer::Renderer;
 use std::sync::Arc;
+use utils::map::LabelMap;
 use winit::{event::WindowEvent, keyboard::PhysicalKey};
 
 // Re-exports
@@ -22,23 +31,33 @@ pub struct Context {
     pub time: Time,
     pub input: Input,
     pub render: Renderer,
+    pub scenes: SceneChanger,
     pub monitors: Monitors,
     pub assets: Arc<AssetManager>,
-    pub globals: Arc<States>,
+    pub states: ScopedStates,
+    pub globals: Arc<GlobalStates>,
 }
 
 impl Context {
-    pub(crate) fn new(window: Window, assets: Arc<AssetManager>, globals: Arc<States>) -> Self {
+    pub(crate) fn new(
+        window: Window,
+        assets: Arc<AssetManager>,
+        globals: Arc<GlobalStates>,
+    ) -> Self {
         let render = Renderer::new(Arc::clone(window.inner()), Arc::clone(&assets));
+        let scenes = SceneChanger::new();
         let monitors = Monitors::new(Arc::clone(window.inner()));
+        let states = ScopedStates::new();
 
         Self {
             window,
             time: Time::default(),
             input: Input::default(),
             render,
+            scenes,
             monitors,
             assets,
+            states,
             globals,
         }
     }

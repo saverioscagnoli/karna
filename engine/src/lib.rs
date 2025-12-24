@@ -2,7 +2,10 @@ mod builder;
 mod context;
 mod scene;
 
-use crate::context::{WinitWindow, states::States};
+use crate::{
+    context::{WinitWindow, states::GlobalStates},
+    scene::SceneManager,
+};
 use assets::AssetManager;
 use crossbeam_channel::{Receiver, Sender};
 use ctor::ctor;
@@ -94,7 +97,7 @@ pub struct App {
     windows: FastHashMap<WindowId, WindowHandle>,
     window_builders: Vec<WindowBuilder>,
     assets: Option<Arc<AssetManager>>,
-    globals: Option<Arc<States>>,
+    globals: Option<Arc<GlobalStates>>,
 }
 
 /// Internal
@@ -128,7 +131,7 @@ impl App {
 
         let handle = thread::spawn(move || {
             let _span = traccia::span!("window", "label" => window.label());
-            Self::window_loop(window, assets, globals, rx, scenes);
+            Self::window_loop(window, scenes, assets, globals, rx);
         });
 
         let window_handle = WindowHandle {
@@ -141,18 +144,15 @@ impl App {
 
     fn window_loop(
         window: Window,
+        scenes: LabelMap<Box<dyn Scene>>,
         assets: Arc<AssetManager>,
-        states: Arc<States>,
+        states: Arc<GlobalStates>,
         rx: Receiver<WindowMessage>,
-        mut scenes: LabelMap<Box<dyn Scene>>,
     ) {
         let mut context = Context::new(window, assets, states);
-        let active_scene = label!("initial");
+        let mut scenes = SceneManager::new(scenes);
 
-        scenes
-            .get_mut(&active_scene)
-            .expect("Cannot fail")
-            .load(&mut context);
+        scenes.current().load(&mut context);
 
         // Kickstart
         context.window.request_redraw();
@@ -190,9 +190,7 @@ impl App {
                                 if let WindowEvent::Resized(size) = event {
                                     let size: Size<u32> = size.into();
 
-                                    if let Some(scene) = scenes.get_mut(&active_scene) {
-                                        scene.on_resize(size, &mut context);
-                                    }
+                                    scenes.current().on_resize(size, &mut context);
                                 }
 
                                 context.handle_event(event);
@@ -200,23 +198,20 @@ impl App {
                         }
                     }
 
+                    // FRAME START
                     context.time.frame_start();
+                    context.render.frame_start();
+
                     context.time.update();
 
                     while let Some(tick_start) = context.time.next_tick() {
-                        if let Some(scene) = scenes.get_mut(&active_scene) {
-                            scene.fixed_update(&mut context);
-                        }
-
+                        scenes.current().fixed_update(&mut context);
                         context.time.do_tick(tick_start);
                     }
 
-                    if let Some(scene) = scenes.get_mut(&active_scene) {
-                        scene.update(&mut context);
+                    scenes.current().update(&mut context);
 
-                        context.render.frame_start();
-                        scene.render(&mut context);
-                    }
+                    scenes.current().render(&mut context);
 
                     match context.render.present(context.time.delta()) {
                         Ok(_) => {}
@@ -236,15 +231,24 @@ impl App {
                     context.input.flush();
                     context.time.wait_for_next_frame();
                     context.window.request_redraw();
+
+                    // Check for pending scene changes
+                    if let Some(new_scene) = context.scenes.changed_to() {
+                        info!(
+                            "Changing from scene '{:?}' to '{:?}'",
+                            scenes.current_label(),
+                            new_scene
+                        );
+
+                        scenes.switch_to(new_scene, &mut context);
+                    }
                 }
 
                 Ok(WindowMessage::WinitEvent(event)) => {
                     if let WindowEvent::Resized(size) = event {
                         let size: Size<u32> = size.into();
 
-                        if let Some(scene) = scenes.get_mut(&active_scene) {
-                            scene.on_resize(size, &mut context);
-                        }
+                        scenes.current().on_resize(size, &mut context);
                     }
 
                     context.handle_event(event);
@@ -274,7 +278,7 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let windows = std::mem::take(&mut self.window_builders);
         let assets = Arc::new(AssetManager::new());
-        let globals = Arc::new(States::new());
+        let globals = Arc::new(GlobalStates::new());
 
         self.assets = Some(assets);
         self.globals = Some(globals);

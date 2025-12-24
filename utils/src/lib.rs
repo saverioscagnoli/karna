@@ -48,7 +48,7 @@ impl<T> Lazy<T> {
     }
 
     #[inline]
-    pub fn init(&mut self, value: T) {
+    pub fn set(&mut self, value: T) {
         self.0 = Some(value)
     }
 
