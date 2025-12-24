@@ -94,7 +94,7 @@ pub struct App {
     windows: FastHashMap<WindowId, WindowHandle>,
     window_builders: Vec<WindowBuilder>,
     assets: Option<Arc<AssetManager>>,
-    states: Option<Arc<States>>,
+    globals: Option<Arc<States>>,
 }
 
 /// Internal
@@ -106,7 +106,7 @@ impl App {
             windows: FastHashMap::default(),
             window_builders: Vec::new(),
             assets: None,
-            states: None,
+            globals: None,
         }
     }
 
@@ -124,11 +124,11 @@ impl App {
         let window_id = window.id();
         let window = Window::new(label, window);
         let assets = Arc::clone(self.assets.as_ref().expect("Cannot fail"));
-        let states = Arc::clone(self.states.as_ref().expect("Cannot fail"));
+        let globals = Arc::clone(self.globals.as_ref().expect("Cannot fail"));
 
         let handle = thread::spawn(move || {
             let _span = traccia::span!("window", "label" => window.label());
-            Self::window_loop(window, assets, states, rx, scenes);
+            Self::window_loop(window, assets, globals, rx, scenes);
         });
 
         let window_handle = WindowHandle {
@@ -201,7 +201,6 @@ impl App {
                     }
 
                     context.time.frame_start();
-                    context.render.frame_start();
                     context.time.update();
 
                     while let Some(tick_start) = context.time.next_tick() {
@@ -214,7 +213,8 @@ impl App {
 
                     if let Some(scene) = scenes.get_mut(&active_scene) {
                         scene.update(&mut context);
-                        context.render.begin_frame();
+
+                        context.render.frame_start();
                         scene.render(&mut context);
                     }
 
@@ -274,10 +274,10 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let windows = std::mem::take(&mut self.window_builders);
         let assets = Arc::new(AssetManager::new());
-        let states = Arc::new(States::new());
+        let globals = Arc::new(States::new());
 
         self.assets = Some(assets);
-        self.states = Some(states);
+        self.globals = Some(globals);
 
         for builder in windows {
             match event_loop.create_window(builder.attributes) {
