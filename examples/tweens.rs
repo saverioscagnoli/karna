@@ -26,7 +26,7 @@ impl Scene for TweenDemo {
             window_size.height() as f32 - 100.0,
         );
 
-        self.tween.init(
+        self.tween.set(
             Tween::new(
                 *self.rect.position(),
                 target,
@@ -62,7 +62,7 @@ impl Scene for TweenDemo {
         let target_panel_y = ctx.window.height() as f32 / 2.0 - panel_height / 2.0;
         let target_panel = Vector2::new(center_x, target_panel_y);
 
-        self.ui_tween.init(Tween::new(
+        self.ui_tween.set(Tween::new(
             initial_panel_pos,
             target_panel,
             Easing::QuadOut,
