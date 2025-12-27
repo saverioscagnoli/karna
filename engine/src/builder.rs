@@ -1,10 +1,7 @@
 use crate::{App, scene::Scene};
 use macros::With;
 use math::Size;
-use utils::{
-    label,
-    map::{Label, LabelMap},
-};
+use utils::{Label, LabelMap, label};
 use winit::window::WindowAttributes;
 
 #[derive(Default)]

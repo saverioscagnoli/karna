@@ -1,149 +1,146 @@
-use assets::AssetManager;
-use math::Vector2;
 use std::sync::Arc;
-use utils::label;
-use wgpu::naga::FastHashMap;
 
 use crate::{
-    Mesh, Text,
+    Sprite,
     camera::Camera,
-    mesh::{GeometryBuffer, GpuMesh, InstanceBuffer},
-    text::TextRenderer,
+    immediate::ImmediateRenderer,
+    mesh::{Mesh, MeshInstanceGpu},
+    text::{Text, TextRenderer2d},
 };
+use assets::AssetManager;
+use gpu::core::{GpuBuffer, GpuBufferBuilder};
+use utils::{Handle, SlotMap};
+use wgpu::naga::FastHashMap;
+
+#[derive(Debug, Clone, Copy)]
+pub enum Layer {
+    World,
+    Ui,
+    N(usize),
+}
 
 pub struct RenderLayer {
-    assets: Arc<AssetManager>,
     pub camera: Camera,
-    text_renderer: TextRenderer,
+    assets: Arc<AssetManager>,
 
-    /// All the texts that are / were written with `draw_debug_text`
-    debug_texts: FastHashMap<String, Text>,
+    // Mesh rendering
+    meshes: SlotMap<Mesh>,
+    instance_buffer: GpuBuffer<MeshInstanceGpu>,
+    instance_capacity: usize,
 
-    /// The texts that are currently being used
-    debug_texts_used: Vec<String>,
+    pub(crate) immediate: ImmediateRenderer,
 
-    /// Per-layer geometry buffers (vertices/indices)
-    geometry_buffers: FastHashMap<u32, GeometryBuffer>,
+    // Text rendering
+    texts: SlotMap<Text>,
+    text_renderer: TextRenderer2d,
 
-    /// Per-layer instance buffers for each mesh geometry
-    instance_buffers: FastHashMap<u32, InstanceBuffer>,
+    sprites: SlotMap<Sprite>,
+
+    // Reusable buffers
+    batches: FastHashMap<u32, Vec<MeshInstanceGpu>>,
+    all_instances: Vec<MeshInstanceGpu>,
+    batch_ranges: Vec<(u32, std::ops::Range<u32>)>,
+    any_dirty: bool,
 }
 
 impl RenderLayer {
-    #[inline]
-    pub fn new(assets: Arc<AssetManager>, camera: Camera, text_renderer: TextRenderer) -> Self {
+    pub(crate) fn new(
+        surface_format: wgpu::TextureFormat,
+        camera: Camera,
+        assets: Arc<AssetManager>,
+    ) -> Self {
+        let instance_buffer = GpuBufferBuilder::new()
+            .label("render layer instance buffer")
+            .vertex()
+            .copy_dst()
+            .capacity(Mesh::INITIAL_INSTANCE_CAPACITY)
+            .build();
+
+        let text_renderer = TextRenderer2d::new("world", surface_format, &camera, &assets);
+
         Self {
-            assets,
             camera,
+            assets,
+            meshes: SlotMap::new(),
+            instance_buffer,
+            instance_capacity: Mesh::INITIAL_INSTANCE_CAPACITY,
+            sprites: SlotMap::new(),
+            immediate: ImmediateRenderer::new(),
+            texts: SlotMap::new(),
             text_renderer,
-            debug_texts: FastHashMap::default(),
-            debug_texts_used: Vec::new(),
-            geometry_buffers: FastHashMap::default(),
-            instance_buffers: FastHashMap::default(),
+            batches: FastHashMap::default(),
+            all_instances: Vec::new(),
+            batch_ranges: Vec::new(),
+            any_dirty: false,
         }
     }
 
+    // Mesh methods (existing)
     #[inline]
-    pub(crate) fn frame_start(&mut self) {
-        // Reset instance counts for all mesh buffers in this layer
-        for instance_buffer in self.instance_buffers.values_mut() {
-            instance_buffer.reset();
-        }
+    pub fn add_mesh(&mut self, mesh: Mesh) -> Handle<Mesh> {
+        self.any_dirty = true;
+        self.meshes.insert(mesh)
     }
 
     #[inline]
-    fn register_geometry(&mut self, mesh: &Mesh) {
-        let geometry_id = mesh.geometry().id();
-
-        if self.geometry_buffers.contains_key(&geometry_id) {
-            return;
-        }
-
-        let index_count = mesh.geometry().indices().len() as u32;
-
-        let vertex_buffer = gpu::core::Buffer::new(
-            &format!("Mesh id '{:?}' vertex buffer", geometry_id),
-            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            &mesh.geometry().vertices(),
-        );
-
-        let index_buffer = gpu::core::Buffer::new(
-            &format!("Mesh id '{:?}' index buffer", geometry_id),
-            wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-            &mesh.geometry().indices(),
-        );
-
-        let geometry_buffer = GeometryBuffer {
-            vertex_buffer,
-            index_buffer,
-            index_count,
-            topology: mesh.geometry().topology(),
-        };
-
-        self.geometry_buffers.insert(geometry_id, geometry_buffer);
+    pub fn get_mesh(&self, id: Handle<Mesh>) -> &Mesh {
+        self.meshes.get(id).expect("Failed to get mesh instance")
     }
 
     #[inline]
-    pub fn draw_mesh(&mut self, mesh: &Mesh) {
-        self.register_geometry(mesh);
+    pub fn get_mesh_mut(&mut self, id: Handle<Mesh>) -> &mut Mesh {
+        self.meshes
+            .get_mut(id)
+            .expect("Failed to get mesh instance")
+    }
 
-        let geometry_id = mesh.geometry().id();
+    #[inline]
+    pub fn remove_mesh(&mut self, id: Handle<Mesh>) {
+        self.any_dirty = true;
+        self.meshes.remove(id);
+    }
 
-        if !self.instance_buffers.contains_key(&geometry_id) {
-            self.instance_buffers.insert(
-                geometry_id,
-                InstanceBuffer::new(Mesh::INITIAL_INSTANCE_CAPACITY),
-            );
-        }
+    // Text methods (new)
+    #[inline]
+    pub fn add_text(&mut self, text: Text) -> Handle<Text> {
+        self.texts.insert(text)
+    }
 
-        let instance_buffer = self
-            .instance_buffers
-            .get_mut(&geometry_id)
-            .expect("Cannot fail");
+    #[inline]
+    pub fn get_text(&self, id: Handle<Text>) -> &Text {
+        self.texts.get(id).expect("Failed to get text instance")
+    }
 
-        let needs_new_slot = match mesh.instance_index() {
-            Some(idx) if idx < instance_buffer.instance_count => {
-                if mesh.is_dirty() {
-                    instance_buffer.instances[idx] = mesh.for_gpu(&self.assets);
-                    instance_buffer.dirty_indices.push(idx);
-                    mesh.clean();
-                }
-                false
-            }
-            _ => true,
-        };
+    #[inline]
+    pub fn get_text_mut(&mut self, id: Handle<Text>) -> &mut Text {
+        self.texts.get_mut(id).expect("Failed to get text instance")
+    }
 
-        if needs_new_slot {
-            let instance_idx = instance_buffer.instance_count;
-            mesh.set_instance_index(instance_idx);
+    #[inline]
+    pub fn remove_text(&mut self, id: Handle<Text>) {
+        self.texts.remove(id);
+    }
 
-            if instance_idx >= instance_buffer.instances.capacity() {
-                let new_capacity = instance_buffer.instances.capacity() * 2;
+    #[inline]
+    pub fn add_sprite(&mut self, sprite: Sprite) -> Handle<Sprite> {
+        self.sprites.insert(sprite)
+    }
 
-                instance_buffer.instance_buffer.resize(new_capacity);
-                instance_buffer
-                    .instances
-                    .reserve(new_capacity - instance_buffer.instances.len());
+    #[inline]
+    pub fn get_sprite(&self, id: Handle<Sprite>) -> &Sprite {
+        self.sprites.get(id).expect("Failed to get sprite instance")
+    }
 
-                // Mark all existing instances as dirty to ensure they're written to the new buffer
-                instance_buffer.dirty_indices.clear();
+    #[inline]
+    pub fn get_sprite_mut(&mut self, id: Handle<Sprite>) -> &mut Sprite {
+        self.sprites
+            .get_mut(id)
+            .expect("Failed to get sprite instance")
+    }
 
-                for i in 0..instance_buffer.instances.len() {
-                    instance_buffer.dirty_indices.push(i);
-                }
-            }
-
-            if instance_idx >= instance_buffer.instances.len() {
-                instance_buffer.instances.push(mesh.for_gpu(&self.assets));
-            } else {
-                instance_buffer.instances[instance_idx] = mesh.for_gpu(&self.assets);
-            }
-
-            instance_buffer.dirty_indices.push(instance_idx);
-            instance_buffer.instance_count += 1;
-
-            mesh.clean();
-        }
+    #[inline]
+    pub fn remove_sprite(&mut self, id: Handle<Sprite>) {
+        self.sprites.remove(id);
     }
 
     #[inline]
@@ -156,110 +153,152 @@ impl RenderLayer {
         if self.camera.dirty() {
             self.camera.resize(width, height);
         }
-
         self.camera.update_shake(dt);
-    }
-
-    #[inline]
-    pub fn draw_text(&mut self, text: &mut Text) {
-        text.rebuild(&self.assets);
-
-        for glyph in text.glyph_instances() {
-            self.text_renderer.add_glyph(*glyph);
-        }
-    }
-
-    #[inline]
-    pub fn draw_debug_text<T: Into<String>, P: Into<Vector2>>(&mut self, text: T, pos: P) {
-        let content = text.into();
-        let pos = pos.into();
-
-        let key = format!("{}:{}", pos.x.round() as i32, pos.y.round() as i32);
-
-        let text = self
-            .debug_texts
-            .entry(key.clone())
-            .or_insert_with(|| Text::new(label!("debug")));
-
-        // Trigger dirty
-        if text.content() != content {
-            text.set_content(content);
-        }
-
-        if text.position() != &pos {
-            text.set_position(pos);
-        }
-
-        text.rebuild(&self.assets);
-
-        for glyph in text.glyph_instances() {
-            self.text_renderer.add_glyph(*glyph);
-        }
-
-        self.debug_texts_used.push(key);
     }
 
     #[inline]
     pub(crate) fn present<'a>(
         &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,
-        triangle_pipeline: &'a wgpu::RenderPipeline,
+        retained_pipeline: &'a wgpu::RenderPipeline,
+        immediate_pipeline: &'a wgpu::RenderPipeline,
     ) {
-        render_pass.set_pipeline(triangle_pipeline);
+        render_pass.set_pipeline(retained_pipeline);
         render_pass.set_bind_group(0, self.camera.view_projection_bind_group(), &[]);
         render_pass.set_bind_group(1, self.assets.bind_group(), &[]);
 
-        for (geometry_id, instance_buffer) in &self.instance_buffers {
-            if instance_buffer.instance_count == 0 {
+        let mut has_dirty = self.any_dirty;
+
+        // Batch regular meshes
+        for mesh in self.meshes.values_mut() {
+            if !mesh.visible() {
                 continue;
             }
 
-            let geometry_buffer = match self.geometry_buffers.get(geometry_id) {
-                Some(buf) => buf,
-                None => continue, // Geometry not registered yet
-            };
+            if mesh.is_dirty() {
+                mesh.sync_gpu(&self.assets);
+                has_dirty = true;
+            }
 
-            // Write dirty instances to GPU
-            if !instance_buffer.dirty_indices.is_empty() {
-                for &dirty_idx in &instance_buffer.dirty_indices {
-                    let offset = (dirty_idx * std::mem::size_of::<GpuMesh>()) as u64;
-                    instance_buffer
-                        .instance_buffer
-                        .write_at(offset, &[instance_buffer.instances[dirty_idx]]);
+            let geo_id = mesh.geometry().id();
+            self.batches
+                .entry(geo_id)
+                .or_insert_with(Vec::new)
+                .push(mesh.gpu());
+        }
+
+        // Batch sprites (they deref to Mesh, so we can access their mesh data)
+        for sprite in self.sprites.values_mut() {
+            if !sprite.visible() {
+                continue;
+            }
+
+            if sprite.is_dirty() {
+                sprite.sync_gpu(&self.assets);
+                has_dirty = true;
+            }
+
+            let geo_id = sprite.geometry().id();
+            self.batches
+                .entry(geo_id)
+                .or_insert_with(Vec::new)
+                .push(sprite.gpu());
+        }
+
+        if !self.batches.is_empty() {
+            if has_dirty {
+                let total_instances: usize = self.batches.values().map(|v| v.len()).sum();
+
+                if total_instances > self.instance_capacity {
+                    self.instance_capacity = (total_instances * 2).max(128);
+                    self.instance_buffer.resize(self.instance_capacity);
+                }
+
+                self.all_instances.clear();
+                self.batch_ranges.clear();
+
+                for (geo_id, instances) in self.batches.iter() {
+                    let start = self.all_instances.len() as u32;
+                    self.all_instances.extend_from_slice(instances);
+                    let end = self.all_instances.len() as u32;
+                    self.batch_ranges.push((*geo_id, start..end));
+                }
+
+                self.instance_buffer.write(0, &self.all_instances);
+                self.any_dirty = false;
+            } else {
+                self.batch_ranges.clear();
+                let mut offset = 0u32;
+
+                for (geo_id, instances) in self.batches.iter() {
+                    let start = offset;
+                    let end = offset + instances.len() as u32;
+                    self.batch_ranges.push((*geo_id, start..end));
+                    offset = end;
                 }
             }
 
-            // Set up buffers and draw
-            render_pass.set_vertex_buffer(0, geometry_buffer.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, instance_buffer.instance_buffer.slice(..));
-            render_pass.set_index_buffer(
-                geometry_buffer.index_buffer.slice(..),
-                wgpu::IndexFormat::Uint32,
-            );
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
 
-            render_pass.draw_indexed(
-                0..geometry_buffer.index_count,
-                0,
-                0..instance_buffer.instance_count as u32,
-            );
+            let mut geo_buffers: Vec<(u32, Arc<crate::mesh::GeometryBuffer>)> = Vec::new();
+
+            for geo_id in self.batches.keys() {
+                let geo_buffer = self
+                    .meshes
+                    .values()
+                    .find(|m| m.geometry().id() == *geo_id)
+                    .map(|m| m.geometry().buffer())
+                    .or_else(|| {
+                        self.sprites
+                            .values()
+                            .find(|s| s.geometry().id() == *geo_id)
+                            .map(|s| s.geometry().buffer())
+                    })
+                    .expect("Geometry should exist");
+
+                geo_buffers.push((*geo_id, geo_buffer));
+            }
+
+            for batch in self.batches.values_mut() {
+                batch.clear();
+            }
+
+            for (geo_id, instance_range) in &self.batch_ranges {
+                let geo_buffer = geo_buffers
+                    .iter()
+                    .find(|(id, _)| id == geo_id)
+                    .map(|(_, buf)| buf)
+                    .expect("Geometry buffer should exist");
+
+                render_pass.set_vertex_buffer(0, geo_buffer.vertex_buffer.slice(..));
+                render_pass
+                    .set_index_buffer(geo_buffer.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(
+                    0..geo_buffer.index_count as u32,
+                    0,
+                    instance_range.clone(),
+                );
+            }
+        }
+
+        self.text_renderer.clear();
+
+        for text in self.texts.values_mut() {
+            text.rebuild(&self.assets);
+
+            for glyph in text.glyph_instances() {
+                self.text_renderer.add_glyph(*glyph);
+            }
         }
 
         self.text_renderer
-            .render(render_pass, &self.camera, &self.assets);
-    }
+            .present(render_pass, &self.camera, &self.assets);
 
-    #[inline]
-    pub(crate) fn clear(&mut self) {
-        self.text_renderer.clear();
-        self.camera.clean();
+        // Present immediate rendering
+        render_pass.set_pipeline(immediate_pipeline);
+        render_pass.set_bind_group(0, self.camera.view_projection_bind_group(), &[]);
+        render_pass.set_bind_group(1, self.assets.bind_group(), &[]);
 
-        self.debug_texts
-            .retain(|key, _| self.debug_texts_used.contains(key));
-        self.debug_texts_used.clear();
-
-        // Clear dirty indices for all instance buffers
-        for instance_buffer in self.instance_buffers.values_mut() {
-            instance_buffer.clear_dirty();
-        }
+        self.immediate.present(render_pass);
     }
 }

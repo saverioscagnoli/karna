@@ -1,5 +1,5 @@
 use macros::Get;
-use utils::map::Label;
+use utils::Label;
 
 #[derive(Get)]
 pub struct SceneChanger {

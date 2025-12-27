@@ -1,38 +1,24 @@
-use crate::{Color, Vertex};
-use macros::Get;
-use math::{Vector3, Vector4};
+use crate::mesh::{GeometryBuffer, Vertex};
+use gpu::core::GpuBufferBuilder;
+use math::{Size, Vector3, Vector4};
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
     sync::{Arc, LazyLock, RwLock},
 };
-use traccia::info;
 use wgpu::naga::FastHashMap;
 
-static GEOMETRY_CACHE: LazyLock<RwLock<FastHashMap<u32, Arc<Geometry>>>> =
+static GEOMETRY_CACHE: LazyLock<RwLock<FastHashMap<u32, Arc<GeometryBuffer>>>> =
     LazyLock::new(|| RwLock::new(FastHashMap::default()));
 
-#[derive(Debug)]
-#[derive(Get)]
+#[derive(Debug, Clone)]
 pub struct Geometry {
-    #[get(copied)]
     id: u32,
-
-    #[get]
     vertices: Vec<Vertex>,
-
-    #[get]
     indices: Vec<u32>,
-
-    #[get(copied)]
-    topology: wgpu::PrimitiveTopology,
 }
 
 impl Geometry {
-    fn compute_hash(
-        vertices: &[Vertex],
-        indices: &[u32],
-        topology: &wgpu::PrimitiveTopology,
-    ) -> u32 {
+    fn compute_hash(vertices: &[Vertex], indices: &[u32]) -> u32 {
         let mut hasher = DefaultHasher::new();
 
         for vertex in vertices {
@@ -42,61 +28,70 @@ impl Geometry {
         }
 
         indices.hash(&mut hasher);
-        std::mem::discriminant(topology).hash(&mut hasher);
-
         hasher.finish() as u32
     }
 
     #[inline]
-    pub fn new(
-        vertices: &[Vertex],
-        indices: &[u32],
-        topology: wgpu::PrimitiveTopology,
-    ) -> Arc<Self> {
-        let id = Self::compute_hash(vertices, indices, &topology);
-
-        {
-            let lock = GEOMETRY_CACHE
-                .read()
-                .expect("Geometry cache lock is poisoned");
-
-            if let Some(geometry) = lock.get(&id) {
-                return Arc::clone(geometry);
-            }
-        }
-
-        let mut lock = GEOMETRY_CACHE
-            .write()
-            .expect("Geometry cache lock is poisoned");
-
-        let geometry = Arc::new(Self {
+    pub fn new(vertices: &[Vertex], indices: &[u32]) -> Self {
+        let id = Self::compute_hash(vertices, indices);
+        Self {
             id,
             vertices: vertices.to_vec(),
             indices: indices.to_vec(),
-            topology,
+        }
+    }
+
+    /// Get or create the GPU buffer for this geometry
+    #[inline]
+    pub fn buffer(&self) -> Arc<GeometryBuffer> {
+        {
+            let cache = GEOMETRY_CACHE.read().unwrap();
+
+            if let Some(buffer) = cache.get(&self.id) {
+                return Arc::clone(buffer);
+            }
+        }
+
+        // Not in cache, create new buffer
+        let vertex_buffer = GpuBufferBuilder::new()
+            .label("geometry vertex buffer")
+            .vertex()
+            .copy_dst()
+            .data(self.vertices.to_vec())
+            .build();
+
+        let index_buffer = GpuBufferBuilder::new()
+            .label("geometry index buffer")
+            .index()
+            .copy_dst()
+            .data(self.indices.to_vec())
+            .build();
+
+        let gpu_buffer = Arc::new(GeometryBuffer {
+            vertex_buffer,
+            index_buffer,
+            index_count: self.indices.len() as i32,
+            topology: wgpu::PrimitiveTopology::TriangleList,
         });
 
-        info!(
-            "Created new geometry with {} vertices and {} indices with id '{}'",
-            vertices.len(),
-            indices.len(),
-            id
-        );
+        // Cache it
+        {
+            let mut cache = GEOMETRY_CACHE.write().unwrap();
+            cache.insert(self.id, Arc::clone(&gpu_buffer));
+        }
 
-        lock.insert(id, Arc::clone(&geometry));
-
-        geometry
+        gpu_buffer
     }
 
     #[inline]
-    pub fn unit_rect() -> Arc<Self> {
-        Self::rect(1.0, 1.0)
+    pub fn id(&self) -> u32 {
+        self.id
     }
 
     #[inline]
-    pub fn rect(w: f32, h: f32) -> Arc<Self> {
-        let color: Vector4 = Color::White.into();
-
+    pub fn rect<S: Into<Size<f32>>>(size: S) -> Self {
+        let size = size.into();
+        let color = Vector4::ones();
         let vertices = &[
             Vertex {
                 position: Vector3::new(0.0, 0.0, 0.0),
@@ -104,98 +99,28 @@ impl Geometry {
                 uv_coords: math::Vector2::new(0.0, 0.0),
             },
             Vertex {
-                position: Vector3::new(w, 0.0, 0.0),
+                position: Vector3::new(size.width, 0.0, 0.0),
                 color,
                 uv_coords: math::Vector2::new(1.0, 0.0),
             },
             Vertex {
-                position: Vector3::new(w, h, 0.0),
+                position: Vector3::new(size.width, size.height, 0.0),
                 color,
                 uv_coords: math::Vector2::new(1.0, 1.0),
             },
             Vertex {
-                position: Vector3::new(0.0, h, 0.0),
+                position: Vector3::new(0.0, size.height, 0.0),
                 color,
                 uv_coords: math::Vector2::new(0.0, 1.0),
             },
         ];
 
         let indices = &[0, 1, 2, 2, 3, 0];
-        Self::new(vertices, indices, wgpu::PrimitiveTopology::TriangleList)
+        Self::new(vertices, indices)
     }
 
     #[inline]
-    pub fn cube() -> Arc<Self> {
-        let color: Vector4 = Color::White.into();
-
-        let vertices = &[
-            // Front face (z = 1.0)
-            Vertex {
-                position: Vector3::new(0.0, 0.0, 1.0),
-                color,
-                uv_coords: math::Vector2::new(0.0, 0.0),
-            },
-            Vertex {
-                position: Vector3::new(1.0, 0.0, 1.0),
-                color,
-                uv_coords: math::Vector2::new(1.0, 0.0),
-            },
-            Vertex {
-                position: Vector3::new(1.0, 1.0, 1.0),
-                color,
-                uv_coords: math::Vector2::new(1.0, 1.0),
-            },
-            Vertex {
-                position: Vector3::new(0.0, 1.0, 1.0),
-                color,
-                uv_coords: math::Vector2::new(0.0, 1.0),
-            },
-            // Back face (z = 0.0)
-            Vertex {
-                position: Vector3::new(0.0, 0.0, 0.0),
-                color,
-                uv_coords: math::Vector2::new(0.0, 0.0),
-            },
-            Vertex {
-                position: Vector3::new(1.0, 0.0, 0.0),
-                color,
-                uv_coords: math::Vector2::new(1.0, 0.0),
-            },
-            Vertex {
-                position: Vector3::new(1.0, 1.0, 0.0),
-                color,
-                uv_coords: math::Vector2::new(1.0, 1.0),
-            },
-            Vertex {
-                position: Vector3::new(0.0, 1.0, 0.0),
-                color,
-                uv_coords: math::Vector2::new(0.0, 1.0),
-            },
-        ];
-
-        let indices = &[
-            // Front face
-            0, 1, 2, 2, 3, 0, // Back face
-            5, 4, 7, 7, 6, 5, // Left face
-            4, 0, 3, 3, 7, 4, // Right face
-            1, 5, 6, 6, 2, 1, // Top face
-            3, 2, 6, 6, 7, 3, // Bottom face
-            4, 5, 1, 1, 0, 4,
-        ];
-
-        Self::new(vertices, indices, wgpu::PrimitiveTopology::TriangleList)
-    }
-
-    #[inline]
-    pub fn pixel() -> Arc<Self> {
-        let vertices = &[Vertex {
-            position: Vector3::zeros(),
-            color: Color::White.into(),
-            uv_coords: math::Vector2::new(0.0, 0.0),
-        }];
-
-        let indices = &[0];
-
-        Self::new(vertices, indices, wgpu::PrimitiveTopology::PointList)
+    pub fn unit_rect() -> Self {
+        Self::rect(Size::new(1.0, 1.0))
     }
 }

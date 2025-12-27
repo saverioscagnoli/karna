@@ -4,6 +4,7 @@ pub mod states;
 mod monitors;
 mod scene_changer;
 mod time;
+mod tween;
 mod window;
 
 use crate::context::{

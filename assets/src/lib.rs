@@ -4,10 +4,7 @@ mod texture;
 
 use crate::atlas::{AtlasRegion, TextureAtlas};
 use std::sync::{Arc, RwLock};
-use utils::{
-    label,
-    map::{Label, LabelMap},
-};
+use utils::{Label, LabelMap, label};
 
 // Re-exports
 pub use font::Font;
@@ -57,6 +54,27 @@ impl AssetManager {
         self.atlas
             .get_region(label)
             .uv_coordinates(self.atlas.size())
+    }
+
+    #[inline]
+    pub fn get_subtexture_coords(
+        &self,
+        label: Label,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> (f32, f32, f32, f32) {
+        let region = self.atlas.get_region(label);
+        let atlas_size = self.atlas.size();
+
+        // Calculate normalized coordinates
+        let uv_x = (region.x + x) as f32 / atlas_size.width() as f32;
+        let uv_y = (region.y + y) as f32 / atlas_size.height() as f32;
+        let uv_width = width as f32 / atlas_size.width() as f32;
+        let uv_height = height as f32 / atlas_size.height() as f32;
+
+        (uv_x, uv_y, uv_width, uv_height)
     }
 
     #[inline]

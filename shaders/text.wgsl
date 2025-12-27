@@ -1,16 +1,17 @@
+
 // Vertex shader input (unit quad vertices)
 struct VertexInput {
-    @location(0) position: vec2<f32>,
+    @location(0) position: vec3<f32>,
 }
 
 // Instance data (per-glyph data)
 struct GlyphInstance {
-    @location(1) position: vec2<f32>,
+    @location(1) position: vec3<f32>,    // Changed to vec3 to match Rust
     @location(2) size: vec2<f32>,
-    @location(3) uv_min: vec2<f32>,
-    @location(4) uv_max: vec2<f32>,
+    @location(3) uv_offset: vec2<f32>,   // Changed from uv_min
+    @location(4) uv_scale: vec2<f32>,    // Changed from uv_max
     @location(5) color: vec4<f32>,
-    @location(6) rotation: f32,
+    @location(6) rotation: vec3<f32>,    // Changed to vec3 to match Rust
 }
 
 // Vertex shader output / Fragment shader input
@@ -38,23 +39,26 @@ fn vs_main(
 ) -> VertexOutput {
     var out: VertexOutput;
 
-    // Scale the vertex
-    let scaled_vertex = vertex.position * glyph.size;
+    // Scale the vertex (using x and y only)
+    let scaled_vertex = vec2<f32>(vertex.position.x, vertex.position.y) * glyph.size;
 
-    // Apply rotation
-    let cos_rot = cos(glyph.rotation);
-    let sin_rot = sin(glyph.rotation);
+    // Apply rotation (using z component for 2D rotation)
+    let cos_rot = cos(glyph.rotation.z);
+    let sin_rot = sin(glyph.rotation.z);
+
     let rotated_vertex = vec2<f32>(
         scaled_vertex.x * cos_rot - scaled_vertex.y * sin_rot,
         scaled_vertex.x * sin_rot + scaled_vertex.y * cos_rot
     );
 
     // Translate to final position
-    let world_pos = glyph.position + rotated_vertex;
-    out.clip_position = view_projection * vec4<f32>(world_pos, 0.0, 1.0);
+    let world_pos = glyph.position.xy + rotated_vertex;
+    out.clip_position = view_projection * vec4<f32>(world_pos, glyph.position.z, 1.0);
 
-    // Interpolate UV coordinates between min and max based on vertex position
-    out.uv = mix(glyph.uv_min, glyph.uv_max, vertex.position);
+    // Calculate UV coordinates: offset + (vertex_pos * scale)
+    // vertex.position.xy is in [0,1] range for our unit quad
+    out.uv = glyph.uv_offset + (vertex.position.xy * glyph.uv_scale);
+
     out.color = glyph.color;
 
     return out;

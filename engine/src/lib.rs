@@ -27,10 +27,7 @@ use winit::{
 pub use builder::{AppBuilder, WindowBuilder};
 pub use context::{Context, Monitor, Monitors, Time, Window, input};
 pub use scene::Scene;
-pub use utils::{
-    label,
-    map::{Label, LabelMap},
-};
+pub use utils::{Label, LabelMap, label};
 
 fn init_logging() {
     traccia::init_with_config(traccia::Config {
@@ -200,7 +197,6 @@ impl App {
 
                     // FRAME START
                     context.time.frame_start();
-                    context.render.frame_start();
 
                     context.time.update();
 

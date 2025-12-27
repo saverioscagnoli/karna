@@ -38,6 +38,7 @@ pub struct PipelineBuilder<'a> {
     cull_mode: Option<wgpu::Face>,
     topology: wgpu::PrimitiveTopology,
     blend_state: Option<wgpu::BlendState>,
+    polygon_mode: wgpu::PolygonMode,
 }
 
 impl<'a> PipelineBuilder<'a> {
@@ -50,6 +51,7 @@ impl<'a> PipelineBuilder<'a> {
             cull_mode: None,
             topology: wgpu::PrimitiveTopology::TriangleList,
             blend_state: Some(wgpu::BlendState::ALPHA_BLENDING),
+            polygon_mode: wgpu::PolygonMode::Fill,
         }
     }
 
@@ -80,6 +82,11 @@ impl<'a> PipelineBuilder<'a> {
 
     pub fn blend_state(mut self, blend_state: Option<wgpu::BlendState>) -> Self {
         self.blend_state = blend_state;
+        self
+    }
+
+    pub fn polygon_mode(mut self, mode: wgpu::PolygonMode) -> Self {
+        self.polygon_mode = mode;
         self
     }
 
@@ -121,7 +128,7 @@ impl<'a> PipelineBuilder<'a> {
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: self.cull_mode,
-                polygon_mode: wgpu::PolygonMode::Fill,
+                polygon_mode: self.polygon_mode,
                 unclipped_depth: false,
                 conservative: false,
             },

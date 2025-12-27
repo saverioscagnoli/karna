@@ -53,7 +53,7 @@ impl Scene for CameraDemo {
         }
 
         if ctx.input.key_pressed(&KeyCode::Space) {
-            ctx.render.camera.shake(25.0, Duration::from_secs(2));
+            ctx.render.camera.shake(8.0, Duration::from_secs(2));
         }
 
         let player_center = *self.player.position() + Vector2::new(25.0, 25.0);

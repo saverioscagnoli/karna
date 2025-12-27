@@ -1,10 +1,7 @@
 use crate::context::Context;
 use macros::Get;
 use math::Size;
-use utils::{
-    label,
-    map::{Label, LabelMap},
-};
+use utils::{Label, LabelMap, label};
 
 #[allow(unused)]
 pub trait Scene: Send {

@@ -1,106 +1,120 @@
-mod renderer;
+mod renderer_2d;
 
-use crate::{Color, text::renderer::GlyphInstance};
 use assets::AssetManager;
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
-use macros::{Get, Set, With};
-use math::Vector2;
-use std::cell::Cell;
-use utils::map::Label;
+use macros::{Get, Set};
+use math::{Vector2, Vector3, Vector4};
+use utils::{Handle, Label};
 
 // Re-exports
-pub use renderer::TextRenderer;
+pub use renderer_2d::*;
 
-#[derive(Get, Set, With)]
+use crate::{Color, Transform};
+
+#[derive(Get, Set)]
 pub struct Text {
     #[get(visibility = "pub(crate)")]
     #[get(copied, name = "font")]
-    #[set(name = "set_font")]
+    #[set(name = "set_font", also = self.tracker |= Self::font_label_f())]
     font_label: Label,
 
     #[get(ty = &str)]
-    #[get(mut, also = self.mark_layout())]
-    #[set(into, also = self.mark_layout())]
-    #[with(into)]
+    #[get(mut, also = self.tracker |= Self::content_f())]
+    #[set(into, also = self.tracker |= Self::content_f())]
     content: String,
 
     #[get]
-    #[get(mut, also = self.mark_visuals())]
-    #[get(mut, prop = "x", ty = &mut f32, also = self.mark_visuals())]
-    #[get(mut, prop = "y", ty = &mut f32, also = self.mark_visuals())]
-    #[set(into, also = self.mark_visuals())]
-    #[set(prop = "x", ty = f32, also = self.mark_visuals())]
-    #[set(prop = "y", ty = f32, also = self.mark_visuals())]
-    #[with(into)]
-    position: Vector2,
+    #[get(prop = "position", ty = &Vector3, name = "position")]
+    #[get(copied, prop = "position.x", ty = f32, name = "position_x")]
+    #[get(copied, prop = "position.y", ty = f32, name = "position_y")]
+    #[get(copied, prop = "position.z", ty = f32, name = "position_z")]
+    #[get(prop = "rotation", ty = &Vector3, name = "rotation")]
+    #[get(copied, prop = "rotation.x", ty = f32, name = "rotation_x")]
+    #[get(copied, prop = "rotation.y", ty = f32, name = "rotation_y")]
+    #[get(copied, prop = "rotation.z", ty = f32, name = "rotation_z")]
+    #[get(prop = "scale", ty = &Vector3, name = "scale")]
+    #[get(copied, prop = "scale.x", ty = f32, name = "scale_x")]
+    #[get(copied, prop = "scale.y", ty = f32, name = "scale_y")]
+    #[get(copied, prop = "scale.z", ty = f32, name = "scale_z")]
+    #[get(mut, also = self.tracker |= Self::transform_f())]
+    #[get(mut, prop = "position", ty = &mut Vector3, name = "position_mut", also = self.tracker |= Self::transform_f())]
+    #[get(mut, prop = "position.x", ty = &mut f32, name = "position_x_mut", also = self.tracker |= Self::transform_f())]
+    #[get(mut, prop = "position.y", ty = &mut f32, name = "position_y_mut", also = self.tracker |= Self::transform_f())]
+    #[get(mut, prop = "position.z", ty = &mut f32, name = "position_z_mut", also = self.tracker |= Self::transform_f())]
+    #[get(mut, prop = "rotation", ty = &mut Vector3, name = "rotation_mut", also = self.tracker |= Self::transform_f())]
+    #[get(mut, prop = "rotation.x", ty = &mut f32, name = "rotation_x_mut", also = self.tracker |= Self::transform_f())]
+    #[get(mut, prop = "rotation.y", ty = &mut f32, name = "rotation_y_mut", also = self.tracker |= Self::transform_f())]
+    #[get(mut, prop = "rotation.z", ty = &mut f32, name = "rotation_z_mut", also = self.tracker |= Self::transform_f())]
+    #[get(mut, prop = "scale", ty = &mut Vector3, name = "scale_mut", also = self.tracker |= Self::transform_f())]
+    #[get(mut, prop = "scale.x", ty = &mut f32, name = "scale_x_mut", also = self.tracker |= Self::transform_f())]
+    #[get(mut, prop = "scale.y", ty = &mut f32, name = "scale_y_mut", also = self.tracker |= Self::transform_f())]
+    #[get(mut, prop = "scale.z", ty = &mut f32, name = "scale_z_mut", also = self.tracker |= Self::transform_f())]
+    #[set(also = self.tracker |= Self::transform_f())]
+    #[set(into, prop = "position", ty = Vector3, name = "set_position", also = self.tracker |= Self::transform_f())]
+    #[set(prop = "position.x", ty = f32, name = "set_position_x", also = self.tracker |= Self::transform_f())]
+    #[set(prop = "position.y", ty = f32, name = "set_position_y", also = self.tracker |= Self::transform_f())]
+    #[set(prop = "position.z", ty = f32, name = "set_position_z", also = self.tracker |= Self::transform_f())]
+    #[set(into, prop = "rotation", ty = Vector3, name = "set_rotation", also = self.tracker |= Self::transform_f())]
+    #[set(prop = "rotation.x", ty = f32, name = "set_rotation_x", also = self.tracker |= Self::transform_f())]
+    #[set(prop = "rotation.y", ty = f32, name = "set_rotation_y", also = self.tracker |= Self::transform_f())]
+    #[set(prop = "rotation.z", ty = f32, name = "set_rotation_z", also = self.tracker |= Self::transform_f())]
+    #[set(into, prop = "scale", ty = Vector3, name = "set_scale", also = self.tracker |= Self::transform_f())]
+    #[set(prop = "scale.x", ty = f32, name = "set_scale_x", also = self.tracker |= Self::transform_f())]
+    #[set(prop = "scale.y", ty = f32, name = "set_scale_y", also = self.tracker |= Self::transform_f())]
+    #[set(prop = "scale.z", ty = f32, name = "set_scale_z", also = self.tracker |= Self::transform_f())]
+    transform: Transform,
 
     #[get]
-    #[get(mut, also = self.mark_visuals())]
-    #[get(mut, prop = "x", ty = &mut f32, also = self.mark_visuals())]
-    #[get(mut, prop = "y", ty = &mut f32, also = self.mark_visuals())]
-    #[set(into, also = self.mark_visuals())]
-    #[set(prop = "x", ty = f32, also = self.mark_visuals())]
-    #[set(prop = "y", ty = f32, also = self.mark_visuals())]
-    #[with(into)]
-    scale: Vector2,
-
-    #[get(copied)]
-    #[get(mut, also = self.mark_visuals())]
-    #[set(also = self.mark_visuals())]
-    #[with(into)]
-    rotation: f32,
-
-    #[get]
-    #[get(mut, also = self.mark_visuals())]
-    #[get(mut, prop = "r", ty = &mut f32, also = self.mark_visuals())]
-    #[get(mut, prop = "g", ty = &mut f32, also = self.mark_visuals())]
-    #[get(mut, prop = "b", ty = &mut f32, also = self.mark_visuals())]
-    #[get(mut, prop = "a", ty = &mut f32, also = self.mark_visuals())]
-    #[set(into, also = self.mark_visuals())]
-    #[set(prop = "r", ty = f32, also = self.mark_visuals())]
-    #[set(prop = "g", ty = f32, also = self.mark_visuals())]
-    #[set(prop = "b", ty = f32, also = self.mark_visuals())]
-    #[set(prop = "a", ty = f32, also = self.mark_visuals())]
-    #[with(into)]
+    #[get(mut, also = self.tracker |= Self::color_f())]
+    #[get(mut, prop = "r", ty = &mut f32, also = self.tracker |= Self::color_f())]
+    #[get(mut, prop = "g", ty = &mut f32, also = self.tracker |= Self::color_f())]
+    #[get(mut, prop = "b", ty = &mut f32, also = self.tracker |= Self::color_f())]
+    #[get(mut, prop = "a", ty = &mut f32, also = self.tracker |= Self::color_f())]
+    #[set(into, also = self.tracker |= Self::color_f())]
+    #[set(prop = "r", ty = f32, also = self.tracker |= Self::color_f())]
+    #[set(prop = "g", ty = f32, also = self.tracker |= Self::color_f())]
+    #[set(prop = "b", ty = f32, also = self.tracker |= Self::color_f())]
+    #[set(prop = "a", ty = f32, also = self.tracker |= Self::color_f())]
     color: Color,
 
-    dirty_layout: Cell<bool>,
-    dirty_visuals: Cell<bool>,
+    tracker: u8,
 
     layout: Layout,
-    glyph_instances: Vec<GlyphInstance>,
+    glyphs: Vec<GlyphInstance>,
 }
 
 impl Text {
-    pub fn new(font_label: Label) -> Self {
-        Self {
-            font_label,
-            content: String::new(),
-            position: Vector2::new(0.0, 0.0),
-            scale: Vector2::ones(),
-            rotation: 0.0,
+    pub fn new<T: Into<String>>(font: Label, text: T) -> Self {
+        let mut text = Self {
+            font_label: font,
+            content: text.into(),
+            transform: Transform::default(),
             color: Color::White,
-            dirty_layout: Cell::new(true),
-            dirty_visuals: Cell::new(true),
             layout: Layout::new(CoordinateSystem::PositiveYDown),
-            glyph_instances: Vec::new(),
-        }
+            glyphs: Vec::new(),
+            tracker: 0,
+        };
+
+        text.mark_all();
+
+        text
     }
 
     #[inline]
-    pub(crate) fn glyph_instances(&self) -> &Vec<GlyphInstance> {
-        &self.glyph_instances
+    pub(crate) fn glyph_instances(&self) -> &[GlyphInstance] {
+        &self.glyphs
     }
 
     #[inline]
     pub(crate) fn rebuild(&mut self, assets: &AssetManager) {
-        if !self.dirty_layout.get() && !self.dirty_visuals.get() {
+        if !self.changed(Self::content_f())
+            && !self.changed(Self::transform_f())
+            && !self.changed(Self::color_f())
+        {
             return;
         }
 
-        // Only runs if content changes
-        // Separate from visuals, cause it's heavier to compute
-        if self.dirty_layout.get() {
+        if self.changed(Self::content_f()) {
             self.layout.clear();
 
             let font = assets.get_font(&self.font_label);
@@ -110,19 +124,16 @@ impl Text {
                 &TextStyle::new(&self.content, font.size() as f32, 0),
             );
 
-            self.dirty_layout.set(false);
-
-            // If layout changed, visuals must be regenerated
-            self.dirty_visuals.set(true);
+            self.reset_one(Self::content_f());
+            self.tracker |= Self::transform_f() | Self::color_f();
         }
 
-        // Runs if layout or something like the color and/or scale changed
-        if self.dirty_visuals.get() {
-            self.glyph_instances.clear();
+        if self.changed(Self::transform_f()) || self.changed(Self::color_f()) {
+            self.glyphs.clear();
 
-            let color_array: [f32; 4] = self.color.into();
-            let cos_rot = self.rotation.cos();
-            let sin_rot = self.rotation.sin();
+            let color: Vector4 = self.color.into();
+            let cos = self.transform.rotation.z.cos();
+            let sin = self.transform.rotation.z.sin();
 
             for glyph in self.layout.glyphs() {
                 if glyph.width == 0 || glyph.height == 0 {
@@ -131,40 +142,80 @@ impl Text {
 
                 let texture_label =
                     Label::new(&format!("{}_{}", self.font_label.raw(), glyph.parent));
-                let (uv_x, uv_y, uv_w, uv_h) = assets.get_texture_coords(texture_label);
 
-                let local_x = glyph.x * self.scale.x;
-                let local_y = glyph.y * self.scale.y;
+                let (x, y, w, h) = assets.get_texture_coords(texture_label);
 
-                let rotated_x = local_x * cos_rot - local_y * sin_rot;
-                let rotated_y = local_x * sin_rot + local_y * cos_rot;
+                let local_x = glyph.x * self.transform.scale.x;
+                let local_y = glyph.y * self.transform.scale.y;
 
-                let instance = GlyphInstance {
-                    position: [self.position.x + rotated_x, self.position.y + rotated_y],
-                    size: [
-                        glyph.width as f32 * self.scale.x,
-                        glyph.height as f32 * self.scale.y,
-                    ],
-                    uv_min: [uv_x, uv_y],
-                    uv_max: [uv_x + uv_w, uv_y + uv_h],
-                    color: color_array,
-                    rotation: self.rotation,
+                let rotated_x = local_x * cos - local_y * sin;
+                let rotated_y = local_x * sin + local_y * cos;
+
+                let glyph = GlyphInstance {
+                    position: Vector3::new(
+                        self.transform.position.x + rotated_x,
+                        self.transform.position.y + rotated_y,
+                        self.transform.position.z,
+                    ),
+                    size: Vector2::new(
+                        glyph.width as f32 * self.transform.scale.x,
+                        glyph.height as f32 * self.transform.scale.y,
+                    ),
+                    uv_offset: Vector2::new(x as f32, y as f32),
+                    uv_scale: Vector2::new(w as f32, h as f32),
+                    color,
+                    rotation: self.transform.rotation,
                 };
 
-                self.glyph_instances.push(instance);
+                self.glyphs.push(glyph);
             }
 
-            self.dirty_visuals.set(false);
+            self.reset_one(Self::transform_f());
+            self.reset_one(Self::color_f());
         }
     }
+}
 
+// Dirty tracking
+impl Text {
     #[inline]
-    fn mark_layout(&self) {
-        self.dirty_layout.set(true);
+    const fn font_label_f() -> u8 {
+        1 << 0
     }
 
     #[inline]
-    fn mark_visuals(&self) {
-        self.dirty_visuals.set(true);
+    const fn content_f() -> u8 {
+        1 << 1
+    }
+
+    const fn transform_f() -> u8 {
+        1 << 2
+    }
+
+    const fn color_f() -> u8 {
+        1 << 3
+    }
+
+    #[inline]
+    const fn changed(&self, flag: u8) -> bool {
+        self.tracker & flag != 0
+    }
+
+    #[inline]
+    const fn mark_all(&mut self) {
+        self.tracker =
+            Self::font_label_f() | Self::content_f() | Self::transform_f() | Self::color_f();
+    }
+
+    #[inline]
+    const fn reset_one(&mut self, flag: u8) {
+        self.tracker &= !flag;
+    }
+
+    #[inline]
+    pub(crate) const fn is_dirty(&self) -> bool {
+        self.tracker != 0
     }
 }
+
+pub type TextHandle = Handle<Text>;

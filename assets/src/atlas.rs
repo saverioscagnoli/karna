@@ -4,10 +4,7 @@ use macros::Get;
 use math::Size;
 use rect_packer::Packer;
 use std::sync::{Mutex, RwLock};
-use utils::{
-    label,
-    map::{Label, LabelMap},
-};
+use utils::{Label, LabelMap, label};
 
 use crate::font::Font;
 
