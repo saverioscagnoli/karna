@@ -1,3 +1,4 @@
+use globals::profiling;
 use macros::{Get, Set};
 use spin_sleep::SpinSleeper;
 use std::time::{Duration, Instant};
@@ -40,6 +41,8 @@ pub struct Time {
     #[get(copied, pre = round, cast = u32)]
     /// Average frames per second using exponential smoothing
     fps: f32,
+    #[get(copied, name = "fps_uncapped")]
+    fps_uncap: bool,
 
     #[get(copied)]
     /// Average ticks per second
@@ -70,6 +73,7 @@ impl Default for Time {
             frame_time: Duration::ZERO,
             tick_time: Duration::ZERO,
             fps: 0.0,
+            fps_uncap: false,
             tps: 0,
             tick_counter: 0,
             tick_timer: 0.0,
@@ -119,6 +123,8 @@ impl Time {
         let instant_fps = if dtf > f32::EPSILON { 1.0 / dtf } else { 0.0 };
         self.fps = Self::FPS_SMOOTHING * instant_fps + (1.0 - Self::FPS_SMOOTHING) * self.fps;
 
+        profiling::update_time(self.delta_time, self.fps, self.tps);
+
         if self.tick_timer >= 1.0 {
             self.tps = self.tick_counter;
             self.tick_timer = 0.0;
@@ -160,8 +166,10 @@ impl Time {
     /// it means that the frame was completed before the next frame was supposed to start
     /// so the thread should sleep for this duration
     pub(crate) fn wait_for_next_frame(&self) {
-        self.sleeper
-            .sleep(self.frame_step.saturating_sub(self.frame_time));
+        if !self.fps_uncap {
+            self.sleeper
+                .sleep(self.frame_step.saturating_sub(self.frame_time));
+        }
     }
 
     #[inline]
@@ -169,8 +177,14 @@ impl Time {
     pub fn set_target_fps(&mut self, target: u32) {
         let target = 1.0 / target as f32;
 
+        self.fps_uncap = false;
         self.frame_step = Duration::from_secs_f32(target);
         self.frame_step_f32 = target;
+    }
+
+    #[inline]
+    pub fn uncap_fps(&mut self) {
+        self.fps_uncap = true;
     }
 
     #[inline]

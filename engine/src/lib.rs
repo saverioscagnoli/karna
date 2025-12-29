@@ -9,6 +9,7 @@ use crate::{
 use assets::AssetManager;
 use crossbeam_channel::{Receiver, Sender};
 use ctor::ctor;
+use globals::{TrackingAllocator, profiling};
 use math::Size;
 use std::{
     sync::Arc,
@@ -28,6 +29,9 @@ pub use builder::{AppBuilder, WindowBuilder};
 pub use context::{Context, Monitor, Monitors, Time, Window, input};
 pub use scene::Scene;
 pub use utils::{Label, LabelMap, label};
+
+#[global_allocator]
+static GLOBAL: TrackingAllocator = TrackingAllocator;
 
 fn init_logging() {
     traccia::init_with_config(traccia::Config {
@@ -196,8 +200,10 @@ impl App {
                     }
 
                     // FRAME START
-                    context.time.frame_start();
+                    profiling::reset_frame();
+                    context.profiling.mem.update();
 
+                    context.time.frame_start();
                     context.time.update();
 
                     while let Some(tick_start) = context.time.next_tick() {
@@ -238,6 +244,8 @@ impl App {
 
                         scenes.switch_to(new_scene, &mut context);
                     }
+
+                    context.profiling = profiling::get_stats();
                 }
 
                 Ok(WindowMessage::WinitEvent(event)) => {

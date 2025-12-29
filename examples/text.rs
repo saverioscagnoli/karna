@@ -14,7 +14,7 @@ impl Scene for TextDemo {
 
         text.set_position([100.0, 100.0, 0.0]);
 
-        self.text1 = ctx.render.add_text(Layer::World, text);
+        self.text1 = ctx.render.add_text(text);
     }
 
     fn update(&mut self, ctx: &mut karna::Context) {

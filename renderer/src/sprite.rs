@@ -1,4 +1,4 @@
-use crate::{Geometry, Material, Mesh, TextureKind, Transform};
+use crate::{Geometry, Layer, Material, Mesh, TextureKind, Transform};
 use macros::{Get, Set, With};
 use math::{Vector2, Vector3};
 use std::{
@@ -146,4 +146,33 @@ impl Sprite {
     }
 }
 
-pub type SpriteHandle = Handle<Sprite>;
+#[derive(Debug, Clone, Copy)]
+#[derive(Get)]
+pub struct SpriteHandle {
+    #[get]
+    pub(crate) layer: Layer,
+    pub(crate) handle: Handle<Sprite>,
+}
+
+impl Deref for SpriteHandle {
+    type Target = Handle<Sprite>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
+    }
+}
+
+impl DerefMut for SpriteHandle {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.handle
+    }
+}
+
+impl SpriteHandle {
+    pub fn dummy() -> Self {
+        Self {
+            layer: Layer::World,
+            handle: Handle::dummy(),
+        }
+    }
+}

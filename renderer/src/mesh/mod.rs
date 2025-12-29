@@ -2,8 +2,10 @@ pub mod geometry;
 pub mod material;
 pub mod transform;
 
+use std::ops::{Deref, DerefMut};
+
 use crate::{
-    Color, Descriptor,
+    Color, Descriptor, Layer,
     mesh::{
         geometry::Geometry,
         material::{Material, TextureKind},
@@ -118,6 +120,7 @@ impl Descriptor for MeshInstanceGpu {
 #[derive(Debug)]
 pub struct GeometryBuffer {
     pub vertex_buffer: GpuBuffer<Vertex>,
+    pub vertex_count: i32,
     pub index_buffer: GpuBuffer<u32>,
     pub index_count: i32,
     pub topology: wgpu::PrimitiveTopology,
@@ -301,4 +304,33 @@ impl Mesh {
     }
 }
 
-pub type MeshHandle = Handle<Mesh>;
+#[derive(Debug, Clone, Copy)]
+#[derive(Get)]
+pub struct MeshHandle {
+    #[get]
+    pub(crate) layer: Layer,
+    pub(crate) handle: Handle<Mesh>,
+}
+
+impl Deref for MeshHandle {
+    type Target = Handle<Mesh>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
+    }
+}
+
+impl DerefMut for MeshHandle {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.handle
+    }
+}
+
+impl MeshHandle {
+    pub fn dummy() -> Self {
+        Self {
+            layer: Layer::World,
+            handle: Handle::dummy(),
+        }
+    }
+}

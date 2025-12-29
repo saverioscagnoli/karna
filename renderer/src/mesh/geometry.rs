@@ -69,6 +69,7 @@ impl Geometry {
 
         let gpu_buffer = Arc::new(GeometryBuffer {
             vertex_buffer,
+            vertex_count: self.vertices.len() as i32,
             index_buffer,
             index_count: self.indices.len() as i32,
             topology: wgpu::PrimitiveTopology::TriangleList,

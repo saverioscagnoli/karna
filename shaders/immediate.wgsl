@@ -34,10 +34,13 @@ fn vs_main(vertex: VertexInput) -> VertexOutput {
     return out;
 }
 
-
-
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    // For immediate rendering, just use the vertex color without texture sampling
-    return in.color;
+    // Sample the texture (for text, this is the glyph alpha; for rects, it's white)
+    let tex_color = textureSample(texture_atlas, texture_sampler, in.uv_coords);
+
+    // Multiply vertex color by texture
+    // For text: vertex color defines text color, texture provides alpha mask
+    // For rects: white texture pixel, so vertex color passes through
+    return in.color * tex_color;
 }

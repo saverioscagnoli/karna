@@ -6,7 +6,6 @@ use utils::Timer;
 
 struct Donut {
     text: TextHandle,
-    debug_text: TextHandle,
     debug_timer: Timer,
     angle_a: f32,
     angle_b: f32,
@@ -122,8 +121,7 @@ impl Scene for Donut {
 
         debug_text.set_position([10.0, 10.0, 0.0]);
 
-        self.text = ctx.render.add_text(Layer::World, text);
-        self.debug_text = ctx.render.add_text(Layer::World, debug_text);
+        self.text = ctx.render.add_text(text);
     }
 
     fn update(&mut self, ctx: &mut karna::Context) {
@@ -152,17 +150,44 @@ impl Scene for Donut {
         }
 
         self.debug_timer.tick(dt);
-
-        if self.debug_timer.is_finished() {
-            let debug_text = ctx.render.get_text_mut(self.debug_text);
-            *debug_text.content_mut() = format!("fps: {} dt: {}", ctx.time.fps(), ctx.time.delta());
-            self.debug_timer.reset();
-        }
     }
 
     fn fixed_update(&mut self, _ctx: &mut karna::Context) {}
 
-    fn render(&mut self, ctx: &mut karna::Context) {}
+    fn render(&mut self, ctx: &mut karna::Context) {
+        ctx.render
+            .debug_text(format!("fps: {}", ctx.time.fps()), 10.0, 10.0);
+
+        ctx.render
+            .debug_text(format!("dt: {:.5}", ctx.time.delta()), 10.0, 30.0);
+
+        ctx.render.debug_text(
+            format!("draw calls: {}", ctx.profiling.render.draw_calls()),
+            10.0,
+            50.0,
+        );
+
+        ctx.render.debug_text(
+            format!("vertices: {}", ctx.profiling.render.vertices()),
+            10.0,
+            70.0,
+        );
+
+        ctx.render.debug_text(
+            format!("indices: {}", ctx.profiling.render.indices()),
+            10.0,
+            90.0,
+        );
+
+        ctx.render.debug_text(
+            format!(
+                "allocated: {:.2} MB",
+                ctx.profiling.mem.allocated() as f32 / 1024.0 / 1024.0
+            ),
+            10.0,
+            110.0,
+        );
+    }
 }
 
 fn main() {
@@ -175,7 +200,6 @@ fn main() {
                 .with_resizable(false)
                 .with_initial_scene(Donut {
                     text: TextHandle::dummy(),
-                    debug_text: TextHandle::dummy(),
                     debug_timer: Timer::new(Duration::from_millis(100)),
                     angle_a: 0.0,
                     angle_b: 0.0,

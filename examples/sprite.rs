@@ -63,7 +63,7 @@ impl Scene for S {
 
         sprite.set_render_scale([2.0, 2.0]);
 
-        self.sprite = ctx.render.add_sprite(Layer::World, sprite);
+        self.sprite = ctx.render.add_sprite(sprite);
     }
 
     fn update(&mut self, ctx: &mut karna::Context) {

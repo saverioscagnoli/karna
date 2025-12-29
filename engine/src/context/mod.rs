@@ -13,6 +13,7 @@ use crate::context::{
     states::{GlobalStates, ScopedStates},
 };
 use assets::AssetManager;
+use globals::profiling::{self, Statistics};
 use renderer::Renderer;
 use std::sync::Arc;
 use winit::{event::WindowEvent, keyboard::PhysicalKey};
@@ -33,6 +34,7 @@ pub struct Context {
     pub assets: Arc<AssetManager>,
     pub states: ScopedStates,
     pub globals: Arc<GlobalStates>,
+    pub profiling: Statistics,
 }
 
 impl Context {
@@ -56,9 +58,11 @@ impl Context {
             assets,
             states,
             globals,
+            profiling: profiling::get_stats(),
         }
     }
 
+    #[inline]
     pub(crate) fn handle_event(&mut self, event: WindowEvent) {
         match event {
             WindowEvent::Resized(size) => {

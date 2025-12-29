@@ -1,6 +1,7 @@
 use karna::{AppBuilder, Scene, WindowBuilder, input::KeyCode};
 use math::Vector2;
 use renderer::Color;
+use utils::label;
 
 struct ImmediateRenderingDemo {
     pos: Vector2,
@@ -10,6 +11,11 @@ struct ImmediateRenderingDemo {
 impl Scene for ImmediateRenderingDemo {
     fn load(&mut self, ctx: &mut karna::Context) {
         ctx.time.set_target_fps(120);
+        ctx.assets.load_font(
+            label!("jetbrains mono"),
+            include_bytes!("assets/JetBrainsMono-Regular.ttf").to_vec(),
+            16,
+        );
     }
 
     fn update(&mut self, ctx: &mut karna::Context) {
@@ -36,12 +42,25 @@ impl Scene for ImmediateRenderingDemo {
     }
 
     fn render(&mut self, ctx: &mut karna::Context) {
+        ctx.render.set_draw_color(Color::White);
+        ctx.render.debug_text(
+            &format!("FPS: {}\ndt: {}", ctx.time.fps(), ctx.time.delta()),
+            10.0,
+            10.0,
+        );
+
+        ctx.render.set_font(label!("jetbrains mono"));
+
+        ctx.render
+            .draw_text_v("This is jetbrains mono", [200.0, 200.0]);
+
         ctx.render.set_draw_color(Color::Red);
-        ctx.render.fill_rect(self.pos, (50.0, 50.0));
+        ctx.render.fill_rect_v(self.pos, (50.0, 50.0));
 
         ctx.render.set_draw_color(Color::Cyan);
 
-        ctx.render.fill_rect(self.pos + 200.0, (50.0, 50.0));
+        ctx.render
+            .fill_rect(self.pos.x, self.pos.y + 200.0, 50.0, 50.0);
     }
 }
 

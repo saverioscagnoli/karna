@@ -8,6 +8,7 @@ use crate::{
     text::{Text, TextRenderer2d},
 };
 use assets::AssetManager;
+use globals::profiling;
 use gpu::core::{GpuBuffer, GpuBufferBuilder};
 use utils::{Handle, SlotMap};
 use wgpu::naga::FastHashMap;
@@ -60,12 +61,13 @@ impl RenderLayer {
 
         Self {
             camera,
-            assets,
+            // Clone so it can be passed to Immediate Renderer
+            assets: assets.clone(),
             meshes: SlotMap::new(),
             instance_buffer,
             instance_capacity: Mesh::INITIAL_INSTANCE_CAPACITY,
             sprites: SlotMap::new(),
-            immediate: ImmediateRenderer::new(),
+            immediate: ImmediateRenderer::new(assets),
             texts: SlotMap::new(),
             text_renderer,
             batches: FastHashMap::default(),
@@ -273,6 +275,14 @@ impl RenderLayer {
                 render_pass.set_vertex_buffer(0, geo_buffer.vertex_buffer.slice(..));
                 render_pass
                     .set_index_buffer(geo_buffer.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+
+                let instance_count = instance_range.end - instance_range.start;
+
+                let vertices_n = geo_buffer.vertex_count as u32 * instance_count;
+                let indices_n = geo_buffer.index_count as u32 * instance_count;
+
+                profiling::record_draw_call(vertices_n, indices_n);
+
                 render_pass.draw_indexed(
                     0..geo_buffer.index_count as u32,
                     0,

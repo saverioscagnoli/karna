@@ -17,3 +17,4 @@ traccia.workspace = true
 rodio = "0.21.1"
 ctor = "0.6.3"
 gpu.workspace = true
+globals.workspace = true

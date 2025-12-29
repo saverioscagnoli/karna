@@ -13,23 +13,17 @@ impl Scene for ImageDemo {
         ctx.assets
             .load_image(label!("cat"), include_bytes!("assets/cat.jpg").to_vec());
 
-        self.target = ctx.render.add_mesh(
-            Layer::World,
-            Mesh::new(
-                Geometry::rect((200.0, 200.0)),
-                Material::new_texture(TextureKind::Full(label!("cat"))),
-                Transform::default().with_position([10.0, 10.0, 0.0]),
-            ),
-        );
+        self.target = ctx.render.add_mesh(Mesh::new(
+            Geometry::rect((200.0, 200.0)),
+            Material::new_texture(TextureKind::Full(label!("cat"))),
+            Transform::default().with_position([10.0, 10.0, 0.0]),
+        ));
 
-        self.rect = ctx.render.add_mesh(
-            Layer::World,
-            Mesh::new(
-                Geometry::rect((150.0, 50.0)),
-                Material::new_color(Color::Pink),
-                Transform::default().with_position([250.0, 25.0, 0.0]),
-            ),
-        );
+        self.rect = ctx.render.add_mesh(Mesh::new(
+            Geometry::rect((150.0, 50.0)),
+            Material::new_color(Color::Pink),
+            Transform::default().with_position([250.0, 25.0, 0.0]),
+        ));
     }
 
     fn update(&mut self, ctx: &mut karna::Context) {}

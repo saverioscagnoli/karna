@@ -9,11 +9,12 @@ mod text;
 
 use crate::{mesh::MeshInstanceGpu, shader::Shader};
 use assets::AssetManager;
+use globals::profiling;
 use macros::{Get, Set};
 use math::{Size, Vector2};
 use std::sync::Arc;
 use traccia::info;
-use utils::Handle;
+use utils::{Handle, Label, label};
 use winit::window::Window;
 
 // Re-exports
@@ -47,6 +48,10 @@ pub struct Renderer {
     #[get]
     #[set(into)]
     draw_color: Color,
+
+    #[get(name = "font")]
+    #[set(name = "set_font")]
+    current_font: Label,
 
     // Render layers
     world: RenderLayer,
@@ -181,6 +186,7 @@ impl Renderer {
             assets: assets.clone(),
             clear_color: Color::Black,
             draw_color: Color::White,
+            current_font: label!("debug"),
             world,
             ui,
             active_layer: Layer::World,
@@ -192,8 +198,8 @@ impl Renderer {
         }
     }
 
-    #[inline]
     /// Gets adapter information
+    #[inline]
     pub fn info() -> wgpu::AdapterInfo {
         gpu::adapter().get_info()
     }
@@ -209,136 +215,199 @@ impl Renderer {
 
         self.surface.configure(&gpu::device(), &self.config);
         self.world.resize(width, height);
+        self.ui.resize(width, height);
+
+        for layer in self.user_layers.iter_mut() {
+            layer.resize(width, height);
+        }
 
         self.config.width = width;
         self.config.height = height;
     }
 
     #[inline]
-    pub fn add_mesh(&mut self, layer: Layer, mesh: Mesh) -> Handle<Mesh> {
+    fn render_layer(&self, layer: Layer) -> &RenderLayer {
         match layer {
-            Layer::World => self.world.add_mesh(mesh),
-            Layer::Ui => self.ui.add_mesh(mesh),
-            Layer::N(i) => self.user_layers[i].add_mesh(mesh),
+            Layer::World => &self.world,
+            Layer::Ui => &self.ui,
+            Layer::N(i) => &self.user_layers[i],
         }
     }
 
     #[inline]
-    pub fn get_mesh(&self, id: Handle<Mesh>) -> &Mesh {
-        match self.active_layer {
-            Layer::World => self.world.get_mesh(id),
-            Layer::Ui => self.ui.get_mesh(id),
-            Layer::N(i) => self.user_layers[i].get_mesh(id),
-        }
-    }
-
-    #[inline]
-    pub fn get_mesh_mut(&mut self, id: Handle<Mesh>) -> &mut Mesh {
-        match self.active_layer {
-            Layer::World => self.world.get_mesh_mut(id),
-            Layer::Ui => self.ui.get_mesh_mut(id),
-            Layer::N(i) => self.user_layers[i].get_mesh_mut(id),
-        }
-    }
-
-    #[inline]
-    pub fn remove_mesh(&mut self, layer: Layer, id: Handle<Mesh>) {
+    fn render_layer_mut(&mut self, layer: Layer) -> &mut RenderLayer {
         match layer {
-            Layer::World => self.world.remove_mesh(id),
-            Layer::Ui => self.ui.remove_mesh(id),
-            Layer::N(i) => self.user_layers[i].remove_mesh(id),
+            Layer::World => &mut self.world,
+            Layer::Ui => &mut self.ui,
+            Layer::N(i) => &mut self.user_layers[i],
         }
     }
 
     #[inline]
-    pub fn add_text(&mut self, layer: Layer, text: Text) -> Handle<Text> {
-        match layer {
-            Layer::World => self.world.add_text(text),
-            Layer::Ui => self.ui.add_text(text),
-            Layer::N(i) => self.user_layers[i].add_text(text),
-        }
+    pub fn add_mesh(&mut self, mesh: Mesh) -> MeshHandle {
+        let layer = self.active_layer;
+        let handle = self.render_layer_mut(layer).add_mesh(mesh);
+
+        MeshHandle { handle, layer }
     }
 
     #[inline]
-    pub fn get_text(&self, id: Handle<Text>) -> &Text {
-        match self.active_layer {
-            Layer::World => self.world.get_text(id),
-            Layer::Ui => self.ui.get_text(id),
-            Layer::N(i) => self.user_layers[i].get_text(id),
-        }
+    pub fn get_mesh(&self, handle: MeshHandle) -> &Mesh {
+        self.render_layer(handle.layer).get_mesh(*handle)
     }
 
     #[inline]
-    pub fn get_text_mut(&mut self, id: Handle<Text>) -> &mut Text {
-        match self.active_layer {
-            Layer::World => self.world.get_text_mut(id),
-            Layer::Ui => self.ui.get_text_mut(id),
-            Layer::N(i) => self.user_layers[i].get_text_mut(id),
-        }
+    pub fn get_mesh_mut(&mut self, handle: MeshHandle) -> &mut Mesh {
+        self.render_layer_mut(handle.layer).get_mesh_mut(*handle)
     }
 
     #[inline]
-    pub fn remove_text(&mut self, layer: Layer, id: Handle<Text>) {
-        match layer {
-            Layer::World => self.world.remove_text(id),
-            Layer::Ui => self.ui.remove_text(id),
-            Layer::N(i) => self.user_layers[i].remove_text(id),
-        }
+    pub fn remove_mesh(&mut self, handle: MeshHandle) {
+        self.render_layer_mut(handle.layer).remove_mesh(*handle);
     }
 
     #[inline]
-    pub fn add_sprite(&mut self, layer: Layer, sprite: Sprite) -> Handle<Sprite> {
-        match layer {
-            Layer::World => self.world.add_sprite(sprite),
-            Layer::Ui => self.ui.add_sprite(sprite),
-            Layer::N(i) => self.user_layers[i].add_sprite(sprite),
-        }
+    pub fn add_text(&mut self, text: Text) -> TextHandle {
+        let layer = self.active_layer;
+        let handle = self.render_layer_mut(layer).add_text(text);
+
+        TextHandle { layer, handle }
     }
 
     #[inline]
-    pub fn get_sprite(&self, id: Handle<Sprite>) -> &Sprite {
-        match self.active_layer {
-            Layer::World => self.world.get_sprite(id),
-            Layer::Ui => self.ui.get_sprite(id),
-            Layer::N(i) => self.user_layers[i].get_sprite(id),
-        }
+    pub fn get_text(&self, handle: TextHandle) -> &Text {
+        self.render_layer(handle.layer).get_text(*handle)
     }
 
     #[inline]
-    pub fn get_sprite_mut(&mut self, id: Handle<Sprite>) -> &mut Sprite {
-        match self.active_layer {
-            Layer::World => self.world.get_sprite_mut(id),
-            Layer::Ui => self.ui.get_sprite_mut(id),
-            Layer::N(i) => self.user_layers[i].get_sprite_mut(id),
-        }
+    pub fn get_text_mut(&mut self, handle: TextHandle) -> &mut Text {
+        self.render_layer_mut(handle.layer).get_text_mut(*handle)
     }
 
     #[inline]
-    pub fn remove_sprite(&mut self, id: Handle<Sprite>) {
-        match self.active_layer {
-            Layer::World => self.world.remove_sprite(id),
-            Layer::Ui => self.ui.remove_sprite(id),
-            Layer::N(i) => self.user_layers[i].remove_sprite(id),
-        }
+    pub fn remove_text(&mut self, handle: TextHandle) {
+        self.render_layer_mut(handle.layer).remove_text(*handle);
+    }
+
+    #[inline]
+    pub fn add_sprite(&mut self, sprite: Sprite) -> SpriteHandle {
+        let layer = self.active_layer;
+        let handle = self.render_layer_mut(layer).add_sprite(sprite);
+
+        SpriteHandle { layer, handle }
+    }
+
+    #[inline]
+    pub fn get_sprite(&self, handle: SpriteHandle) -> &Sprite {
+        self.render_layer(handle.layer).get_sprite(*handle)
+    }
+
+    #[inline]
+    pub fn get_sprite_mut(&mut self, handle: SpriteHandle) -> &mut Sprite {
+        self.render_layer_mut(handle.layer).get_sprite_mut(*handle)
+    }
+
+    #[inline]
+    pub fn remove_sprite(&mut self, handle: SpriteHandle) {
+        self.render_layer_mut(handle.layer).remove_sprite(*handle);
+    }
+
+    #[inline]
+    pub fn camera(&self) -> &Camera {
+        &self.render_layer(self.active_layer).camera
+    }
+
+    #[inline]
+    pub fn camera_mut(&mut self) -> &mut Camera {
+        &mut self.render_layer_mut(self.active_layer).camera
     }
 
     // === Immediate Rendering ===
-    pub fn fill_rect<P, S>(&mut self, pos: P, size: S)
+    //
+    // Separates retained rendering functionality (Above, add once, render until removed)
+    // from immediate rendering functionality (Below, add once, render once)
+    //
+    // Immediate rendering is useful for quickly drawing shapes or text
+    // without the complexity of retained rendering.
+
+    /// Draws a filled rectangle in immediate rendering mode.
+    #[inline]
+    pub fn fill_rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
+        let pos = Vector2::new(x, y);
+        let size = Size::new(w, h);
+        let color = self.draw_color.into();
+
+        self.render_layer_mut(self.active_layer)
+            .immediate
+            .fill_rect(pos, size, color);
+    }
+
+    /// Draws a filled rectangle in immediate rendering mode.
+    /// Uses [`math::Vector2`] and [`math::Size`] as arguments.
+    #[inline]
+    pub fn fill_rect_v<P, S>(&mut self, pos: P, size: S)
     where
         P: Into<Vector2>,
         S: Into<Size<f32>>,
     {
         let pos = pos.into();
         let size = size.into();
-        let draw_color = self.draw_color.into();
+        let color = self.draw_color.into();
 
-        match self.active_layer {
-            Layer::World => self.world.immediate.fill_rect(pos, size, draw_color),
-            Layer::Ui => self.ui.immediate.fill_rect(pos, size, draw_color),
-            Layer::N(i) => self.user_layers[i]
-                .immediate
-                .fill_rect(pos, size, draw_color),
-        }
+        self.render_layer_mut(self.active_layer)
+            .immediate
+            .fill_rect(pos, size, color);
+    }
+
+    #[inline]
+    pub fn draw_text<T: Into<String>>(&mut self, text: T, x: f32, y: f32) {
+        let font_label = self.current_font;
+        let text = text.into();
+        let color = self.draw_color.into();
+
+        self.render_layer_mut(self.active_layer)
+            .immediate
+            .draw_text(font_label, text, x, y, color);
+    }
+
+    #[inline]
+    pub fn draw_text_v<T, P>(&mut self, text: T, pos: P)
+    where
+        T: Into<String>,
+        P: Into<Vector2>,
+    {
+        let font_label = self.current_font;
+        let text = text.into();
+        let pos = pos.into();
+        let color = self.draw_color.into();
+
+        self.render_layer_mut(self.active_layer)
+            .immediate
+            .draw_text(font_label, text, pos.x, pos.y, color);
+    }
+
+    #[inline]
+    pub fn debug_text<T: Into<String>>(&mut self, text: T, x: f32, y: f32) {
+        let text = text.into();
+        let color = self.draw_color.into();
+
+        self.render_layer_mut(self.active_layer)
+            .immediate
+            .debug_text(text, x, y, color);
+    }
+
+    #[inline]
+    pub fn debug_text_v<T, P>(&mut self, text: T, pos: P)
+    where
+        T: Into<String>,
+        P: Into<Vector2>,
+    {
+        let pos = pos.into();
+        let color = self.draw_color.into();
+
+        self.render_layer_mut(self.active_layer)
+            .immediate
+            .debug_text(text.into(), pos.x, pos.y, color);
     }
 
     #[inline]
@@ -356,6 +425,11 @@ impl Renderer {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         self.world.update(self.config.width, self.config.height, dt);
+        self.ui.update(self.config.width, self.config.height, dt);
+
+        for layer in self.user_layers.iter_mut() {
+            layer.update(self.config.width, self.config.height, dt);
+        }
 
         let mut encoder = gpu
             .device()
@@ -389,6 +463,13 @@ impl Renderer {
 
             self.world
                 .present(&mut render_pass, pipeline, &self.immediate_pipeline);
+
+            self.ui
+                .present(&mut render_pass, pipeline, &self.immediate_pipeline);
+
+            for layer in self.user_layers.iter_mut() {
+                layer.present(&mut render_pass, pipeline, &self.immediate_pipeline);
+            }
         }
 
         gpu.queue().submit(std::iter::once(encoder.finish()));

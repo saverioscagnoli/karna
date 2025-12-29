@@ -1,5 +1,7 @@
 mod renderer_2d;
 
+use std::ops::{Deref, DerefMut};
+
 use assets::AssetManager;
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
 use macros::{Get, Set};
@@ -9,7 +11,7 @@ use utils::{Handle, Label};
 // Re-exports
 pub use renderer_2d::*;
 
-use crate::{Color, Transform};
+use crate::{Color, Layer, Transform};
 
 #[derive(Get, Set)]
 pub struct Text {
@@ -218,4 +220,33 @@ impl Text {
     }
 }
 
-pub type TextHandle = Handle<Text>;
+#[derive(Clone, Copy)]
+#[derive(Get)]
+pub struct TextHandle {
+    #[get]
+    pub(crate) layer: Layer,
+    pub(crate) handle: Handle<Text>,
+}
+
+impl Deref for TextHandle {
+    type Target = Handle<Text>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
+    }
+}
+
+impl DerefMut for TextHandle {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.handle
+    }
+}
+
+impl TextHandle {
+    pub fn dummy() -> Self {
+        Self {
+            layer: Layer::World,
+            handle: Handle::dummy(),
+        }
+    }
+}
