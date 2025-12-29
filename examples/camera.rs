@@ -11,11 +11,11 @@ struct CameraDemo {
 
 impl Scene for CameraDemo {
     fn load(&mut self, ctx: &mut karna::Context) {
-        ctx.time.uncap_fps();
+        ctx.time.set_target_fps(120);
         ctx.render.set_active_layer(Layer::World);
 
         let mut player = Mesh::new(
-            Geometry::rect((50.0, 50.0)),
+            Geometry::rect(50.0, 50.0),
             Material::new_color(Color::Cyan),
             Transform::default(),
         );
@@ -33,7 +33,7 @@ impl Scene for CameraDemo {
             let y = if i < 2 { 0.0 } else { size.height - 50.0 };
 
             let mesh = Mesh::new(
-                Geometry::rect((50.0, 50.0)),
+                Geometry::rect(50.0, 50.0),
                 Material::new_color(Color::random()),
                 Transform::default().with_position(Vector3::new(x, y, 0.0)),
             );

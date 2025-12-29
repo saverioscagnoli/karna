@@ -46,6 +46,7 @@ pub struct RenderLayer {
 
 impl RenderLayer {
     pub(crate) fn new(
+        name: &str,
         surface_format: wgpu::TextureFormat,
         camera: Camera,
         assets: Arc<AssetManager>,
@@ -57,7 +58,7 @@ impl RenderLayer {
             .capacity(Mesh::INITIAL_INSTANCE_CAPACITY)
             .build();
 
-        let text_renderer = TextRenderer2d::new("world", surface_format, &camera, &assets);
+        let text_renderer = TextRenderer2d::new(name, surface_format, &camera, &assets);
 
         Self {
             camera,
@@ -75,6 +76,19 @@ impl RenderLayer {
             batch_ranges: Vec::new(),
             any_dirty: false,
         }
+    }
+
+    #[inline]
+    pub(crate) fn resize(&mut self, width: u32, height: u32) {
+        self.camera.resize(width, height);
+    }
+
+    #[inline]
+    pub(crate) fn update(&mut self, width: u32, height: u32, dt: f32) {
+        if self.camera.dirty() {
+            self.camera.resize(width, height);
+        }
+        self.camera.update_shake(dt);
     }
 
     // Mesh methods (existing)
@@ -146,19 +160,6 @@ impl RenderLayer {
     }
 
     #[inline]
-    pub(crate) fn resize(&mut self, width: u32, height: u32) {
-        self.camera.resize(width, height);
-    }
-
-    #[inline]
-    pub(crate) fn update(&mut self, width: u32, height: u32, dt: f32) {
-        if self.camera.dirty() {
-            self.camera.resize(width, height);
-        }
-        self.camera.update_shake(dt);
-    }
-
-    #[inline]
     pub(crate) fn present<'a>(
         &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,
@@ -170,6 +171,11 @@ impl RenderLayer {
         render_pass.set_bind_group(1, self.assets.bind_group(), &[]);
 
         let mut has_dirty = self.any_dirty;
+
+        // Clear batches BEFORE populating them
+        for batch in self.batches.values_mut() {
+            batch.clear();
+        }
 
         // Batch regular meshes
         for mesh in self.meshes.values_mut() {
@@ -259,10 +265,6 @@ impl RenderLayer {
                     .expect("Geometry should exist");
 
                 geo_buffers.push((*geo_id, geo_buffer));
-            }
-
-            for batch in self.batches.values_mut() {
-                batch.clear();
             }
 
             for (geo_id, instance_range) in &self.batch_ranges {

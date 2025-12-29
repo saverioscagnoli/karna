@@ -3,12 +3,11 @@ mod context;
 mod scene;
 
 use crate::{
-    context::{WinitWindow, states::GlobalStates},
+    context::{WinitWindow, states::GlobalStates, sysinfo::SystemInfo},
     scene::SceneManager,
 };
 use assets::AssetManager;
 use crossbeam_channel::{Receiver, Sender};
-use ctor::ctor;
 use globals::{TrackingAllocator, profiling};
 use math::Size;
 use std::{
@@ -16,6 +15,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 use traccia::{error, info, warn};
+use utils::Lazy;
 use wgpu::naga::FastHashMap;
 use winit::{
     application::ApplicationHandler,
@@ -64,24 +64,6 @@ fn init_logging() {
     });
 }
 
-#[ctor]
-/// The gpu will be initialized before the app starts, so that things like
-/// font cache, geometry cache can be used during scene creation.
-///
-/// Maybe in the future i can implement a scenebuilder with the
-/// gpu available, or make the user explicitly call something like karna::init();
-fn init() {
-    gpu::init();
-    init_logging();
-
-    let info = gpu::adapter().get_info();
-
-    info!("backend: {}", info.backend);
-    info!("device: {}", info.name);
-    info!("device type: {:?}", info.device_type);
-    info!("driver: {}", info.driver_info);
-}
-
 enum WindowMessage {
     Close,
     MonitorsChanged(Vec<Monitor>),
@@ -94,11 +76,17 @@ struct WindowHandle {
     thread: JoinHandle<()>,
 }
 
+#[derive(Clone)]
+struct EngineState {
+    assets: Arc<AssetManager>,
+    globals: Arc<GlobalStates>,
+    info: Arc<SystemInfo>,
+}
+
 pub struct App {
     windows: FastHashMap<WindowId, WindowHandle>,
     window_builders: Vec<WindowBuilder>,
-    assets: Option<Arc<AssetManager>>,
-    globals: Option<Arc<GlobalStates>>,
+    state: Lazy<EngineState>,
 }
 
 /// Internal
@@ -109,9 +97,33 @@ impl App {
         Self {
             windows: FastHashMap::default(),
             window_builders: Vec::new(),
-            assets: None,
-            globals: None,
+            state: Lazy::new(),
         }
+    }
+
+    pub(crate) fn init(&mut self) {
+        gpu::init();
+        init_logging();
+
+        let assets = Arc::new(AssetManager::new());
+        let globals = Arc::new(GlobalStates::new());
+        let info = Arc::new(SystemInfo::new());
+
+        info!("Cpu: {} ({})", info.cpu_model(), info.cpu_cores());
+        info!(
+            "Total Memory: {:.2} GB",
+            info.mem_total() as f64 / 1024.0 / 1024.0 / 1024.0
+        );
+        info!("Gpu: {}", info.gpu_model());
+        info!("Gpu Type: {:?}", info.gpu_type());
+        info!("Graphics Backend: {}", info.gpu_backend());
+        info!("Graphics Driver: {}", info.gpu_driver());
+
+        self.state.set(EngineState {
+            assets,
+            globals,
+            info,
+        });
     }
 
     pub(crate) fn add_window_builder(&mut self, builder: WindowBuilder) {
@@ -127,12 +139,11 @@ impl App {
         let (tx, rx) = crossbeam_channel::bounded::<WindowMessage>(64);
         let window_id = window.id();
         let window = Window::new(label, window);
-        let assets = Arc::clone(self.assets.as_ref().expect("Cannot fail"));
-        let globals = Arc::clone(self.globals.as_ref().expect("Cannot fail"));
+        let state = self.state.clone();
 
         let handle = thread::spawn(move || {
             let _span = traccia::span!("window", "label" => window.label());
-            Self::window_loop(window, scenes, assets, globals, rx);
+            Self::window_loop(window, scenes, state, rx);
         });
 
         let window_handle = WindowHandle {
@@ -146,11 +157,10 @@ impl App {
     fn window_loop(
         window: Window,
         scenes: LabelMap<Box<dyn Scene>>,
-        assets: Arc<AssetManager>,
-        states: Arc<GlobalStates>,
+        state: EngineState,
         rx: Receiver<WindowMessage>,
     ) {
-        let mut context = Context::new(window, assets, states);
+        let mut context = Context::new(window, state.assets, state.globals, state.info);
         let mut scenes = SceneManager::new(scenes);
 
         scenes.current().load(&mut context);
@@ -280,18 +290,14 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let windows = std::mem::take(&mut self.window_builders);
-        let assets = Arc::new(AssetManager::new());
-        let globals = Arc::new(GlobalStates::new());
+        self.init();
 
-        self.assets = Some(assets);
-        self.globals = Some(globals);
-
-        for builder in windows {
+        for builder in std::mem::take(&mut self.window_builders) {
             match event_loop.create_window(builder.attributes) {
                 Ok(window) => {
                     self.spawn_window_thread(builder.label, Arc::new(window), builder.scenes);
                 }
+
                 Err(e) => {
                     error!(
                         "Failed to spawn window with label: '{}': {}",

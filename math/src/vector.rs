@@ -451,6 +451,18 @@ impl Vector2 {
     }
 }
 
+impl From<Vector3> for Vector2 {
+    fn from(value: Vector3) -> Self {
+        value.truncate()
+    }
+}
+
+impl From<Vector4> for Vector2 {
+    fn from(value: Vector4) -> Self {
+        value.truncate2()
+    }
+}
+
 impl Vector3 {
     #[inline]
     pub fn new(x: f32, y: f32, z: f32) -> Self {
@@ -532,6 +544,18 @@ impl Vector3 {
     #[inline]
     pub fn yz(&self) -> Vector2 {
         Vector([self.y, self.z])
+    }
+}
+
+impl From<Vector2> for Vector3 {
+    fn from(value: Vector2) -> Self {
+        Vector([value.x, value.y, 0.0])
+    }
+}
+
+impl From<Vector4> for Vector3 {
+    fn from(value: Vector4) -> Self {
+        value.truncate()
     }
 }
 

@@ -1,5 +1,6 @@
 mod label_map;
 mod slot_map;
+mod sysinfo;
 
 use std::{
     ops::{Deref, DerefMut},
@@ -9,6 +10,7 @@ use std::{
 // Re-exports
 pub use label_map::*;
 pub use slot_map::*;
+pub use sysinfo::*;
 
 /// Implement Deref + DerefMut by transmuting from one type to another.
 ///

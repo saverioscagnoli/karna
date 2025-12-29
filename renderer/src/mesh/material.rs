@@ -1,7 +1,5 @@
-use math::{Size, Vector2};
-use utils::Label;
-
 use crate::Color;
+use utils::Label;
 
 #[derive(Debug, Clone, Copy)]
 pub enum TextureKind {

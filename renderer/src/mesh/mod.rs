@@ -21,9 +21,9 @@ use utils::Handle;
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
-    pub position: Vector3,
-    pub color: Vector4,
-    pub uv_coords: Vector2,
+    pub position: [f32; 3],
+    pub color: [f32; 4],
+    pub uv_coords: [f32; 2],
 }
 
 impl Descriptor for Vertex {
@@ -152,14 +152,17 @@ pub struct Mesh {
 
     #[get]
     #[get(prop = "position", ty = &Vector3, name = "position")]
+    #[get(copied, prop = "position", name = "position_2d", pre = truncate, ty = Vector2)]
     #[get(copied, prop = "position.x", ty = f32, name = "position_x")]
     #[get(copied, prop = "position.y", ty = f32, name = "position_y")]
     #[get(copied, prop = "position.z", ty = f32, name = "position_z")]
     #[get(prop = "rotation", ty = &Vector3, name = "rotation")]
+    #[get(copied, prop = "rotation.z", ty = f32, name = "rotation_2d")]
     #[get(copied, prop = "rotation.x", ty = f32, name = "rotation_x")]
     #[get(copied, prop = "rotation.y", ty = f32, name = "rotation_y")]
     #[get(copied, prop = "rotation.z", ty = f32, name = "rotation_z")]
     #[get(prop = "scale", ty = &Vector3, name = "scale")]
+    #[get(copied, prop = "scale", name = "scale_2d", pre = truncate, ty = Vector2)]
     #[get(copied, prop = "scale.x", ty = f32, name = "scale_x")]
     #[get(copied, prop = "scale.y", ty = f32, name = "scale_y")]
     #[get(copied, prop = "scale.z", ty = f32, name = "scale_z")]
@@ -182,6 +185,7 @@ pub struct Mesh {
     #[set(prop = "position.y", ty = f32, name = "set_position_y", also = self.tracker |= Self::transform_f())]
     #[set(prop = "position.z", ty = f32, name = "set_position_z", also = self.tracker |= Self::transform_f())]
     #[set(into, prop = "rotation", ty = Vector3, name = "set_rotation", also = self.tracker |= Self::transform_f())]
+    #[set(prop = "rotation.z", ty = f32, name = "set_rotation_2d", also = self.tracker |= Self::transform_f())]
     #[set(prop = "rotation.x", ty = f32, name = "set_rotation_x", also = self.tracker |= Self::transform_f())]
     #[set(prop = "rotation.y", ty = f32, name = "set_rotation_y", also = self.tracker |= Self::transform_f())]
     #[set(prop = "rotation.z", ty = f32, name = "set_rotation_z", also = self.tracker |= Self::transform_f())]
@@ -263,6 +267,24 @@ impl Mesh {
     #[inline]
     pub(crate) fn gpu(&self) -> MeshInstanceGpu {
         self.gpu
+    }
+
+    #[inline]
+    pub fn set_position_2d<P: Into<Vector2>>(&mut self, pos: P) {
+        let pos = pos.into();
+
+        self.transform.position.x = pos.x;
+        self.transform.position.y = pos.y;
+        self.tracker |= Self::transform_f();
+    }
+
+    #[inline]
+    pub fn set_scale_2d<S: Into<Vector2>>(&mut self, scale: S) {
+        let scale = scale.into();
+
+        self.transform.scale.x = scale.x;
+        self.transform.scale.y = scale.y;
+        self.tracker |= Self::transform_f();
     }
 }
 

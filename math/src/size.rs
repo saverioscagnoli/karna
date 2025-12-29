@@ -9,11 +9,13 @@ use crate::Vector2;
 #[derive(Get, Set, With)]
 pub struct Size<T: Num + Copy> {
     #[get(copied)]
+    #[get(copied, name = "w")]
     #[set]
     #[with]
     pub width: T,
 
     #[get(copied)]
+    #[get(copied, name = "h")]
     #[set]
     #[with]
     pub height: T,

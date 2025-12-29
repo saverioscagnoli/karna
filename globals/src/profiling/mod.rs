@@ -46,8 +46,8 @@ pub fn update_time(delta: f32, fps: f32, tps: u32) {
     });
 }
 
-#[derive(Debug, Clone, Copy)]
 #[derive(Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct Statistics {
     pub render: RenderStats,
     pub time: TimeStats,

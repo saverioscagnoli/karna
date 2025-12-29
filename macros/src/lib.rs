@@ -387,6 +387,7 @@ struct SetConfig {
     pre: Option<syn::Ident>,
     cast: Option<Type>,
     ty: Option<Type>,
+    from: Option<Type>,
     name: Option<syn::Ident>,
     vis: Option<Visibility>,
     also: Option<Expr>,
@@ -403,6 +404,7 @@ fn parse_set_attribute(
         pre: None,
         cast: None,
         ty: None,
+        from: None,
         name: None,
         vis: None,
         also: None,
@@ -430,6 +432,8 @@ fn parse_set_attribute(
                         config.cast = parse_type(&value);
                     } else if path.is_ident("ty") {
                         config.ty = parse_type(&value);
+                    } else if path.is_ident("from") {
+                        config.from = parse_type(&value);
                     } else if path.is_ident("name") {
                         if let Expr::Lit(expr_lit) = value {
                             if let Lit::Str(lit_str) = &expr_lit.lit {
@@ -459,19 +463,22 @@ fn parse_set_attribute(
 
     let vis = config.vis.unwrap_or_else(|| syn::parse_quote! { pub });
 
-    let param_type = if let Some(ty) = &config.ty {
+    // Determine param type and whether to use .into()
+    let (param_type, use_into) = if let Some(from_ty) = &config.from {
+        (quote! { #from_ty }, true)
+    } else if let Some(ty) = &config.ty {
         if config.into {
-            quote! { impl Into<#ty> }
+            (quote! { impl Into<#ty> }, true)
         } else {
-            quote! { #ty }
+            (quote! { #ty }, false)
         }
     } else if config.into {
-        quote! { impl Into<#field_type> }
+        (quote! { impl Into<#field_type> }, true)
     } else {
-        quote! { #field_type }
+        (quote! { #field_type }, false)
     };
 
-    let value_expr = if config.into {
+    let value_expr = if use_into {
         quote! { value.into() }
     } else {
         quote! { value }
@@ -514,6 +521,7 @@ struct WithConfig {
     prop: Option<Vec<syn::Ident>>,
     cast: Option<Type>,
     ty: Option<Type>,
+    from: Option<Type>,
     name: Option<syn::Ident>,
     vis: Option<Visibility>,
     also: Option<Expr>,
@@ -529,6 +537,7 @@ fn parse_with_attribute(
         prop: None,
         cast: None,
         ty: None,
+        from: None,
         name: None,
         vis: None,
         also: None,
@@ -552,6 +561,8 @@ fn parse_with_attribute(
                         config.cast = parse_type(&value);
                     } else if path.is_ident("ty") {
                         config.ty = parse_type(&value);
+                    } else if path.is_ident("from") {
+                        config.from = parse_type(&value);
                     } else if path.is_ident("name") {
                         if let Expr::Lit(expr_lit) = value {
                             if let Lit::Str(lit_str) = &expr_lit.lit {
@@ -581,19 +592,22 @@ fn parse_with_attribute(
 
     let vis = config.vis.unwrap_or_else(|| syn::parse_quote! { pub });
 
-    let param_type = if let Some(ty) = &config.ty {
+    // Determine param type and whether to use .into()
+    let (param_type, use_into) = if let Some(from_ty) = &config.from {
+        (quote! { #from_ty }, true)
+    } else if let Some(ty) = &config.ty {
         if config.into {
-            quote! { impl Into<#ty> }
+            (quote! { impl Into<#ty> }, true)
         } else {
-            quote! { #ty }
+            (quote! { #ty }, false)
         }
     } else if config.into {
-        quote! { impl Into<#field_type> }
+        (quote! { impl Into<#field_type> }, true)
     } else {
-        quote! { #field_type }
+        (quote! { #field_type }, false)
     };
 
-    let value_expr = if config.into {
+    let value_expr = if use_into {
         quote! { value.into() }
     } else {
         quote! { value }
@@ -611,6 +625,19 @@ fn parse_with_attribute(
         quote! { self.#field_name }
     };
 
+    // Generate a compile-time assertion if `from` is used
+    let from_assertion = if let Some(from_ty) = &config.from {
+        let target_ty = config.ty.as_ref().unwrap_or(field_type);
+        quote! {
+            const _: fn() = || {
+                fn assert_impl<T: From<U>, U>() {}
+                assert_impl::<#target_ty, #from_ty>();
+            };
+        }
+    } else {
+        quote! {}
+    };
+
     let assignment = if let Some(cast_type) = &config.cast {
         quote! { #field_access = #value_expr as #cast_type; }
     } else {
@@ -618,6 +645,7 @@ fn parse_with_attribute(
     };
 
     quote! {
+        #from_assertion
         #[inline]
         #vis fn #method_name(mut self, value: #param_type) -> Self {
             #also_stmt

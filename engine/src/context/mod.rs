@@ -1,5 +1,6 @@
 pub mod input;
 pub mod states;
+pub mod sysinfo;
 
 mod monitors;
 mod scene_changer;
@@ -11,11 +12,12 @@ use crate::context::{
     input::Input,
     scene_changer::SceneChanger,
     states::{GlobalStates, ScopedStates},
+    sysinfo::SystemInfo,
 };
 use assets::AssetManager;
 use globals::profiling::{self, Statistics};
 use renderer::Renderer;
-use std::sync::Arc;
+use std::{alloc::System, sync::Arc};
 use winit::{event::WindowEvent, keyboard::PhysicalKey};
 
 // Re-exports
@@ -34,6 +36,7 @@ pub struct Context {
     pub assets: Arc<AssetManager>,
     pub states: ScopedStates,
     pub globals: Arc<GlobalStates>,
+    pub info: Arc<SystemInfo>,
     pub profiling: Statistics,
 }
 
@@ -42,6 +45,7 @@ impl Context {
         window: Window,
         assets: Arc<AssetManager>,
         globals: Arc<GlobalStates>,
+        info: Arc<SystemInfo>,
     ) -> Self {
         let render = Renderer::new(Arc::clone(window.inner()), Arc::clone(&assets));
         let scenes = SceneChanger::new();
@@ -58,6 +62,7 @@ impl Context {
             assets,
             states,
             globals,
+            info,
             profiling: profiling::get_stats(),
         }
     }

@@ -3,6 +3,7 @@ mod color;
 mod immediate;
 mod layer;
 mod mesh;
+mod retained;
 mod shader;
 mod sprite;
 mod text;
@@ -13,8 +14,8 @@ use globals::profiling;
 use macros::{Get, Set};
 use math::{Size, Vector2};
 use std::sync::Arc;
-use traccia::info;
-use utils::{Handle, Label, label};
+use traccia::{info, warn};
+use utils::{Label, label};
 use winit::window::Window;
 
 // Re-exports
@@ -177,8 +178,8 @@ impl Renderer {
                 &[Vertex::desc(), MeshInstanceGpu::desc()],
             );
 
-        let world = RenderLayer::new(surface_format, camera, assets.clone());
-        let ui = RenderLayer::new(surface_format, ui_camera, assets.clone());
+        let world = RenderLayer::new("world", surface_format, camera, assets.clone());
+        let ui = RenderLayer::new("ui", surface_format, ui_camera, assets.clone());
 
         Self {
             surface,
@@ -241,6 +242,31 @@ impl Renderer {
             Layer::Ui => &mut self.ui,
             Layer::N(i) => &mut self.user_layers[i],
         }
+    }
+
+    #[inline]
+    pub fn add_layer(&mut self, index: usize) {
+        if self.user_layers.get_mut(index).is_some() {
+            warn!("Layer with index '{}' already exists! Skipping.", index);
+            return;
+        }
+
+        self.user_layers.insert(
+            index,
+            RenderLayer::new(
+                &format!("user layer {}", index),
+                self.config.format,
+                Camera::new(Projection::Orthographic {
+                    left: 0.0,
+                    right: self.config.width as f32,
+                    bottom: self.config.height as f32,
+                    top: 0.0,
+                    z_near: -1.0,
+                    z_far: 1.0,
+                }),
+                self.assets.clone(),
+            ),
+        );
     }
 
     #[inline]
@@ -333,13 +359,10 @@ impl Renderer {
     /// Draws a filled rectangle in immediate rendering mode.
     #[inline]
     pub fn fill_rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
-        let pos = Vector2::new(x, y);
-        let size = Size::new(w, h);
         let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
 
-        self.render_layer_mut(self.active_layer)
-            .immediate
-            .fill_rect(pos, size, color);
+        layer.immediate.fill_rect(x, y, w, h, color);
     }
 
     /// Draws a filled rectangle in immediate rendering mode.
@@ -353,10 +376,11 @@ impl Renderer {
         let pos = pos.into();
         let size = size.into();
         let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
 
-        self.render_layer_mut(self.active_layer)
+        layer
             .immediate
-            .fill_rect(pos, size, color);
+            .fill_rect(pos.x, pos.y, size.w(), size.h(), color);
     }
 
     #[inline]
@@ -364,10 +388,9 @@ impl Renderer {
         let font_label = self.current_font;
         let text = text.into();
         let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
 
-        self.render_layer_mut(self.active_layer)
-            .immediate
-            .draw_text(font_label, text, x, y, color);
+        layer.immediate.draw_text(font_label, text, x, y, color);
     }
 
     #[inline]
@@ -380,8 +403,9 @@ impl Renderer {
         let text = text.into();
         let pos = pos.into();
         let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
 
-        self.render_layer_mut(self.active_layer)
+        layer
             .immediate
             .draw_text(font_label, text, pos.x, pos.y, color);
     }
@@ -390,10 +414,9 @@ impl Renderer {
     pub fn debug_text<T: Into<String>>(&mut self, text: T, x: f32, y: f32) {
         let text = text.into();
         let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
 
-        self.render_layer_mut(self.active_layer)
-            .immediate
-            .debug_text(text, x, y, color);
+        layer.immediate.debug_text(text, x, y, color);
     }
 
     #[inline]
@@ -404,10 +427,9 @@ impl Renderer {
     {
         let pos = pos.into();
         let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
 
-        self.render_layer_mut(self.active_layer)
-            .immediate
-            .debug_text(text.into(), pos.x, pos.y, color);
+        layer.immediate.debug_text(text.into(), pos.x, pos.y, color);
     }
 
     #[inline]

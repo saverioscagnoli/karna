@@ -1,4 +1,7 @@
-use crate::mesh::{GeometryBuffer, Vertex};
+use crate::{
+    Color,
+    mesh::{GeometryBuffer, Vertex},
+};
 use gpu::core::GpuBufferBuilder;
 use math::{Size, Vector3, Vector4};
 use std::{
@@ -22,9 +25,9 @@ impl Geometry {
         let mut hasher = DefaultHasher::new();
 
         for vertex in vertices {
-            vertex.position.x.to_bits().hash(&mut hasher);
-            vertex.position.y.to_bits().hash(&mut hasher);
-            vertex.position.z.to_bits().hash(&mut hasher);
+            vertex.position[0].to_bits().hash(&mut hasher);
+            vertex.position[1].to_bits().hash(&mut hasher);
+            vertex.position[2].to_bits().hash(&mut hasher);
         }
 
         indices.hash(&mut hasher);
@@ -90,29 +93,28 @@ impl Geometry {
     }
 
     #[inline]
-    pub fn rect<S: Into<Size<f32>>>(size: S) -> Self {
-        let size = size.into();
-        let color = Vector4::ones();
+    pub fn rect(width: f32, height: f32) -> Self {
+        let color = Color::White.into();
         let vertices = &[
             Vertex {
-                position: Vector3::new(0.0, 0.0, 0.0),
+                position: [0.0, 0.0, 0.0],
                 color,
-                uv_coords: math::Vector2::new(0.0, 0.0),
+                uv_coords: [0.0, 0.0],
             },
             Vertex {
-                position: Vector3::new(size.width, 0.0, 0.0),
+                position: [width, 0.0, 0.0],
                 color,
-                uv_coords: math::Vector2::new(1.0, 0.0),
+                uv_coords: [1.0, 0.0],
             },
             Vertex {
-                position: Vector3::new(size.width, size.height, 0.0),
+                position: [width, height, 0.0],
                 color,
-                uv_coords: math::Vector2::new(1.0, 1.0),
+                uv_coords: [1.0, 1.0],
             },
             Vertex {
-                position: Vector3::new(0.0, size.height, 0.0),
+                position: [0.0, height, 0.0],
                 color,
-                uv_coords: math::Vector2::new(0.0, 1.0),
+                uv_coords: [0.0, 1.0],
             },
         ];
 
@@ -122,6 +124,6 @@ impl Geometry {
 
     #[inline]
     pub fn unit_rect() -> Self {
-        Self::rect(Size::new(1.0, 1.0))
+        Self::rect(1.0, 1.0)
     }
 }

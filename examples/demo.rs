@@ -12,7 +12,7 @@ impl Scene for Demo {
         ctx.render.set_clear_color(Color::Black);
 
         self.rect1 = ctx.render.add_mesh(Mesh::new(
-            Geometry::rect((50.0, 50.0)),
+            Geometry::rect(50.0, 50.0),
             Material::new_color(Color::Red),
             Transform::new_2d([10.0, 10.0], 0.0, Vector2::ones()),
         ))
