@@ -1,4 +1,4 @@
-use crate::{Vertex, profiling};
+use crate::{Color, Vertex, profiling};
 use assets::AssetManager;
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
 use gpu::core::{GpuBuffer, GpuBufferBuilder};
@@ -135,16 +135,12 @@ impl ImmediateRenderer {
             if let Some((cached_verts, cached_indices)) = cache.get(&ch) {
                 let base_vertex = self.vertices.len() as u32;
 
-                for vertex in cached_verts.iter() {
-                    self.vertices.push(Vertex {
-                        position: [
-                            vertex.position[0] + x + glyph.x,
-                            vertex.position[1] + y + glyph.y,
-                            self.zstep,
-                        ],
-                        color,
-                        uv_coords: vertex.uv_coords,
-                    });
+                for mut vertex in cached_verts.iter().copied() {
+                    vertex.position[0] += x + glyph.x;
+                    vertex.position[1] += y + glyph.y;
+                    vertex.position[2] = self.zstep;
+                    vertex.color = color;
+                    self.vertices.push(vertex);
                 }
 
                 for index in cached_indices {
@@ -194,25 +190,26 @@ impl ImmediateRenderer {
                 ]);
 
                 // Cache relative to (0, 0)
+                let cached_color = Color::White.into();
                 let cached_vertices = vec![
                     Vertex {
                         position: [0.0, 0.0, 0.0],
-                        color,
+                        color: cached_color,
                         uv_coords: [uv_x, uv_y],
                     },
                     Vertex {
                         position: [w, 0.0, 0.0],
-                        color,
+                        color: cached_color,
                         uv_coords: [uv_x + uv_w, uv_y],
                     },
                     Vertex {
                         position: [0.0, h, 0.0],
-                        color,
+                        color: cached_color,
                         uv_coords: [uv_x, uv_y + uv_h],
                     },
                     Vertex {
                         position: [w, h, 0.0],
-                        color,
+                        color: cached_color,
                         uv_coords: [uv_x + uv_w, uv_y + uv_h],
                     },
                 ];
@@ -229,7 +226,11 @@ impl ImmediateRenderer {
     }
 
     #[inline]
-    pub(crate) fn present<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>) {
+    pub(crate) fn present<'a>(
+        &'a mut self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        pipeline: &wgpu::RenderPipeline,
+    ) {
         if self.vertices.is_empty() || self.indices.is_empty() {
             return;
         }
@@ -247,12 +248,14 @@ impl ImmediateRenderer {
         self.vertex_buffer.write(0, &self.vertices);
         self.index_buffer.write(0, &self.indices);
 
+        render_pass.set_pipeline(pipeline);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
-        profiling::record_draw_call(self.vertices.len() as u32, self.indices.len() as u32);
         render_pass.draw_indexed(0..self.indices.len() as u32, 0, 0..1);
 
+        profiling::record_draw_call(self.vertices.len() as u32, self.indices.len() as u32);
+        profiling::record_triangles(self.indices.len() as u32);
         self.clear();
     }
 }

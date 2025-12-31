@@ -1,17 +1,10 @@
-mod renderer_2d;
-
-use std::ops::{Deref, DerefMut};
-
+use crate::{Color, Layer, Transform, retained::text_renderer::GlyphInstance};
 use assets::AssetManager;
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
 use macros::{Get, Set};
-use math::{Vector2, Vector3, Vector4};
+use math::Vector3;
+use std::ops::{Deref, DerefMut};
 use utils::{Handle, Label};
-
-// Re-exports
-pub use renderer_2d::*;
-
-use crate::{Color, Layer, Transform};
 
 #[derive(Get, Set)]
 pub struct Text {
@@ -133,7 +126,6 @@ impl Text {
         if self.changed(Self::transform_f()) || self.changed(Self::color_f()) {
             self.glyphs.clear();
 
-            let color: Vector4 = self.color.into();
             let cos = self.transform.rotation.z.cos();
             let sin = self.transform.rotation.z.sin();
 
@@ -154,19 +146,19 @@ impl Text {
                 let rotated_y = local_x * sin + local_y * cos;
 
                 let glyph = GlyphInstance {
-                    position: Vector3::new(
+                    position: [
                         self.transform.position.x + rotated_x,
                         self.transform.position.y + rotated_y,
                         self.transform.position.z,
-                    ),
-                    size: Vector2::new(
+                    ],
+                    size: [
                         glyph.width as f32 * self.transform.scale.x,
                         glyph.height as f32 * self.transform.scale.y,
-                    ),
-                    uv_offset: Vector2::new(x as f32, y as f32),
-                    uv_scale: Vector2::new(w as f32, h as f32),
-                    color,
-                    rotation: self.transform.rotation,
+                    ],
+                    uv_offset: [x as f32, y as f32],
+                    uv_scale: [w as f32, h as f32],
+                    color: self.color.into(),
+                    rotation: [0.0, 0.0, self.transform.rotation.z],
                 };
 
                 self.glyphs.push(glyph);

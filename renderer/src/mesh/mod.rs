@@ -14,7 +14,7 @@ use crate::{
 };
 use assets::AssetManager;
 use gpu::core::GpuBuffer;
-use macros::{Get, Set, With};
+use macros::{Get, Set, With, track_dirty};
 use math::{Vector2, Vector3, Vector4};
 use utils::Handle;
 
@@ -126,6 +126,7 @@ pub struct GeometryBuffer {
     pub topology: wgpu::PrimitiveTopology,
 }
 
+#[track_dirty]
 #[derive(Debug, Clone)]
 #[derive(Get, Set, With)]
 pub struct Mesh {
@@ -201,7 +202,6 @@ pub struct Mesh {
     visible: bool,
 
     gpu: MeshInstanceGpu,
-    tracker: u8,
 }
 
 impl Mesh {
@@ -218,8 +218,7 @@ impl Mesh {
             tracker: 0,
         };
 
-        mesh.mark_all();
-
+        mesh.set_all_dirty();
         mesh
     }
 
@@ -227,7 +226,7 @@ impl Mesh {
     pub(crate) fn sync_gpu(&mut self, assets: &AssetManager) -> bool {
         let mut changed = false;
 
-        if self.changed(Self::transform_f()) {
+        if self.is_dirty(Self::transform_f()) {
             self.gpu.position = self.transform.position;
             self.gpu.rotation = self.transform.rotation;
             self.gpu.scale = self.transform.scale;
@@ -235,7 +234,7 @@ impl Mesh {
             changed = true
         }
 
-        if self.changed(Self::material_f()) {
+        if self.is_dirty(Self::material_f()) {
             self.gpu.color = self.material.color.into();
 
             let (x, y, w, h) = if let Some(kind) = self.material.texture {
@@ -258,7 +257,7 @@ impl Mesh {
         }
 
         if changed {
-            self.reset_all();
+            self.clear_all_dirty();
         }
 
         changed
@@ -285,44 +284,6 @@ impl Mesh {
         self.transform.scale.x = scale.x;
         self.transform.scale.y = scale.y;
         self.tracker |= Self::transform_f();
-    }
-}
-
-// Dirty Tracking
-impl Mesh {
-    #[inline]
-    const fn material_f() -> u8 {
-        1 << 0
-    }
-
-    #[inline]
-    const fn transform_f() -> u8 {
-        1 << 1
-    }
-
-    #[inline]
-    const fn visible_f() -> u8 {
-        1 << 2
-    }
-
-    #[inline]
-    const fn changed(&self, flag: u8) -> bool {
-        self.tracker & flag != 0
-    }
-
-    #[inline]
-    pub const fn is_dirty(&self) -> bool {
-        self.tracker != 0
-    }
-
-    #[inline]
-    const fn mark_all(&mut self) {
-        self.tracker = Self::material_f() | Self::transform_f() | Self::visible_f();
-    }
-
-    #[inline]
-    const fn reset_all(&mut self) {
-        self.tracker = 0;
     }
 }
 

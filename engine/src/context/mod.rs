@@ -8,16 +8,19 @@ mod time;
 mod tween;
 mod window;
 
-use crate::context::{
-    input::Input,
-    scene_changer::SceneChanger,
-    states::{GlobalStates, ScopedStates},
-    sysinfo::SystemInfo,
+use crate::{
+    LOGS,
+    context::{
+        input::Input,
+        scene_changer::SceneChanger,
+        states::{GlobalStates, ScopedStates},
+        sysinfo::SystemInfo,
+    },
 };
 use assets::AssetManager;
 use globals::profiling::{self, Statistics};
 use renderer::Renderer;
-use std::{alloc::System, sync::Arc};
+use std::sync::Arc;
 use winit::{event::WindowEvent, keyboard::PhysicalKey};
 
 // Re-exports
@@ -47,7 +50,11 @@ impl Context {
         globals: Arc<GlobalStates>,
         info: Arc<SystemInfo>,
     ) -> Self {
-        let render = Renderer::new(Arc::clone(window.inner()), Arc::clone(&assets));
+        let render = Renderer::new(
+            Arc::clone(window.inner()),
+            Arc::clone(&assets),
+            LOGS.clone(),
+        );
         let scenes = SceneChanger::new();
         let monitors = Monitors::new(Arc::clone(window.inner()));
         let states = ScopedStates::new();

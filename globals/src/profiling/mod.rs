@@ -28,6 +28,42 @@ pub fn record_draw_call(vertices_n: u32, indices_n: u32) {
 }
 
 #[inline]
+pub fn record_instance_writes(count: u32) {
+    STATS.with(|stats| {
+        let mut stats = stats.borrow_mut();
+
+        stats.render.instance_writes += count;
+    });
+}
+
+#[inline]
+pub fn record_geometry_buffer(count: u32) {
+    STATS.with(|stats| {
+        let mut stats = stats.borrow_mut();
+
+        stats.render.geometry_buffers += count;
+    });
+}
+
+#[inline]
+pub fn record_geometry_buffers_size(size: u32) {
+    STATS.with(|stats| {
+        let mut stats = stats.borrow_mut();
+
+        stats.render.geometry_buffers_size += size;
+    });
+}
+
+#[inline]
+pub fn record_triangles(index_n: u32) {
+    STATS.with(|stats| {
+        let mut stats = stats.borrow_mut();
+
+        stats.render.triangles += index_n / 3;
+    });
+}
+
+#[inline]
 pub fn reset_frame() {
     STATS.with(|stats| {
         let mut stats = stats.borrow_mut();

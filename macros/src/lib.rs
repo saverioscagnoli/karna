@@ -1,7 +1,8 @@
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 use quote::quote;
 use syn::{
-    Data, DeriveInput, Expr, Fields, Lit, Meta, MetaNameValue, Token, Type, Visibility,
+    Data, DeriveInput, Expr, Fields, Ident, Lit, Meta, MetaNameValue, Token, Type, Visibility,
     parse::{Parse, ParseStream, Parser},
     parse_macro_input,
     punctuated::Punctuated,
@@ -827,6 +828,120 @@ pub fn derive_random(input: TokenStream) -> TokenStream {
                     #(Self::#variant_names,)*
                 ];
                 variants[rand::random_range(0..#variant_count)]
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_attribute]
+pub fn track_dirty(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+
+    let name = &input.ident;
+    let vis = &input.vis;
+    let attrs = &input.attrs;
+    let generics = &input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let fields = match &input.data {
+        Data::Struct(data) => match &data.fields {
+            Fields::Named(fields) => &fields.named,
+            _ => {
+                return syn::Error::new_spanned(&input, "only named fields are supported")
+                    .to_compile_error()
+                    .into();
+            }
+        },
+        _ => {
+            return syn::Error::new_spanned(&input, "only structs are supported")
+                .to_compile_error()
+                .into();
+        }
+    };
+
+    if fields.len() > 8 {
+        return syn::Error::new_spanned(
+            &input,
+            "track_dirty supports at most 8 fields (u8 tracker)",
+        )
+        .to_compile_error()
+        .into();
+    }
+
+    // Generate _f() functions for each field
+    let field_fns = fields.iter().enumerate().map(|(i, field)| {
+        let field_name = field.ident.as_ref().unwrap();
+        let fn_name = Ident::new(&format!("{}_f", field_name), Span::call_site());
+        let shift = i;
+        quote! {
+            #[inline]
+            pub const fn #fn_name() -> u8 {
+                1u8 << #shift
+            }
+        }
+    });
+
+    // Calculate the "all dirty" mask
+    let all_mask: u8 = (1u8 << fields.len()) - 1;
+
+    // Reconstruct existing fields
+    let existing_fields = fields.iter().map(|f| {
+        let field_name = &f.ident;
+        let ty = &f.ty;
+        let field_vis = &f.vis;
+        let field_attrs = &f.attrs;
+        quote! {
+            #(#field_attrs)*
+            #field_vis #field_name: #ty
+        }
+    });
+
+    let expanded = quote! {
+        #(#attrs)*
+        #vis struct #name #generics {
+            #(#existing_fields,)*
+            pub tracker: u8,
+        }
+
+        impl #impl_generics #name #ty_generics #where_clause {
+            #(#field_fns)*
+
+            /// Check if a specific dirty flag is set
+            #[inline]
+            pub const fn is_dirty(&self, flag: u8) -> bool {
+                self.tracker & flag != 0
+            }
+
+            /// Set a specific dirty flag
+            #[inline]
+            pub fn set_dirty(&mut self, flag: u8) {
+                self.tracker |= flag;
+            }
+
+            /// Clear a specific dirty flag
+            #[inline]
+            pub fn clear_dirty(&mut self, flag: u8) {
+                self.tracker &= !flag;
+            }
+
+            /// Set all fields as dirty
+            #[inline]
+            pub fn set_all_dirty(&mut self) {
+                self.tracker = #all_mask;
+            }
+
+            /// Clear all dirty flags
+            #[inline]
+            pub fn clear_all_dirty(&mut self) {
+                self.tracker = 0;
+            }
+
+            /// Check if any field is dirty
+            #[inline]
+            pub const fn any_dirty(&self) -> bool {
+                self.tracker != 0
             }
         }
     };

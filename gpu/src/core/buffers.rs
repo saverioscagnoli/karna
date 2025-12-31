@@ -1,5 +1,6 @@
 use macros::Get;
 use std::{marker::PhantomData, ops::RangeBounds};
+use traccia::info;
 use wgpu::util::DeviceExt;
 
 #[derive(Debug, Get)]
@@ -98,6 +99,11 @@ impl<T> GpuBuffer<T> {
         if new_capacity == self.capacity {
             return;
         }
+
+        info!(
+            "Resizing gpu buffer '{:?}' from {} to {}",
+            self.label, self.capacity, new_capacity
+        );
 
         let size = (std::mem::size_of::<T>() * new_capacity.max(1)) as u64;
 

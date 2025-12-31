@@ -11,10 +11,10 @@ use crossbeam_channel::{Receiver, Sender};
 use globals::{TrackingAllocator, profiling};
 use math::Size;
 use std::{
-    sync::Arc,
+    sync::{Arc, LazyLock, RwLock},
     thread::{self, JoinHandle},
 };
-use traccia::{error, info, warn};
+use traccia::{TargetId, error, info, warn};
 use utils::Lazy;
 use wgpu::naga::FastHashMap;
 use winit::{
@@ -32,6 +32,20 @@ pub use utils::{Label, LabelMap, label};
 
 #[global_allocator]
 static GLOBAL: TrackingAllocator = TrackingAllocator;
+pub(crate) static LOGS: LazyLock<Arc<RwLock<Vec<String>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(Vec::new())));
+
+#[derive(Clone)]
+struct EngineLogTarget;
+
+impl traccia::Target for EngineLogTarget {
+    fn write(&self, _level: traccia::LogLevel, formatted: &str) -> Result<(), traccia::Error> {
+        LOGS.write()
+            .unwrap()
+            .push(strip_ansi_escapes::strip_str(formatted));
+        Ok(())
+    }
+}
 
 fn init_logging() {
     traccia::init_with_config(traccia::Config {
@@ -60,7 +74,7 @@ fn init_logging() {
                     }
                 }),
         )),
-        ..Default::default()
+        targets: vec![Box::new(EngineLogTarget), Box::new(traccia::Console::new())],
     });
 }
 

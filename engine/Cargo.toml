@@ -17,3 +17,4 @@ traccia.workspace = true
 rodio = "0.21.1"
 gpu.workspace = true
 globals.workspace = true
+strip-ansi-escapes = "0.2.1"

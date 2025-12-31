@@ -1,8 +1,7 @@
-use std::time::Duration;
-
 use karna::{App, Scene, WindowBuilder, input::KeyCode, math::Lerp};
 use math::{Size, Vector2, Vector3};
 use renderer::{Color, Geometry, Layer, Material, Mesh, MeshHandle, Transform};
+use std::time::Duration;
 
 struct CameraDemo {
     player: MeshHandle,
@@ -123,6 +122,15 @@ impl Scene for CameraDemo {
             10.0,
             90.0,
         );
+
+        ctx.render.debug_text(
+            format!(
+                "Instance buffer writes: {}",
+                ctx.profiling.render.instance_writes()
+            ),
+            10.0,
+            110.0,
+        );
     }
 }
 
@@ -133,6 +141,7 @@ fn main() {
                 .with_label("main")
                 .with_title("camera movement demo")
                 .with_resizable(false)
+                .with_size((1280, 720))
                 .with_initial_scene(CameraDemo {
                     player: MeshHandle::dummy(),
                     corner_rects: Vec::new(),

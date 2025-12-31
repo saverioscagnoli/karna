@@ -6,14 +6,17 @@ mod mesh;
 mod retained;
 mod shader;
 mod sprite;
-mod text;
 
-use crate::{mesh::MeshInstanceGpu, shader::Shader};
+use crate::{
+    mesh::MeshInstanceGpu,
+    retained::{GlyphInstance, TextVertex},
+    shader::Shader,
+};
 use assets::AssetManager;
 use globals::profiling;
 use macros::{Get, Set};
 use math::{Size, Vector2};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use traccia::{info, warn};
 use utils::{Label, label};
 use winit::window::Window;
@@ -28,8 +31,8 @@ pub use mesh::{
     material::{Material, TextureKind},
     transform::Transform,
 };
+pub use retained::{Text, TextHandle};
 pub use sprite::{Frame, Sprite, SpriteHandle};
-pub use text::{Text, TextHandle};
 
 pub(crate) trait Descriptor {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
@@ -64,16 +67,22 @@ pub struct Renderer {
     active_layer: Layer,
 
     retained_pipeline: wgpu::RenderPipeline,
+    text_pipeline: wgpu::RenderPipeline,
     immediate_pipeline: wgpu::RenderPipeline,
 
     // Wireframe pipeline
     wireframe_pipeline: wgpu::RenderPipeline,
     wireframe_toggle: bool,
+    logs: Arc<RwLock<Vec<String>>>,
 }
 
 impl Renderer {
     #[doc(hidden)]
-    pub fn new(window: Arc<Window>, assets: Arc<AssetManager>) -> Self {
+    pub fn new(
+        window: Arc<Window>,
+        assets: Arc<AssetManager>,
+        logs: Arc<RwLock<Vec<String>>>,
+    ) -> Self {
         let gpu = gpu::get();
         let size = window.inner_size();
 
@@ -124,6 +133,9 @@ impl Renderer {
         let shader =
             Shader::from_wgsl_file(include_str!("../../shaders/basic_2d.wgsl"), Some("shader"));
 
+        let text_shader =
+            Shader::from_wgsl_file(include_str!("../../shaders/text.wgsl"), Some("text shader"));
+
         let immediate_shader = Shader::from_wgsl_file(
             include_str!("../../shaders/immediate.wgsl"),
             Some("immediate_shader"),
@@ -161,6 +173,22 @@ impl Renderer {
                 &[Vertex::desc()], // Only Vertex, no MeshInstanceGpu!
             );
 
+        let text_pipeline = text_shader
+            .pipeline_builder()
+            .label("text pipeline")
+            .vertex_entry("vs_main")
+            .fragment_entry("fs_main")
+            .topology(wgpu::PrimitiveTopology::TriangleList)
+            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
+            .build(
+                surface_format,
+                &[
+                    camera.view_projection_bind_group_layout(),
+                    assets.bind_group_layout(),
+                ],
+                &[TextVertex::desc(), GlyphInstance::desc()],
+            );
+
         let wireframe_pipeline = shader
             .pipeline_builder()
             .label("wireframe triangle pipeline")
@@ -178,8 +206,8 @@ impl Renderer {
                 &[Vertex::desc(), MeshInstanceGpu::desc()],
             );
 
-        let world = RenderLayer::new("world", surface_format, camera, assets.clone());
-        let ui = RenderLayer::new("ui", surface_format, ui_camera, assets.clone());
+        let world = RenderLayer::new(camera, assets.clone());
+        let ui = RenderLayer::new(ui_camera, assets.clone());
 
         Self {
             surface,
@@ -194,15 +222,11 @@ impl Renderer {
             user_layers: Vec::new(),
             retained_pipeline,
             immediate_pipeline,
+            text_pipeline,
             wireframe_pipeline,
             wireframe_toggle: false,
+            logs,
         }
-    }
-
-    /// Gets adapter information
-    #[inline]
-    pub fn info() -> wgpu::AdapterInfo {
-        gpu::adapter().get_info()
     }
 
     #[inline]
@@ -254,8 +278,6 @@ impl Renderer {
         self.user_layers.insert(
             index,
             RenderLayer::new(
-                &format!("user layer {}", index),
-                self.config.format,
                 Camera::new(Projection::Orthographic {
                     left: 0.0,
                     right: self.config.width as f32,
@@ -269,73 +291,87 @@ impl Renderer {
         );
     }
 
+    // === Retained Rendering ===
+
     #[inline]
     pub fn add_mesh(&mut self, mesh: Mesh) -> MeshHandle {
         let layer = self.active_layer;
-        let handle = self.render_layer_mut(layer).add_mesh(mesh);
+        let handle = self.render_layer_mut(layer).retained.add_mesh(mesh);
 
         MeshHandle { handle, layer }
     }
 
     #[inline]
     pub fn get_mesh(&self, handle: MeshHandle) -> &Mesh {
-        self.render_layer(handle.layer).get_mesh(*handle)
+        self.render_layer(handle.layer).retained.get_mesh(*handle)
     }
 
     #[inline]
     pub fn get_mesh_mut(&mut self, handle: MeshHandle) -> &mut Mesh {
-        self.render_layer_mut(handle.layer).get_mesh_mut(*handle)
+        self.render_layer_mut(handle.layer)
+            .retained
+            .get_mesh_mut(*handle)
     }
 
     #[inline]
     pub fn remove_mesh(&mut self, handle: MeshHandle) {
-        self.render_layer_mut(handle.layer).remove_mesh(*handle);
+        self.render_layer_mut(handle.layer)
+            .retained
+            .remove_mesh(*handle);
     }
 
     #[inline]
     pub fn add_text(&mut self, text: Text) -> TextHandle {
         let layer = self.active_layer;
-        let handle = self.render_layer_mut(layer).add_text(text);
+        let handle = self.render_layer_mut(layer).retained.add_text(text);
 
         TextHandle { layer, handle }
     }
 
     #[inline]
     pub fn get_text(&self, handle: TextHandle) -> &Text {
-        self.render_layer(handle.layer).get_text(*handle)
+        self.render_layer(handle.layer).retained.get_text(*handle)
     }
 
     #[inline]
     pub fn get_text_mut(&mut self, handle: TextHandle) -> &mut Text {
-        self.render_layer_mut(handle.layer).get_text_mut(*handle)
+        self.render_layer_mut(handle.layer)
+            .retained
+            .get_text_mut(*handle)
     }
 
     #[inline]
     pub fn remove_text(&mut self, handle: TextHandle) {
-        self.render_layer_mut(handle.layer).remove_text(*handle);
+        self.render_layer_mut(handle.layer)
+            .retained
+            .remove_text(*handle);
     }
 
     #[inline]
     pub fn add_sprite(&mut self, sprite: Sprite) -> SpriteHandle {
         let layer = self.active_layer;
-        let handle = self.render_layer_mut(layer).add_sprite(sprite);
+        let handle = self.render_layer_mut(layer).retained.add_sprite(sprite);
 
         SpriteHandle { layer, handle }
     }
 
     #[inline]
     pub fn get_sprite(&self, handle: SpriteHandle) -> &Sprite {
-        self.render_layer(handle.layer).get_sprite(*handle)
+        self.render_layer(handle.layer).retained.get_sprite(*handle)
     }
 
     #[inline]
     pub fn get_sprite_mut(&mut self, handle: SpriteHandle) -> &mut Sprite {
-        self.render_layer_mut(handle.layer).get_sprite_mut(*handle)
+        self.render_layer_mut(handle.layer)
+            .retained
+            .get_sprite_mut(*handle)
     }
 
     #[inline]
     pub fn remove_sprite(&mut self, handle: SpriteHandle) {
-        self.render_layer_mut(handle.layer).remove_sprite(*handle);
+        self.render_layer_mut(handle.layer)
+            .retained
+            .remove_sprite(*handle);
     }
 
     #[inline]
@@ -433,6 +469,34 @@ impl Renderer {
     }
 
     #[inline]
+    pub fn debug_logs(&mut self, x: f32) {
+        let mut y = 10.0;
+        let logs_clone = self.logs.clone();
+        let logs = logs_clone.read().expect("Logs lock is poisoned");
+
+        let prev_color = self.draw_color;
+
+        for log in logs.iter() {
+            if log.starts_with("info") {
+                self.set_draw_color(Color::Green);
+            }
+
+            if log.starts_with("warn") {
+                self.set_draw_color(Color::Yellow);
+            }
+
+            if log.starts_with("error") {
+                self.set_draw_color(Color::Red);
+            }
+
+            self.debug_text(log, x, y);
+            y += 20.0;
+        }
+
+        self.set_draw_color(prev_color);
+    }
+
+    #[inline]
     pub fn toggle_wireframe(&mut self) {
         self.wireframe_toggle = !self.wireframe_toggle;
     }
@@ -483,18 +547,38 @@ impl Renderer {
                 &self.retained_pipeline
             };
 
-            self.world
-                .present(&mut render_pass, pipeline, &self.immediate_pipeline);
+            render_pass.set_bind_group(0, self.world.camera.view_projection_bind_group(), &[]);
+            render_pass.set_bind_group(1, self.assets.bind_group(), &[]);
 
-            self.ui
-                .present(&mut render_pass, pipeline, &self.immediate_pipeline);
+            self.world.present(
+                &mut render_pass,
+                pipeline,
+                &self.immediate_pipeline,
+                &self.text_pipeline,
+            );
+
+            render_pass.set_bind_group(0, self.ui.camera.view_projection_bind_group(), &[]);
+
+            self.ui.present(
+                &mut render_pass,
+                pipeline,
+                &self.immediate_pipeline,
+                &self.text_pipeline,
+            );
 
             for layer in self.user_layers.iter_mut() {
-                layer.present(&mut render_pass, pipeline, &self.immediate_pipeline);
+                render_pass.set_bind_group(0, layer.camera.view_projection_bind_group(), &[]);
+
+                layer.present(
+                    &mut render_pass,
+                    pipeline,
+                    &self.immediate_pipeline,
+                    &self.text_pipeline,
+                );
             }
         }
 
-        gpu.queue().submit(std::iter::once(encoder.finish()));
+        gpu.queue().submit([encoder.finish()]);
         output.present();
 
         Ok(())

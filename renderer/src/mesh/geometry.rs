@@ -2,12 +2,13 @@ use crate::{
     Color,
     mesh::{GeometryBuffer, Vertex},
 };
+use globals::profiling;
 use gpu::core::GpuBufferBuilder;
-use math::{Size, Vector3, Vector4};
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
     sync::{Arc, LazyLock, RwLock},
 };
+use traccia::{fatal, info};
 use wgpu::naga::FastHashMap;
 
 static GEOMETRY_CACHE: LazyLock<RwLock<FastHashMap<u32, Arc<GeometryBuffer>>>> =
@@ -81,6 +82,10 @@ impl Geometry {
         // Cache it
         {
             let mut cache = GEOMETRY_CACHE.write().unwrap();
+            profiling::record_geometry_buffer(1);
+            profiling::record_geometry_buffers_size(
+                (gpu_buffer.vertex_buffer.byte_size() + gpu_buffer.index_buffer.byte_size()) as u32,
+            );
             cache.insert(self.id, Arc::clone(&gpu_buffer));
         }
 
@@ -125,5 +130,42 @@ impl Geometry {
     #[inline]
     pub fn unit_rect() -> Self {
         Self::rect(1.0, 1.0)
+    }
+
+    #[inline]
+    pub fn circle(r: f32, segments: u32) -> Self {
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
+
+        vertices.push(Vertex {
+            position: [0.0, 0.0, 0.0],
+            color: Color::White.into(),
+            uv_coords: [0.5, 0.5],
+        });
+
+        for i in 0..segments {
+            let theta = 2.0 * std::f32::consts::PI * (i as f32) / (segments as f32);
+
+            let x = r * theta.cos();
+            let y = r * theta.sin();
+
+            vertices.push(Vertex {
+                position: [x, y, 0.0],
+                color: Color::White.into(),
+                uv_coords: [0.5 + x / (2.0 * r), 0.5 + y / (2.0 * r)],
+            });
+        }
+
+        for i in 1..segments {
+            indices.push(0);
+            indices.push(i);
+            indices.push(i + 1);
+        }
+
+        indices.push(0);
+        indices.push(segments);
+        indices.push(1);
+
+        Self::new(&vertices, &indices)
     }
 }
