@@ -1,17 +1,24 @@
 pub mod input;
 pub mod states;
+pub mod sysinfo;
 
 mod monitors;
 mod scene_changer;
 mod time;
+mod tween;
 mod window;
 
-use crate::context::{
-    input::Input,
-    scene_changer::SceneChanger,
-    states::{GlobalStates, ScopedStates},
+use crate::{
+    LOGS,
+    context::{
+        input::Input,
+        scene_changer::SceneChanger,
+        states::{GlobalStates, ScopedStates},
+        sysinfo::SystemInfo,
+    },
 };
 use assets::AssetManager;
+use globals::profiling::{self, Statistics};
 use renderer::Renderer;
 use std::sync::Arc;
 use winit::{event::WindowEvent, keyboard::PhysicalKey};
@@ -32,6 +39,8 @@ pub struct Context {
     pub assets: Arc<AssetManager>,
     pub states: ScopedStates,
     pub globals: Arc<GlobalStates>,
+    pub info: Arc<SystemInfo>,
+    pub profiling: Statistics,
 }
 
 impl Context {
@@ -39,8 +48,13 @@ impl Context {
         window: Window,
         assets: Arc<AssetManager>,
         globals: Arc<GlobalStates>,
+        info: Arc<SystemInfo>,
     ) -> Self {
-        let render = Renderer::new(Arc::clone(window.inner()), Arc::clone(&assets));
+        let render = Renderer::new(
+            Arc::clone(window.inner()),
+            Arc::clone(&assets),
+            LOGS.clone(),
+        );
         let scenes = SceneChanger::new();
         let monitors = Monitors::new(Arc::clone(window.inner()));
         let states = ScopedStates::new();
@@ -55,9 +69,12 @@ impl Context {
             assets,
             states,
             globals,
+            info,
+            profiling: profiling::get_stats(),
         }
     }
 
+    #[inline]
     pub(crate) fn handle_event(&mut self, event: WindowEvent) {
         match event {
             WindowEvent::Resized(size) => {

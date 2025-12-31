@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["assets", "utils", "engine", "gpu","macros","math", "renderer"]
+members = ["assets", "utils", "engine", "gpu","macros","math", "renderer", "globals"]
 
 [workspace.dependencies]
 utils = { path = "utils" }
@@ -19,6 +19,7 @@ gpu = { path = "gpu" }
 assets = { path = "assets" }
 fontdue = "0.9.3"
 rand = "0.9.2"
+globals = { path = "globals" }
 
 [dependencies]
 math.workspace = true
@@ -31,3 +32,4 @@ utils = { path = "utils" }
 [dev-dependencies]
 image = "0.25.9"
 rand = "0.8"
+traccia = "3.0.0"

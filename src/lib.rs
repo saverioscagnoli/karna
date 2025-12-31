@@ -3,5 +3,5 @@ pub use math;
 pub use renderer as render;
 
 pub mod utils {
-    pub use utils::Lazy;
+    pub use utils::{Handle, Label, LabelMap, Lazy, SlotMap};
 }

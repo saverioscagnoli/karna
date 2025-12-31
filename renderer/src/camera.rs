@@ -65,7 +65,8 @@ pub struct Camera {
     up: Vector3,
 
     shake_offset: Vector2,
-    shake_tween: Option<Tween<Vector2>>,
+    shake_tween: Option<Tween<f32>>,
+    shake_timer: f32,
 }
 
 impl Camera {
@@ -119,7 +120,18 @@ impl Camera {
             up: Vector3::y(),
             shake_offset: Vector2::zeros(),
             shake_tween: None,
+            shake_timer: 0.0,
         }
+    }
+
+    #[inline]
+    fn mark(&mut self) {
+        self.dirty = true;
+    }
+
+    #[inline]
+    pub(crate) fn clean(&mut self) {
+        self.dirty = false;
     }
 
     #[inline]
@@ -144,31 +156,6 @@ impl Camera {
     }
 
     #[inline]
-    fn mark(&mut self) {
-        self.dirty = true;
-    }
-
-    #[inline]
-    pub(crate) fn clean(&mut self) {
-        self.dirty = false;
-    }
-
-    #[inline]
-    pub(crate) fn update_shake(&mut self, dt: f32) {
-        if let Some(ref mut tween) = self.shake_tween {
-            tween.update(dt);
-            self.shake_offset = tween.value();
-
-            if tween.is_complete() {
-                self.shake_offset = Vector2::zeros();
-                self.shake_tween = None;
-            }
-
-            self.mark();
-        }
-    }
-
-    #[inline]
     pub(crate) fn resize(&mut self, width: u32, height: u32) {
         self.projection = Projection::Orthographic {
             left: 0.0,
@@ -188,20 +175,43 @@ impl Camera {
 
     #[inline]
     pub fn shake(&mut self, intensity: f32, duration: Duration) {
-        let angle = rng(0.0..std::f32::consts::TAU);
-        let target_offset = Vector2::new(angle.cos() * intensity, angle.sin() * intensity);
-
-        let easing = Easing::Custom(|t: f32| {
-            let freq = 15.0;
-            let decay = 3.0;
-            (1.0 - t).powf(decay) * (t * freq * std::f32::consts::TAU).sin()
-        });
-
-        let mut tween = Tween::new(Vector2::zeros(), target_offset, easing, duration);
+        let mut tween = Tween::new(intensity, 0.0, Easing::QuadOut, duration);
 
         tween.start();
-
-        self.shake_offset = Vector2::zeros();
         self.shake_tween = Some(tween);
+
+        // Randomize the timer slightly so consecutive shakes don't follow the exact same path
+        self.shake_timer = rng(0.0..100.0);
+    }
+
+    #[inline]
+    pub(crate) fn update_shake(&mut self, dt: f32) {
+        if let Some(mut tween) = self.shake_tween.take() {
+            tween.update(dt);
+
+            self.shake_timer += dt;
+
+            let intensity = tween.value();
+            let trauma = intensity * intensity;
+
+            if trauma > 0.0 {
+                let dx = (self.shake_timer * 25.0).sin() + (self.shake_timer * 17.0).cos() * 0.5;
+                let dy = (self.shake_timer * 19.0).cos() + (self.shake_timer * 23.0).sin() * 0.5;
+
+                self.shake_offset = Vector2::new(dx, dy) * trauma;
+
+                self.mark();
+            } else {
+                self.shake_offset = Vector2::zeros();
+            }
+
+            if !tween.is_complete() {
+                self.shake_tween = Some(tween);
+            } else {
+                self.shake_offset = Vector2::zeros();
+                self.shake_timer = 0.0;
+                self.mark();
+            }
+        }
     }
 }

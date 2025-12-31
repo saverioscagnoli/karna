@@ -1,18 +1,18 @@
-use crate::{Geometry, Material, Mesh, TextureKind, Transform};
+use crate::{Geometry, Layer, Material, Mesh, TextureKind, Transform};
 use macros::{Get, Set, With};
-use math::Vector2;
+use math::{Vector2, Vector3};
 use std::{
     ops::{Deref, DerefMut},
     time::Duration,
 };
-use utils::map::Label;
+use utils::{Handle, Label};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Frame {
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
     pub duration: Duration,
 }
 
@@ -27,14 +27,14 @@ pub struct Sprite {
 
     #[get]
     #[get(mut)]
-    #[get(mut, prop = "x", ty = &mut f32)]
-    #[get(mut, prop = "y", ty = &mut f32)]
-    #[set(into)]
-    #[set(prop = "x", ty = f32)]
-    #[set(prop = "y", ty = f32)]
-    #[with(into)]
-    #[with(prop = "x", ty = f32)]
-    #[with(prop = "y", ty = f32)]
+    #[get(mut, prop = "x", ty = &mut f32, also = self.update_scale())]
+    #[get(mut, prop = "y", ty = &mut f32, also = self.update_scale())]
+    #[set(into, also = self.update_scale())]
+    #[set(prop = "x", ty = f32, also = self.update_scale())]
+    #[set(prop = "y", ty = f32, also = self.update_scale())]
+    #[with(into, also = self.update_scale())]
+    #[with(prop = "x", ty = f32, also = self.update_scale())]
+    #[with(prop = "y", ty = f32, also = self.update_scale())]
     render_scale: Vector2,
 }
 
@@ -67,22 +67,28 @@ impl Sprite {
                 frame.width,
                 frame.height,
             )),
-            Transform::default()
-                .with_scale([frame.width * render_scale.x, frame.height * render_scale.y]),
+            Transform::default(),
         );
 
-        Self {
+        let mut sprite = Self {
             texture_label: texture,
             mesh,
             frames,
             frame_current: 0,
             elapsed: 0.0,
             render_scale,
-        }
+        };
+
+        sprite.update_scale();
+        sprite
     }
 
     #[inline]
     pub fn update(&mut self, dt: f32) {
+        if self.frames.len() <= 1 {
+            return;
+        }
+
         self.elapsed += dt;
 
         let current_frame = self.frames[self.frame_current];
@@ -90,14 +96,18 @@ impl Sprite {
         if self.elapsed >= current_frame.duration.as_secs_f32() {
             self.elapsed -= current_frame.duration.as_secs_f32();
             self.frame_current = (self.frame_current + 1) % self.frames.len();
+
             self.refresh_mesh();
         }
     }
 
+    /// Updates the underlying Mesh to reflect the current frame's data.
+    /// This changes the Material (UV coords) and the Transform (Scale).
     fn refresh_mesh(&mut self) {
         let frame = self.frames[self.frame_current];
         let label = self.texture_label;
 
+        // Update UV coordinates
         self.set_material(Material::new_texture(TextureKind::Partial(
             label,
             frame.x,
@@ -106,10 +116,20 @@ impl Sprite {
             frame.height,
         )));
 
-        *self.scale_mut() = Vector2::new(
-            frame.width * self.render_scale.x,
-            frame.height * self.render_scale.y,
+        self.update_scale();
+    }
+
+    /// Calculates the final World Scale for the mesh.
+    /// Intrinsic Frame Size (Pixels) * User Render Scale = Final Transform
+    fn update_scale(&mut self) {
+        let frame = self.frames[self.frame_current];
+        let new_scale = Vector3::new(
+            frame.width as f32 * self.render_scale.x,
+            frame.height as f32 * self.render_scale.y,
+            1.0,
         );
+
+        self.set_scale(new_scale);
     }
 
     #[inline]
@@ -123,5 +143,36 @@ impl Sprite {
 
     pub fn reset(&mut self) {
         self.set_frame(0);
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[derive(Get)]
+pub struct SpriteHandle {
+    #[get]
+    pub(crate) layer: Layer,
+    pub(crate) handle: Handle<Sprite>,
+}
+
+impl Deref for SpriteHandle {
+    type Target = Handle<Sprite>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
+    }
+}
+
+impl DerefMut for SpriteHandle {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.handle
+    }
+}
+
+impl SpriteHandle {
+    pub fn dummy() -> Self {
+        Self {
+            layer: Layer::World,
+            handle: Handle::dummy(),
+        }
     }
 }

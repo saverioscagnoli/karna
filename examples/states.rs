@@ -1,7 +1,7 @@
 #![allow(unused)]
 
 use karna::{App, Scene, WindowBuilder, input::KeyCode};
-use renderer::Color;
+use renderer::{Color, Layer};
 use utils::label;
 
 struct StatesDemo1;
@@ -28,14 +28,12 @@ impl Scene for StatesDemo1 {
         let state = ctx.states.get::<bool>(label!("boolean")).unwrap();
         let str = format!("This is Scene 1. Boolean value: {}", state);
 
-        ctx.render.ui.draw_debug_text(str, [10.0, 10.0]);
+        ctx.render.debug_text_v(str, [10.0, 10.0]);
         ctx.render
-            .ui
-            .draw_debug_text("Press 'B' to toggle the state!", [10.0, 30.0]);
+            .debug_text_v("Press 'B' to toggle the state!", [10.0, 30.0]);
 
         ctx.render
-            .ui
-            .draw_debug_text("Press 'Space' to switch to Scene 2.", [10.0, 50.0]);
+            .debug_text_v("Press 'Space' to switch to Scene 2.", [10.0, 50.0]);
     }
 
     fn on_changed(&mut self, ctx: &mut karna::Context) {
@@ -60,11 +58,9 @@ impl Scene for StatesDemo2 {
         let state = ctx.states.get::<bool>(label!("boolean")).unwrap();
         let str = format!("This is Scene 2. Boolean value: {}", state);
 
-        ctx.render.ui.draw_debug_text(str, [10.0, 10.0]);
-
+        ctx.render.debug_text_v(str, [10.0, 10.0]);
         ctx.render
-            .ui
-            .draw_debug_text("Press 'Space' to switch to Scene 1.", [10.0, 30.0]);
+            .debug_text_v("Press 'Space' to switch to Scene 1.", [10.0, 30.0]);
     }
 
     fn on_changed(&mut self, ctx: &mut karna::Context) {

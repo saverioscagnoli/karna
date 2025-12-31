@@ -35,7 +35,7 @@ impl Label {
 #[macro_export]
 macro_rules! label {
     ($s:literal) => {{
-        const LABEL: $crate::map::Label = $crate::map::Label::new($s);
+        const LABEL: $crate::Label = $crate::Label::new($s);
         LABEL
     }};
 }

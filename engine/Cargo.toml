@@ -15,5 +15,6 @@ spin_sleep = "1.3.3"
 renderer = { path = "../renderer" }
 traccia.workspace = true
 rodio = "0.21.1"
-ctor = "0.6.3"
 gpu.workspace = true
+globals.workspace = true
+strip-ansi-escapes = "0.2.1"

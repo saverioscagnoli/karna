@@ -1,13 +1,11 @@
 use std::time::Duration;
 
 use karna::{AppBuilder, Scene, WindowBuilder, input::KeyCode, label, render::Text};
-use math::Vector2;
-use renderer::Color;
+use renderer::{Color, Layer, TextHandle};
 use utils::Timer;
 
 struct Donut {
-    text: Text,
-    debug_text: Text,
+    text: TextHandle,
     debug_timer: Timer,
     angle_a: f32,
     angle_b: f32,
@@ -114,12 +112,16 @@ impl Scene for Donut {
 
         let size = ctx.window.size();
 
-        self.text.set_position(Vector2::new(
-            size.width as f32 / 2.0 - 400.0,
-            size.height as f32 / 2.0 - 300.0,
-        ));
+        let mut text = Text::new(label!("jetbrains mono"), "");
 
-        self.debug_text.set_position([10.0, 10.0]);
+        text.set_position_x(size.width as f32 / 2.0 - 400.0);
+        text.set_position_y(size.height as f32 / 2.0 - 300.0);
+
+        let mut debug_text = Text::new(label!("debug"), "");
+
+        debug_text.set_position([10.0, 10.0, 0.0]);
+
+        self.text = ctx.render.add_text(text);
     }
 
     fn update(&mut self, ctx: &mut karna::Context) {
@@ -127,35 +129,64 @@ impl Scene for Donut {
 
         self.angle_a += 1.0 * dt;
         self.angle_b += 0.5 * dt;
-
         self.color_timer += 2.0 * dt;
 
-        *self.text.content_mut() = self.generate_frame().into();
-        *self.text.color_mut() = self.get_rainbow_color().into();
+        let frame_content = self.generate_frame();
+        let rainbow_color = self.get_rainbow_color();
 
-        self.debug_timer.tick(dt);
+        {
+            let text = ctx.render.get_text_mut(self.text);
 
-        if self.debug_timer.is_finished() {
-            *self.debug_text.content_mut() =
-                format!("fps: {} dt: {}", ctx.time.fps(), ctx.time.delta());
+            *text.content_mut() = frame_content.into();
+            *text.color_mut() = rainbow_color.into();
 
-            self.debug_timer.reset();
-        }
-
-        if ctx.input.key_pressed(&KeyCode::Space) {
-            if self.text.font() == label!("debug") {
-                self.text.set_font(label!("jetbrains mono"));
-            } else {
-                self.text.set_font(label!("debug"));
+            if ctx.input.key_pressed(&KeyCode::Space) {
+                if text.font() == label!("debug") {
+                    text.set_font(label!("jetbrains mono"));
+                } else {
+                    text.set_font(label!("debug"));
+                }
             }
         }
+
+        self.debug_timer.tick(dt);
     }
 
     fn fixed_update(&mut self, _ctx: &mut karna::Context) {}
 
     fn render(&mut self, ctx: &mut karna::Context) {
-        ctx.render.draw_text(&mut self.text);
-        ctx.render.draw_text(&mut self.debug_text);
+        ctx.render
+            .debug_text(format!("fps: {}", ctx.time.fps()), 10.0, 10.0);
+
+        ctx.render
+            .debug_text(format!("dt: {:.5}", ctx.time.delta()), 10.0, 30.0);
+
+        ctx.render.debug_text(
+            format!("draw calls: {}", ctx.profiling.render.draw_calls()),
+            10.0,
+            50.0,
+        );
+
+        ctx.render.debug_text(
+            format!("vertices: {}", ctx.profiling.render.vertices()),
+            10.0,
+            70.0,
+        );
+
+        ctx.render.debug_text(
+            format!("indices: {}", ctx.profiling.render.indices()),
+            10.0,
+            90.0,
+        );
+
+        ctx.render.debug_text(
+            format!(
+                "allocated: {:.2} MB",
+                ctx.profiling.mem.allocated() as f32 / 1024.0 / 1024.0
+            ),
+            10.0,
+            110.0,
+        );
     }
 }
 
@@ -168,8 +199,7 @@ fn main() {
                 .with_size((1280, 720))
                 .with_resizable(false)
                 .with_initial_scene(Donut {
-                    text: Text::new(label!("jetbrains mono")),
-                    debug_text: Text::new(label!("debug")),
+                    text: TextHandle::dummy(),
                     debug_timer: Timer::new(Duration::from_millis(100)),
                     angle_a: 0.0,
                     angle_b: 0.0,

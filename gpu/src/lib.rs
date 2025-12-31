@@ -71,7 +71,8 @@ impl GpuState {
             .request_device(&wgpu::DeviceDescriptor {
                 required_limits: wgpu::Limits::defaults(),
                 label: Some("device"),
-                required_features: wgpu::Features::default(),
+                required_features: wgpu::Features::default()
+                    .union(wgpu::Features::POLYGON_MODE_LINE),
                 ..Default::default()
             })
             .await

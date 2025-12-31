@@ -1,9 +1,14 @@
+mod label_map;
+mod slot_map;
+
 use std::{
     ops::{Deref, DerefMut},
     time::Duration,
 };
 
-pub mod map;
+// Re-exports
+pub use label_map::*;
+pub use slot_map::*;
 
 /// Implement Deref + DerefMut by transmuting from one type to another.
 ///

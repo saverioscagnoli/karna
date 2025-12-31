@@ -3,7 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
     sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
-use utils::map::{Label, LabelMap};
+use utils::{Label, LabelMap};
 use wgpu::naga::FastHashMap;
 
 /// Map used to store states across all scenes of a single window.

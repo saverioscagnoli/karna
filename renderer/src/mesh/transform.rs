@@ -1,42 +1,64 @@
 use macros::{Get, Set, With};
-use math::Vector2;
+use math::{Vector2, Vector3};
 
 #[derive(Debug, Clone, Copy)]
 #[derive(Get, Set, With)]
 pub struct Transform {
     #[get]
+    #[set(into)]
     #[with(into)]
-    #[with(prop = x, ty = f32)]
-    #[with(prop = y, ty = f32)]
-    pub(crate) position: Vector2,
+    pub position: Vector3,
 
     #[get]
+    #[set(into)]
     #[with(into)]
-    #[with(prop = x, ty = f32)]
-    #[with(prop = y, ty = f32)]
-    pub(crate) scale: Vector2,
+    pub rotation: Vector3,
 
-    #[get(copied)]
-    #[with]
-    pub(crate) rotation: f32,
+    #[get]
+    #[set(into)]
+    #[with(into)]
+    pub scale: Vector3,
 }
 
 impl Default for Transform {
     fn default() -> Self {
         Self {
-            position: Vector2::zeros(),
-            scale: Vector2::ones(),
-            rotation: 0.0,
+            position: Vector3::zeros(),
+            rotation: Vector3::zeros(),
+            scale: Vector3::ones(),
         }
     }
 }
 
 impl Transform {
-    pub fn new<P: Into<Vector2>, S: Into<Vector2>>(position: P, scale: S, rotation: f32) -> Self {
+    #[inline]
+    pub fn new<P, R, S>(position: P, rotation: R, scale: S) -> Self
+    where
+        P: Into<Vector3>,
+        R: Into<Vector3>,
+        S: Into<Vector3>,
+    {
         Self {
             position: position.into(),
+            rotation: rotation.into(),
             scale: scale.into(),
+        }
+    }
+
+    #[inline]
+    pub fn new_2d<P, S>(position: P, rotation: f32, scale: S) -> Self
+    where
+        P: Into<Vector2>,
+        S: Into<Vector2>,
+    {
+        let position: Vector3 = position.into().extend(0.0);
+        let rotation = Vector3::new(0.0, 0.0, rotation);
+        let scale: Vector3 = scale.into().extend(0.0);
+
+        Self {
+            position,
             rotation,
+            scale,
         }
     }
 }
