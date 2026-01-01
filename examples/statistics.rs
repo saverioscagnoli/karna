@@ -1,6 +1,6 @@
 use karna::{AppBuilder, Scene, WindowBuilder, input::KeyCode};
+use logging::info;
 use renderer::{Color, Geometry, Material, Mesh, MeshHandle, Transform};
-use traccia::info;
 
 struct StatsDemo {
     rect: MeshHandle,

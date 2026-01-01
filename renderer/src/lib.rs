@@ -14,10 +14,13 @@ use crate::{
 };
 use assets::AssetManager;
 use globals::profiling;
-use logging::{info, warn};
+use logging::{LogError, LogLevel, info, warn};
 use macros::{Get, Set};
 use math::{Size, Vector2};
-use std::sync::{Arc, RwLock};
+use std::{
+    ops::Deref,
+    sync::{Arc, RwLock},
+};
 use utils::{Label, label};
 use winit::window::Window;
 
@@ -36,6 +39,43 @@ pub use sprite::{Frame, Sprite, SpriteHandle};
 
 pub(crate) trait Descriptor {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
+}
+
+#[derive(Debug, Clone)]
+pub struct RenderLogs {
+    logs: Arc<RwLock<Vec<String>>>,
+    max_logs: usize,
+}
+
+impl Deref for RenderLogs {
+    type Target = Arc<RwLock<Vec<String>>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.logs
+    }
+}
+
+impl RenderLogs {
+    pub fn new(max_logs: usize) -> Self {
+        Self {
+            logs: Arc::new(RwLock::new(Vec::new())),
+            max_logs,
+        }
+    }
+}
+
+impl logging::target::Target for RenderLogs {
+    fn write(&self, level: LogLevel, message: &str) -> Result<(), LogError> {
+        let mut logs = self.logs.write().map_err(|_| LogError::PoisonError)?;
+
+        logs.push(format!("{}: {}", level, message));
+
+        if logs.len() > self.max_logs {
+            logs.remove(0);
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Get, Set)]
@@ -73,16 +113,12 @@ pub struct Renderer {
     // Wireframe pipeline
     wireframe_pipeline: wgpu::RenderPipeline,
     wireframe_toggle: bool,
-    logs: Arc<RwLock<Vec<String>>>,
+    logs: RenderLogs,
 }
 
 impl Renderer {
     #[doc(hidden)]
-    pub fn new(
-        window: Arc<Window>,
-        assets: Arc<AssetManager>,
-        logs: Arc<RwLock<Vec<String>>>,
-    ) -> Self {
+    pub fn new(window: Arc<Window>, assets: Arc<AssetManager>, logs: RenderLogs) -> Self {
         let gpu = gpu::get();
         let size = window.inner_size();
 
@@ -471,10 +507,9 @@ impl Renderer {
     #[inline]
     pub fn debug_logs(&mut self, x: f32) {
         let mut y = 10.0;
-        let logs_clone = self.logs.clone();
-        let logs = logs_clone.read().expect("Logs lock is poisoned");
-
         let prev_color = self.draw_color;
+        let logs = self.logs.clone();
+        let logs = logs.read().expect("Logs lock is poisoned");
 
         for log in logs.iter() {
             if log.starts_with("info") {

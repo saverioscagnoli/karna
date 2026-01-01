@@ -11,6 +11,7 @@ use crossbeam_channel::{Receiver, Sender};
 use globals::{TrackingAllocator, profiling};
 use logging::{error, info, warn};
 use math::Size;
+use renderer::RenderLogs;
 use std::{
     sync::{Arc, LazyLock, RwLock},
     thread::{self, JoinHandle},
@@ -32,8 +33,6 @@ pub use utils::{Label, LabelMap, label};
 
 #[global_allocator]
 static GLOBAL: TrackingAllocator = TrackingAllocator;
-pub(crate) static LOGS: LazyLock<Arc<RwLock<Vec<String>>>> =
-    LazyLock::new(|| Arc::new(RwLock::new(Vec::new())));
 
 enum WindowMessage {
     Close,
@@ -52,6 +51,7 @@ struct EngineState {
     assets: Arc<AssetManager>,
     globals: Arc<GlobalStates>,
     info: Arc<SystemInfo>,
+    logs: RenderLogs,
 }
 
 pub struct App {
@@ -74,11 +74,18 @@ impl App {
 
     pub(crate) fn init(&mut self) {
         gpu::init();
-        logging::init_default();
 
         let assets = Arc::new(AssetManager::new());
         let globals = Arc::new(GlobalStates::new());
         let info = Arc::new(SystemInfo::new());
+        let logs = RenderLogs::new(25);
+
+        logging::init(
+            logging::Config::default().with_target(logging::TargetConfig {
+                target: Box::new(logs.clone()),
+                formatter: None,
+            }),
+        );
 
         info!("Cpu: {} ({})", info.cpu_model(), info.cpu_cores());
         info!(
@@ -94,6 +101,7 @@ impl App {
             assets,
             globals,
             info,
+            logs,
         });
     }
 
@@ -131,7 +139,7 @@ impl App {
         state: EngineState,
         rx: Receiver<WindowMessage>,
     ) {
-        let mut context = Context::new(window, state.assets, state.globals, state.info);
+        let mut context = Context::new(window, state.assets, state.globals, state.info, state.logs);
         let mut scenes = SceneManager::new(scenes);
 
         scenes.current().load(&mut context);
