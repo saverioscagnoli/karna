@@ -55,9 +55,6 @@ pub enum Color {
     /// Bright white color (ANSI code 97 - bg: 107)
     BrightWhite,
 
-    /// Gray color (ANSI code 90 - bg: 100)
-    Gray,
-
     /// RGB color with 8-bit values for red, green, and blue components (![table](https://gist.github.com/ConnerWill/d4b6c776b509add763e17f9f113fd25b#256-colors))
     ID(u8),
 
@@ -90,7 +87,6 @@ impl Color {
             Self::BrightMagenta => "\x1b[95m".to_string(),
             Self::BrightCyan => "\x1b[96m".to_string(),
             Self::BrightWhite => "\x1b[97m".to_string(),
-            Self::Gray => "\x1b[90m".to_string(),
             Self::ID(id) => format!("\x1b[38;5;{}m", id),
             Self::RGB(r, g, b) => format!("\x1b[38;2;{};{};{}m", r, g, b),
         }
@@ -115,7 +111,6 @@ impl Color {
             Self::BrightMagenta => "\x1b[105m".to_string(),
             Self::BrightCyan => "\x1b[106m".to_string(),
             Self::BrightWhite => "\x1b[107m".to_string(),
-            Self::Gray => "\x1b[100m".to_string(),
             Self::ID(id) => format!("\x1b[48;5;{}m", id),
             Self::RGB(r, g, b) => format!("\x1b[48;2;{};{};{}m", r, g, b),
         }

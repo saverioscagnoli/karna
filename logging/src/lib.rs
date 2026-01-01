@@ -2,6 +2,7 @@
 
 pub mod target;
 
+mod context;
 mod default;
 mod err;
 mod formatter;
@@ -9,12 +10,13 @@ mod macros;
 mod style;
 
 use crate::target::{Console, DefaultConsoleFormatter, Target};
-use std::{fmt, sync::OnceLock};
+use std::{collections::HashMap, fmt, sync::OnceLock};
 
 // Re-exports
+pub use context::*;
 pub use default::DefaultLogger;
 pub use err::LogError;
-pub use formatter::{DefaultFormatter, Formatter};
+pub use formatter::*;
 pub use style::*;
 
 /// Logging severity levels in ascending order of importance.
@@ -51,6 +53,8 @@ impl fmt::Display for LogLevel {
 }
 
 impl LogLevel {
+    pub const MAX_WIDTH: usize = 5;
+
     pub fn console_color(&self) -> Color {
         match self {
             Self::Trace => Color::Cyan,
@@ -73,6 +77,19 @@ pub struct Record {
     pub message: String,
     pub timestamp: u64,
     pub target: String,
+    pub context: HashMap<String, String>,
+}
+
+impl Record {
+    pub fn new(level: LogLevel, message: String, target: String, timestamp: u64) -> Self {
+        Self {
+            level,
+            message,
+            timestamp,
+            target,
+            context: context::snapshot(),
+        }
+    }
 }
 
 pub struct TargetConfig {

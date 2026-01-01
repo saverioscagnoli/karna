@@ -2,12 +2,7 @@
 macro_rules! log {
    ($level:expr, $($arg:tt)*) => {{
         let logger = $crate::logger();
-        let record = $crate::Record {
-            level: $level,
-            target: module_path!().to_string(),
-            message: format!($($arg)*),
-            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or(std::time::Duration::ZERO).as_millis() as u64,
-        };
+        let record = $crate::Record::new($level, format!($($arg)*), module_path!().to_string(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or(std::time::Duration::ZERO).as_millis() as u64);
 
         logger.log(&record);
     }};
@@ -52,5 +47,12 @@ macro_rules! error {
 macro_rules! fatal {
     ($($arg:tt)*) => {
         $crate::log!($crate::LogLevel::Fatal, $($arg)*)
+    };
+}
+
+#[macro_export]
+macro_rules! ctx {
+    ($key:expr, $value:expr) => {
+        $crate::ContextGuard::new($key, $value.to_string())
     };
 }
