@@ -6,7 +6,6 @@
 use crate::{
     Color, Colorize, LogLevel, Record, err::LogError, format_context, formatter::Formatter,
 };
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{io::Write, path::Path, sync::Mutex};
 
 /// Defines an output destination for log messages.
