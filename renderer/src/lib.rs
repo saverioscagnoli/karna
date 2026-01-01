@@ -14,10 +14,10 @@ use crate::{
 };
 use assets::AssetManager;
 use globals::profiling;
+use logging::{info, warn};
 use macros::{Get, Set};
 use math::{Size, Vector2};
 use std::sync::{Arc, RwLock};
-use traccia::{info, warn};
 use utils::{Label, label};
 use winit::window::Window;
 

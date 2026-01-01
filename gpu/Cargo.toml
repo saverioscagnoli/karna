@@ -10,4 +10,4 @@ macros.workspace = true
 utils.workspace = true
 image.workspace = true
 math.workspace = true
-traccia.workspace = true
+logging.workspace = true

@@ -8,7 +8,6 @@ use std::{
     hash::{DefaultHasher, Hash, Hasher},
     sync::{Arc, LazyLock, RwLock},
 };
-use traccia::{fatal, info};
 use wgpu::naga::FastHashMap;
 
 static GEOMETRY_CACHE: LazyLock<RwLock<FastHashMap<u32, Arc<GeometryBuffer>>>> =

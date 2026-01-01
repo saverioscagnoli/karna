@@ -13,13 +13,13 @@ math = { path = "math" }
 winit = "0.30.12"
 wgpu = "28.0.0"
 renderer = { path = "renderer" }
-traccia = "3.0.0"
 image = "0.25.9"
 gpu = { path = "gpu" }
 assets = { path = "assets" }
 fontdue = "0.9.3"
 rand = "0.9.2"
 globals = { path = "globals" }
+logging = { path = "logging" }
 
 [dependencies]
 math.workspace = true
@@ -28,8 +28,8 @@ renderer.workspace = true
 winit.workspace = true
 pollster = "0.4"
 utils = { path = "utils" }
+logging.workspace = true
 
 [dev-dependencies]
 image = "0.25.9"
 rand = "0.8"
-traccia = "3.0.0"

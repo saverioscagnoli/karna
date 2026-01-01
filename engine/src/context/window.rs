@@ -1,7 +1,7 @@
+use logging::warn;
 use macros::Get;
 use math::Size;
 use std::sync::Arc;
-use traccia::warn;
 use winit::window::Fullscreen;
 
 pub type WinitWindow = Arc<winit::window::Window>;

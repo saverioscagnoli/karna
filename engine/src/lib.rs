@@ -9,12 +9,12 @@ use crate::{
 use assets::AssetManager;
 use crossbeam_channel::{Receiver, Sender};
 use globals::{TrackingAllocator, profiling};
+use logging::{error, info, warn};
 use math::Size;
 use std::{
     sync::{Arc, LazyLock, RwLock},
     thread::{self, JoinHandle},
 };
-use traccia::{TargetId, error, info, warn};
 use utils::Lazy;
 use wgpu::naga::FastHashMap;
 use winit::{
@@ -34,49 +34,6 @@ pub use utils::{Label, LabelMap, label};
 static GLOBAL: TrackingAllocator = TrackingAllocator;
 pub(crate) static LOGS: LazyLock<Arc<RwLock<Vec<String>>>> =
     LazyLock::new(|| Arc::new(RwLock::new(Vec::new())));
-
-#[derive(Clone)]
-struct EngineLogTarget;
-
-impl traccia::Target for EngineLogTarget {
-    fn write(&self, _level: traccia::LogLevel, formatted: &str) -> Result<(), traccia::Error> {
-        LOGS.write()
-            .unwrap()
-            .push(strip_ansi_escapes::strip_str(formatted));
-        Ok(())
-    }
-}
-
-fn init_logging() {
-    traccia::init_with_config(traccia::Config {
-        level: if cfg!(debug_assertions) {
-            traccia::LogLevel::Debug
-        } else {
-            traccia::LogLevel::Info
-        },
-        format: Some(Box::new(
-            traccia::FormatterBuilder::new()
-                .with_span_position(traccia::SpanPosition::AfterLevel)
-                .build(|record, span| {
-                    if span.is_empty() {
-                        format!(
-                            "{} {}",
-                            record.level.default_coloring().to_lowercase(),
-                            record.message
-                        )
-                    } else {
-                        format!(
-                            "{} {} {}",
-                            record.level.default_coloring().to_lowercase(),
-                            span,
-                            record.message
-                        )
-                    }
-                }),
-        )),
-        targets: vec![Box::new(EngineLogTarget), Box::new(traccia::Console::new())],
-    });
-}
 
 enum WindowMessage {
     Close,
@@ -117,7 +74,7 @@ impl App {
 
     pub(crate) fn init(&mut self) {
         gpu::init();
-        init_logging();
+        logging::init_default();
 
         let assets = Arc::new(AssetManager::new());
         let globals = Arc::new(GlobalStates::new());
@@ -156,7 +113,7 @@ impl App {
         let state = self.state.clone();
 
         let handle = thread::spawn(move || {
-            let _span = traccia::span!("window", "label" => window.label());
+            let _ctx = logging::ctx!("window", window.label());
             Self::window_loop(window, scenes, state, rx);
         });
 

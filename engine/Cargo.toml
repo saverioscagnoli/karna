@@ -10,11 +10,10 @@ wgpu.workspace = true
 macros.workspace = true
 utils.workspace = true
 math.workspace = true
+logging.workspace = true
 crossbeam-channel = "0.5.15"
 spin_sleep = "1.3.3"
 renderer = { path = "../renderer" }
-traccia.workspace = true
 rodio = "0.21.1"
 gpu.workspace = true
 globals.workspace = true
-strip-ansi-escapes = "0.2.1"

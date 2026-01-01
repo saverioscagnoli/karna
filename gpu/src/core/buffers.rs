@@ -1,6 +1,6 @@
+use logging::info;
 use macros::Get;
 use std::{marker::PhantomData, ops::RangeBounds};
-use traccia::info;
 use wgpu::util::DeviceExt;
 
 #[derive(Debug, Get)]
