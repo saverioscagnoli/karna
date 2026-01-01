@@ -55,43 +55,20 @@ impl Target for Console {
 #[derive(Default)]
 pub struct DefaultConsoleFormatter;
 
-static MAX_CONTEXT_WIDTH: AtomicUsize = AtomicUsize::new(0);
-
 impl Formatter for DefaultConsoleFormatter {
     fn format(&self, record: &Record) -> String {
-        let level_str = record.level.to_string();
-        let level = format!(
-            "[{}]{:<padding$}",
-            level_str,
-            "",
-            padding = LogLevel::MAX_WIDTH - level_str.len()
-        )
-        .color(record.level.console_color());
+        let level_colored = format!("[{}]", record.level).color(record.level.console_color());
+        let padding = " ".repeat(LogLevel::MAX_WIDTH - record.level.to_string().len());
+        let level = format!("{}{}", level_colored, padding);
 
         let ctx = format_context(&record.context);
 
-        if ctx.is_empty() {
+        if record.context.is_empty() {
             format!("{} {}", level, record.message)
         } else {
-            let ctx_len = ctx.len();
-            let mut current_max = MAX_CONTEXT_WIDTH.load(Ordering::Relaxed);
-            while ctx_len > current_max {
-                match MAX_CONTEXT_WIDTH.compare_exchange(
-                    current_max,
-                    ctx_len,
-                    Ordering::Relaxed,
-                    Ordering::Relaxed,
-                ) {
-                    Ok(_) => break,
-                    Err(x) => current_max = x,
-                }
-            }
+            let ctx_formatted = format!("{{ {} }}", ctx).color(Color::RGB(128, 128, 128));
 
-            let max_width = MAX_CONTEXT_WIDTH.load(Ordering::Relaxed).max(30);
-            let ctx_formatted =
-                format!("{:<width$}", ctx, width = max_width).color(Color::RGB(128, 128, 128));
-
-            format!("{} {} | {}", level, ctx_formatted, record.message)
+            format!("{} {} {}", level, ctx_formatted, record.message)
         }
     }
 }
