@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["assets", "utils", "engine", "gpu","macros","math", "renderer", "globals"]
+members = ["assets", "utils", "engine", "gpu","macros","math", "renderer", "globals", "logging"]
 
 [workspace.dependencies]
 utils = { path = "utils" }
