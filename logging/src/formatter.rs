@@ -1,4 +1,4 @@
-use crate::Record;
+use crate::{LogLevel, Record};
 use std::collections::HashMap;
 
 pub trait Formatter {
@@ -9,13 +9,18 @@ pub struct DefaultFormatter;
 
 impl Formatter for DefaultFormatter {
     fn format(&self, record: &Record) -> String {
-        let level = format!("[{:<5}]", record.level);
+        let level = format!("[{}]", record.level);
+        let padding = " ".repeat(LogLevel::MAX_WIDTH - record.level.to_string().len());
+        let level = format!("{}{}", level, padding);
+
         let ctx = format_context(&record.context);
 
-        if ctx.is_empty() {
-            format!("{}: {}", level, record.message)
+        if record.context.is_empty() {
+            format!("{} {}", level, record.message)
         } else {
-            format!("{}: {{ {} }} | {}", level, ctx, record.message)
+            let ctx_formatted = format!("{{ {} }}", ctx);
+
+            format!("{} {} {}", level, ctx_formatted, record.message)
         }
     }
 }

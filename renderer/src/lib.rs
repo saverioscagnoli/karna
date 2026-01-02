@@ -65,10 +65,10 @@ impl RenderLogs {
 }
 
 impl logging::target::Target for RenderLogs {
-    fn write(&self, level: LogLevel, message: &str) -> Result<(), LogError> {
+    fn write(&self, _level: LogLevel, message: &str) -> Result<(), LogError> {
         let mut logs = self.logs.write().map_err(|_| LogError::PoisonError)?;
 
-        logs.push(format!("{}: {}", level, message));
+        logs.push(message.to_string());
 
         if logs.len() > self.max_logs {
             logs.remove(0);
@@ -512,15 +512,15 @@ impl Renderer {
         let logs = logs.read().expect("Logs lock is poisoned");
 
         for log in logs.iter() {
-            if log.starts_with("info") {
+            if log.starts_with("[info") {
                 self.set_draw_color(Color::Green);
             }
 
-            if log.starts_with("warn") {
+            if log.starts_with("[warn") {
                 self.set_draw_color(Color::Yellow);
             }
 
-            if log.starts_with("error") {
+            if log.starts_with("[error") {
                 self.set_draw_color(Color::Red);
             }
 

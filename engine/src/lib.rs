@@ -13,7 +13,7 @@ use logging::{error, info, warn};
 use math::Size;
 use renderer::RenderLogs;
 use std::{
-    sync::{Arc, LazyLock, RwLock},
+    sync::Arc,
     thread::{self, JoinHandle},
 };
 use utils::Lazy;
