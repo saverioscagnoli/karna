@@ -66,6 +66,16 @@ impl Scene for ImmediateRenderingDemo {
 
         ctx.render
             .fill_rect(self.pos.x, self.pos.y + 200.0, 50.0, 50.0);
+
+        ctx.render.set_draw_color(Color::Purple);
+
+        let pos = [500.0, 400.0];
+        for i in 0..10 {
+            for j in 0..10 {
+                ctx.render
+                    .draw_point(pos[0] + i as f32 * 10.0, pos[1] + j as f32 * 10.0);
+            }
+        }
     }
 }
 

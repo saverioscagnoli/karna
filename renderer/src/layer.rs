@@ -19,11 +19,16 @@ pub struct RenderLayer {
 }
 
 impl RenderLayer {
-    pub(crate) fn new(camera: Camera, assets: Arc<AssetManager>) -> Self {
+    pub(crate) fn new(
+        surface_format: wgpu::TextureFormat,
+        camera: Camera,
+        assets: Arc<AssetManager>,
+    ) -> Self {
+        let immediate = ImmediateRenderer::new(surface_format, &camera, assets.clone());
         Self {
             camera,
             assets: assets.clone(),
-            immediate: ImmediateRenderer::new(assets.clone()),
+            immediate,
             retained: RetainedRenderer::new(assets),
         }
     }
@@ -47,14 +52,11 @@ impl RenderLayer {
         &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,
         retained_pipeline: &'a wgpu::RenderPipeline,
-        immediate_pipeline: &'a wgpu::RenderPipeline,
-        immediate_line_pipeline: &'a wgpu::RenderPipeline,
         text_pipeline: &'a wgpu::RenderPipeline,
     ) {
         self.retained
             .present(render_pass, retained_pipeline, text_pipeline);
 
-        self.immediate
-            .present(render_pass, immediate_pipeline, immediate_line_pipeline);
+        self.immediate.present(render_pass);
     }
 }

@@ -108,8 +108,6 @@ pub struct Renderer {
 
     retained_pipeline: wgpu::RenderPipeline,
     text_pipeline: wgpu::RenderPipeline,
-    immediate_pipeline: wgpu::RenderPipeline,
-    immediate_line_pipeline: wgpu::RenderPipeline,
 
     // Wireframe pipeline
     wireframe_pipeline: wgpu::RenderPipeline,
@@ -173,11 +171,6 @@ impl Renderer {
         let text_shader =
             Shader::from_wgsl_file(include_str!("../../shaders/text.wgsl"), Some("text shader"));
 
-        let immediate_shader = Shader::from_wgsl_file(
-            include_str!("../../shaders/immediate.wgsl"),
-            Some("immediate_shader"),
-        );
-
         let retained_pipeline = shader
             .pipeline_builder()
             .label("triangle pipeline")
@@ -192,38 +185,6 @@ impl Renderer {
                     assets.bind_group_layout(),
                 ],
                 &[Vertex::desc(), MeshInstanceGpu::desc()],
-            );
-
-        let immediate_pipeline = immediate_shader
-            .pipeline_builder()
-            .label("immediate pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::TriangleList)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[
-                    camera.view_projection_bind_group_layout(),
-                    assets.bind_group_layout(),
-                ],
-                &[Vertex::desc()],
-            );
-
-        let immediate_line_pipeline = immediate_shader
-            .pipeline_builder()
-            .label("immediate line pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::LineList)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[
-                    camera.view_projection_bind_group_layout(),
-                    assets.bind_group_layout(),
-                ],
-                &[Vertex::desc()],
             );
 
         let text_pipeline = text_shader
@@ -259,8 +220,8 @@ impl Renderer {
                 &[Vertex::desc(), MeshInstanceGpu::desc()],
             );
 
-        let world = RenderLayer::new(camera, assets.clone());
-        let ui = RenderLayer::new(ui_camera, assets.clone());
+        let world = RenderLayer::new(surface_format, camera, assets.clone());
+        let ui = RenderLayer::new(surface_format, ui_camera, assets.clone());
 
         Self {
             surface,
@@ -274,8 +235,6 @@ impl Renderer {
             active_layer: Layer::World,
             user_layers: Vec::new(),
             retained_pipeline,
-            immediate_pipeline,
-            immediate_line_pipeline,
             text_pipeline,
             wireframe_pipeline,
             wireframe_toggle: false,
@@ -332,6 +291,7 @@ impl Renderer {
         self.user_layers.insert(
             index,
             RenderLayer::new(
+                self.config.format,
                 Camera::new(Projection::Orthographic {
                     left: 0.0,
                     right: self.config.width as f32,
@@ -447,6 +407,26 @@ impl Renderer {
     // without the complexity of retained rendering.
 
     #[inline]
+    pub fn draw_point(&mut self, x: f32, y: f32) {
+        let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_point(x, y, color);
+    }
+
+    #[inline]
+    pub fn draw_point_v<P>(&mut self, p: P)
+    where
+        P: Into<Vector2>,
+    {
+        let p = p.into();
+        let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_point(p.x, p.y, color);
+    }
+
+    #[inline]
     pub fn draw_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
         let color = self.draw_color.into();
         let layer = self.render_layer_mut(self.active_layer);
@@ -526,7 +506,7 @@ impl Renderer {
         let color = self.draw_color.into();
         let layer = self.render_layer_mut(self.active_layer);
 
-        layer.immediate.draw_text(font_label, text, x, y, color);
+        layer.immediate.draw_text(font_label, &text, x, y, color);
     }
 
     #[inline]
@@ -543,7 +523,7 @@ impl Renderer {
 
         layer
             .immediate
-            .draw_text(font_label, text, pos.x, pos.y, color);
+            .draw_text(font_label, &text, pos.x, pos.y, color);
     }
 
     #[inline]
@@ -552,20 +532,22 @@ impl Renderer {
         let color = self.draw_color.into();
         let layer = self.render_layer_mut(self.active_layer);
 
-        layer.immediate.debug_text(text, x, y, color);
+        layer.immediate.debug_text(&text, x, y, color);
     }
 
     #[inline]
     pub fn debug_text_v<T, P>(&mut self, text: T, pos: P)
     where
-        T: Into<String>,
+        T: AsRef<str>,
         P: Into<Vector2>,
     {
         let pos = pos.into();
         let color = self.draw_color.into();
         let layer = self.render_layer_mut(self.active_layer);
 
-        layer.immediate.debug_text(text.into(), pos.x, pos.y, color);
+        layer
+            .immediate
+            .debug_text(text.as_ref(), pos.x, pos.y, color);
     }
 
     #[inline]
@@ -646,8 +628,6 @@ impl Renderer {
             self.world.present(
                 &mut render_pass,
                 &self.retained_pipeline,
-                &self.immediate_pipeline,
-                &self.immediate_line_pipeline,
                 &self.text_pipeline,
             );
 
@@ -656,8 +636,6 @@ impl Renderer {
             self.ui.present(
                 &mut render_pass,
                 &self.retained_pipeline,
-                &self.immediate_pipeline,
-                &self.immediate_line_pipeline,
                 &self.text_pipeline,
             );
 
@@ -667,8 +645,6 @@ impl Renderer {
                 layer.present(
                     &mut render_pass,
                     &self.retained_pipeline,
-                    &self.immediate_pipeline,
-                    &self.immediate_line_pipeline,
                     &self.text_pipeline,
                 );
             }

@@ -1,34 +1,22 @@
-use crate::{Color, Vertex, profiling};
+mod line;
+mod point;
+mod triangle;
+
+use crate::{
+    Camera, Descriptor, Vertex,
+    immediate::{line::LineBatcher, point::PointBatcher, triangle::TriangleBatcher},
+    shader::Shader,
+};
 use assets::AssetManager;
-use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
-use gpu::core::{GpuBuffer, GpuBufferBuilder};
 use math::Vector4;
 use std::sync::Arc;
-use utils::{Label, LabelMap, label};
-use wgpu::naga::FastHashMap;
+use utils::{Label, label};
 
 pub struct ImmediateRenderer {
     assets: Arc<AssetManager>,
-
-    vertices: Vec<Vertex>,
-    indices: Vec<u32>,
-
-    vertex_buffer: GpuBuffer<Vertex>,
-    index_buffer: GpuBuffer<u32>,
-
-    vertex_capacity: usize,
-    index_capacity: usize,
-
-    line_vertices: Vec<Vertex>,
-    line_indices: Vec<u32>,
-
-    line_vertex_buffer: GpuBuffer<Vertex>,
-    line_index_buffer: GpuBuffer<u32>,
-
-    text_layout: Layout,
-
-    /// (FontLabel -> (char -> (Vertices, Indices)))
-    char_cache: LabelMap<FastHashMap<char, (Vec<Vertex>, Vec<u32>)>>,
+    point_batcher: PointBatcher,
+    line_batcher: LineBatcher,
+    triangle_batcher: TriangleBatcher,
     zstep: f32,
 }
 
@@ -36,342 +24,124 @@ impl ImmediateRenderer {
     const BASE_VERTEX_CAPACITY: usize = 1024;
     const BASE_INDEX_CAPACITY: usize = 1024;
 
-    pub(crate) fn new(assets: Arc<AssetManager>) -> Self {
-        let vertex_buffer = GpuBufferBuilder::new()
-            .label("Immediate Renderer vertex buffer")
-            .capacity(Self::BASE_VERTEX_CAPACITY)
-            .vertex()
-            .copy_dst()
-            .build();
+    pub(crate) fn new(
+        surface_format: wgpu::TextureFormat,
+        camera: &Camera,
+        assets: Arc<AssetManager>,
+    ) -> Self {
+        let shader = Shader::from_wgsl_file(
+            include_str!("../../../shaders/immediate.wgsl"),
+            Some("Immediate shader module"),
+        );
 
-        let index_buffer = GpuBufferBuilder::new()
-            .label("Immediate Renderer index buffer")
-            .capacity(Self::BASE_INDEX_CAPACITY)
-            .index()
-            .copy_dst()
-            .build();
+        let point_pipeline = shader
+            .pipeline_builder()
+            .label("immediate line pipeline")
+            .vertex_entry("vs_main")
+            .fragment_entry("fs_main")
+            .topology(wgpu::PrimitiveTopology::PointList)
+            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
+            .build(
+                surface_format,
+                &[
+                    camera.view_projection_bind_group_layout(),
+                    assets.bind_group_layout(),
+                ],
+                &[Vertex::desc()],
+            );
 
-        let line_vertex_buffer = GpuBufferBuilder::new()
-            .label("Immediate Renderer line vertex buffer")
-            .capacity(Self::BASE_VERTEX_CAPACITY)
-            .vertex()
-            .copy_dst()
-            .build();
+        let line_pipeline = shader
+            .pipeline_builder()
+            .label("immediate line pipeline")
+            .vertex_entry("vs_main")
+            .fragment_entry("fs_main")
+            .topology(wgpu::PrimitiveTopology::LineList)
+            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
+            .build(
+                surface_format,
+                &[
+                    camera.view_projection_bind_group_layout(),
+                    assets.bind_group_layout(),
+                ],
+                &[Vertex::desc()],
+            );
 
-        let line_index_buffer = GpuBufferBuilder::new()
-            .label("Immediate Renderer line index buffer")
-            .capacity(Self::BASE_INDEX_CAPACITY)
-            .index()
-            .copy_dst()
-            .build();
+        let triangle_pipeline = shader
+            .pipeline_builder()
+            .label("immediate triangle pipeline")
+            .vertex_entry("vs_main")
+            .fragment_entry("fs_main")
+            .topology(wgpu::PrimitiveTopology::TriangleList)
+            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
+            .build(
+                surface_format,
+                &[
+                    camera.view_projection_bind_group_layout(),
+                    assets.bind_group_layout(),
+                ],
+                &[Vertex::desc()],
+            );
+
+        let point_batcher = PointBatcher::new(point_pipeline);
+        let line_batcher = LineBatcher::new(line_pipeline);
+        let triangle_batcher = TriangleBatcher::new(triangle_pipeline);
 
         Self {
             assets,
-            vertices: Vec::with_capacity(Self::BASE_VERTEX_CAPACITY),
-            indices: Vec::with_capacity(Self::BASE_INDEX_CAPACITY),
-            vertex_buffer,
-            index_buffer,
-            line_vertices: Vec::with_capacity(Self::BASE_VERTEX_CAPACITY),
-            line_indices: Vec::with_capacity(Self::BASE_INDEX_CAPACITY),
-            line_vertex_buffer,
-            line_index_buffer,
-            vertex_capacity: Self::BASE_VERTEX_CAPACITY,
-            index_capacity: Self::BASE_INDEX_CAPACITY,
-            text_layout: Layout::new(CoordinateSystem::PositiveYDown),
-            char_cache: LabelMap::default(),
+            point_batcher,
+            line_batcher,
+            triangle_batcher,
             zstep: 0.0,
         }
     }
 
     #[inline]
-    pub(crate) fn clear(&mut self) {
-        self.vertices.clear();
-        self.indices.clear();
-        self.line_vertices.clear();
-        self.line_indices.clear();
-        self.text_layout.clear();
+    pub fn draw_point(&mut self, x: f32, y: f32, color: Vector4) {
+        self.point_batcher.draw_point(x, y, self.zstep, color);
     }
 
     #[inline]
     pub fn draw_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, color: Vector4) {
-        let color: [f32; 4] = color.into();
-
-        let start = Vertex {
-            position: [x1, y1, self.zstep],
-            color,
-            uv_coords: [0.0, 0.0],
-        };
-
-        let end = Vertex {
-            position: [x2, y2, self.zstep],
-            color,
-            uv_coords: [0.0, 0.0],
-        };
-
-        self.line_vertices.push(start);
-        self.line_vertices.push(end);
-
-        self.line_indices.push(self.line_vertices.len() as u32 - 2);
-        self.line_indices.push(self.line_vertices.len() as u32 - 1);
-    }
-
-    #[inline]
-    pub fn fill_rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: Vector4) {
-        let color: [f32; 4] = color.into();
-
-        // Get white pixel UV coords for solid color rendering
-        let (uv_x, uv_y, uv_w, uv_h) = self.assets.get_white_uv_coords();
-        let uv_center = [uv_x + uv_w * 0.5, uv_y + uv_h * 0.5];
-
-        let top_left = Vertex {
-            position: [x, y, self.zstep], // top-left
-            color,
-            uv_coords: uv_center,
-        };
-
-        let top_right = Vertex {
-            position: [x + w, y, self.zstep], // top-right
-            color,
-            uv_coords: uv_center,
-        };
-
-        let bottom_left = Vertex {
-            position: [x, y + h, self.zstep], // bottom-left
-            color,
-            uv_coords: uv_center,
-        };
-
-        let bottom_right = Vertex {
-            position: [x + w, y + h, self.zstep], // bottom-right
-            color,
-            uv_coords: uv_center,
-        };
-
-        let base = self.vertices.len() as u32;
-
-        self.vertices.push(top_left);
-        self.vertices.push(top_right);
-        self.vertices.push(bottom_left);
-        self.vertices.push(bottom_right);
-
-        self.indices
-            .extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 1, base + 3]);
+        self.line_batcher
+            .draw_line(x1, y1, x2, y2, self.zstep, color);
     }
 
     #[inline]
     pub fn stroke_rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: Vector4) {
-        let color: [f32; 4] = color.into();
-        let (uv_x, uv_y, uv_w, uv_h) = self.assets.get_white_uv_coords();
-        let uv_center = [uv_x + uv_w * 0.5, uv_y + uv_h * 0.5];
-
-        let base = self.line_vertices.len() as u32;
-
-        // Add 4 corners as vertices
-        self.line_vertices.extend_from_slice(&[
-            Vertex {
-                position: [x, y, self.zstep],
-                color,
-                uv_coords: uv_center,
-            },
-            Vertex {
-                position: [x + w, y, self.zstep],
-                color,
-                uv_coords: uv_center,
-            },
-            Vertex {
-                position: [x + w, y + h, self.zstep],
-                color,
-                uv_coords: uv_center,
-            },
-            Vertex {
-                position: [x, y + h, self.zstep],
-                color,
-                uv_coords: uv_center,
-            },
-        ]);
-
-        // Connect them in a loop (8 indices for 4 lines)
-        self.line_indices.extend_from_slice(&[
-            base,
-            base + 1, // top
-            base + 1,
-            base + 2, // right
-            base + 2,
-            base + 3, // bottom
-            base + 3,
-            base, // left
-        ]);
+        self.line_batcher.stroke_rect(x, y, self.zstep, w, h, color);
     }
 
     #[inline]
-    pub fn draw_text(&mut self, font_label: Label, text: String, x: f32, y: f32, color: Vector4) {
-        let color: [f32; 4] = color.into();
-        let font = self.assets.get_font(&font_label);
-
-        self.text_layout.clear();
-        self.text_layout.append(
-            &[font.inner()],
-            &TextStyle::new(&text, font.size() as f32, 0),
-        );
-
-        let glyphs: Vec<_> = self.text_layout.glyphs().iter().copied().collect();
-
-        let cache = self
-            .char_cache
-            .entry(font_label)
-            .or_insert_with(FastHashMap::default);
-
-        for glyph in glyphs {
-            if glyph.width == 0 || glyph.height == 0 {
-                continue;
-            }
-
-            let ch = glyph.parent;
-
-            if let Some((cached_verts, cached_indices)) = cache.get(&ch) {
-                let base_vertex = self.vertices.len() as u32;
-
-                for mut vertex in cached_verts.iter().copied() {
-                    vertex.position[0] += x + glyph.x;
-                    vertex.position[1] += y + glyph.y;
-                    vertex.position[2] = self.zstep;
-                    vertex.color = color;
-                    self.vertices.push(vertex);
-                }
-
-                for index in cached_indices {
-                    self.indices.push(*index + base_vertex);
-                }
-            } else {
-                let texture_label = Label::new(&format!("{}_{}", font_label.raw(), ch));
-                let (uv_x, uv_y, uv_w, uv_h) = self.assets.get_texture_coords(texture_label);
-
-                let screen_x = x + glyph.x;
-                let screen_y = y + glyph.y;
-                let w = glyph.width as f32;
-                let h = glyph.height as f32;
-
-                let base = self.vertices.len() as u32;
-
-                self.vertices.extend_from_slice(&[
-                    Vertex {
-                        position: [screen_x, screen_y, self.zstep],
-                        color,
-                        uv_coords: [uv_x, uv_y],
-                    },
-                    Vertex {
-                        position: [screen_x + w, screen_y, self.zstep],
-                        color,
-                        uv_coords: [uv_x + uv_w, uv_y],
-                    },
-                    Vertex {
-                        position: [screen_x, screen_y + h, self.zstep],
-                        color,
-                        uv_coords: [uv_x, uv_y + uv_h],
-                    },
-                    Vertex {
-                        position: [screen_x + w, screen_y + h, self.zstep],
-                        color,
-                        uv_coords: [uv_x + uv_w, uv_y + uv_h],
-                    },
-                ]);
-
-                self.indices.extend_from_slice(&[
-                    base,
-                    base + 2,
-                    base + 1,
-                    base + 1,
-                    base + 2,
-                    base + 3,
-                ]);
-
-                // Cache relative to (0, 0)
-                let cached_color = Color::White.into();
-                let cached_vertices = vec![
-                    Vertex {
-                        position: [0.0, 0.0, 0.0],
-                        color: cached_color,
-                        uv_coords: [uv_x, uv_y],
-                    },
-                    Vertex {
-                        position: [w, 0.0, 0.0],
-                        color: cached_color,
-                        uv_coords: [uv_x + uv_w, uv_y],
-                    },
-                    Vertex {
-                        position: [0.0, h, 0.0],
-                        color: cached_color,
-                        uv_coords: [uv_x, uv_y + uv_h],
-                    },
-                    Vertex {
-                        position: [w, h, 0.0],
-                        color: cached_color,
-                        uv_coords: [uv_x + uv_w, uv_y + uv_h],
-                    },
-                ];
-
-                cache.insert(ch, (cached_vertices, vec![0, 2, 1, 1, 2, 3]));
-            }
-        }
+    pub fn fill_rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: Vector4) {
+        self.triangle_batcher
+            .fill_rect(x, y, self.zstep, w, h, color, &self.assets);
     }
 
     #[inline]
-    pub fn debug_text(&mut self, text: String, x: f32, y: f32, color: Vector4) {
-        let font_label = label!("debug");
-        self.draw_text(font_label, text, x, y, color);
+    pub fn draw_text(&mut self, font_label: Label, text: &str, x: f32, y: f32, color: Vector4) {
+        self.triangle_batcher
+            .draw_text(font_label, text, x, y, self.zstep, color, &self.assets);
     }
 
     #[inline]
-    pub(crate) fn present<'a>(
-        &'a mut self,
-        render_pass: &mut wgpu::RenderPass<'a>,
-        pipeline: &wgpu::RenderPipeline,
-        line_pipeline: &wgpu::RenderPipeline,
-    ) {
-        if self.vertices.is_empty() || self.indices.is_empty() {
-            return;
-        }
-
-        if self.vertices.len() > self.vertex_capacity
-            || self.line_vertices.len() > self.vertex_capacity
-        {
-            self.vertex_capacity = (self.vertices.len() * 2).max(Self::BASE_VERTEX_CAPACITY);
-            self.vertex_buffer.resize(self.vertex_capacity);
-        }
-
-        if self.indices.len() > self.index_capacity || self.line_indices.len() > self.index_capacity
-        {
-            self.index_capacity = (self.indices.len() * 2).max(Self::BASE_INDEX_CAPACITY);
-            self.index_buffer.resize(self.index_capacity);
-        }
-
-        self.vertex_buffer.write(0, &self.vertices);
-        self.index_buffer.write(0, &self.indices);
-
-        render_pass.set_pipeline(pipeline);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice_all());
-        render_pass.set_index_buffer(self.index_buffer.slice_all(), wgpu::IndexFormat::Uint32);
-
-        render_pass.draw_indexed(0..self.indices.len() as u32, 0, 0..1);
-        profiling::record_draw_call(self.vertices.len() as u32, self.indices.len() as u32);
-        profiling::record_triangles(self.indices.len() as u32);
-
-        self.line_vertex_buffer.write(0, &self.line_vertices);
-        self.line_index_buffer.write(0, &self.line_indices);
-
-        render_pass.set_pipeline(line_pipeline);
-        render_pass.set_vertex_buffer(0, self.line_vertex_buffer.slice_all());
-        render_pass.set_index_buffer(
-            self.line_index_buffer.slice_all(),
-            wgpu::IndexFormat::Uint32,
+    pub fn debug_text(&mut self, text: &str, x: f32, y: f32, color: Vector4) {
+        self.triangle_batcher.draw_text(
+            label!("debug"),
+            text,
+            x,
+            y,
+            self.zstep,
+            color,
+            &self.assets,
         );
+    }
 
-        render_pass.draw_indexed(0..self.line_indices.len() as u32, 0, 0..1);
-        profiling::record_draw_call(
-            self.line_vertices.len() as u32,
-            self.line_indices.len() as u32,
-        );
+    #[inline]
+    pub(crate) fn present<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>) {
+        self.point_batcher.present(render_pass);
+        self.line_batcher.present(render_pass);
+        self.triangle_batcher.present(render_pass);
 
-        self.clear();
+        self.zstep = 0.0;
     }
 }
