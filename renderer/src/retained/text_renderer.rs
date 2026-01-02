@@ -218,6 +218,7 @@ impl RetainedTextRenderer {
         self.update_instance_buffer();
 
         render_pass.set_pipeline(pipeline);
+        profiling::record_pipeline_switches(1);
 
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice_all());
         render_pass.set_vertex_buffer(1, self.instance_buffer.slice_all());

@@ -77,6 +77,8 @@ impl PointBatcher {
         self.index_buffer.write(0, &self.indices);
 
         render_pass.set_pipeline(&self.pipeline);
+        profiling::record_pipeline_switches(1);
+
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice_all());
         render_pass.set_index_buffer(self.index_buffer.slice_all(), wgpu::IndexFormat::Uint32);
 

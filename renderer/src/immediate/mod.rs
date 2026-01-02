@@ -66,6 +66,22 @@ impl ImmediateRenderer {
                 &[Vertex::desc()],
             );
 
+        let line_stip_pipeline = shader
+            .pipeline_builder()
+            .label("immediate line pipeline")
+            .vertex_entry("vs_main")
+            .fragment_entry("fs_main")
+            .topology(wgpu::PrimitiveTopology::LineStrip)
+            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
+            .build(
+                surface_format,
+                &[
+                    camera.view_projection_bind_group_layout(),
+                    assets.bind_group_layout(),
+                ],
+                &[Vertex::desc()],
+            );
+
         let triangle_pipeline = shader
             .pipeline_builder()
             .label("immediate triangle pipeline")
@@ -83,7 +99,7 @@ impl ImmediateRenderer {
             );
 
         let point_batcher = PointBatcher::new(point_pipeline);
-        let line_batcher = LineBatcher::new(line_pipeline);
+        let line_batcher = LineBatcher::new(line_pipeline, line_stip_pipeline);
         let triangle_batcher = TriangleBatcher::new(triangle_pipeline);
 
         Self {
@@ -115,6 +131,38 @@ impl ImmediateRenderer {
     pub fn fill_rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: Vector4) {
         self.triangle_batcher
             .fill_rect(x, y, self.zstep, w, h, color, &self.assets);
+    }
+
+    #[inline]
+    pub fn draw_image(&mut self, label: Label, x: f32, y: f32, tint: Vector4) {
+        self.triangle_batcher
+            .draw_image(label, x, y, self.zstep, tint, &self.assets);
+    }
+
+    #[inline]
+    pub fn draw_subimage(
+        &mut self,
+        label: Label,
+        x: f32,
+        y: f32,
+        sx: f32,
+        sy: f32,
+        sw: f32,
+        sh: f32,
+        tint: Vector4,
+    ) {
+        self.triangle_batcher.draw_subimage(
+            label,
+            x,
+            y,
+            self.zstep,
+            sx,
+            sy,
+            sw,
+            sh,
+            tint,
+            &self.assets,
+        );
     }
 
     #[inline]

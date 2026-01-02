@@ -106,6 +106,119 @@ impl TriangleBatcher {
     }
 
     #[inline]
+    pub fn draw_image(
+        &mut self,
+        label: Label,
+        x: f32,
+        y: f32,
+        z: f32,
+        tint: Vector4,
+        assets: &AssetManager,
+    ) {
+        let color: [f32; 4] = tint.into();
+        let region = assets.get_region(label);
+        let w = region.width as f32;
+        let h = region.height as f32;
+        let (uv_x, uv_y, uv_w, uv_h) = region.uv_coordinates(assets.atlas_size());
+        let base = self.vertices.len() as u32;
+
+        self.vertices.extend_from_slice(&[
+            Vertex {
+                position: [x, y, z],
+                color,
+                uv_coords: [uv_x, uv_y],
+            },
+            Vertex {
+                position: [x + w, y, z],
+                color,
+                uv_coords: [uv_x + uv_w, uv_y],
+            },
+            Vertex {
+                position: [x + w, y + h, z],
+                color,
+                uv_coords: [uv_x + uv_w, uv_y + uv_h],
+            },
+            Vertex {
+                position: [x, y + h, z],
+                color,
+                uv_coords: [uv_x, uv_y + uv_h],
+            },
+        ]);
+
+        self.indices.extend_from_slice(&[
+            base + 0,
+            base + 1,
+            base + 2,
+            base + 0,
+            base + 2,
+            base + 3,
+        ]);
+    }
+
+    #[inline]
+    pub fn draw_subimage(
+        &mut self,
+        label: Label,
+        x: f32,
+        y: f32,
+        z: f32,
+        sx: f32,
+        sy: f32,
+        sw: f32,
+        sh: f32,
+        tint: Vector4,
+        assets: &AssetManager,
+    ) {
+        let color: [f32; 4] = tint.into();
+        let base = self.vertices.len() as u32;
+        let region = assets.get_region(label);
+        let rw = region.width as f32;
+        let rh = region.height as f32;
+
+        // Get the region's base UV coordinates in the atlas
+        let (region_uv_x, region_uv_y, region_uv_w, region_uv_h) =
+            region.uv_coordinates(assets.atlas_size());
+
+        // Calculate sub-region UVs relative to the region's position
+        let sub_uv_x = region_uv_x + (sx / rw) * region_uv_w;
+        let sub_uv_y = region_uv_y + (sy / rh) * region_uv_h;
+        let sub_uv_w = (sw / rw) * region_uv_w;
+        let sub_uv_h = (sh / rh) * region_uv_h;
+
+        self.vertices.extend_from_slice(&[
+            Vertex {
+                position: [x, y, z],
+                color,
+                uv_coords: [sub_uv_x, sub_uv_y],
+            },
+            Vertex {
+                position: [x + sw, y, z],
+                color,
+                uv_coords: [sub_uv_x + sub_uv_w, sub_uv_y],
+            },
+            Vertex {
+                position: [x + sw, y + sh, z],
+                color,
+                uv_coords: [sub_uv_x + sub_uv_w, sub_uv_y + sub_uv_h],
+            },
+            Vertex {
+                position: [x, y + sh, z],
+                color,
+                uv_coords: [sub_uv_x, sub_uv_y + sub_uv_h],
+            },
+        ]);
+
+        self.indices.extend_from_slice(&[
+            base + 0,
+            base + 1,
+            base + 2,
+            base + 0,
+            base + 2,
+            base + 3,
+        ]);
+    }
+
+    #[inline]
     pub fn draw_text(
         &mut self,
         font_label: Label,
@@ -250,8 +363,10 @@ impl TriangleBatcher {
         self.index_buffer.write_all(&self.indices);
 
         render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        profiling::record_pipeline_switches(1);
+
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice_all());
+        render_pass.set_index_buffer(self.index_buffer.slice_all(), wgpu::IndexFormat::Uint32);
 
         render_pass.draw_indexed(0..indices_n, 0, 0..1);
         profiling::record_draw_call(vertices_n, indices_n);

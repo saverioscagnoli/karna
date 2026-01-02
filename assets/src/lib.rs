@@ -4,6 +4,7 @@ mod texture;
 
 use crate::atlas::{AtlasRegion, TextureAtlas};
 use logging::info;
+use math::Size;
 use std::sync::{Arc, RwLock};
 use utils::{ByteSize, Label, LabelMap, label};
 
@@ -99,6 +100,11 @@ impl AssetManager {
     #[doc(hidden)]
     pub fn get_region(&self, label: Label) -> AtlasRegion {
         self.atlas.get_region(label)
+    }
+
+    #[inline]
+    pub fn atlas_size(&self) -> &Size<u32> {
+        self.atlas.size()
     }
 
     #[inline]

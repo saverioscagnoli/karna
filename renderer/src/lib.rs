@@ -16,7 +16,7 @@ use assets::AssetManager;
 use globals::profiling;
 use logging::{LogError, LogLevel, info, warn};
 use macros::{Get, Set};
-use math::{Size, Vector2};
+use math::{Size, Vector2, Vector4};
 use std::{
     ops::Deref,
     sync::{Arc, RwLock},
@@ -497,6 +497,132 @@ impl Renderer {
         layer
             .immediate
             .stroke_rect(pos.x, pos.y, size.w(), size.h(), color);
+    }
+
+    #[inline]
+    pub fn draw_image(&mut self, label: Label, x: f32, y: f32) {
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_image(label, x, y, Color::White.into());
+    }
+
+    #[inline]
+    pub fn draw_image_v<P>(&mut self, label: Label, pos: P)
+    where
+        P: Into<Vector2>,
+    {
+        let pos = pos.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer
+            .immediate
+            .draw_image(label, pos.x, pos.y, Color::White.into());
+    }
+
+    #[inline]
+    pub fn draw_image_tinted(&mut self, label: Label, x: f32, y: f32) {
+        let color: Vector4 = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_image(label, x, y, color);
+    }
+
+    #[inline]
+    pub fn draw_image_tinted_v<P>(&mut self, label: Label, pos: P)
+    where
+        P: Into<Vector2>,
+    {
+        let pos = pos.into();
+        let color: Vector4 = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_image(label, pos.x, pos.y, color);
+    }
+
+    #[inline]
+    pub fn draw_subimage(
+        &mut self,
+        label: Label,
+        x: f32,
+        y: f32,
+        sx: f32,
+        sy: f32,
+        sw: f32,
+        sh: f32,
+    ) {
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer
+            .immediate
+            .draw_subimage(label, x, y, sx, sy, sw, sh, Color::White.into());
+    }
+
+    #[inline]
+    pub fn draw_subimage_v<P, SP, SS>(&mut self, label: Label, pos: P, spos: SP, ssize: SS)
+    where
+        P: Into<Vector2>,
+        SP: Into<Vector2>,
+        SS: Into<Size<f32>>,
+    {
+        let pos = pos.into();
+        let spos = spos.into();
+        let ssize = ssize.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_subimage(
+            label,
+            pos.x,
+            pos.y,
+            spos.x,
+            spos.y,
+            ssize.width,
+            ssize.height,
+            Color::White.into(),
+        );
+    }
+
+    #[inline]
+    pub fn draw_subimage_tinted(
+        &mut self,
+        label: Label,
+        x: f32,
+        y: f32,
+        sx: f32,
+        sy: f32,
+        sw: f32,
+        sh: f32,
+    ) {
+        let color: Vector4 = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer
+            .immediate
+            .draw_subimage(label, x, y, sx, sy, sw, sh, color);
+    }
+
+    #[inline]
+    pub fn draw_subimage_tinted_v<P, SP, SS>(&mut self, label: Label, pos: P, spos: SP, ssize: SS)
+    where
+        P: Into<Vector2>,
+        SP: Into<Vector2>,
+        SS: Into<Size<f32>>,
+    {
+        let pos = pos.into();
+        let spos = spos.into();
+        let ssize = ssize.into();
+        let color: Vector4 = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_subimage(
+            label,
+            pos.x,
+            pos.y,
+            spos.x,
+            spos.y,
+            ssize.width,
+            ssize.height,
+            color,
+        );
     }
 
     #[inline]

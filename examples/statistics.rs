@@ -178,6 +178,17 @@ impl Scene for StatsDemo {
 
         y += 20.0;
 
+        ctx.render.debug_text(
+            format!(
+                "Pipeline switches: {}",
+                ctx.profiling.render.pipeline_switches()
+            ),
+            10.0,
+            y,
+        );
+
+        y += 20.0;
+
         ctx.render.debug_text("Press L to see logs!", 10.0, y);
 
         if self.logs_toggle {
