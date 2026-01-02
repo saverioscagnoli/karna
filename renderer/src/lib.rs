@@ -13,7 +13,6 @@ use crate::{
     shader::Shader,
 };
 use assets::AssetManager;
-use globals::profiling;
 use logging::{LogError, LogLevel, info, warn};
 use macros::{Get, Set};
 use math::{Size, Vector2, Vector4};
@@ -109,6 +108,8 @@ pub struct Renderer {
     retained_pipeline: wgpu::RenderPipeline,
     text_pipeline: wgpu::RenderPipeline,
 
+    depth_texture: wgpu::Texture,
+
     // Wireframe pipeline
     wireframe_pipeline: wgpu::RenderPipeline,
     wireframe_toggle: bool,
@@ -152,8 +153,8 @@ impl Renderer {
             right: size.width as f32,
             bottom: size.height as f32,
             top: 0.0,
-            z_near: -1.0,
-            z_far: 1.0,
+            z_near: -1000.0,
+            z_far: 1000.0,
         });
 
         let ui_camera = Camera::new(Projection::Orthographic {
@@ -177,6 +178,7 @@ impl Renderer {
             .vertex_entry("vs_main")
             .fragment_entry("fs_main")
             .topology(wgpu::PrimitiveTopology::TriangleList)
+            .cull_mode(wgpu::Face::Back)
             .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
             .build(
                 surface_format,
@@ -223,6 +225,21 @@ impl Renderer {
         let world = RenderLayer::new(surface_format, camera, assets.clone());
         let ui = RenderLayer::new(surface_format, ui_camera, assets.clone());
 
+        let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("Depth Texture"),
+            size: wgpu::Extent3d {
+                width: config.width,
+                height: config.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float, // Standard depth format
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+
         Self {
             surface,
             config,
@@ -238,6 +255,7 @@ impl Renderer {
             text_pipeline,
             wireframe_pipeline,
             wireframe_toggle: false,
+            depth_texture,
             logs,
         }
     }
@@ -261,6 +279,21 @@ impl Renderer {
 
         self.config.width = width;
         self.config.height = height;
+
+        self.depth_texture = gpu::device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("Depth Texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
     }
 
     #[inline]
@@ -717,6 +750,10 @@ impl Renderer {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
+        let depth_view = self
+            .depth_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
         self.world.update(self.config.width, self.config.height, dt);
         self.ui.update(self.config.width, self.config.height, dt);
 
@@ -742,9 +779,16 @@ impl Renderer {
                     },
                     depth_slice: None,
                 })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 timestamp_writes: None,
+                occlusion_query_set: None,
                 multiview_mask: None,
             });
 

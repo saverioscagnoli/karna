@@ -95,14 +95,8 @@ impl TriangleBatcher {
             },
         ]);
 
-        self.indices.extend_from_slice(&[
-            base + 0,
-            base + 1,
-            base + 2,
-            base + 0,
-            base + 2,
-            base + 3,
-        ]);
+        self.indices
+            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
     #[inline]
@@ -145,14 +139,8 @@ impl TriangleBatcher {
             },
         ]);
 
-        self.indices.extend_from_slice(&[
-            base + 0,
-            base + 1,
-            base + 2,
-            base + 0,
-            base + 2,
-            base + 3,
-        ]);
+        self.indices
+            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
     #[inline]
@@ -208,14 +196,8 @@ impl TriangleBatcher {
             },
         ]);
 
-        self.indices.extend_from_slice(&[
-            base + 0,
-            base + 1,
-            base + 2,
-            base + 0,
-            base + 2,
-            base + 3,
-        ]);
+        self.indices
+            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
     #[inline]

@@ -4,6 +4,7 @@ use renderer::{Color, Geometry, Layer, Material, Mesh, MeshHandle, Transform};
 
 struct Demo {
     rect1: MeshHandle,
+    cube: MeshHandle,
 }
 
 impl Scene for Demo {
@@ -15,7 +16,13 @@ impl Scene for Demo {
             Geometry::rect(50.0, 50.0),
             Material::new_color(Color::Red),
             Transform::new_2d([10.0, 10.0], 0.0, Vector2::ones()),
-        ))
+        ));
+
+        self.cube = ctx.render.add_mesh(Mesh::new(
+            Geometry::cube(50.0, 50.0, 50.0),
+            Material::new_color(Color::Blue),
+            Transform::default().with_position([100.0, 100.0, 20.0]),
+        ));
     }
 
     fn update(&mut self, ctx: &mut karna::Context) {
@@ -42,6 +49,12 @@ impl Scene for Demo {
             *rect1.color_mut() = Color::random();
             ctx.render.toggle_wireframe();
         }
+
+        let cube = ctx.render.get_mesh_mut(self.cube);
+
+        *cube.rotation_x_mut() += 0.01;
+        *cube.rotation_y_mut() += 0.01;
+        *cube.rotation_z_mut() += 0.01;
     }
 
     fn render(&mut self, ctx: &mut karna::Context) {}
@@ -57,6 +70,7 @@ fn main() {
                 .with_size((800, 600))
                 .with_initial_scene(Demo {
                     rect1: MeshHandle::dummy(),
+                    cube: MeshHandle::dummy(),
                 }),
         )
         .build()

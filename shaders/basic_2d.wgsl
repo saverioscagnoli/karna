@@ -33,6 +33,28 @@ var texture_atlas: texture_2d<f32>;
 @group(1) @binding(1)
 var texture_sampler: sampler;
 
+fn rotation_x(angle: f32) -> mat4x4<f32> {
+    let c = cos(angle);
+    let s = sin(angle);
+    return mat4x4<f32>(
+        vec4<f32>(1.0, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, c, s, 0.0),
+        vec4<f32>(0.0, -s, c, 0.0),
+        vec4<f32>(0.0, 0.0, 0.0, 1.0)
+    );
+}
+
+fn rotation_y(angle: f32) -> mat4x4<f32> {
+    let c = cos(angle);
+    let s = sin(angle);
+    return mat4x4<f32>(
+        vec4<f32>(c, 0.0, -s, 0.0),
+        vec4<f32>(0.0, 1.0, 0.0, 0.0),
+        vec4<f32>(s, 0.0, c, 0.0),
+        vec4<f32>(0.0, 0.0, 0.0, 1.0)
+    );
+}
+
 // Helper function to create a 2D rotation matrix around Z axis
 fn rotation_z(angle: f32) -> mat4x4<f32> {
     let c = cos(angle);
@@ -71,12 +93,13 @@ fn vs_main(vertex: VertexInput, instance: InstanceInput) -> VertexOutput {
 
     // Build transformation matrix: Translation * Rotation * Scale
     let scale_mat = scale_matrix(instance.instance_scale);
-    let rotation_mat = rotation_z(instance.instance_rotation.z);
+    let rotation_mat = rotation_z(instance.instance_rotation.z)
+                     * rotation_y(instance.instance_rotation.y)
+                     * rotation_x(instance.instance_rotation.x);
     let translation_mat = translation_matrix(instance.instance_position);
 
     // Apply transformations in order: scale -> rotate -> translate
     let model_matrix = translation_mat * rotation_mat * scale_mat;
-
     // Transform vertex position
     let world_position = model_matrix * vec4<f32>(vertex.position, 1.0);
 

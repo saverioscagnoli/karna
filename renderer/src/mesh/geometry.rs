@@ -167,4 +167,157 @@ impl Geometry {
 
         Self::new(&vertices, &indices)
     }
+
+    #[inline]
+    pub fn cube(width: f32, height: f32, depth: f32) -> Self {
+        let color = Color::White.into();
+        let w = width / 2.0;
+        let h = height / 2.0;
+        let d = depth / 2.0;
+
+        let vertices = &[
+            // Front face (z = d)
+            Vertex {
+                position: [-w, -h, d],
+                color,
+                uv_coords: [0.0, 1.0],
+            },
+            Vertex {
+                position: [w, -h, d],
+                color,
+                uv_coords: [1.0, 1.0],
+            },
+            Vertex {
+                position: [w, h, d],
+                color,
+                uv_coords: [1.0, 0.0],
+            },
+            Vertex {
+                position: [-w, h, d],
+                color,
+                uv_coords: [0.0, 0.0],
+            },
+            // Back face (z = -d)
+            Vertex {
+                position: [w, -h, -d],
+                color,
+                uv_coords: [0.0, 1.0],
+            },
+            Vertex {
+                position: [-w, -h, -d],
+                color,
+                uv_coords: [1.0, 1.0],
+            },
+            Vertex {
+                position: [-w, h, -d],
+                color,
+                uv_coords: [1.0, 0.0],
+            },
+            Vertex {
+                position: [w, h, -d],
+                color,
+                uv_coords: [0.0, 0.0],
+            },
+            // Top face (y = h)
+            Vertex {
+                position: [-w, h, d],
+                color,
+                uv_coords: [0.0, 1.0],
+            },
+            Vertex {
+                position: [w, h, d],
+                color,
+                uv_coords: [1.0, 1.0],
+            },
+            Vertex {
+                position: [w, h, -d],
+                color,
+                uv_coords: [1.0, 0.0],
+            },
+            Vertex {
+                position: [-w, h, -d],
+                color,
+                uv_coords: [0.0, 0.0],
+            },
+            // Bottom face (y = -h)
+            Vertex {
+                position: [-w, -h, -d],
+                color,
+                uv_coords: [0.0, 1.0],
+            },
+            Vertex {
+                position: [w, -h, -d],
+                color,
+                uv_coords: [1.0, 1.0],
+            },
+            Vertex {
+                position: [w, -h, d],
+                color,
+                uv_coords: [1.0, 0.0],
+            },
+            Vertex {
+                position: [-w, -h, d],
+                color,
+                uv_coords: [0.0, 0.0],
+            },
+            // Right face (x = w)
+            Vertex {
+                position: [w, -h, d],
+                color,
+                uv_coords: [0.0, 1.0],
+            },
+            Vertex {
+                position: [w, -h, -d],
+                color,
+                uv_coords: [1.0, 1.0],
+            },
+            Vertex {
+                position: [w, h, -d],
+                color,
+                uv_coords: [1.0, 0.0],
+            },
+            Vertex {
+                position: [w, h, d],
+                color,
+                uv_coords: [0.0, 0.0],
+            },
+            // Left face (x = -w)
+            Vertex {
+                position: [-w, -h, -d],
+                color,
+                uv_coords: [0.0, 1.0],
+            },
+            Vertex {
+                position: [-w, -h, d],
+                color,
+                uv_coords: [1.0, 1.0],
+            },
+            Vertex {
+                position: [-w, h, d],
+                color,
+                uv_coords: [1.0, 0.0],
+            },
+            Vertex {
+                position: [-w, h, -d],
+                color,
+                uv_coords: [0.0, 0.0],
+            },
+        ];
+
+        let indices = &[
+            0, 1, 2, 2, 3, 0, // Front
+            4, 5, 6, 6, 7, 4, // Back
+            8, 9, 10, 10, 11, 8, // Top
+            12, 13, 14, 14, 15, 12, // Bottom
+            16, 17, 18, 18, 19, 16, // Right
+            20, 21, 22, 22, 23, 20, // Left
+        ];
+
+        Self::new(vertices, indices)
+    }
+
+    #[inline]
+    pub fn unit_cube() -> Self {
+        Self::cube(1.0, 1.0, 1.0)
+    }
 }
