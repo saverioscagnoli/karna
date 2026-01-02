@@ -109,6 +109,7 @@ pub struct Renderer {
     retained_pipeline: wgpu::RenderPipeline,
     text_pipeline: wgpu::RenderPipeline,
     immediate_pipeline: wgpu::RenderPipeline,
+    immediate_line_pipeline: wgpu::RenderPipeline,
 
     // Wireframe pipeline
     wireframe_pipeline: wgpu::RenderPipeline,
@@ -206,7 +207,23 @@ impl Renderer {
                     camera.view_projection_bind_group_layout(),
                     assets.bind_group_layout(),
                 ],
-                &[Vertex::desc()], // Only Vertex, no MeshInstanceGpu!
+                &[Vertex::desc()],
+            );
+
+        let immediate_line_pipeline = immediate_shader
+            .pipeline_builder()
+            .label("immediate line pipeline")
+            .vertex_entry("vs_main")
+            .fragment_entry("fs_main")
+            .topology(wgpu::PrimitiveTopology::LineList)
+            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
+            .build(
+                surface_format,
+                &[
+                    camera.view_projection_bind_group_layout(),
+                    assets.bind_group_layout(),
+                ],
+                &[Vertex::desc()],
             );
 
         let text_pipeline = text_shader
@@ -258,6 +275,7 @@ impl Renderer {
             user_layers: Vec::new(),
             retained_pipeline,
             immediate_pipeline,
+            immediate_line_pipeline,
             text_pipeline,
             wireframe_pipeline,
             wireframe_toggle: false,
@@ -428,6 +446,28 @@ impl Renderer {
     // Immediate rendering is useful for quickly drawing shapes or text
     // without the complexity of retained rendering.
 
+    #[inline]
+    pub fn draw_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
+        let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_line(x1, y1, x2, y2, color);
+    }
+
+    #[inline]
+    pub fn draw_line_v<P1, P2>(&mut self, p1: P1, p2: P2)
+    where
+        P1: Into<Vector2>,
+        P2: Into<Vector2>,
+    {
+        let p1 = p1.into();
+        let p2 = p2.into();
+        let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_line(p1.x, p1.y, p2.x, p2.y, color);
+    }
+
     /// Draws a filled rectangle in immediate rendering mode.
     #[inline]
     pub fn fill_rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
@@ -453,6 +493,30 @@ impl Renderer {
         layer
             .immediate
             .fill_rect(pos.x, pos.y, size.w(), size.h(), color);
+    }
+
+    #[inline]
+    pub fn stroke_rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
+        let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.stroke_rect(x, y, w, h, color);
+    }
+
+    #[inline]
+    pub fn stroke_rect_v<P, S>(&mut self, pos: P, size: S)
+    where
+        P: Into<Vector2>,
+        S: Into<Size<f32>>,
+    {
+        let pos = pos.into();
+        let size = size.into();
+        let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer
+            .immediate
+            .stroke_rect(pos.x, pos.y, size.w(), size.h(), color);
     }
 
     #[inline]
@@ -576,19 +640,14 @@ impl Renderer {
                 multiview_mask: None,
             });
 
-            let pipeline = if self.wireframe_toggle {
-                &self.wireframe_pipeline
-            } else {
-                &self.retained_pipeline
-            };
-
             render_pass.set_bind_group(0, self.world.camera.view_projection_bind_group(), &[]);
             render_pass.set_bind_group(1, self.assets.bind_group(), &[]);
 
             self.world.present(
                 &mut render_pass,
-                pipeline,
+                &self.retained_pipeline,
                 &self.immediate_pipeline,
+                &self.immediate_line_pipeline,
                 &self.text_pipeline,
             );
 
@@ -596,8 +655,9 @@ impl Renderer {
 
             self.ui.present(
                 &mut render_pass,
-                pipeline,
+                &self.retained_pipeline,
                 &self.immediate_pipeline,
+                &self.immediate_line_pipeline,
                 &self.text_pipeline,
             );
 
@@ -606,8 +666,9 @@ impl Renderer {
 
                 layer.present(
                     &mut render_pass,
-                    pipeline,
+                    &self.retained_pipeline,
                     &self.immediate_pipeline,
+                    &self.immediate_line_pipeline,
                     &self.text_pipeline,
                 );
             }

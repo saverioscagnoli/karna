@@ -48,11 +48,13 @@ impl RenderLayer {
         render_pass: &mut wgpu::RenderPass<'a>,
         retained_pipeline: &'a wgpu::RenderPipeline,
         immediate_pipeline: &'a wgpu::RenderPipeline,
+        immediate_line_pipeline: &'a wgpu::RenderPipeline,
         text_pipeline: &'a wgpu::RenderPipeline,
     ) {
         self.retained
             .present(render_pass, retained_pipeline, text_pipeline);
 
-        self.immediate.present(render_pass, immediate_pipeline);
+        self.immediate
+            .present(render_pass, immediate_pipeline, immediate_line_pipeline);
     }
 }

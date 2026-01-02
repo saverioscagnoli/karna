@@ -12,10 +12,18 @@ pub struct ImmediateRenderer {
 
     vertices: Vec<Vertex>,
     indices: Vec<u32>,
+
     vertex_buffer: GpuBuffer<Vertex>,
     index_buffer: GpuBuffer<u32>,
+
     vertex_capacity: usize,
     index_capacity: usize,
+
+    line_vertices: Vec<Vertex>,
+    line_indices: Vec<u32>,
+
+    line_vertex_buffer: GpuBuffer<Vertex>,
+    line_index_buffer: GpuBuffer<u32>,
 
     text_layout: Layout,
 
@@ -43,12 +51,30 @@ impl ImmediateRenderer {
             .copy_dst()
             .build();
 
+        let line_vertex_buffer = GpuBufferBuilder::new()
+            .label("Immediate Renderer line vertex buffer")
+            .capacity(Self::BASE_VERTEX_CAPACITY)
+            .vertex()
+            .copy_dst()
+            .build();
+
+        let line_index_buffer = GpuBufferBuilder::new()
+            .label("Immediate Renderer line index buffer")
+            .capacity(Self::BASE_INDEX_CAPACITY)
+            .index()
+            .copy_dst()
+            .build();
+
         Self {
             assets,
             vertices: Vec::with_capacity(Self::BASE_VERTEX_CAPACITY),
             indices: Vec::with_capacity(Self::BASE_INDEX_CAPACITY),
             vertex_buffer,
             index_buffer,
+            line_vertices: Vec::with_capacity(Self::BASE_VERTEX_CAPACITY),
+            line_indices: Vec::with_capacity(Self::BASE_INDEX_CAPACITY),
+            line_vertex_buffer,
+            line_index_buffer,
             vertex_capacity: Self::BASE_VERTEX_CAPACITY,
             index_capacity: Self::BASE_INDEX_CAPACITY,
             text_layout: Layout::new(CoordinateSystem::PositiveYDown),
@@ -61,7 +87,32 @@ impl ImmediateRenderer {
     pub(crate) fn clear(&mut self) {
         self.vertices.clear();
         self.indices.clear();
+        self.line_vertices.clear();
+        self.line_indices.clear();
         self.text_layout.clear();
+    }
+
+    #[inline]
+    pub fn draw_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, color: Vector4) {
+        let color: [f32; 4] = color.into();
+
+        let start = Vertex {
+            position: [x1, y1, self.zstep],
+            color,
+            uv_coords: [0.0, 0.0],
+        };
+
+        let end = Vertex {
+            position: [x2, y2, self.zstep],
+            color,
+            uv_coords: [0.0, 0.0],
+        };
+
+        self.line_vertices.push(start);
+        self.line_vertices.push(end);
+
+        self.line_indices.push(self.line_vertices.len() as u32 - 2);
+        self.line_indices.push(self.line_vertices.len() as u32 - 1);
     }
 
     #[inline]
@@ -105,6 +156,51 @@ impl ImmediateRenderer {
 
         self.indices
             .extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 1, base + 3]);
+    }
+
+    #[inline]
+    pub fn stroke_rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: Vector4) {
+        let color: [f32; 4] = color.into();
+        let (uv_x, uv_y, uv_w, uv_h) = self.assets.get_white_uv_coords();
+        let uv_center = [uv_x + uv_w * 0.5, uv_y + uv_h * 0.5];
+
+        let base = self.line_vertices.len() as u32;
+
+        // Add 4 corners as vertices
+        self.line_vertices.extend_from_slice(&[
+            Vertex {
+                position: [x, y, self.zstep],
+                color,
+                uv_coords: uv_center,
+            },
+            Vertex {
+                position: [x + w, y, self.zstep],
+                color,
+                uv_coords: uv_center,
+            },
+            Vertex {
+                position: [x + w, y + h, self.zstep],
+                color,
+                uv_coords: uv_center,
+            },
+            Vertex {
+                position: [x, y + h, self.zstep],
+                color,
+                uv_coords: uv_center,
+            },
+        ]);
+
+        // Connect them in a loop (8 indices for 4 lines)
+        self.line_indices.extend_from_slice(&[
+            base,
+            base + 1, // top
+            base + 1,
+            base + 2, // right
+            base + 2,
+            base + 3, // bottom
+            base + 3,
+            base, // left
+        ]);
     }
 
     #[inline]
@@ -230,17 +326,21 @@ impl ImmediateRenderer {
         &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,
         pipeline: &wgpu::RenderPipeline,
+        line_pipeline: &wgpu::RenderPipeline,
     ) {
         if self.vertices.is_empty() || self.indices.is_empty() {
             return;
         }
 
-        if self.vertices.len() > self.vertex_capacity {
+        if self.vertices.len() > self.vertex_capacity
+            || self.line_vertices.len() > self.vertex_capacity
+        {
             self.vertex_capacity = (self.vertices.len() * 2).max(Self::BASE_VERTEX_CAPACITY);
             self.vertex_buffer.resize(self.vertex_capacity);
         }
 
-        if self.indices.len() > self.index_capacity {
+        if self.indices.len() > self.index_capacity || self.line_indices.len() > self.index_capacity
+        {
             self.index_capacity = (self.indices.len() * 2).max(Self::BASE_INDEX_CAPACITY);
             self.index_buffer.resize(self.index_capacity);
         }
@@ -249,13 +349,29 @@ impl ImmediateRenderer {
         self.index_buffer.write(0, &self.indices);
 
         render_pass.set_pipeline(pipeline);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice_all());
+        render_pass.set_index_buffer(self.index_buffer.slice_all(), wgpu::IndexFormat::Uint32);
 
         render_pass.draw_indexed(0..self.indices.len() as u32, 0, 0..1);
-
         profiling::record_draw_call(self.vertices.len() as u32, self.indices.len() as u32);
         profiling::record_triangles(self.indices.len() as u32);
+
+        self.line_vertex_buffer.write(0, &self.line_vertices);
+        self.line_index_buffer.write(0, &self.line_indices);
+
+        render_pass.set_pipeline(line_pipeline);
+        render_pass.set_vertex_buffer(0, self.line_vertex_buffer.slice_all());
+        render_pass.set_index_buffer(
+            self.line_index_buffer.slice_all(),
+            wgpu::IndexFormat::Uint32,
+        );
+
+        render_pass.draw_indexed(0..self.line_indices.len() as u32, 0, 0..1);
+        profiling::record_draw_call(
+            self.line_vertices.len() as u32,
+            self.line_indices.len() as u32,
+        );
+
         self.clear();
     }
 }

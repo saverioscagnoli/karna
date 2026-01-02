@@ -57,7 +57,12 @@ impl Scene for ImmediateRenderingDemo {
         ctx.render.set_draw_color(Color::Red);
         ctx.render.fill_rect_v(self.pos, (50.0, 50.0));
 
+        ctx.render.set_draw_color(Color::Magenta);
+        ctx.render.stroke_rect_v([100.0, 10.0], (50.0, 50.0));
+
         ctx.render.set_draw_color(Color::Cyan);
+
+        ctx.render.draw_line_v([300.0, 10.0], [100.0, 500.0]);
 
         ctx.render
             .fill_rect(self.pos.x, self.pos.y + 200.0, 50.0, 50.0);

@@ -3,8 +3,9 @@ mod font;
 mod texture;
 
 use crate::atlas::{AtlasRegion, TextureAtlas};
+use logging::info;
 use std::sync::{Arc, RwLock};
-use utils::{Label, LabelMap, label};
+use utils::{ByteSize, Label, LabelMap, label};
 
 // Re-exports
 pub use font::Font;
@@ -35,11 +36,22 @@ impl AssetManager {
 
     #[inline]
     pub fn load_image(&self, label: Label, bytes: Vec<u8>) {
+        info!(
+            "Loading image with label '{:?}' of size {}",
+            label,
+            ByteSize::from_bytes(bytes.len() as u64)
+        );
         self.atlas.add_image(label, bytes);
     }
 
     #[inline]
     pub fn load_font(&self, label: Label, bytes: Vec<u8>, size: u8) {
+        info!(
+            "Loading font with label '{:?}' of size {}",
+            label,
+            ByteSize::from_bytes(bytes.len() as u64)
+        );
+
         let mut font = Font::new(bytes, size);
         let mut font_cache = self.fonts.write().expect("Font cache lock is poisoned");
 

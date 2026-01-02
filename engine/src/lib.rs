@@ -75,9 +75,6 @@ impl App {
     pub(crate) fn init(&mut self) {
         gpu::init();
 
-        let assets = Arc::new(AssetManager::new());
-        let globals = Arc::new(GlobalStates::new());
-        let info = Arc::new(SystemInfo::new());
         let logs = RenderLogs::new(25);
 
         logging::init(
@@ -86,6 +83,10 @@ impl App {
                 formatter: None,
             }),
         );
+
+        let assets = Arc::new(AssetManager::new());
+        let globals = Arc::new(GlobalStates::new());
+        let info = Arc::new(SystemInfo::new());
 
         info!("Cpu: {} ({})", info.cpu_model(), info.cpu_cores());
         info!(
