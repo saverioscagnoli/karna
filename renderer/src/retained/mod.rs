@@ -124,6 +124,7 @@ impl RetainedRenderer {
         text_pipeline: &'a wgpu::RenderPipeline,
     ) {
         render_pass.set_pipeline(pipeline);
+        profiling::record_pipeline_switches(1);
 
         for (idx, mesh) in self.meshes.values_mut().enumerate() {
             if mesh.sync_gpu(&self.assets) {

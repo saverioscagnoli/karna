@@ -185,6 +185,7 @@ dependencies = [
  "fontdue",
  "gpu",
  "image",
+ "logging",
  "macros",
  "math",
  "rect_packer",

@@ -13,10 +13,9 @@ use crate::{
     shader::Shader,
 };
 use assets::AssetManager;
-use globals::profiling;
 use logging::{LogError, LogLevel, info, warn};
 use macros::{Get, Set};
-use math::{Size, Vector2};
+use math::{Size, Vector2, Vector4};
 use std::{
     ops::Deref,
     sync::{Arc, RwLock},
@@ -108,7 +107,8 @@ pub struct Renderer {
 
     retained_pipeline: wgpu::RenderPipeline,
     text_pipeline: wgpu::RenderPipeline,
-    immediate_pipeline: wgpu::RenderPipeline,
+
+    depth_texture: wgpu::Texture,
 
     // Wireframe pipeline
     wireframe_pipeline: wgpu::RenderPipeline,
@@ -153,8 +153,8 @@ impl Renderer {
             right: size.width as f32,
             bottom: size.height as f32,
             top: 0.0,
-            z_near: -1.0,
-            z_far: 1.0,
+            z_near: -1000.0,
+            z_far: 1000.0,
         });
 
         let ui_camera = Camera::new(Projection::Orthographic {
@@ -172,17 +172,13 @@ impl Renderer {
         let text_shader =
             Shader::from_wgsl_file(include_str!("../../shaders/text.wgsl"), Some("text shader"));
 
-        let immediate_shader = Shader::from_wgsl_file(
-            include_str!("../../shaders/immediate.wgsl"),
-            Some("immediate_shader"),
-        );
-
         let retained_pipeline = shader
             .pipeline_builder()
             .label("triangle pipeline")
             .vertex_entry("vs_main")
             .fragment_entry("fs_main")
             .topology(wgpu::PrimitiveTopology::TriangleList)
+            .cull_mode(wgpu::Face::Back)
             .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
             .build(
                 surface_format,
@@ -191,22 +187,6 @@ impl Renderer {
                     assets.bind_group_layout(),
                 ],
                 &[Vertex::desc(), MeshInstanceGpu::desc()],
-            );
-
-        let immediate_pipeline = immediate_shader
-            .pipeline_builder()
-            .label("immediate pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::TriangleList)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[
-                    camera.view_projection_bind_group_layout(),
-                    assets.bind_group_layout(),
-                ],
-                &[Vertex::desc()], // Only Vertex, no MeshInstanceGpu!
             );
 
         let text_pipeline = text_shader
@@ -242,8 +222,23 @@ impl Renderer {
                 &[Vertex::desc(), MeshInstanceGpu::desc()],
             );
 
-        let world = RenderLayer::new(camera, assets.clone());
-        let ui = RenderLayer::new(ui_camera, assets.clone());
+        let world = RenderLayer::new(surface_format, camera, assets.clone());
+        let ui = RenderLayer::new(surface_format, ui_camera, assets.clone());
+
+        let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("Depth Texture"),
+            size: wgpu::Extent3d {
+                width: config.width,
+                height: config.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float, // Standard depth format
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
 
         Self {
             surface,
@@ -257,10 +252,10 @@ impl Renderer {
             active_layer: Layer::World,
             user_layers: Vec::new(),
             retained_pipeline,
-            immediate_pipeline,
             text_pipeline,
             wireframe_pipeline,
             wireframe_toggle: false,
+            depth_texture,
             logs,
         }
     }
@@ -284,6 +279,21 @@ impl Renderer {
 
         self.config.width = width;
         self.config.height = height;
+
+        self.depth_texture = gpu::device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("Depth Texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
     }
 
     #[inline]
@@ -314,6 +324,7 @@ impl Renderer {
         self.user_layers.insert(
             index,
             RenderLayer::new(
+                self.config.format,
                 Camera::new(Projection::Orthographic {
                     left: 0.0,
                     right: self.config.width as f32,
@@ -428,6 +439,48 @@ impl Renderer {
     // Immediate rendering is useful for quickly drawing shapes or text
     // without the complexity of retained rendering.
 
+    #[inline]
+    pub fn draw_point(&mut self, x: f32, y: f32) {
+        let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_point(x, y, color);
+    }
+
+    #[inline]
+    pub fn draw_point_v<P>(&mut self, p: P)
+    where
+        P: Into<Vector2>,
+    {
+        let p = p.into();
+        let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_point(p.x, p.y, color);
+    }
+
+    #[inline]
+    pub fn draw_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
+        let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_line(x1, y1, x2, y2, color);
+    }
+
+    #[inline]
+    pub fn draw_line_v<P1, P2>(&mut self, p1: P1, p2: P2)
+    where
+        P1: Into<Vector2>,
+        P2: Into<Vector2>,
+    {
+        let p1 = p1.into();
+        let p2 = p2.into();
+        let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_line(p1.x, p1.y, p2.x, p2.y, color);
+    }
+
     /// Draws a filled rectangle in immediate rendering mode.
     #[inline]
     pub fn fill_rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
@@ -456,13 +509,163 @@ impl Renderer {
     }
 
     #[inline]
+    pub fn stroke_rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
+        let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.stroke_rect(x, y, w, h, color);
+    }
+
+    #[inline]
+    pub fn stroke_rect_v<P, S>(&mut self, pos: P, size: S)
+    where
+        P: Into<Vector2>,
+        S: Into<Size<f32>>,
+    {
+        let pos = pos.into();
+        let size = size.into();
+        let color = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer
+            .immediate
+            .stroke_rect(pos.x, pos.y, size.w(), size.h(), color);
+    }
+
+    #[inline]
+    pub fn draw_image(&mut self, label: Label, x: f32, y: f32) {
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_image(label, x, y, Color::White.into());
+    }
+
+    #[inline]
+    pub fn draw_image_v<P>(&mut self, label: Label, pos: P)
+    where
+        P: Into<Vector2>,
+    {
+        let pos = pos.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer
+            .immediate
+            .draw_image(label, pos.x, pos.y, Color::White.into());
+    }
+
+    #[inline]
+    pub fn draw_image_tinted(&mut self, label: Label, x: f32, y: f32) {
+        let color: Vector4 = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_image(label, x, y, color);
+    }
+
+    #[inline]
+    pub fn draw_image_tinted_v<P>(&mut self, label: Label, pos: P)
+    where
+        P: Into<Vector2>,
+    {
+        let pos = pos.into();
+        let color: Vector4 = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_image(label, pos.x, pos.y, color);
+    }
+
+    #[inline]
+    pub fn draw_subimage(
+        &mut self,
+        label: Label,
+        x: f32,
+        y: f32,
+        sx: f32,
+        sy: f32,
+        sw: f32,
+        sh: f32,
+    ) {
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer
+            .immediate
+            .draw_subimage(label, x, y, sx, sy, sw, sh, Color::White.into());
+    }
+
+    #[inline]
+    pub fn draw_subimage_v<P, SP, SS>(&mut self, label: Label, pos: P, spos: SP, ssize: SS)
+    where
+        P: Into<Vector2>,
+        SP: Into<Vector2>,
+        SS: Into<Size<f32>>,
+    {
+        let pos = pos.into();
+        let spos = spos.into();
+        let ssize = ssize.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_subimage(
+            label,
+            pos.x,
+            pos.y,
+            spos.x,
+            spos.y,
+            ssize.width,
+            ssize.height,
+            Color::White.into(),
+        );
+    }
+
+    #[inline]
+    pub fn draw_subimage_tinted(
+        &mut self,
+        label: Label,
+        x: f32,
+        y: f32,
+        sx: f32,
+        sy: f32,
+        sw: f32,
+        sh: f32,
+    ) {
+        let color: Vector4 = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer
+            .immediate
+            .draw_subimage(label, x, y, sx, sy, sw, sh, color);
+    }
+
+    #[inline]
+    pub fn draw_subimage_tinted_v<P, SP, SS>(&mut self, label: Label, pos: P, spos: SP, ssize: SS)
+    where
+        P: Into<Vector2>,
+        SP: Into<Vector2>,
+        SS: Into<Size<f32>>,
+    {
+        let pos = pos.into();
+        let spos = spos.into();
+        let ssize = ssize.into();
+        let color: Vector4 = self.draw_color.into();
+        let layer = self.render_layer_mut(self.active_layer);
+
+        layer.immediate.draw_subimage(
+            label,
+            pos.x,
+            pos.y,
+            spos.x,
+            spos.y,
+            ssize.width,
+            ssize.height,
+            color,
+        );
+    }
+
+    #[inline]
     pub fn draw_text<T: Into<String>>(&mut self, text: T, x: f32, y: f32) {
         let font_label = self.current_font;
         let text = text.into();
         let color = self.draw_color.into();
         let layer = self.render_layer_mut(self.active_layer);
 
-        layer.immediate.draw_text(font_label, text, x, y, color);
+        layer.immediate.draw_text(font_label, &text, x, y, color);
     }
 
     #[inline]
@@ -479,7 +682,7 @@ impl Renderer {
 
         layer
             .immediate
-            .draw_text(font_label, text, pos.x, pos.y, color);
+            .draw_text(font_label, &text, pos.x, pos.y, color);
     }
 
     #[inline]
@@ -488,20 +691,22 @@ impl Renderer {
         let color = self.draw_color.into();
         let layer = self.render_layer_mut(self.active_layer);
 
-        layer.immediate.debug_text(text, x, y, color);
+        layer.immediate.debug_text(&text, x, y, color);
     }
 
     #[inline]
     pub fn debug_text_v<T, P>(&mut self, text: T, pos: P)
     where
-        T: Into<String>,
+        T: AsRef<str>,
         P: Into<Vector2>,
     {
         let pos = pos.into();
         let color = self.draw_color.into();
         let layer = self.render_layer_mut(self.active_layer);
 
-        layer.immediate.debug_text(text.into(), pos.x, pos.y, color);
+        layer
+            .immediate
+            .debug_text(text.as_ref(), pos.x, pos.y, color);
     }
 
     #[inline]
@@ -545,6 +750,10 @@ impl Renderer {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
+        let depth_view = self
+            .depth_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
         self.world.update(self.config.width, self.config.height, dt);
         self.ui.update(self.config.width, self.config.height, dt);
 
@@ -570,25 +779,25 @@ impl Renderer {
                     },
                     depth_slice: None,
                 })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 timestamp_writes: None,
+                occlusion_query_set: None,
                 multiview_mask: None,
             });
-
-            let pipeline = if self.wireframe_toggle {
-                &self.wireframe_pipeline
-            } else {
-                &self.retained_pipeline
-            };
 
             render_pass.set_bind_group(0, self.world.camera.view_projection_bind_group(), &[]);
             render_pass.set_bind_group(1, self.assets.bind_group(), &[]);
 
             self.world.present(
                 &mut render_pass,
-                pipeline,
-                &self.immediate_pipeline,
+                &self.retained_pipeline,
                 &self.text_pipeline,
             );
 
@@ -596,8 +805,7 @@ impl Renderer {
 
             self.ui.present(
                 &mut render_pass,
-                pipeline,
-                &self.immediate_pipeline,
+                &self.retained_pipeline,
                 &self.text_pipeline,
             );
 
@@ -606,8 +814,7 @@ impl Renderer {
 
                 layer.present(
                     &mut render_pass,
-                    pipeline,
-                    &self.immediate_pipeline,
+                    &self.retained_pipeline,
                     &self.text_pipeline,
                 );
             }
