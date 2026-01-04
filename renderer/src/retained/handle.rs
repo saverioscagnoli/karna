@@ -1,4 +1,7 @@
-use crate::{Color, Renderer, retained::mesh::Mesh};
+use crate::{
+    Camera, Color, Renderer,
+    retained::{RetainedRenderer, mesh::Mesh},
+};
 use macros::{Get, Set};
 use utils::Handle;
 
@@ -17,19 +20,52 @@ impl<'a> Scene<'a> {
     }
 
     #[inline]
+    pub fn add_mesh(&mut self, mesh: Mesh) -> Handle<Mesh> {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer.retained.add_mesh(mesh)
+    }
+
+    #[inline]
     pub fn get_mesh(&self, handle: Handle<Mesh>) -> Option<&Mesh> {
-        self.renderer
-            .layer(self.renderer.active_layer)
-            .retained
-            .get_mesh(handle)
+        let layer = self.renderer.layer(self.renderer.active_layer);
+
+        layer.retained.get_mesh(handle)
     }
 
     #[inline]
     pub fn get_mesh_mut(&mut self, handle: Handle<Mesh>) -> Option<&mut Mesh> {
-        self.renderer
-            .layer_mut(self.renderer.active_layer)
-            .retained
-            .get_mesh_mut(handle)
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer.retained.get_mesh_mut(handle)
+    }
+
+    #[inline]
+    pub fn remove_mesh(&mut self, handle: Handle<Mesh>) {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer.retained.remove_mesh(handle)
+    }
+
+    #[inline]
+    pub fn retained(&mut self) -> &mut RetainedRenderer {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        &mut layer.retained
+    }
+
+    #[inline]
+    pub fn camera(&self) -> &Camera {
+        let layer = self.renderer.layer(self.renderer.active_layer);
+
+        &layer.camera
+    }
+
+    #[inline]
+    pub fn camera_mut(&mut self) -> &mut Camera {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        &mut layer.camera
     }
 }
 
@@ -45,9 +81,15 @@ impl<'a> SceneView<'a> {
 
     #[inline]
     pub fn get_mesh(&self, handle: Handle<Mesh>) -> Option<&Mesh> {
-        self.renderer
-            .layer(self.renderer.active_layer)
-            .retained
-            .get_mesh(handle)
+        let layer = self.renderer.layer(self.renderer.active_layer);
+
+        layer.retained.get_mesh(handle)
+    }
+
+    #[inline]
+    pub fn get_camera(&self) -> &Camera {
+        let layer = self.renderer.layer(self.renderer.active_layer);
+
+        &layer.camera
     }
 }

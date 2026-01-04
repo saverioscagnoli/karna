@@ -154,7 +154,7 @@ pub struct GpuBufferBuilder<'a, T> {
     label: Option<String>,
     usage: wgpu::BufferUsages,
     capacity: Option<usize>,
-    data: Option<&'a Vec<T>>,
+    data: Option<&'a [T]>,
 }
 
 impl<'a, T> GpuBufferBuilder<'a, T> {
@@ -212,7 +212,7 @@ impl<'a, T> GpuBufferBuilder<'a, T> {
         self
     }
 
-    pub fn data(mut self, data: &'a Vec<T>) -> Self {
+    pub fn data(mut self, data: &'a [T]) -> Self {
         self.data = Some(data);
         self
     }

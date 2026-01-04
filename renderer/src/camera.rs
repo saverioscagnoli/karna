@@ -1,5 +1,5 @@
 use gpu::core::{GpuBuffer, GpuBufferBuilder};
-use macros::{Get, track_dirty};
+use macros::{Get, Set, track_dirty};
 use math::{Matrix4, Size, Vector3};
 
 #[derive(Debug, Clone, Copy)]
@@ -41,9 +41,9 @@ impl Projection {
     }
 }
 
-#[track_dirty]
+#[track_dirty(u16)]
 #[derive(Debug)]
-#[derive(Get)]
+#[derive(Get, Set)]
 pub struct Camera {
     // WGPU
     uniform_buffer: GpuBuffer<Matrix4>,
@@ -56,8 +56,46 @@ pub struct Camera {
 
     // Maths
     projection: Projection,
+
+    /// Cache viewport size
+    view: Size<u32>,
+
+    #[get]
+    #[get(copied, prop = "x", ty = f32)]
+    #[get(copied, prop = "y", ty = f32)]
+    #[get(copied, prop = "z", ty = f32)]
+    #[get(mut, also = self.tracker |= Self::position_f())]
+    #[get(mut, prop = "x", ty = &mut f32, also = self.tracker |= Self::position_f())]
+    #[get(mut, prop = "y", ty = &mut f32, also = self.tracker |= Self::position_f())]
+    #[get(mut, prop = "z", ty = &mut f32, also = self.tracker |= Self::position_f())]
+    #[set(into, also = self.tracker |= Self::position_f())]
+    #[set(prop = "x", ty = f32, also = self.tracker |= Self::position_f())]
+    #[set(prop = "y", ty = f32, also = self.tracker |= Self::position_f())]
+    #[set(prop = "z", ty = f32, also = self.tracker |= Self::position_f())]
     position: Vector3,
+
+    #[get]
+    #[get(copied, prop = "x", ty = f32)]
+    #[get(copied, prop = "y", ty = f32)]
+    #[get(copied, prop = "z", ty = f32)]
+    #[get(mut, also = self.tracker |= Self::target_f())]
+    #[get(mut, prop = "x", ty = &mut f32, also = self.tracker |= Self::target_f())]
+    #[get(mut, prop = "y", ty = &mut f32, also = self.tracker |= Self::target_f())]
+    #[get(mut, prop = "z", ty = &mut f32, also = self.tracker |= Self::target_f())]
+    #[set(name = "look_at", also = self.tracker |= Self::target_f())]
+    #[set(prop = "x", ty = f32, name = "look_at_x", also = self.tracker |= Self::target_f())]
+    #[set(prop = "y", ty = f32, name = "look_at_y", also = self.tracker |= Self::target_f())]
+    #[set(prop = "z", ty = f32, name = "look_at_z", also = self.tracker |= Self::target_f())]
     target: Vector3,
+
+    #[get]
+    #[get(copied, prop = "x", ty = f32)]
+    #[get(copied, prop = "y", ty = f32)]
+    #[get(copied, prop = "z", ty = f32)]
+    #[get(mut, also = self.tracker |= Self::up_f())]
+    #[get(mut, prop = "x", ty = &mut f32, also = self.tracker |= Self::up_f())]
+    #[get(mut, prop = "y", ty = &mut f32, also = self.tracker |= Self::up_f())]
+    #[get(mut, prop = "z", ty = &mut f32, also = self.tracker |= Self::up_f())]
     up: Vector3,
 }
 
@@ -102,7 +140,8 @@ impl Camera {
             bg,
             bgl,
             projection,
-            position: Vector3::new(0.0, 0.0, -2.0),
+            position: Vector3::new(0.0, 0.0, -5.0),
+            view: Size::new(0, 0),
             target: Vector3::z(),
             up: Vector3::y(),
             tracker: 0,
@@ -121,19 +160,49 @@ impl Camera {
 
     #[inline]
     pub(crate) fn resize(&mut self, view: Size<u32>) {
+        self.view = view;
+        self.set_dirty(Self::projection_f());
+    }
+
+    #[inline]
+    pub(crate) fn update(&mut self) {
+        if !self.any_dirty() {
+            return;
+        }
+
         // FIXME: tf?
-        self.projection = Projection::Orthographic {
-            left: 0.0,
-            right: view.width as f32,
-            bottom: view.height as f32,
-            top: 0.0,
-            near: -1.0,
-            far: 1.0,
+        self.projection = match self.projection {
+            Projection::Orthographic {
+                left,
+                right,
+                bottom,
+                top,
+                near,
+                far,
+            } => Projection::Orthographic {
+                left,
+                right: self.view.width as f32,
+                bottom: self.view.height as f32,
+                top,
+                near,
+                far,
+            },
+            Projection::Perspective {
+                fov,
+                aspect_ratio,
+                near,
+                far,
+            } => Projection::Perspective {
+                fov,
+                aspect_ratio: self.view.to_f32().aspect_ratio(),
+                near,
+                far,
+            },
         };
 
-        let vp = self.projection.matrix(view) * self.view_matrix();
+        let vp = self.projection.matrix(self.view) * self.view_matrix();
 
         self.uniform_buffer.write(0, &[vp]);
-        self.set_dirty(Self::projection_f());
+        self.clear_all_dirty();
     }
 }

@@ -1,4 +1,4 @@
-use crate::{Renderer, color::Color, retained::SceneView};
+use crate::{Layer, Renderer, color::Color, retained::SceneView};
 use assets::{AssetServer, Font, Image};
 use macros::{Get, Set};
 use utils::Handle;
@@ -8,6 +8,8 @@ pub struct Draw<'a> {
     #[get(prop = "clear_color", ty = &Color, name = "clear_color")]
     #[get(mut, prop = "clear_color", ty = &Color, name = "clear_color_mut")]
     #[set(into, prop = "clear_color", ty = Color, name = "set_clear_color")]
+    #[get(prop = "active_layer", ty = &Layer, name = "layer")]
+    #[set(prop = "active_layer", ty = Layer, name = "set_layer")]
     renderer: &'a mut Renderer,
     assets: &'a AssetServer,
 }

@@ -11,6 +11,7 @@ use macros::Get;
 pub struct Handle<T> {
     #[get(copied)]
     index: u32,
+    #[get(copied)]
     generation: u32,
     _d: PhantomData<T>,
 }

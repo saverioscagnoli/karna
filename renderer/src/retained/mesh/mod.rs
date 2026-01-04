@@ -1,3 +1,4 @@
+mod batch;
 mod geometry;
 mod material;
 mod transform;
@@ -7,8 +8,8 @@ use assets::AssetServer;
 use macros::{Get, Set, track_dirty};
 use math::{Vector2, Vector3, Vector4};
 use std::mem;
-use utils::label;
 
+pub use batch::*;
 pub use geometry::*;
 pub use material::*;
 pub use transform::*;
@@ -183,6 +184,10 @@ impl Mesh {
             self.gpu.uv_scale.y = uvh;
 
             changed = true;
+        }
+
+        if changed {
+            self.clear_all_dirty();
         }
 
         changed

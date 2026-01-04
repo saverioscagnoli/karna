@@ -5,15 +5,16 @@ use atlas::TextureAtlas;
 use globals::consts;
 use logging::info;
 use macros::Get;
+use math::Size;
 use std::path::Path;
 use utils::{ByteSize, Handle, Label, SlotMap};
 
 pub use font::*;
 
-/// This struct Exists only for use as Handle<Image>
 #[derive(Debug, Clone)]
 pub struct Image {
-    label: Label,
+    pub label: Label,
+    pub size: Size<u32>,
 }
 
 #[derive(Get)]
@@ -59,15 +60,16 @@ impl AssetServer {
     pub fn load_image_bytes(&mut self, bytes: Vec<u8>) -> Handle<Image> {
         let handle = self.images.insert_with_key(|key| {
             let label = Label::new(&format!("_img_{}", key.index()));
+
             info!(
                 "Loading image with label {:?} of size {}",
                 label,
                 ByteSize::from_bytes(bytes.len() as u64)
             );
 
-            self.atlas.add_image_bytes(label, bytes);
+            let size = self.atlas.add_image_bytes(label, bytes);
 
-            Image { label }
+            Image { label, size }
         });
 
         handle

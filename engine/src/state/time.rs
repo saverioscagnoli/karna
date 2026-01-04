@@ -1,4 +1,5 @@
 use globals::profiling;
+use logging::info;
 use macros::{Get, Set};
 use spin_sleep::SpinSleeper;
 use std::time::{Duration, Instant};
@@ -175,11 +176,13 @@ impl Time {
     #[inline]
     /// Sets the target frame rate
     pub fn set_target_fps(&mut self, target: u32) {
-        let target = 1.0 / target as f32;
+        let step = 1.0 / target as f32;
+
+        info!("Setting target fps to {}. frame step: {}", target, step);
 
         self.fps_uncap = false;
-        self.frame_step = Duration::from_secs_f32(target);
-        self.frame_step_f32 = target;
+        self.frame_step = Duration::from_secs_f32(step);
+        self.frame_step_f32 = step;
     }
 
     #[inline]
@@ -190,10 +193,12 @@ impl Time {
     #[inline]
     /// Sets the target ticks per second
     pub fn set_target_tps(&mut self, target: u32) {
-        let target = 1.0 / target as f32;
+        let step = 1.0 / target as f32;
 
-        self.tick_step = Duration::from_secs_f32(target);
-        self.tick_step_f32 = target;
+        info!("Setting target tps to {}. tick step: {}", target, step);
+
+        self.tick_step = Duration::from_secs_f32(step);
+        self.tick_step_f32 = step;
     }
 
     #[inline]

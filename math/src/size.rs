@@ -59,6 +59,15 @@ impl<T: Num + Copy> Size<T> {
     pub fn area(&self) -> T {
         self.width * self.height
     }
+
+    #[inline]
+    pub fn aspect_ratio(&self) -> T {
+        if self.height == T::zero() {
+            return T::zero();
+        }
+
+        self.width / self.height
+    }
 }
 
 /// From Size<T> to Size<f32>

@@ -21,7 +21,10 @@ use assets::AssetServer;
 use globals::profiling::{self, Statistics};
 use renderer::{Draw, Renderer, Scene, SceneView};
 use std::sync::Arc;
-use winit::{event::WindowEvent, keyboard::PhysicalKey};
+use winit::{
+    event::{DeviceEvent, WindowEvent},
+    keyboard::PhysicalKey,
+};
 
 // Re-exports
 pub use crate::state::time::Time;
@@ -127,6 +130,18 @@ impl EngineState {
         let draw = Draw::new(&mut self.render, &self.assets);
 
         (ctx, draw)
+    }
+
+    #[inline]
+    pub(crate) fn handle_device_event(&mut self, event: DeviceEvent) {
+        match event {
+            DeviceEvent::MouseMotion { delta } => {
+                self.input.mouse_delta.x += delta.0 as f32;
+                self.input.mouse_delta.y += delta.1 as f32;
+            }
+
+            _ => {}
+        }
     }
 
     #[inline]

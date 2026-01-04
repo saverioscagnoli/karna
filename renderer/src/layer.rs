@@ -1,7 +1,6 @@
 use crate::{camera::Camera, immediate::ImmediateRenderer, retained::RetainedRenderer};
 use assets::AssetServer;
 use math::Size;
-use std::sync::Arc;
 
 #[derive(Default)]
 #[derive(Debug, Clone, Copy)]
@@ -26,10 +25,11 @@ impl RenderLayer {
         camera: Camera,
     ) -> Self {
         let immediate = ImmediateRenderer::new(config.format, &camera, assets.atlas_bgl());
+        let retained = RetainedRenderer::new(config.format, &camera, assets.atlas_bgl());
 
         Self {
             camera,
-            retained: RetainedRenderer::new(),
+            retained,
             immediate,
         }
     }
@@ -40,7 +40,10 @@ impl RenderLayer {
     }
 
     #[inline]
-    pub fn present<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>) {
+    pub fn present<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>, assets: &AssetServer) {
+        self.camera.update();
+
         self.immediate.present(render_pass);
+        self.retained.present(render_pass, assets);
     }
 }

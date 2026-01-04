@@ -139,7 +139,7 @@ impl TextureAtlas {
         );
     }
 
-    pub fn add_image_bytes(&mut self, label: Label, bytes: Vec<u8>) {
+    pub fn add_image_bytes(&mut self, label: Label, bytes: Vec<u8>) -> Size<u32> {
         let image = image::load_from_memory(&bytes).expect("Failed to load image bytes");
         let size: Size<u32> = image.dimensions().into();
 
@@ -150,10 +150,18 @@ impl TextureAtlas {
 
         self.write_texture_to_buffer(image, size, region);
         self.regions.insert(label, region);
+
+        size
     }
 
     /// Add raw RGBA image data directly (used for font glyphs)
-    fn add_raw_image(&mut self, label: Label, rgba_data: Vec<u8>, width: u32, height: u32) {
+    fn add_raw_image(
+        &mut self,
+        label: Label,
+        rgba_data: Vec<u8>,
+        width: u32,
+        height: u32,
+    ) -> Size<u32> {
         let size = Size::new(width, height);
 
         let region = self
@@ -191,6 +199,7 @@ impl TextureAtlas {
         );
 
         self.regions.insert(label, region);
+        size
     }
 
     pub fn rasterize_characters(&mut self, label: Label, font: &mut Font, size: f32) {

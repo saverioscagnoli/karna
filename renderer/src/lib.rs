@@ -8,6 +8,7 @@ mod traits;
 mod vertex;
 
 use assets::AssetServer;
+use logging::info;
 use macros::{Get, Set};
 use math::Size;
 use std::sync::{Arc, OnceLock};
@@ -21,7 +22,7 @@ pub use immediate::Draw;
 pub use layer::{Layer, RenderLayer};
 pub use retained::{
     Scene, SceneView,
-    mesh::{Geometry, GeometryBuilder, Material, TextureKind, Transform3d},
+    mesh::{Geometry, Material, Mesh, TextureKind, Transform3d},
 };
 
 use crate::shader::Shader;
@@ -114,13 +115,20 @@ impl Renderer {
 
         surface.configure(gpu.device(), &config);
 
-        let world_camera = Camera::new(Projection::Orthographic {
-            left: 0.0,
-            right: view.width as f32,
-            bottom: view.height as f32,
-            top: 0.0,
-            near: -1.0,
-            far: 1.0,
+        //let world_camera = Camera::new(Projection::Orthographic {
+        //    left: 0.0,
+        //    right: view.width as f32,
+        //    bottom: view.height as f32,
+        //    top: 0.0,
+        //    near: -1.0,
+        //    far: 1.0,
+        //});
+
+        let world_camera = Camera::new(Projection::Perspective {
+            fov: 75.0_f32.to_radians(),
+            aspect_ratio: view.to_f32().aspect_ratio(),
+            near: 0.1,
+            far: 1000.0,
         });
 
         let ui_camera = Camera::new(Projection::Orthographic {
@@ -149,9 +157,15 @@ impl Renderer {
     #[inline]
     #[doc(hidden)]
     pub fn resize(&mut self, view: Size<u32>) {
+        info!("Resizing viewport to {}x{}", view.width, view.height);
+
         self.world.resize(view);
         self.ui.resize(view);
         self.user_layers.iter_mut().for_each(|l| l.resize(view));
+
+        self.config.width = view.width;
+        self.config.height = view.height;
+        self.surface.configure(gpu::device(), &self.config);
     }
 
     #[inline]
@@ -208,15 +222,15 @@ impl Renderer {
             render_pass.set_bind_group(0, self.world.camera.bg(), &[]);
             render_pass.set_bind_group(1, assets.atlas_bg(), &[]);
 
-            self.world.present(&mut render_pass);
+            self.world.present(&mut render_pass, assets);
 
             render_pass.set_bind_group(0, self.ui.camera.bg(), &[]);
 
-            self.ui.present(&mut render_pass);
+            self.ui.present(&mut render_pass, assets);
 
             self.user_layers.iter_mut().for_each(|l| {
                 render_pass.set_bind_group(0, l.camera.bg(), &[]);
-                l.present(&mut render_pass);
+                l.present(&mut render_pass, assets);
             });
         }
 

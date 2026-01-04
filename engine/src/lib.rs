@@ -17,7 +17,7 @@ use std::{
 use utils::{FastHashMap, Lazy};
 use winit::{
     application::ApplicationHandler,
-    event::WindowEvent,
+    event::{DeviceEvent, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::WindowId,
 };
@@ -50,6 +50,7 @@ enum WindowMessage {
     MonitorsChanged(Vec<Monitor>),
     StartFrame,
     WinitEvent(WindowEvent),
+    DeviceEvent(DeviceEvent),
 }
 
 struct WindowHandle {
@@ -188,6 +189,10 @@ impl App {
 
                                 state.handle_event(event);
                             }
+
+                            WindowMessage::DeviceEvent(event) => {
+                                state.handle_device_event(event);
+                            }
                         }
                     }
 
@@ -239,6 +244,10 @@ impl App {
                     state.handle_event(event);
                 }
 
+                Ok(WindowMessage::DeviceEvent(event)) => {
+                    state.handle_device_event(event);
+                }
+
                 Err(_) => return,
             }
         }
@@ -276,6 +285,19 @@ impl ApplicationHandler for App {
                     );
                 }
             }
+        }
+    }
+
+    fn device_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        device_id: winit::event::DeviceId,
+        event: DeviceEvent,
+    ) {
+        for window in self.windows.values() {
+            let _ = window
+                .sender
+                .try_send(WindowMessage::DeviceEvent(event.clone()));
         }
     }
 

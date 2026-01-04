@@ -14,6 +14,9 @@ pub struct Input {
     #[get]
     pub(crate) mouse_position: Vector2,
 
+    #[get]
+    pub(crate) mouse_delta: Vector2,
+
     pub(crate) held_mouse: FastHashSet<MouseButton>,
     pub(crate) pressed_mouse: FastHashSet<MouseButton>,
 }
@@ -24,6 +27,7 @@ impl Default for Input {
             held_keys: FastHashSet::default(),
             pressed_keys: FastHashSet::default(),
             mouse_position: Vector2::zeros(),
+            mouse_delta: Vector2::zeros(),
             held_mouse: FastHashSet::default(),
             pressed_mouse: FastHashSet::default(),
         }
@@ -55,5 +59,6 @@ impl Input {
     pub(crate) fn flush(&mut self) {
         self.pressed_keys.clear();
         self.pressed_mouse.clear();
+        self.mouse_delta.set(0.0, 0.0);
     }
 }
