@@ -3,8 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
     sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
-use utils::{Label, LabelMap};
-use wgpu::naga::FastHashMap;
+use utils::{FastHashMap, Label};
 
 /// Map used to store states across all scenes of a single window.
 /// Not thread safe.
@@ -14,7 +13,7 @@ use wgpu::naga::FastHashMap;
 ///
 /// On the other hand, [`GlobalStates`]  is slower and should not be used for frequent access.
 /// So that's why it supports only one instance of each type.
-pub struct ScopedStates(FastHashMap<TypeId, LabelMap<Box<dyn Any>>>);
+pub struct ScopedStates(FastHashMap<TypeId, FastHashMap<Label, Box<dyn Any>>>);
 
 impl ScopedStates {
     pub fn new() -> Self {
@@ -26,7 +25,7 @@ impl ScopedStates {
         let state_map = self
             .0
             .entry(TypeId::of::<T>())
-            .or_insert_with(LabelMap::default);
+            .or_insert_with(FastHashMap::default);
 
         state_map
             .insert(label, Box::new(value))

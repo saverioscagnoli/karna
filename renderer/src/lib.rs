@@ -7,7 +7,7 @@ mod shader;
 mod traits;
 mod vertex;
 
-use assets::AssetManager;
+use assets::AssetServer;
 use macros::{Get, Set};
 use math::Size;
 use std::sync::{Arc, OnceLock};
@@ -52,7 +52,6 @@ pub struct Renderer {
     // Internal stuff
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
-    assets: Arc<AssetManager>,
 
     clear_color: Color,
 
@@ -64,7 +63,7 @@ pub struct Renderer {
 
 impl Renderer {
     #[doc(hidden)]
-    pub fn new(window: Arc<Window>, assets: Arc<AssetManager>) -> Self {
+    pub fn new(window: Arc<Window>, assets: &AssetServer) -> Self {
         let retained_shader = Shader::from_wgsl_file(
             include_str!("../../shaders/basic_2d.wgsl"),
             Some("Retained shader"),
@@ -133,13 +132,12 @@ impl Renderer {
             far: 1.0,
         });
 
-        let world = RenderLayer::new(&config, assets.clone(), world_camera);
-        let ui = RenderLayer::new(&config, assets.clone(), ui_camera);
+        let world = RenderLayer::new(&config, assets, world_camera);
+        let ui = RenderLayer::new(&config, assets, ui_camera);
 
         Self {
             surface,
             config,
-            assets,
             clear_color: Color::rgb(1.0 / 25.0, 1.0 / 25.0, 1.0 / 25.0),
             world,
             ui,
@@ -176,7 +174,7 @@ impl Renderer {
 
     #[inline]
     #[doc(hidden)]
-    pub fn present(&mut self) {
+    pub fn present(&mut self, assets: &AssetServer) {
         let gpu = gpu::get();
         let output = self.surface.get_current_texture().expect("Ouch");
         let view = output
@@ -208,7 +206,7 @@ impl Renderer {
             });
 
             render_pass.set_bind_group(0, self.world.camera.bg(), &[]);
-            render_pass.set_bind_group(1, self.assets.bind_group(), &[]);
+            render_pass.set_bind_group(1, assets.atlas_bg(), &[]);
 
             self.world.present(&mut render_pass);
 

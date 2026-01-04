@@ -1,10 +1,11 @@
 use crate::color::Color;
-use utils::Label;
+use assets::Image;
+use utils::{Handle, Label};
 
 #[derive(Debug, Clone, Copy)]
 pub enum TextureKind {
     None,
-    Full(Label),
+    Full(Handle<Image>),
 }
 
 #[derive(Debug, Clone, Copy)]

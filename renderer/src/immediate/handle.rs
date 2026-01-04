@@ -1,9 +1,7 @@
-use std::sync::Arc;
-
-use assets::AssetManager;
-use macros::{Get, Set};
-
 use crate::{Renderer, color::Color, retained::SceneView};
+use assets::{AssetServer, Font, Image};
+use macros::{Get, Set};
+use utils::Handle;
 
 #[derive(Get, Set)]
 pub struct Draw<'a> {
@@ -11,12 +9,12 @@ pub struct Draw<'a> {
     #[get(mut, prop = "clear_color", ty = &Color, name = "clear_color_mut")]
     #[set(into, prop = "clear_color", ty = Color, name = "set_clear_color")]
     renderer: &'a mut Renderer,
-    assets: &'a AssetManager,
+    assets: &'a AssetServer,
 }
 
 impl<'a> Draw<'a> {
     #[doc(hidden)]
-    pub fn new(renderer: &'a mut Renderer, assets: &'a AssetManager) -> Self {
+    pub fn new(renderer: &'a mut Renderer, assets: &'a AssetServer) -> Self {
         Self { renderer, assets }
     }
 
@@ -26,7 +24,7 @@ impl<'a> Draw<'a> {
     }
 
     #[inline]
-    pub fn draw_color(&self) -> &Color {
+    pub fn color(&self) -> &Color {
         &self
             .renderer
             .layer(self.renderer.active_layer)
@@ -35,7 +33,7 @@ impl<'a> Draw<'a> {
     }
 
     #[inline]
-    pub fn draw_color_mut(&mut self) -> &mut Color {
+    pub fn color_mut(&mut self) -> &mut Color {
         &mut self
             .renderer
             .layer_mut(self.renderer.active_layer)
@@ -44,7 +42,7 @@ impl<'a> Draw<'a> {
     }
 
     #[inline]
-    pub fn set_draw_color<C>(&mut self, color: C)
+    pub fn set_color<C>(&mut self, color: C)
     where
         C: Into<Color>,
     {
@@ -55,9 +53,36 @@ impl<'a> Draw<'a> {
     }
 
     #[inline]
-    pub fn fill_rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
+    pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
         let layer = self.renderer.layer_mut(self.renderer.active_layer);
 
         layer.immediate.fill_rect([x, y].into(), w, h, &self.assets);
+    }
+
+    #[inline]
+    pub fn image(&mut self, image: Handle<Image>, x: f32, y: f32) {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer
+            .immediate
+            .draw_image(image, [x, y].into(), &self.assets);
+    }
+
+    #[inline]
+    pub fn text<T: AsRef<str>>(&mut self, font: Handle<Font>, text: T, x: f32, y: f32) {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer
+            .immediate
+            .draw_text(font, text.as_ref(), x, y, &self.assets);
+    }
+
+    #[inline]
+    pub fn debug_text<T: AsRef<str>>(&mut self, text: T, x: f32, y: f32) {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer
+            .immediate
+            .draw_text(self.assets.debug_font(), text.as_ref(), x, y, &self.assets);
     }
 }

@@ -1,12 +1,11 @@
 mod builder;
-mod context;
 mod scene;
+mod state;
 
 use crate::{
-    context::{EngineState, WinitWindow, states::GlobalStates, sysinfo::SystemInfo},
     scene::SceneManager,
+    state::{EngineState, WinitWindow, states::GlobalStates, sysinfo::SystemInfo},
 };
-use assets::AssetManager;
 use crossbeam_channel::{Receiver, Sender};
 use globals::{TrackingAllocator, profiling};
 use logging::{LogError, LogLevel, error, info, warn};
@@ -15,8 +14,7 @@ use std::{
     sync::Arc,
     thread::{self, JoinHandle},
 };
-use utils::Lazy;
-use wgpu::naga::FastHashMap;
+use utils::{FastHashMap, Lazy};
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -26,10 +24,10 @@ use winit::{
 
 // Re-exports
 pub use builder::{AppBuilder, WindowBuilder};
-pub use context::{Context, Monitor, Monitors, RenderContext, Time, Window, input};
 pub use renderer::Draw;
 pub use scene::Scene;
-pub use utils::{Label, LabelMap, label};
+pub use state::{Context, Monitor, Monitors, RenderContext, Time, Window, input};
+pub use utils::{Label, label};
 
 #[global_allocator]
 static GLOBAL: TrackingAllocator = TrackingAllocator;
@@ -61,7 +59,6 @@ struct WindowHandle {
 
 #[derive(Clone)]
 struct Arcs {
-    assets: Arc<AssetManager>,
     globals: Arc<GlobalStates>,
     info: Arc<SystemInfo>,
 }
@@ -106,14 +103,9 @@ impl App {
         info!("Graphics Backend: {}", info.gpu_backend());
         info!("Graphics Driver: {}", info.gpu_driver());
 
-        let assets = Arc::new(AssetManager::new());
         let globals = Arc::new(GlobalStates::new());
 
-        self.arcs.set(Arcs {
-            assets,
-            globals,
-            info,
-        });
+        self.arcs.set(Arcs { globals, info });
     }
 
     pub(crate) fn add_window_builder(&mut self, builder: WindowBuilder) {
@@ -124,7 +116,7 @@ impl App {
         &mut self,
         label: String,
         window: WinitWindow,
-        scenes: LabelMap<Box<dyn Scene>>,
+        scenes: FastHashMap<Label, Box<dyn Scene>>,
     ) {
         let (tx, rx) = crossbeam_channel::bounded::<WindowMessage>(64);
         let window_id = window.id();
@@ -146,7 +138,7 @@ impl App {
 
     fn window_loop(
         window: Window,
-        scenes: LabelMap<Box<dyn Scene>>,
+        scenes: FastHashMap<Label, Box<dyn Scene>>,
         arcs: Arcs,
         rx: Receiver<WindowMessage>,
     ) {
@@ -216,7 +208,7 @@ impl App {
 
                     scenes.current().render(&render_context, &mut draw);
 
-                    state.render.present();
+                    state.render.present(&state.assets);
 
                     state.time.frame_end();
                     state.input.flush();

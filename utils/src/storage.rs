@@ -1,7 +1,15 @@
-use std::marker::PhantomData;
+use std::{
+    collections::HashMap,
+    hash::{BuildHasher, BuildHasherDefault, Hasher},
+    marker::PhantomData,
+};
+
+use macros::Get;
 
 #[derive(Debug, Hash)]
+#[derive(Get)]
 pub struct Handle<T> {
+    #[get(copied)]
     index: u32,
     generation: u32,
     _d: PhantomData<T>,
@@ -101,6 +109,32 @@ impl<T> SlotMap<T> {
         }
     }
 
+    /// Insert with access to the handle that will be created
+    /// Useful when you need to derive data from the handle (like a label)
+    pub fn insert_with_key<F>(&mut self, f: F) -> Handle<T>
+    where
+        F: FnOnce(Handle<T>) -> T,
+    {
+        if let Some(index) = self.free_list.pop() {
+            let slot = &mut self.slots[index as usize];
+            let handle = Handle::new(index, slot.generation);
+
+            slot.value = Some(f(handle));
+
+            handle
+        } else {
+            let index = self.slots.len() as u32;
+            let handle = Handle::new(index, 1);
+
+            self.slots.push(Slot {
+                value: Some(f(handle)),
+                generation: 1,
+            });
+
+            handle
+        }
+    }
+
     pub fn get(&self, handle: Handle<T>) -> Option<&T> {
         let slot = self.slots.get(handle.index as usize)?;
 
@@ -193,3 +227,73 @@ impl<T> Default for SlotMap<T> {
         Self::new()
     }
 }
+
+pub struct IdentityHasher(u64);
+
+impl Hasher for IdentityHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, _: &[u8]) {
+        panic!("IdentityHasher only works with u32")
+    }
+
+    fn write_u32(&mut self, i: u32) {
+        self.0 = i as u64;
+    }
+}
+
+#[derive(Default)]
+pub struct IdentityHasherBuilder;
+
+impl BuildHasher for IdentityHasherBuilder {
+    type Hasher = IdentityHasher;
+    fn build_hasher(&self) -> Self::Hasher {
+        IdentityHasher(0)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Label(u32);
+
+impl Label {
+    const FNV_OFFSET: u32 = 2166136261;
+    const FNV_PRIME: u32 = 16777619;
+
+    /// Create a label from a string slice at compile time
+    pub const fn new(s: &str) -> Self {
+        Self(Self::hash(s))
+    }
+
+    /// Get the raw hash value
+    pub const fn raw(&self) -> u32 {
+        self.0
+    }
+
+    pub const fn hash(s: &str) -> u32 {
+        let bytes = s.as_bytes();
+        let mut hash = Self::FNV_OFFSET;
+        let mut i = 0;
+
+        while i < bytes.len() {
+            hash ^= bytes[i] as u32;
+            hash = hash.wrapping_mul(Self::FNV_PRIME);
+            i += 1;
+        }
+
+        hash
+    }
+}
+
+#[macro_export]
+macro_rules! label {
+    ($s:literal) => {{
+        const LABEL: $crate::Label = $crate::Label::new($s);
+        LABEL
+    }};
+}
+
+/// Only works with u32
+pub type UMap<K, V> = HashMap<K, V, IdentityHasherBuilder>;
+pub type FastHashMap<K, V> = HashMap<K, V, BuildHasherDefault<rustc_hash::FxHasher>>;

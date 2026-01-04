@@ -1,5 +1,5 @@
 use crate::{camera::Camera, immediate::ImmediateRenderer, retained::RetainedRenderer};
-use assets::AssetManager;
+use assets::AssetServer;
 use math::Size;
 use std::sync::Arc;
 
@@ -13,7 +13,6 @@ pub enum Layer {
 }
 
 pub struct RenderLayer {
-    assets: Arc<AssetManager>,
     pub(crate) camera: Camera,
 
     pub(crate) retained: RetainedRenderer,
@@ -23,13 +22,12 @@ pub struct RenderLayer {
 impl RenderLayer {
     pub(crate) fn new(
         config: &wgpu::SurfaceConfiguration,
-        assets: Arc<AssetManager>,
+        assets: &AssetServer,
         camera: Camera,
     ) -> Self {
-        let immediate = ImmediateRenderer::new(config.format, &camera, &assets);
+        let immediate = ImmediateRenderer::new(config.format, &camera, assets.atlas_bgl());
 
         Self {
-            assets,
             camera,
             retained: RetainedRenderer::new(),
             immediate,

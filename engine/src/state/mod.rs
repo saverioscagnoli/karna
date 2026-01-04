@@ -10,21 +10,21 @@ mod window;
 
 use crate::{
     Arcs,
-    context::{
+    state::{
         input::Input,
         scene_changer::SceneChanger,
         states::{GlobalStates, ScopedStates},
         sysinfo::SystemInfo,
     },
 };
-use assets::AssetManager;
+use assets::AssetServer;
 use globals::profiling::{self, Statistics};
 use renderer::{Draw, Renderer, Scene, SceneView};
 use std::sync::Arc;
 use winit::{event::WindowEvent, keyboard::PhysicalKey};
 
 // Re-exports
-pub use crate::context::time::Time;
+pub use crate::state::time::Time;
 pub use monitors::{Monitor, Monitors};
 pub use window::Window;
 pub(crate) use window::WinitWindow;
@@ -36,7 +36,7 @@ pub struct EngineState {
     pub render: Renderer,
     pub scenes: SceneChanger,
     pub monitors: Monitors,
-    pub assets: Arc<AssetManager>,
+    pub assets: AssetServer,
     pub states: ScopedStates,
     pub globals: Arc<GlobalStates>,
     pub info: Arc<SystemInfo>,
@@ -47,10 +47,11 @@ pub struct Context<'a> {
     pub window: &'a Window,
     pub time: &'a mut Time,
     pub input: &'a mut Input,
+    /// (Ctx will be mutable)
     pub scene: Scene<'a>,
     pub scenes: &'a mut SceneChanger,
     pub monitors: &'a Monitors,
-    pub assets: &'a AssetManager,
+    pub assets: &'a mut AssetServer,
     pub states: &'a mut ScopedStates,
     pub globals: &'a GlobalStates,
     pub info: &'a SystemInfo,
@@ -62,7 +63,7 @@ pub struct RenderContext<'a> {
     pub time: &'a Time,
     pub input: &'a Input,
     pub monitors: &'a Monitors,
-    pub assets: &'a AssetManager,
+    pub assets: &'a AssetServer,
     pub states: &'a ScopedStates,
     pub globals: &'a GlobalStates,
     pub info: &'a SystemInfo,
@@ -71,7 +72,8 @@ pub struct RenderContext<'a> {
 
 impl EngineState {
     pub(crate) fn new(window: Window, arcs: Arcs) -> Self {
-        let render = Renderer::new(window.inner().clone(), arcs.assets.clone());
+        let assets = AssetServer::new();
+        let render = Renderer::new(window.inner().clone(), &assets);
         let scenes = SceneChanger::new();
         let monitors = Monitors::new(Arc::clone(window.inner()));
         let states = ScopedStates::new();
@@ -83,7 +85,7 @@ impl EngineState {
             render,
             scenes,
             monitors,
-            assets: arcs.assets,
+            assets,
             states,
             globals: arcs.globals,
             info: arcs.info,
@@ -100,7 +102,7 @@ impl EngineState {
             scene: Scene::new(&mut self.render),
             scenes: &mut self.scenes,
             monitors: &self.monitors,
-            assets: &self.assets,
+            assets: &mut self.assets,
             states: &mut self.states,
             globals: &self.globals,
             info: &self.info,

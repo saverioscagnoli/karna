@@ -1,5 +1,6 @@
 use macros::Get;
 use std::ops::Deref;
+use utils::Label;
 use wgpu::naga::FastHashMap;
 
 #[derive(Debug, Clone)]

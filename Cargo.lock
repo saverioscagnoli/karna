@@ -183,6 +183,7 @@ name = "assets"
 version = "0.1.0"
 dependencies = [
  "fontdue",
+ "globals",
  "gpu",
  "image",
  "logging",
@@ -1182,6 +1183,7 @@ dependencies = [
 name = "karna"
 version = "0.1.0"
 dependencies = [
+ "assets",
  "engine",
  "image",
  "logging",
@@ -1431,7 +1433,7 @@ dependencies = [
  "log",
  "num-traits",
  "once_cell",
- "rustc-hash",
+ "rustc-hash 1.1.0",
  "spirv",
  "thiserror 2.0.17",
  "unicode-ident",
@@ -2348,6 +2350,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
+name = "rustc-hash"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
+
+[[package]]
 name = "rustix"
 version = "0.38.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2888,6 +2896,8 @@ name = "utils"
 version = "0.1.0"
 dependencies = [
  "hashbrown 0.16.1",
+ "macros",
+ "rustc-hash 2.1.1",
 ]
 
 [[package]]
@@ -3177,7 +3187,7 @@ dependencies = [
  "portable-atomic",
  "profiling",
  "raw-window-handle",
- "rustc-hash",
+ "rustc-hash 1.1.0",
  "smallvec",
  "thiserror 2.0.17",
  "wgpu-core-deps-apple",

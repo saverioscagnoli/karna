@@ -3,10 +3,11 @@ mod material;
 mod transform;
 
 use crate::{color::Color, traits::LayoutDescriptor};
-use assets::AssetManager;
+use assets::AssetServer;
 use macros::{Get, Set, track_dirty};
 use math::{Vector2, Vector3, Vector4};
 use std::mem;
+use utils::label;
 
 pub use geometry::*;
 pub use material::*;
@@ -157,7 +158,7 @@ impl Mesh {
     }
 
     #[inline]
-    pub(crate) fn prepare(&mut self, assets: &AssetManager) -> bool {
+    pub(crate) fn prepare(&mut self, assets: &AssetServer) -> bool {
         let mut changed = false;
 
         if self.is_dirty(Self::transform_f()) {
@@ -171,8 +172,8 @@ impl Mesh {
         if self.is_dirty(Self::material_f()) {
             self.gpu.color = self.material.color.into();
 
-            let (uvx, uvy, uvw, uvh) = match self.material.texture {
-                TextureKind::Full(label) => assets.get_texture_coords(label),
+            let (uvx, uvy, uvw, uvh, _, _) = match self.material.texture {
+                TextureKind::Full(handle) => assets.get_texture_uv(handle),
                 TextureKind::None => assets.get_white_uv_coords(),
             };
 

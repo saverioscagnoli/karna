@@ -13,3 +13,4 @@ macros.workspace = true
 wgpu.workspace = true
 fontdue.workspace = true
 logging.workspace = true
+globals.workspace = true
