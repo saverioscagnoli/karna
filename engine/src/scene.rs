@@ -1,13 +1,14 @@
-use crate::context::Context;
+use crate::context::{Context, RenderContext};
 use macros::Get;
 use math::Size;
+use renderer::Draw;
 use utils::{Label, LabelMap, label};
 
 #[allow(unused)]
 pub trait Scene: Send {
     fn load(&mut self, ctx: &mut Context);
     fn update(&mut self, ctx: &mut Context);
-    fn render(&mut self, ctx: &mut Context);
+    fn render(&mut self, ctx: &RenderContext, draw: &mut Draw);
 
     // Optional methods
 

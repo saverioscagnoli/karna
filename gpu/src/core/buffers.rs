@@ -25,7 +25,6 @@ impl<T> GpuBuffer<T> {
     pub fn new<S: Into<String>>(label: S, usage: wgpu::BufferUsages, data: &[T]) -> Self {
         let label_str = label.into();
         let capacity = data.len();
-        let size = (std::mem::size_of::<T>() * capacity) as u64;
 
         let inner = crate::device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(&label_str),
@@ -146,19 +145,19 @@ impl<T> GpuBuffer<T> {
 
 // Builder pattern for more flexibility
 impl<T> GpuBuffer<T> {
-    pub fn builder() -> GpuBufferBuilder<T> {
+    pub fn builder<'a>() -> GpuBufferBuilder<'a, T> {
         GpuBufferBuilder::new()
     }
 }
 
-pub struct GpuBufferBuilder<T> {
+pub struct GpuBufferBuilder<'a, T> {
     label: Option<String>,
     usage: wgpu::BufferUsages,
     capacity: Option<usize>,
-    data: Option<Vec<T>>,
+    data: Option<&'a Vec<T>>,
 }
 
-impl<T> GpuBufferBuilder<T> {
+impl<'a, T> GpuBufferBuilder<'a, T> {
     pub fn new() -> Self {
         Self {
             label: None,
@@ -213,7 +212,7 @@ impl<T> GpuBufferBuilder<T> {
         self
     }
 
-    pub fn data(mut self, data: Vec<T>) -> Self {
+    pub fn data(mut self, data: &'a Vec<T>) -> Self {
         self.data = Some(data);
         self
     }
@@ -230,7 +229,7 @@ impl<T> GpuBufferBuilder<T> {
     }
 }
 
-impl<T> Default for GpuBufferBuilder<T> {
+impl<'a, T> Default for GpuBufferBuilder<'a, T> {
     fn default() -> Self {
         Self::new()
     }

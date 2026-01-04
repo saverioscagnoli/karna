@@ -351,3 +351,5 @@ impl fmt::Display for ByteSize {
         }
     }
 }
+
+pub type FastHashMap<K, V> = hashbrown::HashMap<K, V, IdentityHasherBuilder>;

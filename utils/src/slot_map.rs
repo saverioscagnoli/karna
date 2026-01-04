@@ -1,10 +1,32 @@
 use std::marker::PhantomData;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Hash)]
 pub struct Handle<T> {
     index: u32,
     generation: u32,
     _d: PhantomData<T>,
+}
+
+impl<T> PartialEq for Handle<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index && self.generation == other.generation
+    }
+}
+
+impl<T> Eq for Handle<T> {}
+
+impl<T> PartialOrd for Handle<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for Handle<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.index
+            .cmp(&other.index)
+            .then(self.generation.cmp(&other.generation))
+    }
 }
 
 impl<T> Clone for Handle<T> {

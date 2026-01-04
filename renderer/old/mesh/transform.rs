@@ -61,4 +61,12 @@ impl Transform {
             scale,
         }
     }
+
+    pub fn combine(&self, local: &Transform) -> Transform {
+        Transform {
+            position: self.position + self.rotation * (self.scale * local.position),
+            rotation: self.rotation * local.rotation,
+            scale: self.scale * local.scale,
+        }
+    }
 }

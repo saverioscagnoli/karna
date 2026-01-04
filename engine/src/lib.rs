@@ -3,15 +3,14 @@ mod context;
 mod scene;
 
 use crate::{
-    context::{WinitWindow, states::GlobalStates, sysinfo::SystemInfo},
+    context::{EngineState, WinitWindow, states::GlobalStates, sysinfo::SystemInfo},
     scene::SceneManager,
 };
 use assets::AssetManager;
 use crossbeam_channel::{Receiver, Sender};
 use globals::{TrackingAllocator, profiling};
-use logging::{error, info, warn};
+use logging::{LogError, LogLevel, error, info, warn};
 use math::Size;
-use renderer::RenderLogs;
 use std::{
     sync::Arc,
     thread::{self, JoinHandle},
@@ -27,12 +26,26 @@ use winit::{
 
 // Re-exports
 pub use builder::{AppBuilder, WindowBuilder};
-pub use context::{Context, Monitor, Monitors, Time, Window, input};
+pub use context::{Context, Monitor, Monitors, RenderContext, Time, Window, input};
+pub use renderer::Draw;
 pub use scene::Scene;
 pub use utils::{Label, LabelMap, label};
 
 #[global_allocator]
 static GLOBAL: TrackingAllocator = TrackingAllocator;
+
+struct EngineLogs;
+
+impl logging::target::Target for EngineLogs {
+    fn write(&self, _level: LogLevel, message: &str) -> Result<(), LogError> {
+        let logs = globals::logs::get();
+        let mut lock = logs.write().map_err(|_| LogError::PoisonError)?;
+
+        lock.push(message.to_string());
+
+        Ok(())
+    }
+}
 
 enum WindowMessage {
     Close,
@@ -47,17 +60,16 @@ struct WindowHandle {
 }
 
 #[derive(Clone)]
-struct EngineState {
+struct Arcs {
     assets: Arc<AssetManager>,
     globals: Arc<GlobalStates>,
     info: Arc<SystemInfo>,
-    logs: RenderLogs,
 }
 
 pub struct App {
     windows: FastHashMap<WindowId, WindowHandle>,
     window_builders: Vec<WindowBuilder>,
-    state: Lazy<EngineState>,
+    arcs: Lazy<Arcs>,
 }
 
 /// Internal
@@ -68,24 +80,20 @@ impl App {
         Self {
             windows: FastHashMap::default(),
             window_builders: Vec::new(),
-            state: Lazy::new(),
+            arcs: Lazy::new(),
         }
     }
 
     pub(crate) fn init(&mut self) {
-        gpu::init();
-
-        let logs = RenderLogs::new(25);
-
         logging::init(
             logging::Config::default().with_target(logging::TargetConfig {
-                target: Box::new(logs.clone()),
+                target: Box::new(EngineLogs),
                 formatter: None,
             }),
         );
 
-        let assets = Arc::new(AssetManager::new());
-        let globals = Arc::new(GlobalStates::new());
+        gpu::init();
+
         let info = Arc::new(SystemInfo::new());
 
         info!("Cpu: {} ({})", info.cpu_model(), info.cpu_cores());
@@ -98,11 +106,13 @@ impl App {
         info!("Graphics Backend: {}", info.gpu_backend());
         info!("Graphics Driver: {}", info.gpu_driver());
 
-        self.state.set(EngineState {
+        let assets = Arc::new(AssetManager::new());
+        let globals = Arc::new(GlobalStates::new());
+
+        self.arcs.set(Arcs {
             assets,
             globals,
             info,
-            logs,
         });
     }
 
@@ -119,11 +129,11 @@ impl App {
         let (tx, rx) = crossbeam_channel::bounded::<WindowMessage>(64);
         let window_id = window.id();
         let window = Window::new(label, window);
-        let state = self.state.clone();
+        let arcs = self.arcs.clone();
 
         let handle = thread::spawn(move || {
             let _ctx = logging::ctx!("window", window.label());
-            Self::window_loop(window, scenes, state, rx);
+            Self::window_loop(window, scenes, arcs, rx);
         });
 
         let window_handle = WindowHandle {
@@ -137,16 +147,16 @@ impl App {
     fn window_loop(
         window: Window,
         scenes: LabelMap<Box<dyn Scene>>,
-        state: EngineState,
+        arcs: Arcs,
         rx: Receiver<WindowMessage>,
     ) {
-        let mut context = Context::new(window, state.assets, state.globals, state.info, state.logs);
+        let mut state = EngineState::new(window, arcs);
         let mut scenes = SceneManager::new(scenes);
 
-        scenes.current().load(&mut context);
+        scenes.current().load(&mut state.as_context());
 
         // Kickstart
-        context.window.request_redraw();
+        state.window.request_redraw();
 
         loop {
             match rx.recv() {
@@ -156,7 +166,7 @@ impl App {
                 }
 
                 Ok(WindowMessage::MonitorsChanged(monitors)) => {
-                    context.monitors.update(monitors);
+                    state.monitors.update(monitors);
                 }
 
                 Ok(WindowMessage::StartFrame) => {
@@ -174,78 +184,67 @@ impl App {
                             }
 
                             WindowMessage::MonitorsChanged(monitors) => {
-                                context.monitors.update(monitors);
+                                state.monitors.update(monitors);
                             }
 
                             WindowMessage::WinitEvent(event) => {
                                 if let WindowEvent::Resized(size) = event {
                                     let size: Size<u32> = size.into();
 
-                                    scenes.current().on_resize(size, &mut context);
+                                    scenes.current().on_resize(size, &mut state.as_context());
                                 }
 
-                                context.handle_event(event);
+                                state.handle_event(event);
                             }
                         }
                     }
 
                     // FRAME START
                     profiling::reset_frame();
-                    context.profiling.mem.update();
 
-                    context.time.frame_start();
-                    context.time.update();
+                    state.time.frame_start();
+                    state.time.update();
 
-                    while let Some(tick_start) = context.time.next_tick() {
-                        scenes.current().fixed_update(&mut context);
-                        context.time.do_tick(tick_start);
+                    while let Some(tick_start) = state.time.next_tick() {
+                        scenes.current().fixed_update(&mut state.as_context());
+                        state.time.do_tick(tick_start);
                     }
 
-                    scenes.current().update(&mut context);
+                    scenes.current().update(&mut state.as_context());
 
-                    scenes.current().render(&mut context);
+                    let (render_context, mut draw) = state.as_render_context();
 
-                    match context.render.present(context.time.delta()) {
-                        Ok(_) => {}
-                        Err(wgpu::SurfaceError::OutOfMemory) => {
-                            error!("Out of memory error, closing window");
-                            return;
-                        }
-                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                            warn!("Surface lost or outdated, reconfiguring");
-                            let size = context.window.size();
-                            context.render.resize(size.width, size.height);
-                        }
-                        Err(e) => error!("Render error: {:?}", e),
-                    }
+                    scenes.current().render(&render_context, &mut draw);
 
-                    context.time.frame_end();
-                    context.input.flush();
-                    context.time.wait_for_next_frame();
-                    context.window.request_redraw();
+                    state.render.present();
+
+                    state.time.frame_end();
+                    state.input.flush();
+                    state.time.wait_for_next_frame();
+                    state.window.request_redraw();
 
                     // Check for pending scene changes
-                    if let Some(new_scene) = context.scenes.changed_to() {
+                    if let Some(new_scene) = state.scenes.changed_to() {
                         info!(
                             "Changing from scene '{:?}' to '{:?}'",
                             scenes.current_label(),
                             new_scene
                         );
 
-                        scenes.switch_to(new_scene, &mut context);
+                        scenes.switch_to(new_scene, &mut state.as_context());
                     }
 
-                    context.profiling = profiling::get_stats();
+                    state.profiling = profiling::get_stats();
                 }
 
                 Ok(WindowMessage::WinitEvent(event)) => {
                     if let WindowEvent::Resized(size) = event {
                         let size: Size<u32> = size.into();
 
-                        scenes.current().on_resize(size, &mut context);
+                        scenes.current().on_resize(size, &mut state.as_context());
                     }
 
-                    context.handle_event(event);
+                    state.handle_event(event);
                 }
 
                 Err(_) => return,

@@ -8,15 +8,18 @@ mod time;
 mod tween;
 mod window;
 
-use crate::context::{
-    input::Input,
-    scene_changer::SceneChanger,
-    states::{GlobalStates, ScopedStates},
-    sysinfo::SystemInfo,
+use crate::{
+    Arcs,
+    context::{
+        input::Input,
+        scene_changer::SceneChanger,
+        states::{GlobalStates, ScopedStates},
+        sysinfo::SystemInfo,
+    },
 };
 use assets::AssetManager;
 use globals::profiling::{self, Statistics};
-use renderer::{RenderLogs, Renderer};
+use renderer::{Draw, Renderer, Scene, SceneView};
 use std::sync::Arc;
 use winit::{event::WindowEvent, keyboard::PhysicalKey};
 
@@ -26,7 +29,7 @@ pub use monitors::{Monitor, Monitors};
 pub use window::Window;
 pub(crate) use window::WinitWindow;
 
-pub struct Context {
+pub struct EngineState {
     pub window: Window,
     pub time: Time,
     pub input: Input,
@@ -40,15 +43,35 @@ pub struct Context {
     pub profiling: Statistics,
 }
 
-impl Context {
-    pub(crate) fn new(
-        window: Window,
-        assets: Arc<AssetManager>,
-        globals: Arc<GlobalStates>,
-        info: Arc<SystemInfo>,
-        logs: RenderLogs,
-    ) -> Self {
-        let render = Renderer::new(Arc::clone(window.inner()), Arc::clone(&assets), logs);
+pub struct Context<'a> {
+    pub window: &'a Window,
+    pub time: &'a mut Time,
+    pub input: &'a mut Input,
+    pub scene: Scene<'a>,
+    pub scenes: &'a mut SceneChanger,
+    pub monitors: &'a Monitors,
+    pub assets: &'a AssetManager,
+    pub states: &'a mut ScopedStates,
+    pub globals: &'a GlobalStates,
+    pub info: &'a SystemInfo,
+    pub profiling: &'a Statistics,
+}
+
+pub struct RenderContext<'a> {
+    pub window: &'a Window,
+    pub time: &'a Time,
+    pub input: &'a Input,
+    pub monitors: &'a Monitors,
+    pub assets: &'a AssetManager,
+    pub states: &'a ScopedStates,
+    pub globals: &'a GlobalStates,
+    pub info: &'a SystemInfo,
+    pub profiling: &'a Statistics,
+}
+
+impl EngineState {
+    pub(crate) fn new(window: Window, arcs: Arcs) -> Self {
+        let render = Renderer::new(window.inner().clone(), arcs.assets.clone());
         let scenes = SceneChanger::new();
         let monitors = Monitors::new(Arc::clone(window.inner()));
         let states = ScopedStates::new();
@@ -60,19 +83,55 @@ impl Context {
             render,
             scenes,
             monitors,
-            assets,
+            assets: arcs.assets,
             states,
-            globals,
-            info,
+            globals: arcs.globals,
+            info: arcs.info,
             profiling: profiling::get_stats(),
         }
+    }
+
+    #[inline]
+    pub(crate) fn as_context(&mut self) -> Context<'_> {
+        Context {
+            window: &mut self.window,
+            time: &mut self.time,
+            input: &mut self.input,
+            scene: Scene::new(&mut self.render),
+            scenes: &mut self.scenes,
+            monitors: &self.monitors,
+            assets: &self.assets,
+            states: &mut self.states,
+            globals: &self.globals,
+            info: &self.info,
+            profiling: &self.profiling,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn as_render_context(&mut self) -> (RenderContext<'_>, Draw<'_>) {
+        let ctx = RenderContext {
+            window: &self.window,
+            time: &self.time,
+            input: &self.input,
+            monitors: &self.monitors,
+            assets: &self.assets,
+            states: &self.states,
+            globals: &self.globals,
+            info: &self.info,
+            profiling: &self.profiling,
+        };
+
+        let draw = Draw::new(&mut self.render, &self.assets);
+
+        (ctx, draw)
     }
 
     #[inline]
     pub(crate) fn handle_event(&mut self, event: WindowEvent) {
         match event {
             WindowEvent::Resized(size) => {
-                self.render.resize(size.width, size.height);
+                self.render.resize(size.into());
             }
 
             WindowEvent::KeyboardInput { event, .. } => match event.physical_key {
@@ -81,13 +140,11 @@ impl Context {
                         if !event.repeat {
                             self.input.pressed_keys.insert(code);
                         }
-
                         self.input.held_keys.insert(code);
                     } else {
                         self.input.held_keys.remove(&code);
                     }
                 }
-
                 PhysicalKey::Unidentified(_) => {}
             },
 
@@ -101,7 +158,6 @@ impl Context {
                     if !self.input.pressed_mouse.contains(&button) {
                         self.input.pressed_mouse.insert(button);
                     }
-
                     self.input.held_mouse.insert(button);
                 } else {
                     self.input.held_mouse.remove(&button);

@@ -1,62 +1,48 @@
 use crate::{camera::Camera, immediate::ImmediateRenderer, retained::RetainedRenderer};
 use assets::AssetManager;
+use math::Size;
 use std::sync::Arc;
 
+#[derive(Default)]
 #[derive(Debug, Clone, Copy)]
 pub enum Layer {
+    #[default]
     World,
     Ui,
-    N(usize),
+    Custom(usize),
 }
 
 pub struct RenderLayer {
+    assets: Arc<AssetManager>,
     pub(crate) camera: Camera,
 
-    assets: Arc<AssetManager>,
-
-    pub(crate) immediate: ImmediateRenderer,
     pub(crate) retained: RetainedRenderer,
+    pub(crate) immediate: ImmediateRenderer,
 }
 
 impl RenderLayer {
     pub(crate) fn new(
-        surface_format: wgpu::TextureFormat,
-        camera: Camera,
+        config: &wgpu::SurfaceConfiguration,
         assets: Arc<AssetManager>,
+        camera: Camera,
     ) -> Self {
-        let immediate = ImmediateRenderer::new(surface_format, &camera, assets.clone());
+        let immediate = ImmediateRenderer::new(config.format, &camera, &assets);
+
         Self {
+            assets,
             camera,
-            assets: assets.clone(),
+            retained: RetainedRenderer::new(),
             immediate,
-            retained: RetainedRenderer::new(assets),
         }
     }
 
     #[inline]
-    pub(crate) fn resize(&mut self, width: u32, height: u32) {
-        self.camera.resize(width, height);
+    pub fn resize(&mut self, view: Size<u32>) {
+        self.camera.resize(view);
     }
 
     #[inline]
-    pub(crate) fn update(&mut self, width: u32, height: u32, dt: f32) {
-        if self.camera.dirty() {
-            self.camera.resize(width, height);
-        }
-
-        self.camera.update_shake(dt);
-    }
-
-    #[inline]
-    pub(crate) fn present<'a>(
-        &'a mut self,
-        render_pass: &mut wgpu::RenderPass<'a>,
-        retained_pipeline: &'a wgpu::RenderPipeline,
-        text_pipeline: &'a wgpu::RenderPipeline,
-    ) {
-        self.retained
-            .present(render_pass, retained_pipeline, text_pipeline);
-
+    pub fn present<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>) {
         self.immediate.present(render_pass);
     }
 }

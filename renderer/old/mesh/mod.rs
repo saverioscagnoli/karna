@@ -1,4 +1,5 @@
 pub mod geometry;
+pub mod group;
 pub mod material;
 pub mod transform;
 
@@ -287,7 +288,7 @@ impl Mesh {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[derive(Get)]
 pub struct MeshHandle {
     #[get]

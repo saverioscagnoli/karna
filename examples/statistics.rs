@@ -1,10 +1,12 @@
 use karna::{AppBuilder, Scene, WindowBuilder, input::KeyCode};
 use logging::info;
-use renderer::{Color, Geometry, Material, Mesh, MeshHandle, Transform};
+use math::Vector3;
+use renderer::{Color, Geometry, Material, Mesh, MeshHandle, Panel, Transform};
 
 struct StatsDemo {
     rect: MeshHandle,
     circle: MeshHandle,
+    log_panel: Panel,
     logs_toggle: bool,
     c: usize,
 }
@@ -26,9 +28,13 @@ impl Scene for StatsDemo {
         );
 
         self.circle = ctx.render.add_mesh(circle);
+
+        self.log_panel.add_mesh(self.circle, &mut ctx.render);
     }
 
     fn update(&mut self, ctx: &mut karna::Context) {
+        self.log_panel.update(&mut ctx.render);
+
         let vel = 250.0;
         let rect = ctx.render.get_mesh_mut(self.rect);
 
@@ -56,6 +62,9 @@ impl Scene for StatsDemo {
             self.c += 1;
             info!("This is test log number {}", self.c);
         }
+
+        self.log_panel
+            .set_position_2d(self.log_panel.position_2d() + 100.0 * ctx.time.delta());
     }
 
     fn render(&mut self, ctx: &mut karna::Context) {
@@ -208,6 +217,7 @@ fn main() {
                 .with_initial_scene(StatsDemo {
                     rect: MeshHandle::dummy(),
                     circle: MeshHandle::dummy(),
+                    log_panel: Panel::new(Vector3::zeros()),
                     logs_toggle: false,
                     c: 0,
                 }),
