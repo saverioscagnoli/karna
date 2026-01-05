@@ -1,4 +1,5 @@
 mod handle;
+mod text;
 
 pub mod mesh;
 
