@@ -6,10 +6,12 @@ use crate::{
     scene::SceneManager,
     state::{EngineState, WinitWindow, states::GlobalStates, sysinfo::SystemInfo},
 };
+use assets::AssetServer;
 use crossbeam_channel::{Receiver, Sender};
 use globals::{TrackingAllocator, profiling};
 use logging::{LogError, LogLevel, error, info, warn};
 use math::Size;
+use renderer::Renderer;
 use std::{
     sync::Arc,
     thread::{self, JoinHandle},
@@ -124,11 +126,14 @@ impl App {
         let window = Window::new(label, window);
         let label = window.label().to_string();
         let arcs = self.arcs.clone();
-        let state = EngineState::new(window, arcs);
+
+        // Must spawn the renderer on the main thread because windows sucks ass
+        let assets = AssetServer::new();
+        let renderer = Renderer::new(window.inner().clone(), &assets);
 
         let handle = thread::spawn(move || {
             let _ctx = logging::ctx!("window", label);
-            Self::window_loop(scenes, state, rx);
+            Self::window_loop(scenes, window, renderer, assets, arcs, rx);
         });
 
         let window_handle = WindowHandle {
@@ -141,9 +146,13 @@ impl App {
 
     fn window_loop(
         scenes: FastHashMap<Label, Box<dyn Scene>>,
-        mut state: EngineState,
+        window: Window,
+        renderer: Renderer,
+        assets: AssetServer,
+        arcs: Arcs,
         rx: Receiver<WindowMessage>,
     ) {
+        let mut state = EngineState::new(window, renderer, assets, arcs);
         let mut scenes = SceneManager::new(scenes);
 
         scenes.current().load(&mut state.as_context());

@@ -89,9 +89,7 @@ pub struct RenderContext<'a> {
 }
 
 impl EngineState {
-    pub(crate) fn new(window: Window, arcs: Arcs) -> Self {
-        let assets = AssetServer::new();
-        let render = Renderer::new(window.inner().clone(), &assets);
+    pub(crate) fn new(window: Window, renderer: Renderer, assets: AssetServer, arcs: Arcs) -> Self {
         let scenes = SceneChanger::new();
         let monitors = Monitors::new(Arc::clone(window.inner()));
         let states = ScopedStates::new();
@@ -100,7 +98,7 @@ impl EngineState {
             window,
             time: Time::default(),
             input: Input::default(),
-            render,
+            render: renderer,
             scenes,
             monitors,
             assets,
