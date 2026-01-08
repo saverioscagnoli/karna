@@ -53,6 +53,9 @@ pub struct EngineState {
     pub profiling: Statistics,
 }
 
+unsafe impl Send for EngineState {}
+unsafe impl Sync for EngineState {}
+
 /// Holds all the references from [`EngineState`],
 /// And permits the user to mutate the window state, but only during
 /// `Scene::load` and `Scene::update`

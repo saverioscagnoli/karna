@@ -1,7 +1,10 @@
+use std::borrow::Borrow;
+
 use crate::{Layer, Renderer, color::Color, retained::SceneView};
 use assets::{AssetServer, Font, Image};
 use logging::LogLevel;
 use macros::{Get, Set};
+use math::Vector2;
 use utils::Handle;
 
 #[derive(Get, Set)]
@@ -56,10 +59,45 @@ impl<'a> Draw<'a> {
     }
 
     #[inline]
+    pub fn point(&mut self, x: f32, y: f32) {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer.immediate.draw_point([x, y].into());
+    }
+
+    #[inline]
+    pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer.immediate.draw_line([x1, y1].into(), [x2, y2].into());
+    }
+
+    #[inline]
+    pub fn lines<I>(&mut self, points: I)
+    where
+        I: IntoIterator,
+        I::Item: Borrow<(f32, f32, f32, f32)>,
+    {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer.immediate.draw_lines(points.into_iter().map(|item| {
+            let &(x1, y1, x2, y2) = item.borrow();
+            (Vector2::new(x1, y1), Vector2::new(x2, y2))
+        }));
+    }
+
+    #[inline]
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
         let layer = self.renderer.layer_mut(self.renderer.active_layer);
 
         layer.immediate.fill_rect([x, y].into(), w, h, &self.assets);
+    }
+
+    #[inline]
+    pub fn circle(&mut self, cx: f32, cy: f32, r: f32) {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer.immediate.fill_circle([cx, cy].into(), r);
     }
 
     #[inline]

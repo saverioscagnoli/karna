@@ -122,11 +122,13 @@ impl App {
         let (tx, rx) = crossbeam_channel::unbounded::<WindowMessage>();
         let window_id = window.id();
         let window = Window::new(label, window);
+        let label = window.label().to_string();
         let arcs = self.arcs.clone();
+        let state = EngineState::new(window, arcs);
 
         let handle = thread::spawn(move || {
-            let _ctx = logging::ctx!("window", window.label());
-            Self::window_loop(window, scenes, arcs, rx);
+            let _ctx = logging::ctx!("window", label);
+            Self::window_loop(scenes, state, rx);
         });
 
         let window_handle = WindowHandle {
@@ -138,12 +140,10 @@ impl App {
     }
 
     fn window_loop(
-        window: Window,
         scenes: FastHashMap<Label, Box<dyn Scene>>,
-        arcs: Arcs,
+        mut state: EngineState,
         rx: Receiver<WindowMessage>,
     ) {
-        let mut state = EngineState::new(window, arcs);
         let mut scenes = SceneManager::new(scenes);
 
         scenes.current().load(&mut state.as_context());

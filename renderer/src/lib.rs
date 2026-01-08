@@ -32,6 +32,7 @@ struct Shaders {
     retained: Shader,
     text: Shader,
     immediate: Shader,
+    immediate_circle: Shader,
 }
 
 static SHADERS: OnceLock<Shaders> = OnceLock::new();
@@ -46,6 +47,10 @@ pub(crate) fn text_shader() -> &'static Shader {
 
 pub(crate) fn immediate_shader() -> &'static Shader {
     &SHADERS.get().unwrap().immediate
+}
+
+pub(crate) fn immediate_circle_shader() -> &'static Shader {
+    &SHADERS.get().unwrap().immediate_circle
 }
 
 #[derive(Get, Set)]
@@ -80,11 +85,17 @@ impl Renderer {
             Some("Immediate shader"),
         );
 
+        let immediate_circle_shader = Shader::from_wgsl_file(
+            include_str!("../../shaders/immediate_circle.wgsl"),
+            Some("Immediate Circle shader"),
+        );
+
         SHADERS
             .set(Shaders {
                 retained: retained_shader,
                 text: text_shader,
                 immediate: immediate_shader,
+                immediate_circle: immediate_circle_shader,
             })
             .unwrap();
 
