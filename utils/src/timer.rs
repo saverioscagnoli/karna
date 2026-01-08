@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Timer {
     elapsed: f32,
     duration: f32,

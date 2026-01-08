@@ -7,11 +7,12 @@ use crate::{
 };
 use assets::{AssetServer, Font, Image};
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
+use globals::logs;
 use macros::{Get, Set};
 use math::{Vector2, Vector4};
+use utils::{FastHashMap, Handle};
 
 pub use handle::*;
-use utils::{FastHashMap, Handle, Label};
 
 #[derive(Get, Set)]
 pub struct ImmediateRenderer {
@@ -26,7 +27,7 @@ impl ImmediateRenderer {
     pub(crate) fn new(
         surface_format: wgpu::TextureFormat,
         camera: &Camera,
-        atlas_bgl: &wgpu::BindGroupLayout,
+        assets: &AssetServer,
     ) -> Self {
         let triangle_pipeline = immediate_shader()
             .pipeline_builder()
@@ -37,14 +38,14 @@ impl ImmediateRenderer {
             .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
             .build(
                 surface_format,
-                &[camera.bgl(), atlas_bgl],
+                &[camera.bgl(), assets.atlas_bgl()],
                 &[Vertex::desc()],
             );
 
         let triangle_batcher = Batcher::new(triangle_pipeline);
 
         Self {
-            draw_color: Color::Black,
+            draw_color: Color::White,
             triangle_batcher,
             text_layout: Layout::new(CoordinateSystem::PositiveYDown),
             char_cache: FastHashMap::default(),

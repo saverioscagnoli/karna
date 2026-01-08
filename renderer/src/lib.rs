@@ -21,7 +21,7 @@ pub use color::Color;
 pub use immediate::Draw;
 pub use layer::{Layer, RenderLayer};
 pub use retained::{
-    Scene, SceneView,
+    Scene, SceneView, Text,
     mesh::{Geometry, Material, Mesh, TextureKind, Transform3d},
 };
 
@@ -60,6 +60,8 @@ pub struct Renderer {
     ui: RenderLayer,
     user_layers: Vec<RenderLayer>,
     active_layer: Layer,
+    /// Cached viewport size
+    view: Size<u32>,
 }
 
 impl Renderer {
@@ -115,20 +117,13 @@ impl Renderer {
 
         surface.configure(gpu.device(), &config);
 
-        //let world_camera = Camera::new(Projection::Orthographic {
-        //    left: 0.0,
-        //    right: view.width as f32,
-        //    bottom: view.height as f32,
-        //    top: 0.0,
-        //    near: -1.0,
-        //    far: 1.0,
-        //});
-
-        let world_camera = Camera::new(Projection::Perspective {
-            fov: 75.0_f32.to_radians(),
-            aspect_ratio: view.to_f32().aspect_ratio(),
-            near: 0.1,
-            far: 1000.0,
+        let world_camera = Camera::new(Projection::Orthographic {
+            left: 0.0,
+            right: view.width as f32,
+            bottom: view.height as f32,
+            top: 0.0,
+            near: -1.0,
+            far: 1.0,
         });
 
         let ui_camera = Camera::new(Projection::Orthographic {
@@ -151,6 +146,7 @@ impl Renderer {
             ui,
             user_layers: Vec::new(),
             active_layer: Layer::default(),
+            view,
         }
     }
 
@@ -159,13 +155,14 @@ impl Renderer {
     pub fn resize(&mut self, view: Size<u32>) {
         info!("Resizing viewport to {}x{}", view.width, view.height);
 
-        self.world.resize(view);
-        self.ui.resize(view);
-        self.user_layers.iter_mut().for_each(|l| l.resize(view));
+        self.world.queue_resize();
+        self.ui.queue_resize();
+        self.user_layers.iter_mut().for_each(|l| l.queue_resize());
 
         self.config.width = view.width;
         self.config.height = view.height;
         self.surface.configure(gpu::device(), &self.config);
+        self.view = view;
     }
 
     #[inline]
@@ -222,15 +219,15 @@ impl Renderer {
             render_pass.set_bind_group(0, self.world.camera.bg(), &[]);
             render_pass.set_bind_group(1, assets.atlas_bg(), &[]);
 
-            self.world.present(&mut render_pass, assets);
+            self.world.present(self.view, &mut render_pass, assets);
 
             render_pass.set_bind_group(0, self.ui.camera.bg(), &[]);
 
-            self.ui.present(&mut render_pass, assets);
+            self.ui.present(self.view, &mut render_pass, assets);
 
             self.user_layers.iter_mut().for_each(|l| {
                 render_pass.set_bind_group(0, l.camera.bg(), &[]);
-                l.present(&mut render_pass, assets);
+                l.present(self.view, &mut render_pass, assets);
             });
         }
 

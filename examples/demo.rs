@@ -7,6 +7,7 @@ use karna::{
     utils::Handle,
 };
 
+#[derive(Default)]
 struct Demo {
     cat: Handle<Image>,
     jetbrains_mono: Handle<Font>,
@@ -78,10 +79,8 @@ fn main() {
                 .with_resizable(false)
                 .with_size((800, 600))
                 .with_initial_scene(Demo {
-                    cat: Handle::dummy(),
-                    jetbrains_mono: Handle::dummy(),
-                    pos: Vector2::new(10.0, 10.0),
-                    color: Color::Red,
+                    color: Color::White,
+                    ..Default::default()
                 }),
         )
         .build()

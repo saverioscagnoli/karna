@@ -1,5 +1,6 @@
 use crate::{Layer, Renderer, color::Color, retained::SceneView};
 use assets::{AssetServer, Font, Image};
+use logging::LogLevel;
 use macros::{Get, Set};
 use utils::Handle;
 
@@ -86,5 +87,27 @@ impl<'a> Draw<'a> {
         layer
             .immediate
             .draw_text(self.assets.debug_font(), text.as_ref(), x, y, &self.assets);
+    }
+
+    #[inline]
+    pub fn debug_logs(&mut self, x: f32, mut y: f32) {
+        let logs = globals::logs::get().read().expect("Logs lock is poisoned");
+        let prev_color = *self.color();
+
+        for (level, log) in logs.iter() {
+            match level {
+                &LogLevel::Trace => self.set_color(Color::Cyan),
+                &LogLevel::Debug => self.set_color(Color::Purple),
+                &LogLevel::Info => self.set_color(Color::Green),
+                &LogLevel::Warn => self.set_color(Color::Yellow),
+                &LogLevel::Error => self.set_color(Color::Red),
+                &LogLevel::Fatal => self.set_color(Color::Red),
+            }
+
+            self.debug_text(log, x, y);
+            y += 20.0;
+        }
+
+        self.set_color(prev_color);
     }
 }

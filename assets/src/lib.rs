@@ -37,7 +37,7 @@ impl AssetServer {
         let mut assets = Self {
             atlas,
             fonts: SlotMap::new(),
-            debug_font: Handle::dummy(),
+            debug_font: Handle::default(),
             images: SlotMap::new(),
         };
 

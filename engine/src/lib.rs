@@ -35,11 +35,11 @@ static GLOBAL: TrackingAllocator = TrackingAllocator;
 struct EngineLogs;
 
 impl logging::target::Target for EngineLogs {
-    fn write(&self, _level: LogLevel, message: &str) -> Result<(), LogError> {
+    fn write(&self, level: LogLevel, message: &str) -> Result<(), LogError> {
         let logs = globals::logs::get();
         let mut lock = logs.write().map_err(|_| LogError::PoisonError)?;
 
-        lock.push(message.to_string());
+        lock.push((level, message.to_string()));
 
         Ok(())
     }
@@ -119,7 +119,7 @@ impl App {
         window: WinitWindow,
         scenes: FastHashMap<Label, Box<dyn Scene>>,
     ) {
-        let (tx, rx) = crossbeam_channel::bounded::<WindowMessage>(64);
+        let (tx, rx) = crossbeam_channel::unbounded::<WindowMessage>();
         let window_id = window.id();
         let window = Window::new(label, window);
         let arcs = self.arcs.clone();
@@ -290,8 +290,8 @@ impl ApplicationHandler for App {
 
     fn device_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
-        device_id: winit::event::DeviceId,
+        _event_loop: &ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
         event: DeviceEvent,
     ) {
         for window in self.windows.values() {

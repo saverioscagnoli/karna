@@ -1,4 +1,5 @@
 use gpu::core::{GpuBuffer, GpuBufferBuilder};
+use logging::warn;
 use macros::{Get, Set, track_dirty};
 use math::{Matrix4, Size, Vector3};
 
@@ -21,7 +22,7 @@ pub enum Projection {
 }
 
 impl Projection {
-    fn matrix(&self, view: Size<u32>) -> Matrix4 {
+    fn matrix(&self) -> Matrix4 {
         match self {
             &Self::Orthographic {
                 left,
@@ -37,6 +38,32 @@ impl Projection {
                 near,
                 far,
             } => Matrix4::perspective(fov, aspect_ratio, near, far),
+        }
+    }
+
+    /// Returns an orthographic projection typically used
+    /// in 2d games, where the top left point of the window is (0, 0)
+    /// and the bottom left point is (win.width, win.height)
+    pub fn standard_2d(view: Size<u32>) -> Self {
+        Self::Orthographic {
+            left: 0.0,
+            right: view.width as f32,
+            bottom: view.height as f32,
+            top: 0.0,
+            near: -1.0,
+            far: 1.0,
+        }
+    }
+
+    /// Returns a perspective projection typically used in 3d games.
+    ///
+    /// FOV (Field of View) must be in degrees.
+    pub fn standard_3d(view: Size<u32>, fov: f32, near: f32, far: f32) -> Self {
+        Self::Perspective {
+            fov: fov.to_radians(),
+            aspect_ratio: view.to_f32().aspect_ratio(),
+            near,
+            far,
         }
     }
 }
@@ -56,9 +83,6 @@ pub struct Camera {
 
     // Maths
     projection: Projection,
-
-    /// Cache viewport size
-    view: Size<u32>,
 
     #[get]
     #[get(copied, prop = "x", ty = f32)]
@@ -141,7 +165,6 @@ impl Camera {
             bgl,
             projection,
             position: Vector3::new(0.0, 0.0, -5.0),
-            view: Size::new(0, 0),
             target: Vector3::z(),
             up: Vector3::y(),
             tracker: 0,
@@ -159,50 +182,99 @@ impl Camera {
     }
 
     #[inline]
-    pub(crate) fn resize(&mut self, view: Size<u32>) {
-        self.view = view;
-        self.set_dirty(Self::projection_f());
+    pub(crate) fn queue_resize(&mut self) {
+        self.tracker |= Self::projection_f()
     }
 
     #[inline]
-    pub(crate) fn update(&mut self) {
+    pub(crate) fn update(&mut self, view: Size<u32>) {
         if !self.any_dirty() {
             return;
         }
 
-        // FIXME: tf?
-        self.projection = match self.projection {
-            Projection::Orthographic {
-                left,
-                right,
-                bottom,
-                top,
-                near,
-                far,
-            } => Projection::Orthographic {
-                left,
-                right: self.view.width as f32,
-                bottom: self.view.height as f32,
-                top,
-                near,
-                far,
-            },
-            Projection::Perspective {
-                fov,
-                aspect_ratio,
-                near,
-                far,
-            } => Projection::Perspective {
-                fov,
-                aspect_ratio: self.view.to_f32().aspect_ratio(),
-                near,
-                far,
-            },
-        };
+        match &mut self.projection {
+            Projection::Orthographic { right, bottom, .. } => {
+                *right = view.width as f32;
+                *bottom = view.height as f32;
+            }
+            Projection::Perspective { aspect_ratio, .. } => {
+                *aspect_ratio = view.to_f32().aspect_ratio();
+            }
+        }
 
-        let vp = self.projection.matrix(self.view) * self.view_matrix();
+        let vp = self.projection.matrix() * self.view_matrix();
 
         self.uniform_buffer.write(0, &[vp]);
         self.clear_all_dirty();
+    }
+
+    #[inline]
+    pub fn set_projection(&mut self, projection: Projection) {
+        self.projection = projection;
+        self.tracker |= Self::projection_f();
+    }
+
+    /// Current camera FOV (field of view) in degrees
+    ///
+    /// If the camera is using an orthographic projection, it will just return 0.
+    #[inline]
+    pub fn fov(&self) -> f32 {
+        if let Projection::Perspective { fov, .. } = self.projection {
+            return fov.to_degrees();
+        }
+
+        warn!("Trying to get the fov, but the camera is using an orthographic projection!");
+
+        0.0
+    }
+
+    /// Current camera FOV (field of view) in radians
+    ///
+    /// If the camera is using an orthographic projection, it will just return 0.
+    #[inline]
+    pub fn fov_rad(&self) -> f32 {
+        if let Projection::Perspective { fov, .. } = self.projection {
+            return fov;
+        }
+
+        warn!("Trying to get the fov, but the camera is using an orthographic projection!");
+
+        0.0
+    }
+
+    /// Changes the FOV (field of view) of the camera.
+    /// The value must be in degrees.
+    ///
+    /// If the camera is using an orthographic projection, it won't do anything.
+    #[inline]
+    pub fn set_fov(&mut self, fov: f32) {
+        if let Projection::Perspective {
+            fov: current_fov, ..
+        } = &mut self.projection
+        {
+            *current_fov = fov.to_radians();
+            self.tracker |= Self::projection_f();
+            return;
+        }
+
+        warn!("Trying to update the fov, but the camera uses an orthographic projection!");
+    }
+
+    /// Changes the FOV (field of view) of the camera.
+    /// The value must be in radians.
+    ///
+    /// If the camera is using an orthographic projection, it won't do anything.
+    #[inline]
+    pub fn set_fov_rad(&mut self, fov: f32) {
+        if let Projection::Perspective {
+            fov: current_fov, ..
+        } = &mut self.projection
+        {
+            *current_fov = fov;
+            self.tracker |= Self::projection_f();
+            return;
+        }
+
+        warn!("Trying to update the fov, but the camera uses an orthographic projection!");
     }
 }

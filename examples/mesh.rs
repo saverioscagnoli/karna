@@ -5,22 +5,27 @@ use karna::{
     render::{Color, Geometry, Layer, Material, Mesh, TextureKind, Transform3d},
     utils::Handle,
 };
+use renderer::{Projection, Text};
 
+#[derive(Default)]
 struct Demo {
     mesh: Handle<Mesh>,
     yaw: f32,
     pitch: f32,
+    fov: f32,
+    text: Handle<Text>,
 }
 
 impl Scene for Demo {
     fn load(&mut self, ctx: &mut Context) {
-        ctx.time.set_target_fps(120);
+        ctx.time.set_target_fps(175);
 
         let mesh = Mesh::new(
             Geometry::cube(1.0),
             Material::new_color(Color::Cyan),
             Transform3d::default().with_position([0.0, 0.0, 0.0]),
         );
+
         self.mesh = ctx.scene.add_mesh(mesh);
 
         let mesh = Mesh::new(
@@ -30,6 +35,7 @@ impl Scene for Demo {
                 .with_position([600.0, 200.0, 0.0])
                 .with_scale([5.0, 5.0, 0.0]),
         );
+
         ctx.scene.add_mesh(mesh);
 
         let cat = ctx
@@ -50,7 +56,21 @@ impl Scene for Demo {
 
         let camera = ctx.scene.camera_mut();
 
-        camera.set_position([0.0, 0.0, 5.0]);
+        camera.set_projection(Projection::standard_3d(
+            ctx.window.size(),
+            self.fov,
+            0.1,
+            1000.0,
+        ));
+
+        camera.set_position_z(5.0);
+
+        let mut text = Text::new(ctx.assets.debug_font()).with_content("WOW!!!");
+
+        text.set_position([5.0, 5.0, 5.0]);
+        text.set_rotation([0.0, 0.0, 180.0f32.to_radians()]);
+
+        self.text = ctx.scene.add_text(text);
     }
 
     fn update(&mut self, ctx: &mut Context) {
@@ -111,6 +131,13 @@ impl Scene for Demo {
 
         camera.look_at(look_target);
 
+        let wheel = ctx.input.wheel_delta();
+
+        if wheel != 0.0 {
+            self.fov -= wheel.signum();
+            camera.set_fov(self.fov);
+        }
+
         let mesh = ctx.scene.get_mesh_mut(self.mesh).unwrap();
 
         *mesh.rotation_mut() += 0.01;
@@ -122,6 +149,7 @@ impl Scene for Demo {
 
         draw.debug_text(format!("fps: {}", ctx.time.fps()), 10.0, 10.0);
         draw.debug_text(format!("dt: {}", ctx.time.delta()), 10.0, 30.0);
+
         draw.debug_text(
             format!(
                 "Instance Writes: {}",
@@ -137,6 +165,9 @@ impl Scene for Demo {
             70.0,
         );
 
+        draw.debug_text(format!("FOV: {}", self.fov), 10.0, 90.0);
+        draw.debug_text("Scroll the wheel to change FOV", 10.0, 110.0);
+
         draw.set_layer(Layer::World);
     }
 }
@@ -150,9 +181,8 @@ fn main() {
                 .with_resizable(false)
                 .with_size((800, 600))
                 .with_initial_scene(Demo {
-                    mesh: Handle::dummy(),
-                    yaw: 0.0,
-                    pitch: 0.0,
+                    fov: 75.0,
+                    ..Default::default()
                 }),
         )
         .build()

@@ -943,6 +943,7 @@ dependencies = [
 name = "globals"
 version = "0.1.0"
 dependencies = [
+ "logging",
  "macros",
  "utils",
 ]

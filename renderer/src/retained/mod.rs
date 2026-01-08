@@ -5,7 +5,7 @@ pub mod mesh;
 
 use crate::{
     Camera,
-    retained::mesh::{Batch, Mesh, MeshGpu},
+    retained::mesh::{Mesh, MeshBatch, MeshGpu},
     retained_shader,
     traits::LayoutDescriptor,
     vertex::Vertex,
@@ -16,10 +16,11 @@ use logging::warn;
 use utils::{FastHashMap, Handle, SlotMap};
 
 pub use handle::*;
+pub use text::*;
 
 pub struct RetainedRenderer {
     meshes: SlotMap<Mesh>,
-    batches: FastHashMap<u64, Batch>,
+    batches: FastHashMap<u64, MeshBatch>,
     mesh_to_batch: FastHashMap<u64, u64>, // handle hash -> geometry_id
 
     pipeline: wgpu::RenderPipeline,
@@ -27,11 +28,7 @@ pub struct RetainedRenderer {
 
 impl RetainedRenderer {
     #[doc(hidden)]
-    pub fn new(
-        surface_format: wgpu::TextureFormat,
-        camera: &Camera,
-        atlas_bgl: &wgpu::BindGroupLayout,
-    ) -> Self {
+    pub fn new(surface_format: wgpu::TextureFormat, camera: &Camera, assets: &AssetServer) -> Self {
         let pipeline = retained_shader()
             .pipeline_builder()
             .label("Retained Triangle Pipeline")
@@ -42,12 +39,12 @@ impl RetainedRenderer {
             .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
             .build(
                 surface_format,
-                &[camera.bgl(), atlas_bgl],
+                &[camera.bgl(), assets.atlas_bgl()],
                 &[Vertex::desc(), MeshGpu::desc()],
             );
 
         Self {
-            meshes: SlotMap::with_capacity(consts::MESH_INSANCE_BASE_CAPACITY),
+            meshes: SlotMap::with_capacity(consts::MESH_INSTANCE_BASE_CAPACITY),
             batches: FastHashMap::default(),
             mesh_to_batch: FastHashMap::default(),
             pipeline,
@@ -62,7 +59,7 @@ impl RetainedRenderer {
         let batch = self
             .batches
             .entry(geometry_id)
-            .or_insert_with(|| Batch::new(buffer));
+            .or_insert_with(|| MeshBatch::new(buffer));
 
         let handle = self.meshes.insert(mesh);
 

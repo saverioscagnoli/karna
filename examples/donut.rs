@@ -5,8 +5,8 @@ use karna::{
     render::Color,
     utils::{Handle, Timer},
 };
-use std::time::Duration;
 
+#[derive(Default)]
 struct Donut {
     font: Handle<Font>,
     font_toggle: bool,
@@ -105,7 +105,7 @@ impl Donut {
 
 impl Scene for Donut {
     fn load(&mut self, ctx: &mut karna::Context) {
-        ctx.time.set_target_fps(120);
+        ctx.time.set_target_fps(175);
         ctx.scene.set_clear_color(Color::Black);
 
         self.font = ctx
@@ -164,14 +164,7 @@ fn main() {
                 .with_title("spinning donut")
                 .with_size((1280, 720))
                 .with_resizable(false)
-                .with_initial_scene(Donut {
-                    font: Handle::dummy(),
-                    font_toggle: false,
-                    debug_timer: Timer::new(Duration::from_millis(100)),
-                    angle_a: 0.0,
-                    angle_b: 0.0,
-                    color_timer: 0.0,
-                }),
+                .with_initial_scene(Donut::default()),
         )
         .build()
         .run();

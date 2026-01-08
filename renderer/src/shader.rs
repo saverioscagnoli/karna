@@ -20,11 +20,6 @@ impl Shader {
         Self::from_wgsl(source, label)
     }
 
-    #[inline]
-    pub fn module(&self) -> &wgpu::ShaderModule {
-        &self.module
-    }
-
     pub fn pipeline_builder(&self) -> PipelineBuilder<'_> {
         PipelineBuilder::new(&self.module)
     }

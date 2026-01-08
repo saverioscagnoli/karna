@@ -1,6 +1,6 @@
 use crate::{
     Camera, Color, Renderer,
-    retained::{RetainedRenderer, mesh::Mesh},
+    retained::{RetainedRenderer, Text, mesh::Mesh},
 };
 use macros::{Get, Set};
 use utils::Handle;
@@ -45,6 +45,34 @@ impl<'a> Scene<'a> {
         let layer = self.renderer.layer_mut(self.renderer.active_layer);
 
         layer.retained.remove_mesh(handle)
+    }
+
+    #[inline]
+    pub fn add_text(&mut self, text: Text) -> Handle<Text> {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer.text.add_text(text)
+    }
+
+    #[inline]
+    pub fn get_text(&self, handle: Handle<Text>) -> Option<&Text> {
+        let layer = self.renderer.layer(self.renderer.active_layer);
+
+        layer.text.get_text(handle)
+    }
+
+    #[inline]
+    pub fn get_text_mut(&mut self, handle: Handle<Text>) -> Option<&mut Text> {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer.text.get_text_mut(handle)
+    }
+
+    #[inline]
+    pub fn remove_text(&mut self, handle: Handle<Text>) {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer.text.remove_text(handle);
     }
 
     #[inline]

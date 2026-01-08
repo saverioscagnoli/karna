@@ -19,19 +19,26 @@ use crate::{
 };
 use assets::AssetServer;
 use globals::profiling::{self, Statistics};
-use renderer::{Draw, Renderer, Scene, SceneView};
+use renderer::{Draw, Renderer, Scene};
 use std::sync::Arc;
 use winit::{
-    event::{DeviceEvent, WindowEvent},
+    event::{DeviceEvent, MouseScrollDelta, WindowEvent},
     keyboard::PhysicalKey,
 };
 
-// Re-exports
+// === RE-EXPORTS ===
 pub use crate::state::time::Time;
 pub use monitors::{Monitor, Monitors};
 pub use window::Window;
 pub(crate) use window::WinitWindow;
 
+/// Holds the state of the game loop for a single window
+/// for all its life, shares its content to [`Context`]
+/// and [`RenderContext`]
+///
+/// So that the state can be mutable when `Scene::load` and `Scene::update`
+/// But not on Scene::render, where a [`SceneView`] will be created, so that
+/// scene information can be read, but not written.
 pub struct EngineState {
     pub window: Window,
     pub time: Time,
@@ -46,11 +53,14 @@ pub struct EngineState {
     pub profiling: Statistics,
 }
 
+/// Holds all the references from [`EngineState`],
+/// And permits the user to mutate the window state, but only during
+/// `Scene::load` and `Scene::update`
 pub struct Context<'a> {
     pub window: &'a Window,
     pub time: &'a mut Time,
     pub input: &'a mut Input,
-    /// (Ctx will be mutable)
+    // (This context will be mutable, so the scene can be changed)
     pub scene: Scene<'a>,
     pub scenes: &'a mut SceneChanger,
     pub monitors: &'a Monitors,
@@ -61,6 +71,8 @@ pub struct Context<'a> {
     pub profiling: &'a Statistics,
 }
 
+/// Basically equal to [`Context`], but will be immutable,
+/// where it will be accompanied by a mutable [`Draw`] handle, for immediate rendering.
 pub struct RenderContext<'a> {
     pub window: &'a Window,
     pub time: &'a Time,
@@ -160,6 +172,7 @@ impl EngineState {
                         self.input.held_keys.insert(code);
                     } else {
                         self.input.held_keys.remove(&code);
+                        self.input.released_keys.insert(code);
                     }
                 }
                 PhysicalKey::Unidentified(_) => {}
@@ -179,6 +192,13 @@ impl EngineState {
                 } else {
                     self.input.held_mouse.remove(&button);
                 }
+            }
+
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.input.wheel_delta = match delta {
+                    MouseScrollDelta::LineDelta(_x, y) => y,
+                    MouseScrollDelta::PixelDelta(pos) => pos.y as f32,
+                };
             }
 
             _ => {}

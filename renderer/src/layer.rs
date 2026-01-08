@@ -1,4 +1,8 @@
-use crate::{camera::Camera, immediate::ImmediateRenderer, retained::RetainedRenderer};
+use crate::{
+    camera::Camera,
+    immediate::ImmediateRenderer,
+    retained::{RetainedRenderer, TextRenderer},
+};
 use assets::AssetServer;
 use math::Size;
 
@@ -16,6 +20,7 @@ pub struct RenderLayer {
 
     pub(crate) retained: RetainedRenderer,
     pub(crate) immediate: ImmediateRenderer,
+    pub(crate) text: TextRenderer,
 }
 
 impl RenderLayer {
@@ -24,26 +29,34 @@ impl RenderLayer {
         assets: &AssetServer,
         camera: Camera,
     ) -> Self {
-        let immediate = ImmediateRenderer::new(config.format, &camera, assets.atlas_bgl());
-        let retained = RetainedRenderer::new(config.format, &camera, assets.atlas_bgl());
+        let immediate = ImmediateRenderer::new(config.format, &camera, &assets);
+        let retained = RetainedRenderer::new(config.format, &camera, &assets);
+        let text = TextRenderer::new(config.format, &camera, &assets);
 
         Self {
             camera,
             retained,
             immediate,
+            text,
         }
     }
 
     #[inline]
-    pub fn resize(&mut self, view: Size<u32>) {
-        self.camera.resize(view);
+    pub fn queue_resize(&mut self) {
+        self.camera.queue_resize();
     }
 
     #[inline]
-    pub fn present<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>, assets: &AssetServer) {
-        self.camera.update();
+    pub fn present<'a>(
+        &'a mut self,
+        view: Size<u32>,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        assets: &AssetServer,
+    ) {
+        self.camera.update(view);
 
         self.immediate.present(render_pass);
         self.retained.present(render_pass, assets);
+        self.text.present(render_pass, assets);
     }
 }

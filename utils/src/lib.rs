@@ -4,9 +4,8 @@ mod storage;
 mod structs;
 mod timer;
 
-// Re-exports
+// === RE-EXPORTS ===
 pub use lazy::*;
-pub use macros::*;
 pub use storage::*;
 pub use structs::*;
 pub use timer::*;

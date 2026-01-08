@@ -46,19 +46,21 @@ impl<T> Clone for Handle<T> {
 
 impl<T> Copy for Handle<T> {}
 
+impl<T> Default for Handle<T> {
+    fn default() -> Self {
+        Self {
+            index: 0,
+            generation: 0,
+            _d: PhantomData,
+        }
+    }
+}
+
 impl<T> Handle<T> {
     fn new(index: u32, generation: u32) -> Self {
         Self {
             index,
             generation,
-            _d: PhantomData,
-        }
-    }
-
-    pub fn dummy() -> Self {
-        Self {
-            index: 0,
-            generation: 0,
             _d: PhantomData,
         }
     }
