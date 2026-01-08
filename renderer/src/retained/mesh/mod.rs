@@ -1,63 +1,23 @@
-pub mod geometry;
-pub mod material;
-pub mod transform;
+mod batch;
+mod geometry;
+mod material;
+mod transform;
 
-use std::ops::{Deref, DerefMut};
-
-use crate::{
-    Color, Descriptor, Layer,
-    mesh::{
-        geometry::Geometry,
-        material::{Material, TextureKind},
-        transform::Transform,
-    },
-};
-use assets::AssetManager;
-use gpu::core::GpuBuffer;
-use macros::{Get, Set, With, track_dirty};
+use crate::{color::Color, traits::LayoutDescriptor};
+use assets::AssetServer;
+use macros::{Get, Set, track_dirty};
 use math::{Vector2, Vector3, Vector4};
-use utils::Handle;
+use std::mem;
+
+pub use batch::*;
+pub use geometry::*;
+pub use material::*;
+pub use transform::*;
 
 #[repr(C)]
+#[derive(Default)]
 #[derive(Debug, Clone, Copy)]
-pub struct Vertex {
-    pub position: [f32; 3],
-    pub color: [f32; 4],
-    pub uv_coords: [f32; 2],
-}
-
-impl Descriptor for Vertex {
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                // Position attribute at location 0
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                // Color attribute at location 1
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<Vector3>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: (std::mem::size_of::<Vector3>() + std::mem::size_of::<Vector4>())
-                        as wgpu::BufferAddress,
-                    shader_location: 2,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Default, Debug, Clone, Copy)]
-pub struct MeshInstanceGpu {
+pub struct MeshGpu {
     position: Vector3,
     scale: Vector3,
     rotation: Vector3,
@@ -66,48 +26,42 @@ pub struct MeshInstanceGpu {
     uv_scale: Vector2,
 }
 
-impl Descriptor for MeshInstanceGpu {
+impl LayoutDescriptor for MeshGpu {
     fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &[
-                // Position attribute at location 3
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 3,
                     format: wgpu::VertexFormat::Float32x3,
                 },
-                // Scale attribute at location 4
                 wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<Vector3>() as wgpu::BufferAddress,
+                    offset: mem::size_of::<Vector3>() as wgpu::BufferAddress,
                     shader_location: 4,
                     format: wgpu::VertexFormat::Float32x3,
                 },
-                // Rotation attribute at location 5
                 wgpu::VertexAttribute {
-                    offset: (std::mem::size_of::<Vector3>() * 2) as wgpu::BufferAddress,
+                    offset: (mem::size_of::<Vector3>() * 2) as wgpu::BufferAddress,
                     shader_location: 5,
                     format: wgpu::VertexFormat::Float32x3,
                 },
-                // Color attribute at location 6
                 wgpu::VertexAttribute {
-                    offset: (std::mem::size_of::<Vector3>() * 3) as wgpu::BufferAddress,
+                    offset: (mem::size_of::<Vector3>() * 3) as wgpu::BufferAddress,
                     shader_location: 6,
                     format: wgpu::VertexFormat::Float32x4,
                 },
-                // UV offset attribute at location 7
                 wgpu::VertexAttribute {
-                    offset: (std::mem::size_of::<Vector3>() * 3 + std::mem::size_of::<Vector4>())
+                    offset: (mem::size_of::<Vector3>() * 3 + std::mem::size_of::<Vector4>())
                         as wgpu::BufferAddress,
                     shader_location: 7,
                     format: wgpu::VertexFormat::Float32x2,
                 },
-                // UV scale attribute at location 8
                 wgpu::VertexAttribute {
-                    offset: (std::mem::size_of::<Vector3>() * 3
-                        + std::mem::size_of::<Vector4>()
-                        + std::mem::size_of::<Vector2>())
+                    offset: (mem::size_of::<Vector3>() * 3
+                        + mem::size_of::<Vector4>()
+                        + mem::size_of::<Vector2>())
                         as wgpu::BufferAddress,
                     shader_location: 8,
                     format: wgpu::VertexFormat::Float32x2,
@@ -117,18 +71,9 @@ impl Descriptor for MeshInstanceGpu {
     }
 }
 
-#[derive(Debug)]
-pub struct GeometryBuffer {
-    pub vertex_buffer: GpuBuffer<Vertex>,
-    pub vertex_count: i32,
-    pub index_buffer: GpuBuffer<u32>,
-    pub index_count: i32,
-    pub topology: wgpu::PrimitiveTopology,
-}
-
 #[track_dirty]
 #[derive(Debug, Clone)]
-#[derive(Get, Set, With)]
+#[derive(Get, Set)]
 pub struct Mesh {
     #[get]
     geometry: Geometry,
@@ -194,27 +139,18 @@ pub struct Mesh {
     #[set(prop = "scale.x", ty = f32, name = "set_scale_x", also = self.tracker |= Self::transform_f())]
     #[set(prop = "scale.y", ty = f32, name = "set_scale_y", also = self.tracker |= Self::transform_f())]
     #[set(prop = "scale.z", ty = f32, name = "set_scale_z", also = self.tracker |= Self::transform_f())]
-    transform: Transform,
+    transform: Transform3d,
 
-    #[get(copied)]
-    #[get(mut, also = self.tracker |= Self::visible_f())]
-    #[set(also = self.tracker |= Self::visible_f())]
-    visible: bool,
-
-    gpu: MeshInstanceGpu,
+    pub(crate) gpu: MeshGpu,
 }
 
 impl Mesh {
-    pub(crate) const INITIAL_INSTANCE_CAPACITY: usize = 128;
-
-    #[inline]
-    pub fn new(geometry: Geometry, material: Material, transform: Transform) -> Self {
+    pub fn new(geometry: Geometry, material: Material, transform: Transform3d) -> Self {
         let mut mesh = Self {
             geometry,
-            transform,
             material,
-            visible: true,
-            gpu: MeshInstanceGpu::default(),
+            transform,
+            gpu: MeshGpu::default(),
             tracker: 0,
         };
 
@@ -223,7 +159,7 @@ impl Mesh {
     }
 
     #[inline]
-    pub(crate) fn sync_gpu(&mut self, assets: &AssetManager) -> bool {
+    pub(crate) fn prepare(&mut self, assets: &AssetServer) -> bool {
         let mut changed = false;
 
         if self.is_dirty(Self::transform_f()) {
@@ -231,29 +167,23 @@ impl Mesh {
             self.gpu.rotation = self.transform.rotation;
             self.gpu.scale = self.transform.scale;
 
-            changed = true
+            changed = true;
         }
 
         if self.is_dirty(Self::material_f()) {
             self.gpu.color = self.material.color.into();
 
-            let (x, y, w, h) = if let Some(kind) = self.material.texture {
-                match kind {
-                    TextureKind::Full(label) => assets.get_texture_coords(label),
-                    TextureKind::Partial(label, x, y, w, h) => {
-                        assets.get_subtexture_coords(label, x, y, w, h)
-                    }
-                }
-            } else {
-                assets.get_white_uv_coords()
+            let (uvx, uvy, uvw, uvh, _, _) = match self.material.texture {
+                TextureKind::Full(handle) => assets.get_texture_uv(handle),
+                TextureKind::None => assets.get_white_uv_coords(),
             };
 
-            self.gpu.uv_offset.x = x;
-            self.gpu.uv_offset.y = y;
-            self.gpu.uv_scale.x = w;
-            self.gpu.uv_scale.y = h;
+            self.gpu.uv_offset.x = uvx;
+            self.gpu.uv_offset.y = uvy;
+            self.gpu.uv_scale.x = uvw;
+            self.gpu.uv_scale.y = uvh;
 
-            changed = true
+            changed = true;
         }
 
         if changed {
@@ -261,59 +191,5 @@ impl Mesh {
         }
 
         changed
-    }
-
-    #[inline]
-    pub(crate) fn gpu(&self) -> MeshInstanceGpu {
-        self.gpu
-    }
-
-    #[inline]
-    pub fn set_position_2d<P: Into<Vector2>>(&mut self, pos: P) {
-        let pos = pos.into();
-
-        self.transform.position.x = pos.x;
-        self.transform.position.y = pos.y;
-        self.tracker |= Self::transform_f();
-    }
-
-    #[inline]
-    pub fn set_scale_2d<S: Into<Vector2>>(&mut self, scale: S) {
-        let scale = scale.into();
-
-        self.transform.scale.x = scale.x;
-        self.transform.scale.y = scale.y;
-        self.tracker |= Self::transform_f();
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-#[derive(Get)]
-pub struct MeshHandle {
-    #[get]
-    pub(crate) layer: Layer,
-    pub(crate) handle: Handle<Mesh>,
-}
-
-impl Deref for MeshHandle {
-    type Target = Handle<Mesh>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.handle
-    }
-}
-
-impl DerefMut for MeshHandle {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.handle
-    }
-}
-
-impl MeshHandle {
-    pub fn dummy() -> Self {
-        Self {
-            layer: Layer::World,
-            handle: Handle::dummy(),
-        }
     }
 }

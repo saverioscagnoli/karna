@@ -1,184 +1,177 @@
+mod handle;
 mod text;
-mod text_renderer;
 
-use crate::{Mesh, Sprite, mesh::MeshInstanceGpu, retained::text_renderer::RetainedTextRenderer};
-use assets::AssetManager;
-use globals::profiling;
-use gpu::core::{GpuBuffer, GpuBufferBuilder};
-use std::sync::Arc;
-use utils::{Handle, SlotMap};
-use wgpu::naga::FastHashMap;
+pub mod mesh;
 
+use crate::{
+    Camera,
+    retained::mesh::{Mesh, MeshBatch, MeshGpu},
+    retained_shader,
+    traits::LayoutDescriptor,
+    vertex::Vertex,
+};
+use assets::AssetServer;
+use globals::{consts, profiling};
+use logging::warn;
+use utils::{FastHashMap, Handle, SlotMap};
+
+pub use handle::*;
 pub use text::*;
-pub use text_renderer::{GlyphInstance, TextVertex};
 
 pub struct RetainedRenderer {
-    assets: Arc<AssetManager>,
     meshes: SlotMap<Mesh>,
-    sprites: SlotMap<Sprite>,
-    text_renderer: RetainedTextRenderer,
-    instance_buffer: GpuBuffer<MeshInstanceGpu>,
-    dirty_batches: Vec<(usize, MeshInstanceGpu)>,
-    geometry_groups: FastHashMap<u32, Vec<usize>>,
+    batches: FastHashMap<u64, MeshBatch>,
+    mesh_to_batch: FastHashMap<u64, u64>, // handle hash -> geometry_id
+
+    pipeline: wgpu::RenderPipeline,
 }
 
 impl RetainedRenderer {
-    pub fn new(assets: Arc<AssetManager>) -> Self {
-        let instance_buffer = GpuBufferBuilder::new()
-            .label("render layer instance buffer")
-            .vertex()
-            .copy_dst()
-            .capacity(Mesh::INITIAL_INSTANCE_CAPACITY)
-            .build();
-
-        let text_renderer = RetainedTextRenderer::new();
+    #[doc(hidden)]
+    pub fn new(surface_format: wgpu::TextureFormat, camera: &Camera, assets: &AssetServer) -> Self {
+        let pipeline = retained_shader()
+            .pipeline_builder()
+            .label("Retained Triangle Pipeline")
+            .vertex_entry("vs_main")
+            .fragment_entry("fs_main")
+            .topology(wgpu::PrimitiveTopology::TriangleList)
+            .cull_mode(wgpu::Face::Front)
+            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
+            .build(
+                surface_format,
+                &[camera.bgl(), assets.atlas_bgl()],
+                &[Vertex::desc(), MeshGpu::desc()],
+            );
 
         Self {
-            assets,
-            meshes: SlotMap::new(),
-            sprites: SlotMap::new(),
-            text_renderer,
-            instance_buffer,
-            dirty_batches: Vec::new(),
-            geometry_groups: FastHashMap::default(),
+            meshes: SlotMap::with_capacity(consts::MESH_INSTANCE_BASE_CAPACITY),
+            batches: FastHashMap::default(),
+            mesh_to_batch: FastHashMap::default(),
+            pipeline,
         }
     }
 
     #[inline]
-    pub(crate) fn add_mesh(&mut self, mesh: Mesh) -> Handle<Mesh> {
-        self.meshes.insert(mesh)
+    pub fn add_mesh(&mut self, mesh: Mesh) -> Handle<Mesh> {
+        let geometry_id = mesh.geometry().id;
+        let buffer = mesh.geometry().buffer.clone();
+
+        let batch = self
+            .batches
+            .entry(geometry_id)
+            .or_insert_with(|| MeshBatch::new(buffer));
+
+        let handle = self.meshes.insert(mesh);
+
+        batch.handles.push(handle);
+        batch.needs_rebuild = true;
+
+        self.mesh_to_batch
+            .insert(Self::handle_key(handle), geometry_id);
+
+        handle
     }
 
     #[inline]
-    pub(crate) fn get_mesh(&self, handle: Handle<Mesh>) -> &Mesh {
-        self.meshes
-            .get(handle)
-            .expect("Failed to get mesh instance")
+    pub fn get_mesh(&self, handle: Handle<Mesh>) -> Option<&Mesh> {
+        self.meshes.get(handle)
     }
 
     #[inline]
-    pub(crate) fn get_mesh_mut(&mut self, handle: Handle<Mesh>) -> &mut Mesh {
-        self.meshes
-            .get_mut(handle)
-            .expect("Failed to get mutable mesh instance")
+    pub fn get_mesh_mut(&mut self, handle: Handle<Mesh>) -> Option<&mut Mesh> {
+        self.meshes.get_mut(handle)
     }
 
     #[inline]
-    pub(crate) fn remove_mesh(&mut self, handle: Handle<Mesh>) {
-        self.meshes.remove(handle);
-    }
+    pub fn remove_mesh(&mut self, handle: Handle<Mesh>) {
+        let key = Self::handle_key(handle);
 
-    // === Text ===
+        if let Some(geometry_id) = self.mesh_to_batch.remove(&key) {
+            if let Some(batch) = self.batches.get_mut(&geometry_id) {
+                batch.handles.retain(|&h| h != handle);
+                batch.needs_rebuild = true;
 
-    #[inline]
-    pub(crate) fn add_text(&mut self, text: Text) -> Handle<Text> {
-        self.text_renderer.add_text(text)
-    }
-
-    #[inline]
-    pub(crate) fn get_text(&self, handle: Handle<Text>) -> &Text {
-        self.text_renderer.get_text(handle)
-    }
-
-    #[inline]
-    pub(crate) fn get_text_mut(&mut self, handle: Handle<Text>) -> &mut Text {
-        self.text_renderer.get_text_mut(handle)
-    }
-
-    #[inline]
-    pub(crate) fn remove_text(&mut self, handle: Handle<Text>) {
-        self.text_renderer.remove_text(handle);
-    }
-
-    // === Sprite ===
-
-    #[inline]
-    pub(crate) fn add_sprite(&mut self, sprite: Sprite) -> Handle<Sprite> {
-        self.sprites.insert(sprite)
-    }
-
-    #[inline]
-    pub(crate) fn get_sprite(&self, handle: Handle<Sprite>) -> &Sprite {
-        self.sprites
-            .get(handle)
-            .expect("Failed to get sprite instance")
-    }
-
-    #[inline]
-    pub(crate) fn get_sprite_mut(&mut self, handle: Handle<Sprite>) -> &mut Sprite {
-        self.sprites
-            .get_mut(handle)
-            .expect("Failed to get mutable sprite instance")
-    }
-
-    #[inline]
-    pub(crate) fn remove_sprite(&mut self, handle: Handle<Sprite>) {
-        self.sprites.remove(handle);
-    }
-
-    #[inline]
-    pub(crate) fn present<'a>(
-        &'a mut self,
-        render_pass: &mut wgpu::RenderPass<'a>,
-        pipeline: &'a wgpu::RenderPipeline,
-        text_pipeline: &'a wgpu::RenderPipeline,
-    ) {
-        render_pass.set_pipeline(pipeline);
-        profiling::record_pipeline_switches(1);
-
-        for (idx, mesh) in self.meshes.values_mut().enumerate() {
-            if mesh.sync_gpu(&self.assets) {
-                self.dirty_batches.push((idx, mesh.gpu()));
+                if batch.handles.is_empty() {
+                    self.batches.remove(&geometry_id);
+                }
             }
         }
 
-        for (idx, instance) in &self.dirty_batches {
-            let byte_offset = (idx * std::mem::size_of::<MeshInstanceGpu>()) as u64;
-            self.instance_buffer.write(byte_offset, &[*instance]);
-        }
+        self.meshes.remove(handle);
+    }
 
-        profiling::record_instance_writes(self.dirty_batches.len() as u32);
+    #[inline]
+    fn handle_key(handle: Handle<Mesh>) -> u64 {
+        // Combine index and generation into a single u64 key
+        ((handle.index() as u64) << 32) | (handle.generation() as u64)
+    }
 
-        self.dirty_batches.clear();
+    pub(crate) fn present<'a>(
+        &'a mut self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        assets: &AssetServer,
+    ) {
+        render_pass.set_pipeline(&self.pipeline);
+        profiling::record_pipeline_switches(1);
 
-        for (idx, mesh) in self.meshes.values().enumerate() {
-            self.geometry_groups
-                .entry(mesh.geometry().id())
-                .or_insert_with(Vec::new)
-                .push(idx);
-        }
+        let mut writes = 0;
 
-        for indices in self.geometry_groups.values() {
-            let Some(first) = indices.first() else {
+        for batch in self.batches.values_mut() {
+            if batch.handles.is_empty() {
                 continue;
-            };
+            }
 
-            let mesh = self.meshes.values().nth(*first).unwrap();
-            let geom_buffer = mesh.geometry().buffer();
+            if batch.needs_rebuild {
+                // Full rebuild: collect all instance data
+                warn!("Rebuilding instance buffer");
+                let instance_data: Vec<MeshGpu> = batch
+                    .handles
+                    .iter()
+                    .filter_map(|&h| {
+                        let mesh = self.meshes.get_mut(h)?;
+                        mesh.prepare(assets);
+                        Some(mesh.gpu)
+                    })
+                    .collect();
 
-            render_pass.set_vertex_buffer(0, geom_buffer.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+                batch.instance_buffer.write_from_index(0, &instance_data);
+                batch.needs_rebuild = false;
+
+                writes = instance_data.len() as u32;
+            } else {
+                for (buffer_idx, &handle) in batch.handles.iter().enumerate() {
+                    if let Some(mesh) = self.meshes.get_mut(handle)
+                        && mesh.prepare(assets)
+                    {
+                        batch
+                            .instance_buffer
+                            .write_from_index(buffer_idx, &[mesh.gpu]);
+
+                        writes += 1;
+                    }
+                }
+            }
+        }
+
+        profiling::record_instance_writes(writes);
+
+        for batch in self.batches.values() {
+            if batch.handles.is_empty() {
+                continue;
+            }
+
+            let vertex_count = batch.buffer.vertex_buffer.len() as u32;
+            let index_count = batch.buffer.index_buffer.len() as u32;
+
+            render_pass.set_vertex_buffer(0, batch.buffer.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, batch.instance_buffer.slice(..));
             render_pass.set_index_buffer(
-                geom_buffer.index_buffer.slice(..),
+                batch.buffer.index_buffer.slice(..),
                 wgpu::IndexFormat::Uint32,
             );
 
-            let start = *indices.first().unwrap() as u32;
-            let end = (*indices.last().unwrap() + 1) as u32;
-
-            render_pass.draw_indexed(0..geom_buffer.index_count as u32, 0, start..end);
-
-            let vertex_count = geom_buffer.vertex_count as u32;
-            let index_count = geom_buffer.index_count as u32;
-            let instance_count = end - start;
-
+            render_pass.draw_indexed(0..index_count, 0, 0..batch.handles.len() as u32);
             profiling::record_draw_call(vertex_count, index_count);
-            profiling::record_triangles(index_count * instance_count);
         }
-
-        self.geometry_groups.clear();
-
-        self.text_renderer.prepare(&self.assets);
-        self.text_renderer.present(render_pass, text_pipeline);
     }
 }

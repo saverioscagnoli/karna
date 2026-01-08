@@ -1,4 +1,4 @@
-use crate::context::WinitWindow;
+use crate::state::WinitWindow;
 use math::Size;
 use std::{
     fmt::Debug,

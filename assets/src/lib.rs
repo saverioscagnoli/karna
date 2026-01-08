@@ -1,132 +1,169 @@
 mod atlas;
 mod font;
-mod texture;
 
-use crate::atlas::{AtlasRegion, TextureAtlas};
+use atlas::TextureAtlas;
+use globals::consts;
 use logging::info;
+use macros::Get;
 use math::Size;
-use std::sync::{Arc, RwLock};
-use utils::{ByteSize, Label, LabelMap, label};
+use std::path::Path;
+use utils::{ByteSize, Handle, Label, SlotMap};
 
-// Re-exports
-pub use font::Font;
-pub use texture::Texture;
+pub use font::*;
 
-pub struct AssetManager {
-    atlas: TextureAtlas,
-    fonts: RwLock<LabelMap<Arc<Font>>>,
+#[derive(Debug, Clone)]
+pub struct Image {
+    pub label: Label,
+    pub size: Size<u32>,
 }
 
-impl AssetManager {
+#[derive(Get)]
+pub struct AssetServer {
+    atlas: TextureAtlas,
+
+    fonts: SlotMap<Font>,
+
+    #[get(copied)]
+    debug_font: Handle<Font>,
+
+    images: SlotMap<Image>,
+}
+
+impl AssetServer {
     #[doc(hidden)]
     pub fn new() -> Self {
-        let assets = Self {
-            atlas: TextureAtlas::new((1024, 1024)),
-            fonts: RwLock::new(LabelMap::default()),
+        let atlas = TextureAtlas::new(consts::TEXTURE_ATLAS_BASE_SIZE);
+
+        let mut assets = Self {
+            atlas,
+            fonts: SlotMap::new(),
+            debug_font: Handle::default(),
+            images: SlotMap::new(),
         };
 
-        // Load the default debug font
-        assets.load_font(
-            label!("debug"),
-            include_bytes!("../defaults/DOS-V.ttf").to_vec(),
-            16,
-        );
-
+        assets.init();
         assets
     }
 
-    #[inline]
-    pub fn load_image(&self, label: Label, bytes: Vec<u8>) {
+    fn init(&mut self) {
+        self.debug_font =
+            self.load_font_bytes(include_bytes!("../defaults/DOS-V.ttf").to_vec(), 16);
+    }
+
+    /// Load an image from a path and return a handle
+    pub fn load_image<P: AsRef<Path>>(&mut self, path: P) -> Handle<Image> {
+        let bytes = std::fs::read(path).expect("Failed to find image");
+        self.load_image_bytes(bytes)
+    }
+
+    /// Load an image from bytes and return a handle
+    pub fn load_image_bytes(&mut self, bytes: Vec<u8>) -> Handle<Image> {
+        let handle = self.images.insert_with_key(|key| {
+            let label = Label::new(&format!("_img_{}", key.index()));
+
+            info!(
+                "Loading image with label {:?} of size {}",
+                label,
+                ByteSize::from_bytes(bytes.len() as u64)
+            );
+
+            let size = self.atlas.add_image_bytes(label, bytes);
+
+            Image { label, size }
+        });
+
+        handle
+    }
+
+    pub fn load_font<P: AsRef<Path>>(&mut self, path: P, size: u8) -> Handle<Font> {
+        let bytes = std::fs::read(path).expect("Failed to read font file");
+        self.load_font_bytes(bytes, size)
+    }
+
+    pub fn load_font_bytes(&mut self, bytes: Vec<u8>, size: u8) -> Handle<Font> {
         info!(
-            "Loading image with label '{:?}' of size {}",
-            label,
+            "Loading font of size {}",
             ByteSize::from_bytes(bytes.len() as u64)
         );
-        self.atlas.add_image(label, bytes);
+
+        let handle = self.fonts.insert_with_key(|key| {
+            let label = Label::new(&format!("_font_{}", key.index()));
+            let mut font = Font::new(label, bytes, size);
+
+            self.atlas
+                .rasterize_characters(label, &mut font, size as f32);
+
+            font
+        });
+
+        handle
     }
 
+    /// Get image metadata
+    pub fn get_image(&self, handle: Handle<Image>) -> Option<&Image> {
+        self.images.get(handle)
+    }
+
+    /// Get font
+    pub fn get_font(&self, handle: Handle<Font>) -> Option<&Font> {
+        self.fonts.get(handle)
+    }
+
+    // === Hidden Methods ===
+    //
+    // These methods are hidden since they must be used
+    // in the renderer, but they shouldnt be exposed
+    // to the user
+
     #[inline]
-    pub fn load_font(&self, label: Label, bytes: Vec<u8>, size: u8) {
-        info!(
-            "Loading font with label '{:?}' of size {}",
-            label,
-            ByteSize::from_bytes(bytes.len() as u64)
-        );
-
-        let mut font = Font::new(bytes, size);
-        let mut font_cache = self.fonts.write().expect("Font cache lock is poisoned");
-
-        self.atlas
-            .rasterize_characters(label, &mut font, size as f32);
-        font_cache.insert(label, Arc::new(font));
+    #[doc(hidden)]
+    pub fn get_texture_uv(&self, handle: Handle<Image>) -> (f32, f32, f32, f32, f32, f32) {
+        let image = self.images.get(handle).expect("Invalid image handle");
+        self.get_texture_uv_by_label(&image.label)
     }
 
     #[inline]
     #[doc(hidden)]
-    pub fn get_texture_coords(&self, label: Label) -> (f32, f32, f32, f32) {
-        self.atlas
-            .get_region(label)
-            .uv_coordinates(self.atlas.size())
-    }
-
-    #[inline]
-    pub fn get_subtexture_coords(
-        &self,
-        label: Label,
-        x: u32,
-        y: u32,
-        width: u32,
-        height: u32,
-    ) -> (f32, f32, f32, f32) {
-        let region = self.atlas.get_region(label);
-        let atlas_size = self.atlas.size();
-
-        // Calculate normalized coordinates
-        let uv_x = (region.x + x) as f32 / atlas_size.width() as f32;
-        let uv_y = (region.y + y) as f32 / atlas_size.height() as f32;
-        let uv_width = width as f32 / atlas_size.width() as f32;
-        let uv_height = height as f32 / atlas_size.height() as f32;
-
-        (uv_x, uv_y, uv_width, uv_height)
-    }
-
-    #[inline]
-    #[doc(hidden)]
-    pub fn get_white_uv_coords(&self) -> (f32, f32, f32, f32) {
-        self.atlas.get_white_uv_coords()
-    }
-
-    #[inline]
-    #[doc(hidden)]
-    pub fn get_region(&self, label: Label) -> AtlasRegion {
-        self.atlas.get_region(label)
-    }
-
-    #[inline]
-    pub fn atlas_size(&self) -> &Size<u32> {
-        self.atlas.size()
-    }
-
-    #[inline]
-    #[doc(hidden)]
-    pub fn get_font(&self, label: &Label) -> Arc<Font> {
-        self.fonts
-            .read()
-            .expect("Font cache lock is poisoned")
+    pub fn get_texture_uv_by_label(&self, label: &Label) -> (f32, f32, f32, f32, f32, f32) {
+        let rect = self
+            .atlas
+            .regions
             .get(label)
-            .expect("Failed to find font")
-            .clone()
+            .expect("Failed to get atlas region");
+
+        let size = self.atlas.size();
+        let x = rect.x as f32 / size.width as f32;
+        let y = rect.y as f32 / size.height as f32;
+        let width = rect.width as f32 / size.width as f32;
+        let height = rect.height as f32 / size.height as f32;
+
+        (x, y, width, height, rect.width as f32, rect.height as f32)
     }
 
     #[inline]
     #[doc(hidden)]
-    pub fn bind_group(&self) -> &wgpu::BindGroup {
+    pub fn get_white_uv_coords(&self) -> (f32, f32, f32, f32, f32, f32) {
+        self.get_texture_uv_by_label(&utils::label!("_white"))
+    }
+
+    #[inline]
+    #[doc(hidden)]
+    pub fn get_glyph_uv(&self, handle: Handle<Font>, ch: char) -> (f32, f32, f32, f32, f32, f32) {
+        let font = self.fonts.get(handle).expect("Invalid font handle");
+        let glyph_label = Label::new(&format!("{}_{}", font.label().raw(), ch));
+
+        self.get_texture_uv_by_label(&glyph_label)
+    }
+
+    #[inline]
+    #[doc(hidden)]
+    pub fn atlas_bgl(&self) -> &wgpu::BindGroupLayout {
+        &self.atlas.bgl
+    }
+
+    #[inline]
+    #[doc(hidden)]
+    pub fn atlas_bg(&self) -> &wgpu::BindGroup {
         self.atlas.texture().bind_group()
-    }
-
-    #[inline]
-    #[doc(hidden)]
-    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-        self.atlas.bind_group_layout()
     }
 }

@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 macros.workspace = true
 utils.workspace = true
+logging.workspace = true

@@ -1,5 +1,6 @@
 use macros::Get;
 use std::ops::Deref;
+use utils::Label;
 use wgpu::naga::FastHashMap;
 
 #[derive(Debug, Clone)]
@@ -14,6 +15,8 @@ pub struct Font {
     #[get]
     inner: fontdue::Font,
 
+    #[get]
+    label: Label,
     #[get(copied)]
     size: u8,
     glyphs: FastHashMap<char, Glyph>,
@@ -28,12 +31,13 @@ impl Deref for Font {
 }
 
 impl Font {
-    pub fn new(bytes: Vec<u8>, size: u8) -> Self {
+    pub fn new(label: Label, bytes: Vec<u8>, size: u8) -> Self {
         let inner = fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default())
             .expect("Failed to load font");
 
         Self {
             inner,
+            label,
             size,
             glyphs: FastHashMap::default(),
         }

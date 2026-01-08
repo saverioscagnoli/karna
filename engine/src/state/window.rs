@@ -2,7 +2,7 @@ use logging::warn;
 use macros::Get;
 use math::Size;
 use std::sync::Arc;
-use winit::window::Fullscreen;
+use winit::window::{CursorGrabMode, Fullscreen};
 
 pub type WinitWindow = Arc<winit::window::Window>;
 
@@ -139,6 +139,22 @@ impl Window {
         } else {
             self.inner
                 .set_fullscreen(Some(Fullscreen::Borderless(None)));
+        }
+    }
+
+    #[inline]
+    pub fn capture_mouse(&self, should: bool) {
+        if should {
+            let _ = self
+                .inner
+                .set_cursor_grab(CursorGrabMode::Locked)
+                .or_else(|_e| self.inner.set_cursor_grab(CursorGrabMode::Confined));
+
+            self.inner.set_cursor_visible(false);
+        } else {
+            let _ = self.inner.set_cursor_grab(CursorGrabMode::None);
+
+            self.inner.set_cursor_visible(true);
         }
     }
 }

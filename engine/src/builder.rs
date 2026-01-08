@@ -1,7 +1,7 @@
 use crate::{App, scene::Scene};
 use macros::With;
 use math::Size;
-use utils::{Label, LabelMap, label};
+use utils::{FastHashMap, Label, label};
 use winit::window::WindowAttributes;
 
 #[derive(Default)]
@@ -13,7 +13,7 @@ pub struct WindowBuilder {
     /// Used for debugging purposes,
     /// such as distinguish logs between windows
     pub(crate) label: String,
-    pub(crate) scenes: LabelMap<Box<dyn Scene>>,
+    pub(crate) scenes: FastHashMap<Label, Box<dyn Scene>>,
 }
 
 impl WindowBuilder {

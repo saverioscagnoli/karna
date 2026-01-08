@@ -1,11 +1,15 @@
-use std::time::Duration;
+use karna::{
+    AppBuilder, Draw, RenderContext, Scene, WindowBuilder,
+    assets::Font,
+    input::KeyCode,
+    render::Color,
+    utils::{Handle, Timer},
+};
 
-use karna::{AppBuilder, Scene, WindowBuilder, input::KeyCode, label, render::Text};
-use renderer::{Color, Layer, TextHandle};
-use utils::Timer;
-
+#[derive(Default)]
 struct Donut {
-    text: TextHandle,
+    font: Handle<Font>,
+    font_toggle: bool,
     debug_timer: Timer,
     angle_a: f32,
     angle_b: f32,
@@ -101,27 +105,12 @@ impl Donut {
 
 impl Scene for Donut {
     fn load(&mut self, ctx: &mut karna::Context) {
-        ctx.render.set_clear_color(Color::Black);
-        ctx.time.set_target_fps(120);
+        ctx.time.set_target_fps(175);
+        ctx.scene.set_clear_color(Color::Black);
 
-        ctx.assets.load_font(
-            label!("jetbrains mono"),
-            include_bytes!("assets/JetBrainsMono-Regular.ttf").to_vec(),
-            18,
-        );
-
-        let size = ctx.window.size();
-
-        let mut text = Text::new(label!("jetbrains mono"), "");
-
-        text.set_position_x(size.width as f32 / 2.0 - 400.0);
-        text.set_position_y(size.height as f32 / 2.0 - 300.0);
-
-        let mut debug_text = Text::new(label!("debug"), "");
-
-        debug_text.set_position([10.0, 10.0, 0.0]);
-
-        self.text = ctx.render.add_text(text);
+        self.font = ctx
+            .assets
+            .load_font_bytes(include_bytes!("assets/jmono.ttf").to_vec(), 18);
     }
 
     fn update(&mut self, ctx: &mut karna::Context) {
@@ -131,62 +120,39 @@ impl Scene for Donut {
         self.angle_b += 0.5 * dt;
         self.color_timer += 2.0 * dt;
 
-        let frame_content = self.generate_frame();
-        let rainbow_color = self.get_rainbow_color();
-
-        {
-            let text = ctx.render.get_text_mut(self.text);
-
-            *text.content_mut() = frame_content.into();
-            *text.color_mut() = rainbow_color.into();
-
-            if ctx.input.key_pressed(&KeyCode::Space) {
-                if text.font() == label!("debug") {
-                    text.set_font(label!("jetbrains mono"));
-                } else {
-                    text.set_font(label!("debug"));
-                }
-            }
-        }
-
         self.debug_timer.tick(dt);
+
+        if ctx.input.key_pressed(&KeyCode::Space) {
+            self.font_toggle = !self.font_toggle;
+        }
     }
 
-    fn fixed_update(&mut self, _ctx: &mut karna::Context) {}
+    fn render(&mut self, ctx: &RenderContext, draw: &mut Draw) {
+        let frame_content = self.generate_frame();
+        let rainbow_color = self.get_rainbow_color();
+        let win_size = ctx.window.size();
+        let font = ctx.assets.get_font(self.font).unwrap();
 
-    fn render(&mut self, ctx: &mut karna::Context) {
-        ctx.render
-            .debug_text(format!("fps: {}", ctx.time.fps()), 10.0, 10.0);
+        let char_width = 80;
+        let char_height = 30;
 
-        ctx.render
-            .debug_text(format!("dt: {:.5}", ctx.time.delta()), 10.0, 30.0);
+        let text_width = char_width as f32 * font.size() as f32 * 0.6;
+        let text_height = char_height as f32 * font.size() as f32;
 
-        ctx.render.debug_text(
-            format!("draw calls: {}", ctx.profiling.render.draw_calls()),
-            10.0,
-            50.0,
-        );
+        let x = (win_size.width as f32 - text_width) / 2.0;
+        let y = (win_size.height as f32 - text_height) / 2.0;
 
-        ctx.render.debug_text(
-            format!("vertices: {}", ctx.profiling.render.vertices()),
-            10.0,
-            70.0,
-        );
+        draw.set_color(Color::White);
+        draw.debug_text(format!("FPS: {}", ctx.time.fps()), 10.0, 10.0);
+        draw.debug_text(format!("DT: {:.6}", ctx.time.delta()), 10.0, 30.0);
 
-        ctx.render.debug_text(
-            format!("indices: {}", ctx.profiling.render.indices()),
-            10.0,
-            90.0,
-        );
+        draw.set_color(rainbow_color);
 
-        ctx.render.debug_text(
-            format!(
-                "allocated: {:.2} MB",
-                ctx.profiling.mem.allocated() as f32 / 1024.0 / 1024.0
-            ),
-            10.0,
-            110.0,
-        );
+        if self.font_toggle {
+            draw.text(ctx.assets.debug_font(), frame_content, x, y);
+        } else {
+            draw.text(self.font, frame_content, x, y);
+        }
     }
 }
 
@@ -198,13 +164,7 @@ fn main() {
                 .with_title("spinning donut")
                 .with_size((1280, 720))
                 .with_resizable(false)
-                .with_initial_scene(Donut {
-                    text: TextHandle::dummy(),
-                    debug_timer: Timer::new(Duration::from_millis(100)),
-                    angle_a: 0.0,
-                    angle_b: 0.0,
-                    color_timer: 0.0,
-                }),
+                .with_initial_scene(Donut::default()),
         )
         .build()
         .run();

@@ -1,69 +1,36 @@
-use gpu::Texture;
 use image::{DynamicImage, GenericImageView, RgbaImage};
 use macros::Get;
 use math::Size;
-use rect_packer::Packer;
-use std::sync::{Mutex, RwLock};
-use utils::{Label, LabelMap, label};
+use utils::{FastHashMap, Label, label};
 
 use crate::font::Font;
-
-#[derive(Debug, Clone, Copy)]
-pub struct AtlasRegion {
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
-}
-
-impl From<rect_packer::Rect> for AtlasRegion {
-    fn from(value: rect_packer::Rect) -> Self {
-        Self {
-            x: value.x as u32,
-            y: value.y as u32,
-            width: value.width as u32,
-            height: value.height as u32,
-        }
-    }
-}
-
-impl AtlasRegion {
-    #[inline]
-    /// (x, y, width, height)
-    pub fn uv_coordinates(&self, atlas_size: &Size<u32>) -> (f32, f32, f32, f32) {
-        let x = self.x as f32 / atlas_size.width() as f32;
-        let y = self.y as f32 / atlas_size.height() as f32;
-        let width = self.width as f32 / atlas_size.width() as f32;
-        let height = self.height as f32 / atlas_size.height() as f32;
-
-        (x, y, width, height)
-    }
-}
 
 #[derive(Get)]
 pub struct TextureAtlas {
     #[get]
-    texture: Texture,
+    texture: gpu::Texture,
 
     #[get]
-    bind_group_layout: wgpu::BindGroupLayout,
+    pub bgl: wgpu::BindGroupLayout,
 
     #[get]
     size: Size<u32>,
 
-    /// Can be a mutex, since it's mainly used for writing (lock, but it's ok, loading images takes time),
-    /// when getting a texture we don't need to lock it
-    packer: Mutex<rect_packer::Packer>,
-    regions: RwLock<LabelMap<AtlasRegion>>,
+    packer: rect_packer::DensePacker,
+    pub regions: FastHashMap<Label, rect_packer::Rect>,
 }
 
 impl TextureAtlas {
-    pub fn new<S: Into<Size<u32>>>(size: S) -> Self {
-        let size = size.into();
+    #[doc(hidden)]
+    pub fn new<S>(size: S) -> Self
+    where
+        S: Into<Size<u32>>,
+    {
+        let size: Size<u32> = size.into();
         let device = gpu::device();
 
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("texture atlas bgl"),
+        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Texture atlas Bind Group Layout"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -84,34 +51,26 @@ impl TextureAtlas {
             ],
         });
 
-        let texture = Texture::new_empty("texture atlas", size, &bind_group_layout, device);
+        let texture = gpu::Texture::new_empty("Texture Atlas", size, &bgl, device);
+        let mut packer = rect_packer::DensePacker::new(size.width as i32, size.height as i32);
 
-        let mut packer = Packer::new(rect_packer::Config {
-            width: size.width() as i32,
-            height: size.height() as i32,
-            border_padding: 0,
-            rectangle_padding: 0,
-        });
-
-        // Reserve a 1x1 region for white pixel
-        let white_region: AtlasRegion = packer
+        let white_pixel = packer
             .pack(1, 1, false)
-            .expect("Failed to pack white pixel")
-            .into();
+            .expect("Failed to pack white pixel");
 
-        // Write white pixel to the atlas
-        gpu::queue().write_texture(
+        let queue = gpu::queue();
+        queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,
                 texture: texture.inner(),
                 mip_level: 0,
                 origin: wgpu::Origin3d {
-                    x: white_region.x,
-                    y: white_region.y,
+                    x: white_pixel.x as u32,
+                    y: white_pixel.y as u32,
                     z: 0,
                 },
             },
-            &[255u8, 255u8, 255u8, 255u8], // White RGBA pixel
+            &[255, 255, 255, 255],
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4),
@@ -124,33 +83,38 @@ impl TextureAtlas {
             },
         );
 
-        let mut regions = LabelMap::default();
+        let mut regions = FastHashMap::default();
 
-        // Store the white pixel region
-        regions.insert(label!("_white"), white_region);
+        regions.insert(label!("_white"), white_pixel);
 
-        // Store the entire atlas region for debugging
         regions.insert(
             label!("_atlas"),
-            AtlasRegion {
+            rect_packer::Rect {
                 x: 0,
                 y: 0,
-                width: size.width(),
-                height: size.height(),
+                width: size.width as i32,
+                height: size.height as i32,
             },
         );
 
         Self {
             texture,
-            bind_group_layout,
+            bgl,
             size,
-            packer: Mutex::new(packer),
-            regions: RwLock::new(regions),
+            packer,
+            regions,
         }
     }
 
-    fn write_texture(&self, image: DynamicImage, size: Size<u32>, region: AtlasRegion) {
-        gpu::queue().write_texture(
+    fn write_texture_to_buffer(
+        &self,
+        image: DynamicImage,
+        size: Size<u32>,
+        region: rect_packer::Rect,
+    ) {
+        let queue = gpu::queue();
+
+        queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,
                 texture: self.texture.inner(),
@@ -164,91 +128,92 @@ impl TextureAtlas {
             image.to_rgba8().as_raw(),
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(4 * size.width()),
-                rows_per_image: Some(size.height()),
+                bytes_per_row: Some(4 * size.width),
+                rows_per_image: Some(size.height),
             },
             wgpu::Extent3d {
-                width: size.width(),
-                height: size.height(),
+                width: size.width,
+                height: size.height,
                 depth_or_array_layers: 1,
             },
         );
     }
 
-    pub fn get_region(&self, label: Label) -> AtlasRegion {
-        *self
-            .regions
-            .read()
-            .expect("Texture atlas lock is poisoned")
-            .get(&label)
-            .expect("Failed to get region")
+    pub fn add_image_bytes(&mut self, label: Label, bytes: Vec<u8>) -> Size<u32> {
+        let image = image::load_from_memory(&bytes).expect("Failed to load image bytes");
+        let size: Size<u32> = image.dimensions().into();
+
+        let region = self
+            .packer
+            .pack(size.width as i32, size.height as i32, false)
+            .expect("Failed to pack image");
+
+        self.write_texture_to_buffer(image, size, region);
+        self.regions.insert(label, region);
+
+        size
     }
 
-    #[inline]
-    /// Returns UV coordinates for the white pixel in the atlas
-    pub fn get_white_uv_coords(&self) -> (f32, f32, f32, f32) {
-        self.get_region(label!("_white")).uv_coordinates(&self.size)
-    }
-
-    #[inline]
-    pub fn add_image(&self, label: Label, bytes: Vec<u8>) {
-        let image = image::load_from_memory(&bytes).expect("Failed to load image");
-        let (width, height) = image.dimensions();
+    /// Add raw RGBA image data directly (used for font glyphs)
+    fn add_raw_image(
+        &mut self,
+        label: Label,
+        rgba_data: Vec<u8>,
+        width: u32,
+        height: u32,
+    ) -> Size<u32> {
         let size = Size::new(width, height);
-        let mut packer = self.packer.lock().expect("Failed to write to packer");
 
-        let region: AtlasRegion = packer
-            .pack(size.width() as i32, size.height() as i32, false)
-            .expect("Failed to pack image")
-            .into();
+        let region = self
+            .packer
+            .pack(size.width as i32, size.height as i32, false)
+            .expect("Failed to pack image");
 
-        self.write_texture(image, size, region);
+        let image = RgbaImage::from_raw(width, height, rgba_data)
+            .expect("Failed to create RGBA image from raw data");
 
-        let mut regions = self
-            .regions
-            .write()
-            .expect("Texture atlas lock is poisoned");
+        let queue = gpu::queue();
 
-        regions.insert(label, region);
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                aspect: wgpu::TextureAspect::All,
+                texture: self.texture.inner(),
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: region.x as u32,
+                    y: region.y as u32,
+                    z: 0,
+                },
+            },
+            &image,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * width),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        self.regions.insert(label, region);
+        size
     }
 
-    #[inline]
-    /// Helper method to load characters textures.
-    ///
-    /// Cannot use `add_image` before its meant for the end user to load
-    /// images when reading files
-    fn add_raw_image(&self, label: Label, image: RgbaImage) {
-        let (width, height) = image.dimensions();
-        let size = Size::new(width, height);
-        let mut packer = self.packer.lock().expect("Failed to write to packer");
-        let region: AtlasRegion = packer
-            .pack(size.width() as i32, size.height() as i32, false)
-            .expect("Failed to pack image")
-            .into();
-
-        self.write_texture(DynamicImage::ImageRgba8(image), size, region);
-
-        let mut regions = self
-            .regions
-            .write()
-            .expect("Texture atlas lock is poisoned");
-
-        regions.insert(label, region);
-    }
-
-    #[inline]
-    pub fn rasterize_characters(&self, font_label: Label, font: &mut Font, size: f32) {
+    pub fn rasterize_characters(&mut self, label: Label, font: &mut Font, size: f32) {
         let chars = font.chars().keys().copied().collect::<Vec<_>>();
 
         for ch in chars {
             let (metrics, bitmap) = font.rasterize(ch, size);
-            let (width, height) = (metrics.width as u32, metrics.height as u32);
+            let size = Size::new(metrics.width as u32, metrics.height as u32);
 
-            if width == 0 || height == 0 {
+            if size.width == 0 || size.height == 0 {
                 continue;
             }
 
-            font.add_glyph(ch, width, height);
+            font.add_glyph(ch, size.width, size.height);
 
             // Just load a white sample of the character,
             // Keeping only the alpha values that define the character.
@@ -260,13 +225,9 @@ impl TextureAtlas {
                 rgba_buffer.extend_from_slice(&[255, 255, 255, alpha]);
             }
 
-            let texture = RgbaImage::from_raw(width, height, rgba_buffer)
-                .expect("Failed to create char texture");
+            let label = Label::new(&format!("{}_{}", label.raw(), ch));
 
-            // Store the character with label {font_label}_{ch}
-            let label = Label::new(&format!("{}_{}", font_label.raw(), ch));
-
-            self.add_raw_image(label, texture);
+            self.add_raw_image(label, rgba_buffer, size.width, size.height);
         }
     }
 }

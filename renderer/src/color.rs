@@ -52,7 +52,6 @@ impl Color {
     }
 
     #[inline]
-    /// Generate a random color with full opacity
     pub fn random() -> Self {
         let r = rng(0.0..=1.0);
         let g = rng(0.0..=1.0);

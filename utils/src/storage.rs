@@ -1,10 +1,41 @@
-use std::marker::PhantomData;
+use std::{
+    collections::HashMap,
+    hash::{BuildHasher, BuildHasherDefault, Hasher},
+    marker::PhantomData,
+};
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+use macros::Get;
+
+#[derive(Debug, Hash)]
+#[derive(Get)]
 pub struct Handle<T> {
+    #[get(copied)]
     index: u32,
+    #[get(copied)]
     generation: u32,
     _d: PhantomData<T>,
+}
+
+impl<T> PartialEq for Handle<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index && self.generation == other.generation
+    }
+}
+
+impl<T> Eq for Handle<T> {}
+
+impl<T> PartialOrd for Handle<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for Handle<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.index
+            .cmp(&other.index)
+            .then(self.generation.cmp(&other.generation))
+    }
 }
 
 impl<T> Clone for Handle<T> {
@@ -15,19 +46,21 @@ impl<T> Clone for Handle<T> {
 
 impl<T> Copy for Handle<T> {}
 
+impl<T> Default for Handle<T> {
+    fn default() -> Self {
+        Self {
+            index: 0,
+            generation: 0,
+            _d: PhantomData,
+        }
+    }
+}
+
 impl<T> Handle<T> {
     fn new(index: u32, generation: u32) -> Self {
         Self {
             index,
             generation,
-            _d: PhantomData,
-        }
-    }
-
-    pub fn dummy() -> Self {
-        Self {
-            index: 0,
-            generation: 0,
             _d: PhantomData,
         }
     }
@@ -76,6 +109,32 @@ impl<T> SlotMap<T> {
             });
 
             Handle::new(index, 1)
+        }
+    }
+
+    /// Insert with access to the handle that will be created
+    /// Useful when you need to derive data from the handle (like a label)
+    pub fn insert_with_key<F>(&mut self, f: F) -> Handle<T>
+    where
+        F: FnOnce(Handle<T>) -> T,
+    {
+        if let Some(index) = self.free_list.pop() {
+            let slot = &mut self.slots[index as usize];
+            let handle = Handle::new(index, slot.generation);
+
+            slot.value = Some(f(handle));
+
+            handle
+        } else {
+            let index = self.slots.len() as u32;
+            let handle = Handle::new(index, 1);
+
+            self.slots.push(Slot {
+                value: Some(f(handle)),
+                generation: 1,
+            });
+
+            handle
         }
     }
 
@@ -171,3 +230,73 @@ impl<T> Default for SlotMap<T> {
         Self::new()
     }
 }
+
+pub struct IdentityHasher(u64);
+
+impl Hasher for IdentityHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, _: &[u8]) {
+        panic!("IdentityHasher only works with u32")
+    }
+
+    fn write_u32(&mut self, i: u32) {
+        self.0 = i as u64;
+    }
+}
+
+#[derive(Default)]
+pub struct IdentityHasherBuilder;
+
+impl BuildHasher for IdentityHasherBuilder {
+    type Hasher = IdentityHasher;
+    fn build_hasher(&self) -> Self::Hasher {
+        IdentityHasher(0)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Label(u32);
+
+impl Label {
+    const FNV_OFFSET: u32 = 2166136261;
+    const FNV_PRIME: u32 = 16777619;
+
+    /// Create a label from a string slice at compile time
+    pub const fn new(s: &str) -> Self {
+        Self(Self::hash(s))
+    }
+
+    /// Get the raw hash value
+    pub const fn raw(&self) -> u32 {
+        self.0
+    }
+
+    pub const fn hash(s: &str) -> u32 {
+        let bytes = s.as_bytes();
+        let mut hash = Self::FNV_OFFSET;
+        let mut i = 0;
+
+        while i < bytes.len() {
+            hash ^= bytes[i] as u32;
+            hash = hash.wrapping_mul(Self::FNV_PRIME);
+            i += 1;
+        }
+
+        hash
+    }
+}
+
+#[macro_export]
+macro_rules! label {
+    ($s:literal) => {{
+        const LABEL: $crate::Label = $crate::Label::new($s);
+        LABEL
+    }};
+}
+
+/// Only works with u32
+pub type UMap<K, V> = HashMap<K, V, IdentityHasherBuilder>;
+pub type FastHashMap<K, V> = HashMap<K, V, BuildHasherDefault<rustc_hash::FxHasher>>;

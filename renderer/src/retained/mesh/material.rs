@@ -1,29 +1,22 @@
-use crate::Color;
-use utils::Label;
+use crate::color::Color;
+use assets::Image;
+use utils::Handle;
 
 #[derive(Debug, Clone, Copy)]
 pub enum TextureKind {
-    Full(Label),
-    Partial(Label, u32, u32, u32, u32),
+    None,
+    Full(Handle<Image>),
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct Material {
     pub color: Color,
-    pub texture: Option<TextureKind>,
-}
-
-impl Default for Material {
-    fn default() -> Self {
-        Self {
-            color: Color::White,
-            texture: None,
-        }
-    }
+    pub texture: TextureKind,
 }
 
 impl Material {
-    pub fn new(color: Color, texture: Option<TextureKind>) -> Self {
+    #[inline]
+    pub fn new(color: Color, texture: TextureKind) -> Self {
         Self { color, texture }
     }
 
@@ -31,7 +24,7 @@ impl Material {
     pub fn new_color(color: Color) -> Self {
         Self {
             color,
-            texture: None,
+            texture: TextureKind::None,
         }
     }
 
@@ -39,7 +32,7 @@ impl Material {
     pub fn new_texture(texture: TextureKind) -> Self {
         Self {
             color: Color::White,
-            texture: Some(texture),
+            texture,
         }
     }
 }

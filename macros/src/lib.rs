@@ -3,7 +3,7 @@ use proc_macro2::Span;
 use quote::quote;
 use syn::{
     Data, DeriveInput, Expr, Fields, Ident, Lit, Meta, MetaNameValue, Token, Type, Visibility,
-    parse::{Parse, ParseStream, Parser},
+    parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
 };
@@ -656,147 +656,6 @@ fn parse_with_attribute(
     }
 }
 
-#[proc_macro_attribute]
-pub fn dirty(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as DeriveInput);
-    let name = &input.ident;
-    let vis = &input.vis;
-    let generics = &input.generics;
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-    let fields = match &input.data {
-        Data::Struct(data) => match &data.fields {
-            Fields::Named(fields) => &fields.named,
-            _ => panic!("dirty only supports structs with named fields"),
-        },
-        _ => panic!("dirty only supports structs"),
-    };
-
-    let mut new_fields = Vec::new();
-    let mut dirty_fields = Vec::new();
-    let mut bit_index = 0usize;
-
-    for field in fields {
-        let field_name = field.ident.as_ref().unwrap();
-        let field_type = &field.ty;
-        let field_vis = &field.vis;
-
-        let mut is_dirty = false;
-        let mut use_into = false;
-
-        for attr in &field.attrs {
-            if attr.path().is_ident("dirty") {
-                is_dirty = true;
-
-                if let Meta::List(meta_list) = &attr.meta {
-                    if let Ok(ident) = syn::parse2::<syn::Ident>(meta_list.tokens.clone()) {
-                        if ident == "into" {
-                            use_into = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut new_field = field.clone();
-        new_field
-            .attrs
-            .retain(|attr| !attr.path().is_ident("dirty"));
-        new_fields.push(new_field);
-
-        if is_dirty {
-            dirty_fields.push((
-                field_name.clone(),
-                field_type.clone(),
-                bit_index,
-                use_into,
-                field_vis.clone(),
-            ));
-            bit_index += 1;
-        }
-    }
-
-    new_fields.push(
-        syn::Field::parse_named
-            .parse2(quote! {
-                __tracker: u8
-            })
-            .unwrap(),
-    );
-
-    let bit_consts: Vec<_> = dirty_fields
-        .iter()
-        .map(|(field_name, _, index, _, _)| {
-            let const_name = field_name;
-            quote! {
-                #[inline]
-                pub const fn #const_name() -> u8 {
-                    1 << #index
-                }
-            }
-        })
-        .collect();
-
-    let setters: Vec<_> = dirty_fields
-        .iter()
-        .map(|(field_name, field_type, _, use_into, field_vis)| {
-            let setter_name = syn::Ident::new(&format!("set_{}", field_name), field_name.span());
-
-            if *use_into {
-                quote! {
-                    #[inline]
-                    #field_vis fn #setter_name(&mut self, value: impl Into<#field_type>) {
-                        let value = value.into();
-                        if self.#field_name != value {
-                            self.__tracker |= Self::#field_name();
-                            self.#field_name = value;
-                        }
-                    }
-                }
-            } else {
-                quote! {
-                    #[inline]
-                    #field_vis fn #setter_name(&mut self, value: #field_type) {
-                        if self.#field_name != value {
-                            self.__tracker |= Self::#field_name();
-                            self.#field_name = value;
-                        }
-                    }
-                }
-            }
-        })
-        .collect();
-
-    let mut_getters: Vec<_> = dirty_fields
-        .iter()
-        .map(|(field_name, field_type, _, _, field_vis)| {
-            let mut_name = syn::Ident::new(&format!("{}_mut", field_name), field_name.span());
-
-            quote! {
-                #[inline]
-                #field_vis fn #mut_name(&mut self) -> &mut #field_type {
-                    self.__tracker |= Self::#field_name();
-                    &mut self.#field_name
-                }
-            }
-        })
-        .collect();
-
-    let expanded = quote! {
-        #vis struct #name #generics {
-            #(#new_fields),*
-        }
-
-        impl #impl_generics #name #ty_generics #where_clause {
-            #(#bit_consts)*
-            #(#setters)*
-            #(#mut_getters)*
-        }
-    };
-
-    TokenStream::from(expanded)
-}
-
 /// Derive the random function for enums with fieldless variants
 ///
 /// Just returns a random variant of the enum. Ignores fieldful variants.
@@ -835,15 +694,58 @@ pub fn derive_random(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-#[proc_macro_attribute]
-pub fn track_dirty(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as DeriveInput);
+struct TrackerType {
+    ty: syn::Type,
+}
 
+impl Parse for TrackerType {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(TrackerType { ty: input.parse()? })
+    }
+}
+
+#[proc_macro_attribute]
+pub fn track_dirty(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
     let name = &input.ident;
     let vis = &input.vis;
     let attrs = &input.attrs;
     let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    // Parse tracker type from attribute, default to u8
+    let tracker_type = if attr.is_empty() {
+        syn::parse_str::<syn::Type>("u8").unwrap()
+    } else {
+        match syn::parse::<TrackerType>(attr) {
+            Ok(t) => t.ty,
+            Err(_) => {
+                return syn::Error::new_spanned(
+                    &input,
+                    "expected a type like u8, u16, u32, u64, or u128",
+                )
+                .to_compile_error()
+                .into();
+            }
+        }
+    };
+
+    // Determine max fields based on type
+    let max_fields = match tracker_type {
+        syn::Type::Path(ref p) if p.path.is_ident("u8") => 8,
+        syn::Type::Path(ref p) if p.path.is_ident("u16") => 16,
+        syn::Type::Path(ref p) if p.path.is_ident("u32") => 32,
+        syn::Type::Path(ref p) if p.path.is_ident("u64") => 64,
+        syn::Type::Path(ref p) if p.path.is_ident("u128") => 128,
+        _ => {
+            return syn::Error::new_spanned(
+                &tracker_type,
+                "tracker type must be one of: u8, u16, u32, u64, u128",
+            )
+            .to_compile_error()
+            .into();
+        }
+    };
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -861,10 +763,16 @@ pub fn track_dirty(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    if fields.len() > 8 {
+    // Check field count
+    if fields.len() > max_fields {
         return syn::Error::new_spanned(
             &input,
-            "track_dirty supports at most 8 fields (u8 tracker)",
+            format!(
+                "too many fields ({}) for {} tracker (maximum {} fields)",
+                fields.len(),
+                quote!(#tracker_type),
+                max_fields
+            ),
         )
         .to_compile_error()
         .into();
@@ -873,18 +781,23 @@ pub fn track_dirty(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Generate _f() functions for each field
     let field_fns = fields.iter().enumerate().map(|(i, field)| {
         let field_name = field.ident.as_ref().unwrap();
-        let fn_name = Ident::new(&format!("{}_f", field_name), Span::call_site());
-        let shift = i;
+        let fn_name = Ident::new(&format!("{}_f", field_name), proc_macro2::Span::call_site());
+        let shift = i as u32;
         quote! {
             #[inline]
-            pub const fn #fn_name() -> u8 {
-                1u8 << #shift
+            pub const fn #fn_name() -> #tracker_type {
+                1 << #shift
             }
         }
     });
 
     // Calculate the "all dirty" mask
-    let all_mask: u8 = (1u8 << fields.len()) - 1;
+    let all_mask = if fields.is_empty() {
+        quote!(0)
+    } else {
+        let field_count = fields.len() as u32;
+        quote!((1 << #field_count) - 1)
+    };
 
     // Reconstruct existing fields
     let existing_fields = fields.iter().map(|f| {
@@ -902,7 +815,7 @@ pub fn track_dirty(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #(#attrs)*
         #vis struct #name #generics {
             #(#existing_fields,)*
-            pub tracker: u8,
+            pub tracker: #tracker_type,
         }
 
         impl #impl_generics #name #ty_generics #where_clause {
@@ -910,19 +823,19 @@ pub fn track_dirty(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
             /// Check if a specific dirty flag is set
             #[inline]
-            pub const fn is_dirty(&self, flag: u8) -> bool {
+            pub const fn is_dirty(&self, flag: #tracker_type) -> bool {
                 self.tracker & flag != 0
             }
 
             /// Set a specific dirty flag
             #[inline]
-            pub fn set_dirty(&mut self, flag: u8) {
+            pub fn set_dirty(&mut self, flag: #tracker_type) {
                 self.tracker |= flag;
             }
 
             /// Clear a specific dirty flag
             #[inline]
-            pub fn clear_dirty(&mut self, flag: u8) {
+            pub fn clear_dirty(&mut self, flag: #tracker_type) {
                 self.tracker &= !flag;
             }
 

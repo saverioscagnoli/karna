@@ -1,195 +1,277 @@
-mod line;
-mod point;
-mod triangle;
+mod batcher;
+mod handle;
 
 use crate::{
-    Camera, Descriptor, Vertex,
-    immediate::{line::LineBatcher, point::PointBatcher, triangle::TriangleBatcher},
-    shader::Shader,
+    Camera, color::Color, immediate::batcher::Batcher, immediate_shader, traits::LayoutDescriptor,
+    vertex::Vertex,
 };
-use assets::AssetManager;
-use math::Vector4;
-use std::sync::Arc;
-use utils::{Label, label};
+use assets::{AssetServer, Font, Image};
+use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
+use globals::logs;
+use macros::{Get, Set};
+use math::{Vector2, Vector4};
+use utils::{FastHashMap, Handle};
 
+pub use handle::*;
+
+#[derive(Get, Set)]
 pub struct ImmediateRenderer {
-    assets: Arc<AssetManager>,
-    point_batcher: PointBatcher,
-    line_batcher: LineBatcher,
-    triangle_batcher: TriangleBatcher,
-    zstep: f32,
+    triangle_batcher: Batcher,
+
+    pub(crate) draw_color: Color,
+    text_layout: Layout,
+    char_cache: FastHashMap<u32, FastHashMap<char, (Vec<Vertex>, Vec<u32>)>>,
 }
 
 impl ImmediateRenderer {
-    const BASE_VERTEX_CAPACITY: usize = 1024;
-    const BASE_INDEX_CAPACITY: usize = 1024;
-
     pub(crate) fn new(
         surface_format: wgpu::TextureFormat,
         camera: &Camera,
-        assets: Arc<AssetManager>,
+        assets: &AssetServer,
     ) -> Self {
-        let shader = Shader::from_wgsl_file(
-            include_str!("../../../shaders/immediate.wgsl"),
-            Some("Immediate shader module"),
-        );
-
-        let point_pipeline = shader
+        let triangle_pipeline = immediate_shader()
             .pipeline_builder()
-            .label("immediate line pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::PointList)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[
-                    camera.view_projection_bind_group_layout(),
-                    assets.bind_group_layout(),
-                ],
-                &[Vertex::desc()],
-            );
-
-        let line_pipeline = shader
-            .pipeline_builder()
-            .label("immediate line pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::LineList)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[
-                    camera.view_projection_bind_group_layout(),
-                    assets.bind_group_layout(),
-                ],
-                &[Vertex::desc()],
-            );
-
-        let line_stip_pipeline = shader
-            .pipeline_builder()
-            .label("immediate line pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::LineStrip)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[
-                    camera.view_projection_bind_group_layout(),
-                    assets.bind_group_layout(),
-                ],
-                &[Vertex::desc()],
-            );
-
-        let triangle_pipeline = shader
-            .pipeline_builder()
-            .label("immediate triangle pipeline")
+            .label("Immediate Triangle pipeline")
             .vertex_entry("vs_main")
             .fragment_entry("fs_main")
             .topology(wgpu::PrimitiveTopology::TriangleList)
             .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
             .build(
                 surface_format,
-                &[
-                    camera.view_projection_bind_group_layout(),
-                    assets.bind_group_layout(),
-                ],
+                &[camera.bgl(), assets.atlas_bgl()],
                 &[Vertex::desc()],
             );
 
-        let point_batcher = PointBatcher::new(point_pipeline);
-        let line_batcher = LineBatcher::new(line_pipeline, line_stip_pipeline);
-        let triangle_batcher = TriangleBatcher::new(triangle_pipeline);
+        let triangle_batcher = Batcher::new(triangle_pipeline);
 
         Self {
-            assets,
-            point_batcher,
-            line_batcher,
+            draw_color: Color::White,
             triangle_batcher,
-            zstep: 0.0,
+            text_layout: Layout::new(CoordinateSystem::PositiveYDown),
+            char_cache: FastHashMap::default(),
         }
     }
 
     #[inline]
-    pub fn draw_point(&mut self, x: f32, y: f32, color: Vector4) {
-        self.point_batcher.draw_point(x, y, self.zstep, color);
+    pub fn fill_rect(&mut self, pos: Vector2, w: f32, h: f32, assets: &AssetServer) {
+        let color: Vector4 = self.draw_color.into();
+
+        // Get white pixel UV coords for solid color rendering
+        let (uv_x, uv_y, uv_w, uv_h, _, _) = assets.get_white_uv_coords();
+        let uv_center: Vector2 = [uv_x + uv_w * 0.5, uv_y + uv_h * 0.5].into();
+
+        let base = self.triangle_batcher.vertices.len() as u32;
+
+        let [x, y] = pos.into();
+
+        self.triangle_batcher.vertices.extend_from_slice(&[
+            Vertex {
+                position: [x, y, 0.0].into(),
+                color,
+                uv: uv_center,
+            },
+            Vertex {
+                position: [x + w, y, 0.0].into(),
+                color,
+                uv: uv_center,
+            },
+            Vertex {
+                position: [x + w, y + h, 0.0].into(),
+                color,
+                uv: uv_center,
+            },
+            Vertex {
+                position: [x, y + h, 0.0].into(),
+                color,
+                uv: uv_center,
+            },
+        ]);
+
+        self.triangle_batcher.indices.extend_from_slice(&[
+            base,
+            base + 1,
+            base + 2,
+            base,
+            base + 2,
+            base + 3,
+        ]);
     }
 
     #[inline]
-    pub fn draw_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, color: Vector4) {
-        self.line_batcher
-            .draw_line(x1, y1, x2, y2, self.zstep, color);
+    pub fn draw_image(&mut self, image: Handle<Image>, pos: Vector2, assets: &AssetServer) {
+        let color: Vector4 = Color::White.into();
+
+        let (uv_x, uv_y, uv_w, uv_h, w, h) = assets.get_texture_uv(image);
+
+        // Define the four UV corners (not the center!)
+        let uv_top_left: Vector2 = [uv_x, uv_y].into();
+        let uv_top_right: Vector2 = [uv_x + uv_w, uv_y].into();
+        let uv_bottom_right: Vector2 = [uv_x + uv_w, uv_y + uv_h].into();
+        let uv_bottom_left: Vector2 = [uv_x, uv_y + uv_h].into();
+
+        let base = self.triangle_batcher.vertices.len() as u32;
+
+        let [x, y] = pos.into();
+
+        self.triangle_batcher.vertices.extend_from_slice(&[
+            Vertex {
+                position: [x, y, 0.0].into(),
+                color,
+                uv: uv_top_left, // Top-left
+            },
+            Vertex {
+                position: [x + w, y, 0.0].into(),
+                color,
+                uv: uv_top_right, // Top-right
+            },
+            Vertex {
+                position: [x + w, y + h, 0.0].into(),
+                color,
+                uv: uv_bottom_right, // Bottom-right
+            },
+            Vertex {
+                position: [x, y + h, 0.0].into(),
+                color,
+                uv: uv_bottom_left, // Bottom-left
+            },
+        ]);
+
+        self.triangle_batcher.indices.extend_from_slice(&[
+            base,
+            base + 1,
+            base + 2,
+            base,
+            base + 2,
+            base + 3,
+        ]);
     }
 
     #[inline]
-    pub fn stroke_rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: Vector4) {
-        self.line_batcher.stroke_rect(x, y, self.zstep, w, h, color);
-    }
-
-    #[inline]
-    pub fn fill_rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: Vector4) {
-        self.triangle_batcher
-            .fill_rect(x, y, self.zstep, w, h, color, &self.assets);
-    }
-
-    #[inline]
-    pub fn draw_image(&mut self, label: Label, x: f32, y: f32, tint: Vector4) {
-        self.triangle_batcher
-            .draw_image(label, x, y, self.zstep, tint, &self.assets);
-    }
-
-    #[inline]
-    pub fn draw_subimage(
+    pub fn draw_text(
         &mut self,
-        label: Label,
+        handle: Handle<Font>,
+        text: &str,
         x: f32,
         y: f32,
-        sx: f32,
-        sy: f32,
-        sw: f32,
-        sh: f32,
-        tint: Vector4,
+        assets: &AssetServer,
     ) {
-        self.triangle_batcher.draw_subimage(
-            label,
-            x,
-            y,
-            self.zstep,
-            sx,
-            sy,
-            sw,
-            sh,
-            tint,
-            &self.assets,
+        let color: Vector4 = self.draw_color.into();
+        let font = assets.get_font(handle).expect("Failed to get font");
+
+        self.text_layout.clear();
+        self.text_layout.append(
+            &[font.inner()],
+            &TextStyle::new(text, font.size() as f32, 0),
         );
+
+        let glyphs = self.text_layout.glyphs();
+        let cache = self
+            .char_cache
+            .entry(handle.index())
+            .or_insert_with(FastHashMap::default);
+
+        for glyph in glyphs {
+            if glyph.width == 0 || glyph.height == 0 {
+                continue;
+            }
+
+            let ch = glyph.parent;
+
+            if let Some((cached_verts, cached_indices)) = cache.get(&ch) {
+                let base_vertex = self.triangle_batcher.vertices.len() as u32;
+
+                for mut vertex in cached_verts.iter().copied() {
+                    vertex.position[0] += x + glyph.x;
+                    vertex.position[1] += y + glyph.y;
+                    vertex.color = color;
+
+                    self.triangle_batcher.vertices.push(vertex);
+                }
+
+                for index in cached_indices {
+                    self.triangle_batcher.indices.push(*index + base_vertex);
+                }
+            } else {
+                // Create new geometry and cache it
+                let (uv_x, uv_y, uv_w, uv_h, _, _) = assets.get_glyph_uv(handle, ch);
+
+                let screen_x = x + glyph.x;
+                let screen_y = y + glyph.y;
+                let w = glyph.width as f32;
+                let h = glyph.height as f32;
+
+                let base = self.triangle_batcher.vertices.len() as u32;
+
+                // Define the four UV corners
+                let uv_top_left: Vector2 = [uv_x, uv_y].into();
+                let uv_top_right: Vector2 = [uv_x + uv_w, uv_y].into();
+                let uv_bottom_right: Vector2 = [uv_x + uv_w, uv_y + uv_h].into();
+                let uv_bottom_left: Vector2 = [uv_x, uv_y + uv_h].into();
+
+                self.triangle_batcher.vertices.extend_from_slice(&[
+                    Vertex {
+                        position: [screen_x, screen_y, 0.0].into(),
+                        color,
+                        uv: uv_top_left,
+                    },
+                    Vertex {
+                        position: [screen_x + w, screen_y, 0.0].into(),
+                        color,
+                        uv: uv_top_right,
+                    },
+                    Vertex {
+                        position: [screen_x + w, screen_y + h, 0.0].into(),
+                        color,
+                        uv: uv_bottom_right,
+                    },
+                    Vertex {
+                        position: [screen_x, screen_y + h, 0.0].into(),
+                        color,
+                        uv: uv_bottom_left,
+                    },
+                ]);
+
+                self.triangle_batcher.indices.extend_from_slice(&[
+                    base,
+                    base + 1,
+                    base + 2,
+                    base,
+                    base + 2,
+                    base + 3,
+                ]);
+
+                // Cache relative to (0, 0) for reuse
+                let cached_color = Color::White.into();
+                let cached_vertices = vec![
+                    Vertex {
+                        position: [0.0, 0.0, 0.0].into(),
+                        color: cached_color,
+                        uv: uv_top_left,
+                    },
+                    Vertex {
+                        position: [w, 0.0, 0.0].into(),
+                        color: cached_color,
+                        uv: uv_top_right,
+                    },
+                    Vertex {
+                        position: [w, h, 0.0].into(),
+                        color: cached_color,
+                        uv: uv_bottom_right,
+                    },
+                    Vertex {
+                        position: [0.0, h, 0.0].into(),
+                        color: cached_color,
+                        uv: uv_bottom_left,
+                    },
+                ];
+
+                cache.insert(ch, (cached_vertices, vec![0, 1, 2, 0, 2, 3]));
+            }
+        }
     }
 
     #[inline]
-    pub fn draw_text(&mut self, font_label: Label, text: &str, x: f32, y: f32, color: Vector4) {
-        self.triangle_batcher
-            .draw_text(font_label, text, x, y, self.zstep, color, &self.assets);
-    }
-
-    #[inline]
-    pub fn debug_text(&mut self, text: &str, x: f32, y: f32, color: Vector4) {
-        self.triangle_batcher.draw_text(
-            label!("debug"),
-            text,
-            x,
-            y,
-            self.zstep,
-            color,
-            &self.assets,
-        );
-    }
-
-    #[inline]
-    pub(crate) fn present<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>) {
-        self.point_batcher.present(render_pass);
-        self.line_batcher.present(render_pass);
+    pub fn present<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>) {
         self.triangle_batcher.present(render_pass);
-
-        self.zstep = 0.0;
     }
 }

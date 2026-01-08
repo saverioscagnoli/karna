@@ -1,7 +1,7 @@
-use macros::{Get, Set};
-use math::{Easing, rng};
-use math::{Matrix4, Tween, Vector2, Vector3};
-use std::time::Duration;
+use gpu::core::{GpuBuffer, GpuBufferBuilder};
+use logging::warn;
+use macros::{Get, Set, track_dirty};
+use math::{Matrix4, Size, Vector3};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Projection {
@@ -10,97 +10,149 @@ pub enum Projection {
         right: f32,
         bottom: f32,
         top: f32,
-        z_near: f32,
-        z_far: f32,
+        near: f32,
+        far: f32,
     },
-    #[allow(unused)]
-    Perspective { fovy: f32, near: f32, far: f32 },
+    Perspective {
+        fov: f32,
+        aspect_ratio: f32,
+        near: f32,
+        far: f32,
+    },
 }
 
 impl Projection {
-    fn matrix(&self, width: u32, height: u32) -> Matrix4 {
-        match *self {
-            Self::Orthographic {
+    fn matrix(&self) -> Matrix4 {
+        match self {
+            &Self::Orthographic {
                 left,
                 right,
                 bottom,
                 top,
-                z_near,
-                z_far,
-            } => Matrix4::orthographic(left, right, bottom, top, z_near, z_far),
-            Self::Perspective { fovy, near, far } => {
-                Matrix4::perspective(fovy, width as f32 / height as f32, near, far)
-            }
+                near,
+                far,
+            } => Matrix4::orthographic(left, right, bottom, top, near, far),
+            &Self::Perspective {
+                fov,
+                aspect_ratio,
+                near,
+                far,
+            } => Matrix4::perspective(fov, aspect_ratio, near, far),
+        }
+    }
+
+    /// Returns an orthographic projection typically used
+    /// in 2d games, where the top left point of the window is (0, 0)
+    /// and the bottom left point is (win.width, win.height)
+    pub fn standard_2d(view: Size<u32>) -> Self {
+        Self::Orthographic {
+            left: 0.0,
+            right: view.width as f32,
+            bottom: view.height as f32,
+            top: 0.0,
+            near: -1.0,
+            far: 1.0,
+        }
+    }
+
+    /// Returns a perspective projection typically used in 3d games.
+    ///
+    /// FOV (Field of View) must be in degrees.
+    pub fn standard_3d(view: Size<u32>, fov: f32, near: f32, far: f32) -> Self {
+        Self::Perspective {
+            fov: fov.to_radians(),
+            aspect_ratio: view.to_f32().aspect_ratio(),
+            near,
+            far,
         }
     }
 }
 
+#[track_dirty(u16)]
 #[derive(Debug)]
 #[derive(Get, Set)]
 pub struct Camera {
+    // WGPU
+    uniform_buffer: GpuBuffer<Matrix4>,
+
+    #[get(visibility = "pub(crate)")]
+    bgl: wgpu::BindGroupLayout,
+
+    #[get(visibility = "pub(crate)")]
+    bg: wgpu::BindGroup,
+
+    // Maths
     projection: Projection,
-    view_projection_buffer: wgpu::Buffer,
-
-    #[get(visibility = "pub(crate)")]
-    view_projection_bind_group_layout: wgpu::BindGroupLayout,
-
-    #[get(visibility = "pub(crate)")]
-    view_projection_bind_group: wgpu::BindGroup,
 
     #[get]
     #[get(copied, prop = "x", ty = f32)]
     #[get(copied, prop = "y", ty = f32)]
-    #[get(mut, also = self.mark())]
-    #[get(mut, prop = "x", ty = &mut f32, also = self.mark())]
-    #[get(mut, prop = "y", ty = &mut f32, also = self.mark())]
-    #[set(into, also = self.mark())]
-    #[set(prop = x, ty = f32, also = self.mark())]
-    #[set(prop = y, ty = f32, also = self.mark())]
-    position: Vector2,
+    #[get(copied, prop = "z", ty = f32)]
+    #[get(mut, also = self.tracker |= Self::position_f())]
+    #[get(mut, prop = "x", ty = &mut f32, also = self.tracker |= Self::position_f())]
+    #[get(mut, prop = "y", ty = &mut f32, also = self.tracker |= Self::position_f())]
+    #[get(mut, prop = "z", ty = &mut f32, also = self.tracker |= Self::position_f())]
+    #[set(into, also = self.tracker |= Self::position_f())]
+    #[set(prop = "x", ty = f32, also = self.tracker |= Self::position_f())]
+    #[set(prop = "y", ty = f32, also = self.tracker |= Self::position_f())]
+    #[set(prop = "z", ty = f32, also = self.tracker |= Self::position_f())]
+    position: Vector3,
 
-    #[get(copied, visibility = "pub(crate)")]
-    dirty: bool,
-
+    #[get]
+    #[get(copied, prop = "x", ty = f32)]
+    #[get(copied, prop = "y", ty = f32)]
+    #[get(copied, prop = "z", ty = f32)]
+    #[get(mut, also = self.tracker |= Self::target_f())]
+    #[get(mut, prop = "x", ty = &mut f32, also = self.tracker |= Self::target_f())]
+    #[get(mut, prop = "y", ty = &mut f32, also = self.tracker |= Self::target_f())]
+    #[get(mut, prop = "z", ty = &mut f32, also = self.tracker |= Self::target_f())]
+    #[set(name = "look_at", also = self.tracker |= Self::target_f())]
+    #[set(prop = "x", ty = f32, name = "look_at_x", also = self.tracker |= Self::target_f())]
+    #[set(prop = "y", ty = f32, name = "look_at_y", also = self.tracker |= Self::target_f())]
+    #[set(prop = "z", ty = f32, name = "look_at_z", also = self.tracker |= Self::target_f())]
     target: Vector3,
-    up: Vector3,
 
-    shake_offset: Vector2,
-    shake_tween: Option<Tween<f32>>,
-    shake_timer: f32,
+    #[get]
+    #[get(copied, prop = "x", ty = f32)]
+    #[get(copied, prop = "y", ty = f32)]
+    #[get(copied, prop = "z", ty = f32)]
+    #[get(mut, also = self.tracker |= Self::up_f())]
+    #[get(mut, prop = "x", ty = &mut f32, also = self.tracker |= Self::up_f())]
+    #[get(mut, prop = "y", ty = &mut f32, also = self.tracker |= Self::up_f())]
+    #[get(mut, prop = "z", ty = &mut f32, also = self.tracker |= Self::up_f())]
+    up: Vector3,
 }
 
 impl Camera {
     pub(crate) fn new(projection: Projection) -> Self {
         let device = gpu::device();
-        let view_projection_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("camera vp buffer"),
-            size: std::mem::size_of::<Matrix4>() as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
+        let uniform_buffer = GpuBufferBuilder::new()
+            .label("Camera Projection Buffer")
+            .uniform()
+            .copy_dst()
+            .build();
+
+        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Camera Projection Buffer Bind Group Layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
         });
 
-        let view_projection_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("vp bind group layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
-
-        let view_projection_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("vp bind group"),
-            layout: &view_projection_bind_group_layout,
+        let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Camera Projection Buffer Bind Group"),
+            layout: &bgl,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: &view_projection_buffer,
+                    buffer: uniform_buffer.inner(),
                     offset: 0,
                     size: None,
                 }),
@@ -108,110 +160,121 @@ impl Camera {
         });
 
         Self {
+            uniform_buffer,
+            bg,
+            bgl,
             projection,
-            view_projection_buffer,
-            view_projection_bind_group_layout,
-            view_projection_bind_group,
-            position: Vector2::new(0.0, 0.0),
+            position: Vector3::new(0.0, 0.0, -5.0),
             target: Vector3::z(),
-            // No need to set as dirty initially,
-            // as the winit loop sends a resize event at startup
-            dirty: false,
             up: Vector3::y(),
-            shake_offset: Vector2::zeros(),
-            shake_tween: None,
-            shake_timer: 0.0,
+            tracker: 0,
         }
-    }
-
-    #[inline]
-    fn mark(&mut self) {
-        self.dirty = true;
-    }
-
-    #[inline]
-    pub(crate) fn clean(&mut self) {
-        self.dirty = false;
     }
 
     #[inline]
     fn view_matrix(&self) -> Matrix4 {
         match self.projection {
-            Projection::Orthographic { .. } => Matrix4::from_translation(Vector3::new(
-                -(self.position.x + self.shake_offset.x),
-                -(self.position.y + self.shake_offset.y),
-                0.0,
-            )),
-            Projection::Perspective { .. } => Matrix4::look_at(
-                (self.position + self.shake_offset).extend(-5.0),
-                self.target,
-                self.up,
-            ),
+            Projection::Orthographic { .. } => {
+                Matrix4::from_translation(Vector3::new(-(self.position.x), -(self.position.y), 0.0))
+            }
+            Projection::Perspective { .. } => Matrix4::look_at(self.position, self.target, self.up),
         }
     }
 
     #[inline]
-    fn view_projection_matrix(&self, width: u32, height: u32) -> Matrix4 {
-        self.projection.matrix(width, height) * self.view_matrix()
+    pub(crate) fn queue_resize(&mut self) {
+        self.tracker |= Self::projection_f()
     }
 
     #[inline]
-    pub(crate) fn resize(&mut self, width: u32, height: u32) {
-        self.projection = Projection::Orthographic {
-            left: 0.0,
-            right: width as f32,
-            bottom: height as f32,
-            top: 0.0,
-            z_near: -1.0,
-            z_far: 1.0,
-        };
+    pub(crate) fn update(&mut self, view: Size<u32>) {
+        if !self.any_dirty() {
+            return;
+        }
 
-        gpu::queue().write_buffer(
-            &self.view_projection_buffer,
-            0,
-            utils::as_u8_slice(&[self.view_projection_matrix(width, height)]),
-        );
-    }
-
-    #[inline]
-    pub fn shake(&mut self, intensity: f32, duration: Duration) {
-        let mut tween = Tween::new(intensity, 0.0, Easing::QuadOut, duration);
-
-        tween.start();
-        self.shake_tween = Some(tween);
-
-        // Randomize the timer slightly so consecutive shakes don't follow the exact same path
-        self.shake_timer = rng(0.0..100.0);
-    }
-
-    #[inline]
-    pub(crate) fn update_shake(&mut self, dt: f32) {
-        if let Some(mut tween) = self.shake_tween.take() {
-            tween.update(dt);
-
-            self.shake_timer += dt;
-
-            let intensity = tween.value();
-            let trauma = intensity * intensity;
-
-            if trauma > 0.0 {
-                let dx = (self.shake_timer * 25.0).sin() + (self.shake_timer * 17.0).cos() * 0.5;
-                let dy = (self.shake_timer * 19.0).cos() + (self.shake_timer * 23.0).sin() * 0.5;
-
-                self.shake_offset = Vector2::new(dx, dy) * trauma;
-
-                self.mark();
-            } else {
-                self.shake_offset = Vector2::zeros();
+        match &mut self.projection {
+            Projection::Orthographic { right, bottom, .. } => {
+                *right = view.width as f32;
+                *bottom = view.height as f32;
             }
-
-            if !tween.is_complete() {
-                self.shake_tween = Some(tween);
-            } else {
-                self.shake_offset = Vector2::zeros();
-                self.shake_timer = 0.0;
-                self.mark();
+            Projection::Perspective { aspect_ratio, .. } => {
+                *aspect_ratio = view.to_f32().aspect_ratio();
             }
         }
+
+        let vp = self.projection.matrix() * self.view_matrix();
+
+        self.uniform_buffer.write(0, &[vp]);
+        self.clear_all_dirty();
+    }
+
+    #[inline]
+    pub fn set_projection(&mut self, projection: Projection) {
+        self.projection = projection;
+        self.tracker |= Self::projection_f();
+    }
+
+    /// Current camera FOV (field of view) in degrees
+    ///
+    /// If the camera is using an orthographic projection, it will just return 0.
+    #[inline]
+    pub fn fov(&self) -> f32 {
+        if let Projection::Perspective { fov, .. } = self.projection {
+            return fov.to_degrees();
+        }
+
+        warn!("Trying to get the fov, but the camera is using an orthographic projection!");
+
+        0.0
+    }
+
+    /// Current camera FOV (field of view) in radians
+    ///
+    /// If the camera is using an orthographic projection, it will just return 0.
+    #[inline]
+    pub fn fov_rad(&self) -> f32 {
+        if let Projection::Perspective { fov, .. } = self.projection {
+            return fov;
+        }
+
+        warn!("Trying to get the fov, but the camera is using an orthographic projection!");
+
+        0.0
+    }
+
+    /// Changes the FOV (field of view) of the camera.
+    /// The value must be in degrees.
+    ///
+    /// If the camera is using an orthographic projection, it won't do anything.
+    #[inline]
+    pub fn set_fov(&mut self, fov: f32) {
+        if let Projection::Perspective {
+            fov: current_fov, ..
+        } = &mut self.projection
+        {
+            *current_fov = fov.to_radians();
+            self.tracker |= Self::projection_f();
+            return;
+        }
+
+        warn!("Trying to update the fov, but the camera uses an orthographic projection!");
+    }
+
+    /// Changes the FOV (field of view) of the camera.
+    /// The value must be in radians.
+    ///
+    /// If the camera is using an orthographic projection, it won't do anything.
+    #[inline]
+    pub fn set_fov_rad(&mut self, fov: f32) {
+        if let Projection::Perspective {
+            fov: current_fov, ..
+        } = &mut self.projection
+        {
+            *current_fov = fov;
+            self.tracker |= Self::projection_f();
+            return;
+        }
+
+        warn!("Trying to update the fov, but the camera uses an orthographic projection!");
     }
 }

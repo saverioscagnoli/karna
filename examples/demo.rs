@@ -1,63 +1,73 @@
-use karna::{AppBuilder, Scene, WindowBuilder, input::KeyCode};
-use math::Vector2;
-use renderer::{Color, Geometry, Layer, Material, Mesh, MeshHandle, Transform};
+use karna::{
+    AppBuilder, Context, Draw, RenderContext, Scene, WindowBuilder,
+    assets::{Font, Image},
+    input::KeyCode,
+    math::Vector2,
+    render::Color,
+    utils::Handle,
+};
 
+#[derive(Default)]
 struct Demo {
-    rect1: MeshHandle,
-    cube: MeshHandle,
+    cat: Handle<Image>,
+    jetbrains_mono: Handle<Font>,
+    pos: Vector2,
+    color: Color,
 }
 
 impl Scene for Demo {
-    fn load(&mut self, ctx: &mut karna::Context) {
-        ctx.time.set_target_fps(120);
-        ctx.render.set_clear_color(Color::Black);
+    fn load(&mut self, ctx: &mut Context) {
+        self.cat = ctx
+            .assets
+            .load_image_bytes(include_bytes!("assets/cat.jpg").to_vec());
 
-        self.rect1 = ctx.render.add_mesh(Mesh::new(
-            Geometry::rect(50.0, 50.0),
-            Material::new_color(Color::Red),
-            Transform::new_2d([10.0, 10.0], 0.0, Vector2::ones()),
-        ));
-
-        self.cube = ctx.render.add_mesh(Mesh::new(
-            Geometry::cube(50.0, 50.0, 50.0),
-            Material::new_color(Color::Blue),
-            Transform::default().with_position([100.0, 100.0, 20.0]),
-        ));
+        self.jetbrains_mono = ctx
+            .assets
+            .load_font_bytes(include_bytes!("assets/jmono.ttf").to_vec(), 18);
     }
 
-    fn update(&mut self, ctx: &mut karna::Context) {
+    fn update(&mut self, ctx: &mut Context) {
         let vel = 250.0;
-        let rect1 = ctx.render.get_mesh_mut(self.rect1);
 
         if ctx.input.key_held(&KeyCode::KeyW) {
-            *rect1.position_y_mut() -= vel * ctx.time.delta();
+            self.pos.y -= vel * ctx.time.delta();
         }
 
         if ctx.input.key_held(&KeyCode::KeyA) {
-            *rect1.position_x_mut() -= vel * ctx.time.delta();
+            self.pos.x -= vel * ctx.time.delta();
         }
 
         if ctx.input.key_held(&KeyCode::KeyS) {
-            *rect1.position_y_mut() += vel * ctx.time.delta();
+            self.pos.y += vel * ctx.time.delta();
         }
 
         if ctx.input.key_held(&KeyCode::KeyD) {
-            *rect1.position_x_mut() += vel * ctx.time.delta()
+            self.pos.x += vel * ctx.time.delta();
         }
 
         if ctx.input.key_pressed(&KeyCode::Space) {
-            *rect1.color_mut() = Color::random();
-            ctx.render.toggle_wireframe();
+            self.color = Color::random();
         }
-
-        let cube = ctx.render.get_mesh_mut(self.cube);
-
-        *cube.rotation_x_mut() += 0.01;
-        *cube.rotation_y_mut() += 0.01;
-        *cube.rotation_z_mut() += 0.01;
     }
 
-    fn render(&mut self, ctx: &mut karna::Context) {}
+    fn render(&mut self, ctx: &RenderContext, draw: &mut Draw) {
+        draw.set_color(Color::White);
+        draw.debug_text("This is some nice debug text!!", 10.0, 10.0);
+        draw.debug_text(format!("dt: {:.6}", ctx.time.delta()), 10.0, 30.0);
+
+        draw.set_color(Color::Cyan);
+        draw.text(
+            self.jetbrains_mono,
+            "This instead is JetBrains Mono!!",
+            10.0,
+            200.0,
+        );
+
+        draw.set_color(self.color);
+
+        draw.rect(self.pos.x, self.pos.y, 50.0, 50.0);
+        draw.image(self.cat, 400.0, 100.0);
+    }
 }
 
 fn main() {
@@ -69,8 +79,8 @@ fn main() {
                 .with_resizable(false)
                 .with_size((800, 600))
                 .with_initial_scene(Demo {
-                    rect1: MeshHandle::dummy(),
-                    cube: MeshHandle::dummy(),
+                    color: Color::White,
+                    ..Default::default()
                 }),
         )
         .build()

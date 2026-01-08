@@ -1,13 +1,14 @@
-use crate::context::Context;
+use crate::state::{Context, RenderContext};
 use macros::Get;
 use math::Size;
-use utils::{Label, LabelMap, label};
+use renderer::Draw;
+use utils::{FastHashMap, Label, label};
 
 #[allow(unused)]
 pub trait Scene: Send {
     fn load(&mut self, ctx: &mut Context);
     fn update(&mut self, ctx: &mut Context);
-    fn render(&mut self, ctx: &mut Context);
+    fn render(&mut self, ctx: &RenderContext, draw: &mut Draw);
 
     // Optional methods
 
@@ -27,7 +28,7 @@ pub trait Scene: Send {
 
 #[derive(Get)]
 pub struct SceneManager {
-    scenes: LabelMap<Box<dyn Scene>>,
+    scenes: FastHashMap<Label, Box<dyn Scene>>,
     loaded_scenes: Vec<Label>,
 
     #[get(name = "current_label")]
@@ -35,7 +36,7 @@ pub struct SceneManager {
 }
 
 impl SceneManager {
-    pub fn new(scenes: LabelMap<Box<dyn Scene>>) -> Self {
+    pub fn new(scenes: FastHashMap<Label, Box<dyn Scene>>) -> Self {
         Self {
             scenes,
             loaded_scenes: vec![label!("initial")],

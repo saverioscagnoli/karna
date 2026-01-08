@@ -1,62 +1,62 @@
-use crate::{camera::Camera, immediate::ImmediateRenderer, retained::RetainedRenderer};
-use assets::AssetManager;
-use std::sync::Arc;
+use crate::{
+    camera::Camera,
+    immediate::ImmediateRenderer,
+    retained::{RetainedRenderer, TextRenderer},
+};
+use assets::AssetServer;
+use math::Size;
 
+#[derive(Default)]
 #[derive(Debug, Clone, Copy)]
 pub enum Layer {
+    #[default]
     World,
     Ui,
-    N(usize),
+    Custom(usize),
 }
 
 pub struct RenderLayer {
     pub(crate) camera: Camera,
 
-    assets: Arc<AssetManager>,
-
-    pub(crate) immediate: ImmediateRenderer,
     pub(crate) retained: RetainedRenderer,
+    pub(crate) immediate: ImmediateRenderer,
+    pub(crate) text: TextRenderer,
 }
 
 impl RenderLayer {
     pub(crate) fn new(
-        surface_format: wgpu::TextureFormat,
+        config: &wgpu::SurfaceConfiguration,
+        assets: &AssetServer,
         camera: Camera,
-        assets: Arc<AssetManager>,
     ) -> Self {
-        let immediate = ImmediateRenderer::new(surface_format, &camera, assets.clone());
+        let immediate = ImmediateRenderer::new(config.format, &camera, &assets);
+        let retained = RetainedRenderer::new(config.format, &camera, &assets);
+        let text = TextRenderer::new(config.format, &camera, &assets);
+
         Self {
             camera,
-            assets: assets.clone(),
+            retained,
             immediate,
-            retained: RetainedRenderer::new(assets),
+            text,
         }
     }
 
     #[inline]
-    pub(crate) fn resize(&mut self, width: u32, height: u32) {
-        self.camera.resize(width, height);
+    pub fn queue_resize(&mut self) {
+        self.camera.queue_resize();
     }
 
     #[inline]
-    pub(crate) fn update(&mut self, width: u32, height: u32, dt: f32) {
-        if self.camera.dirty() {
-            self.camera.resize(width, height);
-        }
-
-        self.camera.update_shake(dt);
-    }
-
-    #[inline]
-    pub(crate) fn present<'a>(
+    pub fn present<'a>(
         &'a mut self,
+        view: Size<u32>,
         render_pass: &mut wgpu::RenderPass<'a>,
-        retained_pipeline: &'a wgpu::RenderPipeline,
-        text_pipeline: &'a wgpu::RenderPipeline,
+        assets: &AssetServer,
     ) {
-        self.retained
-            .present(render_pass, retained_pipeline, text_pipeline);
+        self.camera.update(view);
 
         self.immediate.present(render_pass);
+        self.retained.present(render_pass, assets);
+        self.text.present(render_pass, assets);
     }
 }
