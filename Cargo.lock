@@ -189,6 +189,7 @@ dependencies = [
  "logging",
  "macros",
  "math",
+ "parking_lot",
  "rect_packer",
  "utils",
  "wgpu",

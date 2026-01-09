@@ -10,7 +10,7 @@ use crate::{
     traits::LayoutDescriptor,
     vertex::Vertex,
 };
-use assets::AssetServer;
+use assets::{AssetServer, AssetServerGuard};
 use globals::{consts, profiling};
 use logging::warn;
 use utils::{FastHashMap, Handle, SlotMap};
@@ -28,7 +28,11 @@ pub struct RetainedRenderer {
 
 impl RetainedRenderer {
     #[doc(hidden)]
-    pub fn new(surface_format: wgpu::TextureFormat, camera: &Camera, assets: &AssetServer) -> Self {
+    pub fn new(
+        surface_format: wgpu::TextureFormat,
+        camera: &Camera,
+        assets: &AssetServerGuard<'_>,
+    ) -> Self {
         let pipeline = retained_shader()
             .pipeline_builder()
             .label("Retained Triangle Pipeline")
@@ -109,7 +113,7 @@ impl RetainedRenderer {
     pub(crate) fn present<'a>(
         &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,
-        assets: &AssetServer,
+        assets: &AssetServerGuard<'_>,
     ) {
         render_pass.set_pipeline(&self.pipeline);
         profiling::record_pipeline_switches(1);

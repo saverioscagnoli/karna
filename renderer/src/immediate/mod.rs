@@ -11,11 +11,11 @@ use crate::{
     traits::LayoutDescriptor,
     vertex::{CircleVertex, Vertex},
 };
-use assets::{AssetServer, Font, Image};
+use assets::{AssetServer, AssetServerGuard, Font, Image};
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
 use macros::{Get, Set};
 use math::{Vector2, Vector3, Vector4};
-use utils::{FastHashMap, Handle};
+use utils::{FastHashMap, Handle, label};
 
 pub use handle::*;
 
@@ -36,7 +36,7 @@ impl ImmediateRenderer {
     pub(crate) fn new(
         surface_format: wgpu::TextureFormat,
         camera: &Camera,
-        assets: &AssetServer,
+        assets: &AssetServerGuard<'_>,
     ) -> Self {
         let point_pipeline = immediate_shader()
             .pipeline_builder()
@@ -177,7 +177,7 @@ impl ImmediateRenderer {
     }
 
     #[inline]
-    pub fn fill_rect(&mut self, pos: Vector2, w: f32, h: f32, assets: &AssetServer) {
+    pub fn fill_rect(&mut self, pos: Vector2, w: f32, h: f32, assets: &AssetServerGuard<'_>) {
         let color: Vector4 = self.draw_color.into();
 
         // Get white pixel UV coords for solid color rendering
@@ -236,10 +236,49 @@ impl ImmediateRenderer {
     }
 
     #[inline]
-    pub fn draw_image(&mut self, image: Handle<Image>, pos: Vector2, assets: &AssetServer) {
+    pub fn draw_image(
+        &mut self,
+        image: Handle<Image>,
+        pos: Vector2,
+        assets: &AssetServerGuard<'_>,
+    ) {
         let color: Vector4 = Color::White.into();
 
         let (uv_x, uv_y, uv_w, uv_h, w, h) = assets.get_texture_uv(image);
+
+        let uv_top_left: Vector2 = [uv_x, uv_y].into();
+        let uv_top_right: Vector2 = [uv_x + uv_w, uv_y].into();
+        let uv_bottom_right: Vector2 = [uv_x + uv_w, uv_y + uv_h].into();
+        let uv_bottom_left: Vector2 = [uv_x, uv_y + uv_h].into();
+
+        let base = self.triangle_batcher.vertices.len() as u32;
+
+        self.triangle_batcher.vertices.extend_from_slice(&[
+            Vertex::new(pos.extend(0.0), color, uv_top_left),
+            Vertex::new(Vector3::new(pos.x + w, pos.y, 0.0), color, uv_top_right),
+            Vertex::new(
+                Vector3::new(pos.x + w, pos.y + h, 0.0),
+                color,
+                uv_bottom_right,
+            ),
+            Vertex::new(Vector3::new(pos.x, pos.y + h, 0.0), color, uv_bottom_left),
+        ]);
+
+        self.triangle_batcher.indices.extend_from_slice(&[
+            base,
+            base + 1,
+            base + 2,
+            base,
+            base + 2,
+            base + 3,
+        ]);
+    }
+
+    #[inline]
+    pub fn draw_atlas(&mut self, pos: Vector2, assets: &AssetServerGuard<'_>) {
+        let color: Vector4 = Color::White.into();
+
+        let (uv_x, uv_y, uv_w, uv_h, w, h) = assets.get_texture_uv_by_label(&label!("_atlas"));
 
         let uv_top_left: Vector2 = [uv_x, uv_y].into();
         let uv_top_right: Vector2 = [uv_x + uv_w, uv_y].into();
@@ -276,10 +315,10 @@ impl ImmediateRenderer {
         text: &str,
         x: f32,
         y: f32,
-        assets: &AssetServer,
+        assets: &AssetServerGuard<'_>,
     ) {
         let color: Vector4 = self.draw_color.into();
-        let font = assets.get_font(handle).expect("Failed to get font");
+        let font = assets.get_font(handle);
 
         self.text_layout.clear();
         self.text_layout.append(

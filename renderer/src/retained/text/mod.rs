@@ -2,7 +2,7 @@ mod batch;
 mod renderer;
 
 use crate::{Transform3d, color::Color, traits::LayoutDescriptor};
-use assets::{AssetServer, Font};
+use assets::{AssetServer, AssetServerGuard, Font};
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
 use macros::{Get, Set, With, track_dirty};
 use math::{Vector2, Vector3, Vector4};
@@ -188,7 +188,7 @@ impl Text {
     }
 
     #[inline]
-    pub(crate) fn prepare(&mut self, assets: &AssetServer) -> bool {
+    pub(crate) fn prepare(&mut self, assets: &AssetServerGuard<'_>) -> bool {
         let content_changed = self.is_dirty(Self::content_f());
         let transform_changed = self.is_dirty(Self::transform_f());
         let color_changed = self.is_dirty(Self::color_f());
@@ -211,12 +211,8 @@ impl Text {
     }
 
     #[inline]
-    fn layout_glyphs(&mut self, assets: &AssetServer) {
-        let Some(font) = assets.get_font(self.font) else {
-            self.glyphs.clear();
-            self.gpu_glyphs.clear();
-            return;
-        };
+    fn layout_glyphs(&mut self, assets: &AssetServerGuard<'_>) {
+        let font = assets.get_font(self.font);
 
         self.layout.append(
             &[font.inner()],

@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use crate::{Layer, Renderer, color::Color, retained::SceneView};
-use assets::{AssetServer, Font, Image};
+use assets::{AssetServerGuard, Font, Image};
 use logging::LogLevel;
 use macros::{Get, Set};
 use math::Vector2;
@@ -15,12 +15,12 @@ pub struct Draw<'a> {
     #[get(prop = "active_layer", ty = &Layer, name = "layer")]
     #[set(prop = "active_layer", ty = Layer, name = "set_layer")]
     renderer: &'a mut Renderer,
-    assets: &'a AssetServer,
+    assets: AssetServerGuard<'a>,
 }
 
 impl<'a> Draw<'a> {
     #[doc(hidden)]
-    pub fn new(renderer: &'a mut Renderer, assets: &'a AssetServer) -> Self {
+    pub fn new(renderer: &'a mut Renderer, assets: AssetServerGuard<'a>) -> Self {
         Self { renderer, assets }
     }
 
@@ -125,6 +125,13 @@ impl<'a> Draw<'a> {
         layer
             .immediate
             .draw_text(self.assets.debug_font(), text.as_ref(), x, y, &self.assets);
+    }
+
+    #[inline]
+    pub fn debug_atlas(&mut self, x: f32, y: f32) {
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer.immediate.draw_atlas([x, y].into(), &self.assets);
     }
 
     #[inline]

@@ -41,7 +41,8 @@ impl Scene for Demo {
         let cat = ctx
             .assets
             .load_image_bytes(include_bytes!("assets/cat.jpg").to_vec());
-        let size = ctx.assets.get_image(cat).unwrap().size.to_f32();
+
+        let size = ctx.assets.get_image(cat).size.to_f32();
 
         let mesh = Mesh::new(
             Geometry::unit_rect(),

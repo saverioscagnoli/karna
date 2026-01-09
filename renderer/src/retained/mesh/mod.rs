@@ -4,7 +4,7 @@ mod material;
 mod transform;
 
 use crate::{color::Color, traits::LayoutDescriptor};
-use assets::AssetServer;
+use assets::{AssetServer, AssetServerGuard};
 use macros::{Get, Set, track_dirty};
 use math::{Vector2, Vector3, Vector4};
 use std::mem;
@@ -159,7 +159,7 @@ impl Mesh {
     }
 
     #[inline]
-    pub(crate) fn prepare(&mut self, assets: &AssetServer) -> bool {
+    pub(crate) fn prepare(&mut self, assets: &AssetServerGuard<'_>) -> bool {
         let mut changed = false;
 
         if self.is_dirty(Self::transform_f()) {

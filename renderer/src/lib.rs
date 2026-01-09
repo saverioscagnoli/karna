@@ -7,7 +7,7 @@ mod shader;
 mod traits;
 mod vertex;
 
-use assets::AssetServer;
+use assets::{AssetServer, AssetServerGuard};
 use logging::info;
 use macros::{Get, Set};
 use math::Size;
@@ -16,6 +16,7 @@ use winit::window::Window;
 
 // === RE-EXPORTS ===
 
+use crate::shader::Shader;
 pub use camera::{Camera, Projection};
 pub use color::Color;
 pub use immediate::Draw;
@@ -25,8 +26,7 @@ pub use retained::{
     mesh::{Geometry, Material, Mesh, TextureKind, Transform3d},
 };
 
-use crate::shader::Shader;
-
+/// FIXME: Try to find a better solution to this shit
 #[derive(Debug)]
 struct Shaders {
     retained: Shader,
@@ -53,6 +53,37 @@ pub(crate) fn immediate_circle_shader() -> &'static Shader {
     &SHADERS.get().unwrap().immediate_circle
 }
 
+pub fn init() {
+    let retained_shader = Shader::from_wgsl_file(
+        include_str!("../../shaders/basic_2d.wgsl"),
+        Some("Retained shader"),
+    );
+
+    let text_shader =
+        Shader::from_wgsl_file(include_str!("../../shaders/text.wgsl"), Some("Text shader"));
+
+    let immediate_shader = Shader::from_wgsl_file(
+        include_str!("../../shaders/immediate.wgsl"),
+        Some("Immediate shader"),
+    );
+
+    let immediate_circle_shader = Shader::from_wgsl_file(
+        include_str!("../../shaders/immediate_circle.wgsl"),
+        Some("Immediate Circle shader"),
+    );
+
+    SHADERS
+        .set(Shaders {
+            retained: retained_shader,
+            text: text_shader,
+            immediate: immediate_shader,
+            immediate_circle: immediate_circle_shader,
+        })
+        .unwrap();
+
+    info!("Built-in shaders loaded.");
+}
+
 #[derive(Get, Set)]
 pub struct Renderer {
     // Internal stuff
@@ -70,35 +101,14 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// Have to separate the surface creation from the `new` function
+    /// because on windows, the surface must be created on the main thread
+    ///
+    /// Windows sucks ass
     #[doc(hidden)]
-    pub fn new(window: Arc<Window>, assets: &AssetServer) -> Self {
-        let retained_shader = Shader::from_wgsl_file(
-            include_str!("../../shaders/basic_2d.wgsl"),
-            Some("Retained shader"),
-        );
-
-        let text_shader =
-            Shader::from_wgsl_file(include_str!("../../shaders/text.wgsl"), Some("Text shader"));
-
-        let immediate_shader = Shader::from_wgsl_file(
-            include_str!("../../shaders/immediate.wgsl"),
-            Some("Immediate shader"),
-        );
-
-        let immediate_circle_shader = Shader::from_wgsl_file(
-            include_str!("../../shaders/immediate_circle.wgsl"),
-            Some("Immediate Circle shader"),
-        );
-
-        SHADERS
-            .set(Shaders {
-                retained: retained_shader,
-                text: text_shader,
-                immediate: immediate_shader,
-                immediate_circle: immediate_circle_shader,
-            })
-            .unwrap();
-
+    pub fn create_surface(
+        window: Arc<Window>,
+    ) -> (wgpu::Surface<'static>, wgpu::SurfaceConfiguration) {
         let gpu = gpu::get();
         let view: Size<u32> = window.inner_size().into();
 
@@ -128,6 +138,17 @@ impl Renderer {
 
         surface.configure(gpu.device(), &config);
 
+        (surface, config)
+    }
+
+    #[doc(hidden)]
+    pub fn from_surface(
+        surface: wgpu::Surface<'static>,
+        surface_config: wgpu::SurfaceConfiguration,
+        assets: &AssetServerGuard<'_>,
+    ) -> Self {
+        let view = Size::new(surface_config.width, surface_config.height);
+
         let world_camera = Camera::new(Projection::Orthographic {
             left: 0.0,
             right: view.width as f32,
@@ -146,12 +167,12 @@ impl Renderer {
             far: 1.0,
         });
 
-        let world = RenderLayer::new(&config, assets, world_camera);
-        let ui = RenderLayer::new(&config, assets, ui_camera);
+        let world = RenderLayer::new(&surface_config, assets, world_camera);
+        let ui = RenderLayer::new(&surface_config, assets, ui_camera);
 
         Self {
             surface,
-            config,
+            config: surface_config,
             clear_color: Color::rgb(1.0 / 25.0, 1.0 / 25.0, 1.0 / 25.0),
             world,
             ui,
@@ -196,7 +217,7 @@ impl Renderer {
 
     #[inline]
     #[doc(hidden)]
-    pub fn present(&mut self, assets: &AssetServer) {
+    pub fn present(&mut self, assets: &AssetServerGuard<'_>) {
         let gpu = gpu::get();
         let output = self.surface.get_current_texture().expect("Ouch");
         let view = output
