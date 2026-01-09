@@ -1,17 +1,16 @@
-use crate::vertex::Vertex;
 use globals::{consts, profiling};
 use gpu::core::{GpuBuffer, GpuBufferBuilder};
 
 #[derive(Debug)]
-pub struct Batcher {
-    pub vertices: Vec<Vertex>,
+pub struct Batcher<V> {
+    pub vertices: Vec<V>,
     pub indices: Vec<u32>,
-    vertex_buffer: GpuBuffer<Vertex>,
+    vertex_buffer: GpuBuffer<V>,
     index_buffer: GpuBuffer<u32>,
     pipeline: wgpu::RenderPipeline,
 }
 
-impl Batcher {
+impl<V> Batcher<V> {
     pub fn new(pipeline: wgpu::RenderPipeline) -> Self {
         let vertex_buffer = GpuBufferBuilder::new()
             .label("Immediate Vertex Buffer")

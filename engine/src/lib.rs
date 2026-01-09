@@ -1,18 +1,21 @@
 mod builder;
+mod lifecycle;
 mod scene;
 mod state;
 
 use crate::{
+    lifecycle::{LoopState, WindowHandle, WindowMessage},
     scene::SceneManager,
     state::{EngineState, WinitWindow, states::GlobalStates, sysinfo::SystemInfo},
 };
-use crossbeam_channel::{Receiver, Sender};
+use assets::AssetServer;
+use crossbeam_channel::Receiver;
 use globals::{TrackingAllocator, profiling};
 use logging::{LogError, LogLevel, error, info, warn};
-use math::Size;
+use renderer::Renderer;
 use std::{
     sync::Arc,
-    thread::{self, JoinHandle},
+    thread::{self},
 };
 use utils::{FastHashMap, Lazy};
 use winit::{
@@ -22,7 +25,7 @@ use winit::{
     window::WindowId,
 };
 
-// Re-exports
+// === RE-EXPORTS ===
 pub use builder::{AppBuilder, WindowBuilder};
 pub use renderer::Draw;
 pub use scene::Scene;
@@ -45,29 +48,22 @@ impl logging::target::Target for EngineLogs {
     }
 }
 
-enum WindowMessage {
-    Close,
-    MonitorsChanged(Vec<Monitor>),
-    StartFrame,
-    WinitEvent(WindowEvent),
-    DeviceEvent(DeviceEvent),
-}
-
-struct WindowHandle {
-    sender: Sender<WindowMessage>,
-    thread: JoinHandle<()>,
-}
-
+/// Struct that will be attached to the app for its entire duration.
+///
+/// This struct holds all the context variable that are meant to live
+/// as long as the app and be shared between threads (windows),
+/// like global states and the asset server (so that images, fonts, etc. are available everywhere)
 #[derive(Clone)]
-struct Arcs {
+pub(crate) struct AppOwned {
     globals: Arc<GlobalStates>,
     info: Arc<SystemInfo>,
+    assets: AssetServer,
 }
 
 pub struct App {
     windows: FastHashMap<WindowId, WindowHandle>,
     window_builders: Vec<WindowBuilder>,
-    arcs: Lazy<Arcs>,
+    owned: Lazy<AppOwned>,
 }
 
 /// Internal
@@ -78,7 +74,7 @@ impl App {
         Self {
             windows: FastHashMap::default(),
             window_builders: Vec::new(),
-            arcs: Lazy::new(),
+            owned: Lazy::new(),
         }
     }
 
@@ -91,6 +87,7 @@ impl App {
         );
 
         gpu::init();
+        renderer::init();
 
         let info = Arc::new(SystemInfo::new());
 
@@ -105,8 +102,14 @@ impl App {
         info!("Graphics Driver: {}", info.gpu_driver());
 
         let globals = Arc::new(GlobalStates::new());
+        let info = Arc::new(SystemInfo::new());
+        let assets = AssetServer::new();
 
-        self.arcs.set(Arcs { globals, info });
+        self.owned.set(AppOwned {
+            globals,
+            info,
+            assets,
+        });
     }
 
     pub(crate) fn add_window_builder(&mut self, builder: WindowBuilder) {
@@ -120,13 +123,21 @@ impl App {
         scenes: FastHashMap<Label, Box<dyn Scene>>,
     ) {
         let (tx, rx) = crossbeam_channel::unbounded::<WindowMessage>();
+
         let window_id = window.id();
         let window = Window::new(label, window);
-        let arcs = self.arcs.clone();
+        let label = window.label().to_string();
+
+        let app_owned = self.owned.clone();
+
+        // Must create the surface on the main thread on Windows
+        let (surface, config) = Renderer::create_surface(window.inner().clone());
 
         let handle = thread::spawn(move || {
-            let _ctx = logging::ctx!("window", window.label());
-            Self::window_loop(window, scenes, arcs, rx);
+            let _ctx = logging::ctx!("window", label);
+            let renderer = Renderer::from_surface(surface, config, &app_owned.assets.guard());
+
+            Self::start_loop(scenes, window, renderer, app_owned, rx);
         });
 
         let window_handle = WindowHandle {
@@ -137,120 +148,149 @@ impl App {
         self.windows.insert(window_id, window_handle);
     }
 
-    fn window_loop(
-        window: Window,
+    #[inline]
+    fn process_message(
+        message: WindowMessage,
+        state: &mut EngineState,
+        pending_events: &mut Vec<WindowEvent>,
+        pending_device_events: &mut Vec<DeviceEvent>,
+    ) -> LoopState {
+        match message {
+            WindowMessage::Close => {
+                info!("Close requested");
+                LoopState::Exit
+            }
+
+            WindowMessage::StartFrame => LoopState::Render,
+
+            WindowMessage::MonitorsChanged(monitors) => {
+                state.monitors.update(monitors);
+                LoopState::Accumulate
+            }
+
+            WindowMessage::WinitEvent(event) => {
+                pending_events.push(event);
+                LoopState::Accumulate
+            }
+
+            WindowMessage::DeviceEvent(event) => {
+                pending_device_events.push(event);
+                LoopState::Accumulate
+            }
+        }
+    }
+
+    fn start_loop(
         scenes: FastHashMap<Label, Box<dyn Scene>>,
-        arcs: Arcs,
+        window: Window,
+        renderer: Renderer,
+        app_owned: AppOwned,
         rx: Receiver<WindowMessage>,
     ) {
-        let mut state = EngineState::new(window, arcs);
+        let mut state = EngineState::new(window, renderer, app_owned);
         let mut scenes = SceneManager::new(scenes);
 
         scenes.current().load(&mut state.as_context());
-
-        // Kickstart
         state.window.request_redraw();
 
+        let mut pending_events = Vec::new();
+        let mut pending_device_events = Vec::new();
+
         loop {
+            let mut loop_state;
+
             match rx.recv() {
-                Ok(WindowMessage::Close) => {
-                    info!("Close requested");
-                    return;
+                Ok(message) => {
+                    loop_state = Self::process_message(
+                        message,
+                        &mut state,
+                        &mut pending_events,
+                        &mut pending_device_events,
+                    );
                 }
+                Err(_) => break,
+            }
 
-                Ok(WindowMessage::MonitorsChanged(monitors)) => {
-                    state.monitors.update(monitors);
-                }
+            if loop_state != LoopState::Exit {
+                while let Ok(message) = rx.try_recv() {
+                    let next_state = Self::process_message(
+                        message,
+                        &mut state,
+                        &mut pending_events,
+                        &mut pending_device_events,
+                    );
 
-                Ok(WindowMessage::StartFrame) => {
-                    // Drain all events before rendering
-                    while let Ok(message) = rx.try_recv() {
-                        match message {
-                            WindowMessage::Close => {
-                                info!("Close requested");
-                                return;
-                            }
-
-                            WindowMessage::StartFrame => {
-                                // Skip
-                                break;
-                            }
-
-                            WindowMessage::MonitorsChanged(monitors) => {
-                                state.monitors.update(monitors);
-                            }
-
-                            WindowMessage::WinitEvent(event) => {
-                                if let WindowEvent::Resized(size) = event {
-                                    let size: Size<u32> = size.into();
-
-                                    scenes.current().on_resize(size, &mut state.as_context());
-                                }
-
-                                state.handle_event(event);
-                            }
-
-                            WindowMessage::DeviceEvent(event) => {
-                                state.handle_device_event(event);
-                            }
+                    match next_state {
+                        LoopState::Exit | LoopState::Render => {
+                            loop_state = next_state;
+                            break;
                         }
+                        _ => {}
+                    }
+                }
+            }
+
+            match loop_state {
+                LoopState::Exit => return,
+                LoopState::Accumulate => continue,
+                LoopState::Render => {
+                    for event in pending_events.drain(..) {
+                        if let WindowEvent::Resized(size) = event {
+                            scenes
+                                .current()
+                                .on_resize(size.into(), &mut state.as_context());
+                        }
+
+                        state.handle_event(event);
                     }
 
-                    // FRAME START
-                    profiling::reset_frame();
-
-                    state.time.frame_start();
-                    state.time.update();
-
-                    while let Some(tick_start) = state.time.next_tick() {
-                        scenes.current().fixed_update(&mut state.as_context());
-                        state.time.do_tick(tick_start);
+                    for event in pending_device_events.drain(..) {
+                        state.handle_device_event(event);
                     }
 
-                    scenes.current().update(&mut state.as_context());
-
-                    let (render_context, mut draw) = state.as_render_context();
-
-                    scenes.current().render(&render_context, &mut draw);
-
-                    state.render.present(&state.assets);
-
-                    state.time.frame_end();
-                    state.input.flush();
-                    state.time.wait_for_next_frame();
+                    Self::frame(&mut state, &mut scenes);
                     state.window.request_redraw();
-
-                    // Check for pending scene changes
-                    if let Some(new_scene) = state.scenes.changed_to() {
-                        info!(
-                            "Changing from scene '{:?}' to '{:?}'",
-                            scenes.current_label(),
-                            new_scene
-                        );
-
-                        scenes.switch_to(new_scene, &mut state.as_context());
-                    }
-
-                    state.profiling = profiling::get_stats();
                 }
-
-                Ok(WindowMessage::WinitEvent(event)) => {
-                    if let WindowEvent::Resized(size) = event {
-                        let size: Size<u32> = size.into();
-
-                        scenes.current().on_resize(size, &mut state.as_context());
-                    }
-
-                    state.handle_event(event);
-                }
-
-                Ok(WindowMessage::DeviceEvent(event)) => {
-                    state.handle_device_event(event);
-                }
-
-                Err(_) => return,
             }
         }
+    }
+
+    #[inline]
+    fn frame(state: &mut EngineState, scenes: &mut SceneManager) {
+        profiling::reset_frame();
+        state.time.frame_start();
+        state.time.update();
+
+        while let Some(tick_start) = state.time.next_tick() {
+            scenes.current().fixed_update(&mut state.as_context());
+            state.time.do_tick(tick_start);
+        }
+
+        scenes.current().update(&mut state.as_context());
+
+        {
+            let (render_context, mut draw) = state.as_render_context();
+            scenes.current().render(&render_context, &mut draw);
+        }
+
+        state.render.present(&state.assets.guard());
+
+        state.time.frame_end();
+        state.input.flush();
+
+        // Check if there are pending scene change requests
+        if let Some(new_scene) = state.scenes.changed_to() {
+            info!(
+                "Changing from scene '{:?}' to '{:?}'",
+                scenes.current_label(),
+                new_scene
+            );
+
+            scenes.switch_to(new_scene, &mut state.as_context());
+        }
+
+        state.profiling = profiling::get_stats();
+        state.time.wait_for_next_frame();
     }
 }
 
@@ -277,7 +317,6 @@ impl ApplicationHandler for App {
                 Ok(window) => {
                     self.spawn_window_thread(builder.label, Arc::new(window), builder.scenes);
                 }
-
                 Err(e) => {
                     error!(
                         "Failed to spawn window with label: '{}': {}",

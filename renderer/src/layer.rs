@@ -3,7 +3,7 @@ use crate::{
     immediate::ImmediateRenderer,
     retained::{RetainedRenderer, TextRenderer},
 };
-use assets::AssetServer;
+use assets::{AssetServer, AssetServerGuard};
 use math::Size;
 
 #[derive(Default)]
@@ -26,7 +26,7 @@ pub struct RenderLayer {
 impl RenderLayer {
     pub(crate) fn new(
         config: &wgpu::SurfaceConfiguration,
-        assets: &AssetServer,
+        assets: &AssetServerGuard<'_>,
         camera: Camera,
     ) -> Self {
         let immediate = ImmediateRenderer::new(config.format, &camera, &assets);
@@ -51,7 +51,7 @@ impl RenderLayer {
         &'a mut self,
         view: Size<u32>,
         render_pass: &mut wgpu::RenderPass<'a>,
-        assets: &AssetServer,
+        assets: &AssetServerGuard<'_>,
     ) {
         self.camera.update(view);
 

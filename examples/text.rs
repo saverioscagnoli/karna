@@ -71,6 +71,18 @@ impl Scene for TextDemo {
     }
 }
 
+struct AtlasDebug;
+
+impl Scene for AtlasDebug {
+    fn load(&mut self, ctx: &mut Context) {}
+
+    fn update(&mut self, ctx: &mut Context) {}
+
+    fn render(&mut self, ctx: &RenderContext, draw: &mut Draw) {
+        draw.debug_atlas(0.0, 0.0);
+    }
+}
+
 fn main() {
     AppBuilder::new()
         .with_window(
@@ -79,6 +91,14 @@ fn main() {
                 .with_title("Text demo")
                 .with_resizable(false)
                 .with_initial_scene(TextDemo::default()),
+        )
+        .with_window(
+            WindowBuilder::new()
+                .with_label("atlas debug")
+                .with_title("Atlas")
+                .with_resizable(false)
+                .with_size((1024, 1024))
+                .with_initial_scene(AtlasDebug),
         )
         .build()
         .run();

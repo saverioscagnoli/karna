@@ -9,7 +9,7 @@ mod tween;
 mod window;
 
 use crate::{
-    Arcs,
+    AppOwned,
     state::{
         input::Input,
         scene_changer::SceneChanger,
@@ -17,7 +17,7 @@ use crate::{
         sysinfo::SystemInfo,
     },
 };
-use assets::AssetServer;
+use assets::{AssetServer, AssetServerGuard};
 use globals::profiling::{self, Statistics};
 use renderer::{Draw, Renderer, Scene};
 use std::sync::Arc;
@@ -53,6 +53,9 @@ pub struct EngineState {
     pub profiling: Statistics,
 }
 
+unsafe impl Send for EngineState {}
+unsafe impl Sync for EngineState {}
+
 /// Holds all the references from [`EngineState`],
 /// And permits the user to mutate the window state, but only during
 /// `Scene::load` and `Scene::update`
@@ -78,7 +81,7 @@ pub struct RenderContext<'a> {
     pub time: &'a Time,
     pub input: &'a Input,
     pub monitors: &'a Monitors,
-    pub assets: &'a AssetServer,
+    pub assets: AssetServerGuard<'a>,
     pub states: &'a ScopedStates,
     pub globals: &'a GlobalStates,
     pub info: &'a SystemInfo,
@@ -86,9 +89,7 @@ pub struct RenderContext<'a> {
 }
 
 impl EngineState {
-    pub(crate) fn new(window: Window, arcs: Arcs) -> Self {
-        let assets = AssetServer::new();
-        let render = Renderer::new(window.inner().clone(), &assets);
+    pub(crate) fn new(window: Window, renderer: Renderer, app_owned: AppOwned) -> Self {
         let scenes = SceneChanger::new();
         let monitors = Monitors::new(Arc::clone(window.inner()));
         let states = ScopedStates::new();
@@ -97,13 +98,13 @@ impl EngineState {
             window,
             time: Time::default(),
             input: Input::default(),
-            render,
+            render: renderer,
             scenes,
             monitors,
-            assets,
+            assets: app_owned.assets,
             states,
-            globals: arcs.globals,
-            info: arcs.info,
+            globals: app_owned.globals,
+            info: app_owned.info,
             profiling: profiling::get_stats(),
         }
     }
@@ -132,14 +133,14 @@ impl EngineState {
             time: &self.time,
             input: &self.input,
             monitors: &self.monitors,
-            assets: &self.assets,
+            assets: self.assets.guard(),
             states: &self.states,
             globals: &self.globals,
             info: &self.info,
             profiling: &self.profiling,
         };
 
-        let draw = Draw::new(&mut self.render, &self.assets);
+        let draw = Draw::new(&mut self.render, self.assets.guard());
 
         (ctx, draw)
     }

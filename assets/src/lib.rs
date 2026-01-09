@@ -6,7 +6,8 @@ use globals::consts;
 use logging::info;
 use macros::Get;
 use math::Size;
-use std::path::Path;
+use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
+use std::{path::Path, sync::Arc};
 use utils::{ByteSize, Handle, Label, SlotMap};
 
 pub use font::*;
@@ -17,16 +18,15 @@ pub struct Image {
     pub size: Size<u32>,
 }
 
+#[derive(Clone)]
 #[derive(Get)]
 pub struct AssetServer {
-    atlas: TextureAtlas,
-
-    fonts: SlotMap<Font>,
+    atlas: Arc<RwLock<TextureAtlas>>,
+    images: Arc<RwLock<SlotMap<Image>>>,
+    fonts: Arc<RwLock<SlotMap<Font>>>,
 
     #[get(copied)]
     debug_font: Handle<Font>,
-
-    images: SlotMap<Image>,
 }
 
 impl AssetServer {
@@ -34,15 +34,15 @@ impl AssetServer {
     pub fn new() -> Self {
         let atlas = TextureAtlas::new(consts::TEXTURE_ATLAS_BASE_SIZE);
 
-        let mut assets = Self {
-            atlas,
-            fonts: SlotMap::new(),
+        let mut server = Self {
+            atlas: Arc::new(RwLock::new(atlas)),
+            images: Arc::new(RwLock::new(SlotMap::new())),
+            fonts: Arc::new(RwLock::new(SlotMap::new())),
             debug_font: Handle::default(),
-            images: SlotMap::new(),
         };
 
-        assets.init();
-        assets
+        server.init();
+        server
     }
 
     fn init(&mut self) {
@@ -50,63 +50,94 @@ impl AssetServer {
             self.load_font_bytes(include_bytes!("../defaults/DOS-V.ttf").to_vec(), 16);
     }
 
-    /// Load an image from a path and return a handle
-    pub fn load_image<P: AsRef<Path>>(&mut self, path: P) -> Handle<Image> {
-        let bytes = std::fs::read(path).expect("Failed to find image");
+    #[inline]
+    #[doc(hidden)]
+    pub fn guard(&self) -> AssetServerGuard<'_> {
+        AssetServerGuard {
+            atlas: self.atlas.read(),
+            images: self.images.read(),
+            fonts: self.fonts.read(),
+            debug_font: self.debug_font,
+        }
+    }
+
+    pub fn load_image_bytes(&self, bytes: Vec<u8>) -> Handle<Image> {
+        let mut images = self.images.write();
+        let mut atlas = self.atlas.write();
+
+        images.insert_with_key(|key| {
+            info!(
+                "Loading image of size {}",
+                ByteSize::from_bytes(bytes.len() as u64)
+            );
+            let label = Label::new(&format!("_img_{}", key.index()));
+            let size = atlas.add_image_bytes(label, bytes);
+
+            Image { label, size }
+        })
+    }
+
+    pub fn load_image<P: AsRef<Path>>(&self, path: P) -> Handle<Image> {
+        let bytes = std::fs::read(path).expect("Failed to read image file");
         self.load_image_bytes(bytes)
     }
 
-    /// Load an image from bytes and return a handle
-    pub fn load_image_bytes(&mut self, bytes: Vec<u8>) -> Handle<Image> {
-        let handle = self.images.insert_with_key(|key| {
-            let label = Label::new(&format!("_img_{}", key.index()));
+    pub fn load_font_bytes(&self, bytes: Vec<u8>, size: u8) -> Handle<Font> {
+        let mut fonts = self.fonts.write();
+        let mut atlas = self.atlas.write();
 
+        fonts.insert_with_key(|key| {
             info!(
-                "Loading image with label {:?} of size {}",
-                label,
+                "Loading font of size {}",
                 ByteSize::from_bytes(bytes.len() as u64)
             );
+            let label = Label::new(&format!("_font_{}", key.index()));
+            let mut font = Font::new(label, bytes, size);
 
-            let size = self.atlas.add_image_bytes(label, bytes);
-
-            Image { label, size }
-        });
-
-        handle
+            atlas.rasterize_characters(label, &mut font, size as f32);
+            font
+        })
     }
 
-    pub fn load_font<P: AsRef<Path>>(&mut self, path: P, size: u8) -> Handle<Font> {
+    pub fn load_font<P: AsRef<Path>>(&self, path: P, size: u8) -> Handle<Font> {
         let bytes = std::fs::read(path).expect("Failed to read font file");
         self.load_font_bytes(bytes, size)
     }
 
-    pub fn load_font_bytes(&mut self, bytes: Vec<u8>, size: u8) -> Handle<Font> {
-        info!(
-            "Loading font of size {}",
-            ByteSize::from_bytes(bytes.len() as u64)
-        );
+    #[inline]
+    pub fn get_image(&self, handle: Handle<Image>) -> MappedRwLockReadGuard<'_, Image> {
+        let guard = self.images.read();
 
-        let handle = self.fonts.insert_with_key(|key| {
-            let label = Label::new(&format!("_font_{}", key.index()));
-            let mut font = Font::new(label, bytes, size);
-
-            self.atlas
-                .rasterize_characters(label, &mut font, size as f32);
-
-            font
-        });
-
-        handle
+        RwLockReadGuard::map(guard, |images| images.get(handle).expect("Image not found"))
     }
 
-    /// Get image metadata
-    pub fn get_image(&self, handle: Handle<Image>) -> Option<&Image> {
-        self.images.get(handle)
+    #[inline]
+    pub fn get_font(&self, handle: Handle<Font>) -> MappedRwLockReadGuard<'_, Font> {
+        let guard = self.fonts.read();
+
+        RwLockReadGuard::map(guard, |fonts| fonts.get(handle).expect("Font not found"))
+    }
+}
+
+#[derive(Get)]
+pub struct AssetServerGuard<'a> {
+    atlas: RwLockReadGuard<'a, TextureAtlas>,
+    images: RwLockReadGuard<'a, SlotMap<Image>>,
+    fonts: RwLockReadGuard<'a, SlotMap<Font>>,
+
+    #[get(copied)]
+    debug_font: Handle<Font>,
+}
+
+impl<'a> AssetServerGuard<'a> {
+    #[inline]
+    pub fn get_image(&self, handle: Handle<Image>) -> &Image {
+        self.images.get(handle).expect("Image not found")
     }
 
-    /// Get font
-    pub fn get_font(&self, handle: Handle<Font>) -> Option<&Font> {
-        self.fonts.get(handle)
+    #[inline]
+    pub fn get_font(&self, handle: Handle<Font>) -> &Font {
+        self.fonts.get(handle).expect("Font not found")
     }
 
     // === Hidden Methods ===

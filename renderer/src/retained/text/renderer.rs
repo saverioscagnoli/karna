@@ -9,7 +9,7 @@ use crate::{
     traits::LayoutDescriptor,
     vertex::Vertex,
 };
-use assets::AssetServer;
+use assets::{AssetServer, AssetServerGuard};
 use globals::profiling;
 use std::sync::Arc;
 use utils::{FastHashMap, Handle, SlotMap};
@@ -24,7 +24,11 @@ pub struct TextRenderer {
 }
 
 impl TextRenderer {
-    pub fn new(surface_format: wgpu::TextureFormat, camera: &Camera, assets: &AssetServer) -> Self {
+    pub fn new(
+        surface_format: wgpu::TextureFormat,
+        camera: &Camera,
+        assets: &AssetServerGuard<'_>,
+    ) -> Self {
         let quad_geometry = Geometry::unit_rect();
 
         let pipeline = text_shader()
@@ -111,7 +115,7 @@ impl TextRenderer {
     pub(crate) fn present<'a>(
         &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,
-        assets: &AssetServer,
+        assets: &AssetServerGuard<'_>,
     ) {
         render_pass.set_pipeline(&self.pipeline);
         profiling::record_pipeline_switches(1);
