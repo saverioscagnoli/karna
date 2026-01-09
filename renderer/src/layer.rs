@@ -3,7 +3,7 @@ use crate::{
     immediate::ImmediateRenderer,
     retained::{RetainedRenderer, TextRenderer},
 };
-use assets::{AssetServer, AssetServerGuard};
+use assets::AssetServerGuard;
 use math::Size;
 
 #[derive(Default)]

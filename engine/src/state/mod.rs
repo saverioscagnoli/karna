@@ -13,7 +13,7 @@ use crate::{
     state::{
         input::Input,
         scene_changer::SceneChanger,
-        states::{GlobalStates, ScopedStates},
+        states::{GlobalStates, States},
         sysinfo::SystemInfo,
     },
 };
@@ -47,8 +47,8 @@ pub struct EngineState {
     pub scenes: SceneChanger,
     pub monitors: Monitors,
     pub assets: AssetServer,
-    pub states: ScopedStates,
-    pub globals: Arc<GlobalStates>,
+    pub states: States,
+    pub globals: GlobalStates,
     pub info: Arc<SystemInfo>,
     pub profiling: Statistics,
 }
@@ -68,7 +68,7 @@ pub struct Context<'a> {
     pub scenes: &'a mut SceneChanger,
     pub monitors: &'a Monitors,
     pub assets: &'a mut AssetServer,
-    pub states: &'a mut ScopedStates,
+    pub states: &'a mut States,
     pub globals: &'a GlobalStates,
     pub info: &'a SystemInfo,
     pub profiling: &'a Statistics,
@@ -82,7 +82,7 @@ pub struct RenderContext<'a> {
     pub input: &'a Input,
     pub monitors: &'a Monitors,
     pub assets: AssetServerGuard<'a>,
-    pub states: &'a ScopedStates,
+    pub states: &'a States,
     pub globals: &'a GlobalStates,
     pub info: &'a SystemInfo,
     pub profiling: &'a Statistics,
@@ -92,7 +92,7 @@ impl EngineState {
     pub(crate) fn new(window: Window, renderer: Renderer, app_owned: AppOwned) -> Self {
         let scenes = SceneChanger::new();
         let monitors = Monitors::new(Arc::clone(window.inner()));
-        let states = ScopedStates::new();
+        let states = States::new();
 
         Self {
             window,
@@ -119,8 +119,8 @@ impl EngineState {
             scenes: &mut self.scenes,
             monitors: &self.monitors,
             assets: &mut self.assets,
-            states: &mut self.states,
             globals: &self.globals,
+            states: &mut self.states,
             info: &self.info,
             profiling: &self.profiling,
         }

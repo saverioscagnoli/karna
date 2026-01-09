@@ -14,4 +14,4 @@ wgpu.workspace = true
 fontdue.workspace = true
 logging.workspace = true
 globals.workspace = true
-parking_lot = "0.12.5"
+parking_lot.workspace = true

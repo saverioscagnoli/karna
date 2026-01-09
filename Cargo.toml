@@ -20,6 +20,7 @@ fontdue = "0.9.3"
 rand = "0.9.2"
 globals = { path = "globals" }
 logging = { path = "logging" }
+parking_lot = "0.12.5"
 
 [dependencies]
 math.workspace = true

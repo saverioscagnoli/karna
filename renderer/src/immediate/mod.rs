@@ -11,7 +11,7 @@ use crate::{
     traits::LayoutDescriptor,
     vertex::{CircleVertex, Vertex},
 };
-use assets::{AssetServer, AssetServerGuard, Font, Image};
+use assets::{AssetServerGuard, Font, Image};
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
 use macros::{Get, Set};
 use math::{Vector2, Vector3, Vector4};

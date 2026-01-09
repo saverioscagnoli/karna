@@ -80,7 +80,7 @@ impl<'a> PipelineBuilder<'a> {
         self
     }
 
-    #[warn(unused)]
+    #[allow(unused)]
     pub fn polygon_mode(mut self, mode: wgpu::PolygonMode) -> Self {
         self.polygon_mode = mode;
         self

@@ -9,7 +9,7 @@ use crate::{
     traits::LayoutDescriptor,
     vertex::Vertex,
 };
-use assets::{AssetServer, AssetServerGuard};
+use assets::AssetServerGuard;
 use globals::profiling;
 use std::sync::Arc;
 use utils::{FastHashMap, Handle, SlotMap};

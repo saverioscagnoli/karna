@@ -5,7 +5,6 @@ use karna::{
     render::{Color, Text, Transform3d},
     utils::Handle,
 };
-use logging::info;
 
 #[derive(Default)]
 struct TextDemo {
@@ -74,11 +73,11 @@ impl Scene for TextDemo {
 struct AtlasDebug;
 
 impl Scene for AtlasDebug {
-    fn load(&mut self, ctx: &mut Context) {}
+    fn load(&mut self, _ctx: &mut Context) {}
 
-    fn update(&mut self, ctx: &mut Context) {}
+    fn update(&mut self, _ctx: &mut Context) {}
 
-    fn render(&mut self, ctx: &RenderContext, draw: &mut Draw) {
+    fn render(&mut self, _ctx: &RenderContext, draw: &mut Draw) {
         draw.debug_atlas(0.0, 0.0);
     }
 }

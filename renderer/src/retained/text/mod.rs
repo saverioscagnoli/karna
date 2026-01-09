@@ -2,7 +2,7 @@ mod batch;
 mod renderer;
 
 use crate::{Transform3d, color::Color, traits::LayoutDescriptor};
-use assets::{AssetServer, AssetServerGuard, Font};
+use assets::{AssetServerGuard, Font};
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
 use macros::{Get, Set, With, track_dirty};
 use math::{Vector2, Vector3, Vector4};

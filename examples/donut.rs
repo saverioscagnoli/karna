@@ -131,7 +131,7 @@ impl Scene for Donut {
         let frame_content = self.generate_frame();
         let rainbow_color = self.get_rainbow_color();
         let win_size = ctx.window.size();
-        let font = ctx.assets.get_font(self.font).unwrap();
+        let font = ctx.assets.get_font(self.font);
 
         let char_width = 80;
         let char_height = 30;

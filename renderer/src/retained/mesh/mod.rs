@@ -4,7 +4,7 @@ mod material;
 mod transform;
 
 use crate::{color::Color, traits::LayoutDescriptor};
-use assets::{AssetServer, AssetServerGuard};
+use assets::AssetServerGuard;
 use macros::{Get, Set, track_dirty};
 use math::{Vector2, Vector3, Vector4};
 use std::mem;

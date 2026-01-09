@@ -31,20 +31,16 @@ impl<'a> Draw<'a> {
 
     #[inline]
     pub fn color(&self) -> &Color {
-        &self
-            .renderer
-            .layer(self.renderer.active_layer)
-            .immediate
-            .draw_color
+        let layer = self.renderer.layer(self.renderer.active_layer);
+
+        &layer.immediate.draw_color
     }
 
     #[inline]
     pub fn color_mut(&mut self) -> &mut Color {
-        &mut self
-            .renderer
-            .layer_mut(self.renderer.active_layer)
-            .immediate
-            .draw_color
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        &mut layer.immediate.draw_color
     }
 
     #[inline]
@@ -52,10 +48,9 @@ impl<'a> Draw<'a> {
     where
         C: Into<Color>,
     {
-        self.renderer
-            .layer_mut(self.renderer.active_layer)
-            .immediate
-            .draw_color = color.into()
+        let layer = self.renderer.layer_mut(self.renderer.active_layer);
+
+        layer.immediate.draw_color = color.into()
     }
 
     #[inline]
@@ -136,7 +131,7 @@ impl<'a> Draw<'a> {
 
     #[inline]
     pub fn debug_logs(&mut self, x: f32, mut y: f32) {
-        let logs = globals::logs::get().read().expect("Logs lock is poisoned");
+        let logs = globals::logs::get().read();
         let prev_color = *self.color();
 
         for (level, log) in logs.iter() {

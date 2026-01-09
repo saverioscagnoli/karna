@@ -40,7 +40,7 @@ struct EngineLogs;
 impl logging::target::Target for EngineLogs {
     fn write(&self, level: LogLevel, message: &str) -> Result<(), LogError> {
         let logs = globals::logs::get();
-        let mut lock = logs.write().map_err(|_| LogError::PoisonError)?;
+        let mut lock = logs.write();
 
         lock.push((level, message.to_string()));
 
@@ -55,9 +55,9 @@ impl logging::target::Target for EngineLogs {
 /// like global states and the asset server (so that images, fonts, etc. are available everywhere)
 #[derive(Clone)]
 pub(crate) struct AppOwned {
-    globals: Arc<GlobalStates>,
     info: Arc<SystemInfo>,
     assets: AssetServer,
+    globals: GlobalStates,
 }
 
 pub struct App {
@@ -101,14 +101,14 @@ impl App {
         info!("Graphics Backend: {}", info.gpu_backend());
         info!("Graphics Driver: {}", info.gpu_driver());
 
-        let globals = Arc::new(GlobalStates::new());
         let info = Arc::new(SystemInfo::new());
         let assets = AssetServer::new();
+        let globals = GlobalStates::new();
 
         self.owned.set(AppOwned {
-            globals,
             info,
             assets,
+            globals,
         });
     }
 

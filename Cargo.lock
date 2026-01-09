@@ -721,6 +721,7 @@ dependencies = [
  "logging",
  "macros",
  "math",
+ "parking_lot",
  "renderer",
  "rodio",
  "spin_sleep",
@@ -946,6 +947,7 @@ version = "0.1.0"
 dependencies = [
  "logging",
  "macros",
+ "parking_lot",
  "utils",
 ]
 

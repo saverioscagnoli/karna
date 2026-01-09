@@ -10,7 +10,7 @@ use crate::{
     traits::LayoutDescriptor,
     vertex::Vertex,
 };
-use assets::{AssetServer, AssetServerGuard};
+use assets::AssetServerGuard;
 use globals::{consts, profiling};
 use logging::warn;
 use utils::{FastHashMap, Handle, SlotMap};

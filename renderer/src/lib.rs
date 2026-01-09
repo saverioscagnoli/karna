@@ -7,7 +7,7 @@ mod shader;
 mod traits;
 mod vertex;
 
-use assets::{AssetServer, AssetServerGuard};
+use assets::AssetServerGuard;
 use logging::info;
 use macros::{Get, Set};
 use math::Size;
@@ -15,7 +15,6 @@ use std::sync::{Arc, OnceLock};
 use winit::window::Window;
 
 // === RE-EXPORTS ===
-
 use crate::shader::Shader;
 pub use camera::{Camera, Projection};
 pub use color::Color;
