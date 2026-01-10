@@ -7,7 +7,7 @@ use logging::info;
 use macros::Get;
 use math::Size;
 use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
-use std::{path::Path, sync::Arc};
+use std::{io::Cursor, path::Path, sync::Arc};
 use utils::{ByteSize, Handle, Label, SlotMap};
 
 pub use font::*;
@@ -62,19 +62,35 @@ impl AssetServer {
     }
 
     pub fn load_image_bytes(&self, bytes: Vec<u8>) -> Handle<Image> {
+        let (rgba, width, height) = Self::decode_png(&bytes);
+
         let mut images = self.images.write();
         let mut atlas = self.atlas.write();
 
         images.insert_with_key(|key| {
             info!(
-                "Loading image of size {}",
-                ByteSize::from_bytes(bytes.len() as u64)
+                "Loading image {}x{} ({})",
+                width,
+                height,
+                ByteSize::from_bytes(rgba.len() as u64)
             );
             let label = Label::new(&format!("_img_{}", key.index()));
-            let size = atlas.add_image_bytes(label, bytes);
+            let size = atlas.add_rgba(label, &rgba, width, height);
 
             Image { label, size }
         })
+    }
+
+    fn decode_png(bytes: &[u8]) -> (Vec<u8>, u32, u32) {
+        let mut decoder = png::Decoder::new(Cursor::new(bytes));
+        decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::ALPHA);
+
+        let mut reader = decoder.read_info().expect("Failed to read PNG info");
+        let mut buf = vec![0; reader.output_buffer_size().unwrap()];
+        let info = reader.next_frame(&mut buf).expect("Failed to decode PNG");
+        buf.truncate(info.buffer_size());
+
+        (buf, info.width, info.height)
     }
 
     pub fn load_image<P: AsRef<Path>>(&self, path: P) -> Handle<Image> {

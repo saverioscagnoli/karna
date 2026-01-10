@@ -39,7 +39,7 @@ impl RetainedRenderer {
             .vertex_entry("vs_main")
             .fragment_entry("fs_main")
             .topology(wgpu::PrimitiveTopology::TriangleList)
-            .cull_mode(wgpu::Face::Front)
+            .cull_mode(wgpu::Face::Back)
             .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
             .build(
                 surface_format,

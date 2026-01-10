@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 gpu.workspace = true
 utils.workspace = true
-image.workspace = true
 rect_packer = "0.2.1"
 math.workspace = true
 macros.workspace = true
@@ -15,3 +14,4 @@ fontdue.workspace = true
 logging.workspace = true
 globals.workspace = true
 parking_lot.workspace = true
+png.workspace = true

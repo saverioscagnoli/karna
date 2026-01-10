@@ -1,12 +1,12 @@
 mod builder;
+mod context;
 mod lifecycle;
 mod scene;
-mod state;
 
 use crate::{
+    context::{AppContext, WinitWindow, states::GlobalStates, sysinfo::SystemInfo},
     lifecycle::{LoopState, WindowHandle, WindowMessage},
     scene::SceneManager,
-    state::{EngineState, WinitWindow, states::GlobalStates, sysinfo::SystemInfo},
 };
 use assets::AssetServer;
 use crossbeam_channel::Receiver;
@@ -27,9 +27,9 @@ use winit::{
 
 // === RE-EXPORTS ===
 pub use builder::{AppBuilder, WindowBuilder};
+pub use context::{Context, Monitor, Monitors, RenderContext, Time, Window, input};
 pub use renderer::Draw;
 pub use scene::Scene;
-pub use state::{Context, Monitor, Monitors, RenderContext, Time, Window, input};
 pub use utils::{Label, label};
 
 #[global_allocator]
@@ -151,7 +151,7 @@ impl App {
     #[inline]
     fn process_message(
         message: WindowMessage,
-        state: &mut EngineState,
+        context: &mut AppContext,
         pending_events: &mut Vec<WindowEvent>,
         pending_device_events: &mut Vec<DeviceEvent>,
     ) -> LoopState {
@@ -164,7 +164,7 @@ impl App {
             WindowMessage::StartFrame => LoopState::Render,
 
             WindowMessage::MonitorsChanged(monitors) => {
-                state.monitors.update(monitors);
+                context.monitors.update(monitors);
                 LoopState::Accumulate
             }
 
@@ -187,11 +187,11 @@ impl App {
         app_owned: AppOwned,
         rx: Receiver<WindowMessage>,
     ) {
-        let mut state = EngineState::new(window, renderer, app_owned);
+        let mut context = AppContext::new(window, renderer, app_owned);
         let mut scenes = SceneManager::new(scenes);
 
-        scenes.current().load(&mut state.as_context());
-        state.window.request_redraw();
+        scenes.current().load(&mut context.as_temp_mut());
+        context.window.request_redraw();
 
         let mut pending_events = Vec::new();
         let mut pending_device_events = Vec::new();
@@ -203,7 +203,7 @@ impl App {
                 Ok(message) => {
                     loop_state = Self::process_message(
                         message,
-                        &mut state,
+                        &mut context,
                         &mut pending_events,
                         &mut pending_device_events,
                     );
@@ -215,7 +215,7 @@ impl App {
                 while let Ok(message) = rx.try_recv() {
                     let next_state = Self::process_message(
                         message,
-                        &mut state,
+                        &mut context,
                         &mut pending_events,
                         &mut pending_device_events,
                     );
@@ -238,59 +238,59 @@ impl App {
                         if let WindowEvent::Resized(size) = event {
                             scenes
                                 .current()
-                                .on_resize(size.into(), &mut state.as_context());
+                                .on_resize(size.into(), &mut context.as_temp_mut());
                         }
 
-                        state.handle_event(event);
+                        context.handle_event(event);
                     }
 
                     for event in pending_device_events.drain(..) {
-                        state.handle_device_event(event);
+                        context.handle_device_event(event);
                     }
 
-                    Self::frame(&mut state, &mut scenes);
-                    state.window.request_redraw();
+                    Self::frame(&mut context, &mut scenes);
+                    context.window.request_redraw();
                 }
             }
         }
     }
 
     #[inline]
-    fn frame(state: &mut EngineState, scenes: &mut SceneManager) {
+    fn frame(context: &mut AppContext, scenes: &mut SceneManager) {
         profiling::reset_frame();
-        state.time.frame_start();
-        state.time.update();
+        context.time.frame_start();
+        context.time.update();
 
-        while let Some(tick_start) = state.time.next_tick() {
-            scenes.current().fixed_update(&mut state.as_context());
-            state.time.do_tick(tick_start);
+        while let Some(tick_start) = context.time.next_tick() {
+            scenes.current().fixed_update(&mut context.as_temp_mut());
+            context.time.do_tick(tick_start);
         }
 
-        scenes.current().update(&mut state.as_context());
+        scenes.current().update(&mut context.as_temp_mut());
 
         {
-            let (render_context, mut draw) = state.as_render_context();
+            let (render_context, mut draw) = context.as_render_context();
             scenes.current().render(&render_context, &mut draw);
         }
 
-        state.render.present(&state.assets.guard());
+        context.render.present(&context.assets.guard());
 
-        state.time.frame_end();
-        state.input.flush();
+        context.time.frame_end();
+        context.input.flush();
 
         // Check if there are pending scene change requests
-        if let Some(new_scene) = state.scenes.changed_to() {
+        if let Some(new_scene) = context.scenes.changed_to() {
             info!(
                 "Changing from scene '{:?}' to '{:?}'",
                 scenes.current_label(),
                 new_scene
             );
 
-            scenes.switch_to(new_scene, &mut state.as_context());
+            scenes.switch_to(new_scene, &mut context.as_temp_mut());
         }
 
-        state.profiling = profiling::get_stats();
-        state.time.wait_for_next_frame();
+        context.profiling = profiling::get_stats();
+        context.time.wait_for_next_frame();
     }
 }
 

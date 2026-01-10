@@ -10,7 +10,7 @@ mod window;
 
 use crate::{
     AppOwned,
-    state::{
+    context::{
         input::Input,
         scene_changer::SceneChanger,
         states::{GlobalStates, States},
@@ -27,7 +27,7 @@ use winit::{
 };
 
 // === RE-EXPORTS ===
-pub use crate::state::time::Time;
+pub use crate::context::time::Time;
 pub use monitors::{Monitor, Monitors};
 pub use window::Window;
 pub(crate) use window::WinitWindow;
@@ -39,7 +39,7 @@ pub(crate) use window::WinitWindow;
 /// So that the state can be mutable when `Scene::load` and `Scene::update`
 /// But not on Scene::render, where a [`SceneView`] will be created, so that
 /// scene information can be read, but not written.
-pub struct EngineState {
+pub struct AppContext {
     pub window: Window,
     pub time: Time,
     pub input: Input,
@@ -53,17 +53,16 @@ pub struct EngineState {
     pub profiling: Statistics,
 }
 
-unsafe impl Send for EngineState {}
-unsafe impl Sync for EngineState {}
+unsafe impl Send for AppContext {}
+unsafe impl Sync for AppContext {}
 
-/// Holds all the references from [`EngineState`],
+/// Holds all the references from [`AppContext`],
 /// And permits the user to mutate the window state, but only during
 /// `Scene::load` and `Scene::update`
 pub struct Context<'a> {
     pub window: &'a Window,
     pub time: &'a mut Time,
     pub input: &'a mut Input,
-    // (This context will be mutable, so the scene can be changed)
     pub scene: Scene<'a>,
     pub scenes: &'a mut SceneChanger,
     pub monitors: &'a Monitors,
@@ -88,7 +87,7 @@ pub struct RenderContext<'a> {
     pub profiling: &'a Statistics,
 }
 
-impl EngineState {
+impl AppContext {
     pub(crate) fn new(window: Window, renderer: Renderer, app_owned: AppOwned) -> Self {
         let scenes = SceneChanger::new();
         let monitors = Monitors::new(Arc::clone(window.inner()));
@@ -110,7 +109,7 @@ impl EngineState {
     }
 
     #[inline]
-    pub(crate) fn as_context(&mut self) -> Context<'_> {
+    pub(crate) fn as_temp_mut(&mut self) -> Context<'_> {
         Context {
             window: &mut self.window,
             time: &mut self.time,

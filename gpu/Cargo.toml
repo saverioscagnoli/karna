@@ -8,6 +8,5 @@ wgpu.workspace = true
 pollster = "0.4.0"
 macros.workspace = true
 utils.workspace = true
-image.workspace = true
 math.workspace = true
 logging.workspace = true

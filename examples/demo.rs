@@ -6,68 +6,33 @@ use karna::{
     render::Color,
     utils::Handle,
 };
+use renderer::{Geometry, Material, Mesh, Projection, TextureKind, Transform3d};
 
 #[derive(Default)]
 struct Demo {
-    cat: Handle<Image>,
-    jetbrains_mono: Handle<Font>,
-    pos: Vector2,
-    color: Color,
+    cat: Handle<Mesh>,
 }
 
 impl Scene for Demo {
     fn load(&mut self, ctx: &mut Context) {
-        self.cat = ctx
+        let handle = ctx
             .assets
-            .load_image_bytes(include_bytes!("assets/cat.jpg").to_vec());
+            .load_image_bytes(include_bytes!("assets/cat.png").to_vec());
 
-        self.jetbrains_mono = ctx
-            .assets
-            .load_font_bytes(include_bytes!("assets/jmono.ttf").to_vec(), 18);
-    }
+        let meta = ctx.assets.get_image(handle);
 
-    fn update(&mut self, ctx: &mut Context) {
-        let vel = 250.0;
-
-        if ctx.input.key_held(&KeyCode::KeyW) {
-            self.pos.y -= vel * ctx.time.delta();
-        }
-
-        if ctx.input.key_held(&KeyCode::KeyA) {
-            self.pos.x -= vel * ctx.time.delta();
-        }
-
-        if ctx.input.key_held(&KeyCode::KeyS) {
-            self.pos.y += vel * ctx.time.delta();
-        }
-
-        if ctx.input.key_held(&KeyCode::KeyD) {
-            self.pos.x += vel * ctx.time.delta();
-        }
-
-        if ctx.input.key_pressed(&KeyCode::Space) {
-            self.color = Color::random();
-        }
-    }
-
-    fn render(&mut self, ctx: &RenderContext, draw: &mut Draw) {
-        draw.set_color(Color::White);
-        draw.debug_text("This is some nice debug text!!", 10.0, 10.0);
-        draw.debug_text(format!("dt: {:.6}", ctx.time.delta()), 10.0, 30.0);
-
-        draw.set_color(Color::Cyan);
-        draw.text(
-            self.jetbrains_mono,
-            "This instead is JetBrains Mono!!",
-            10.0,
-            200.0,
+        let mesh = Mesh::new(
+            Geometry::rect(meta.size.to_f32()),
+            Material::new_texture(TextureKind::Full(handle)),
+            Transform3d::default().with_position([400.0, 300.0, 0.0]),
         );
 
-        draw.set_color(self.color);
-
-        draw.rect(self.pos.x, self.pos.y, 50.0, 50.0);
-        draw.image(self.cat, 400.0, 100.0);
+        ctx.scene.add_mesh(mesh);
     }
+
+    fn update(&mut self, ctx: &mut Context) {}
+
+    fn render(&mut self, ctx: &RenderContext, draw: &mut Draw) {}
 }
 
 fn main() {
@@ -78,10 +43,7 @@ fn main() {
                 .with_label("main")
                 .with_resizable(false)
                 .with_size((800, 600))
-                .with_initial_scene(Demo {
-                    color: Color::White,
-                    ..Default::default()
-                }),
+                .with_initial_scene(Demo::default()),
         )
         .build()
         .run();

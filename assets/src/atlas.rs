@@ -1,4 +1,3 @@
-use image::{DynamicImage, GenericImageView, RgbaImage};
 use macros::Get;
 use math::Size;
 use utils::{FastHashMap, Label, label};
@@ -106,12 +105,7 @@ impl TextureAtlas {
         }
     }
 
-    fn write_texture_to_buffer(
-        &self,
-        image: DynamicImage,
-        size: Size<u32>,
-        region: rect_packer::Rect,
-    ) {
+    fn write_rgba(&self, rgba: &[u8], width: u32, height: u32, region: &rect_packer::Rect) {
         let queue = gpu::queue();
 
         queue.write_texture(
@@ -125,67 +119,7 @@ impl TextureAtlas {
                     z: 0,
                 },
             },
-            image.to_rgba8().as_raw(),
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * size.width),
-                rows_per_image: Some(size.height),
-            },
-            wgpu::Extent3d {
-                width: size.width,
-                height: size.height,
-                depth_or_array_layers: 1,
-            },
-        );
-    }
-
-    pub fn add_image_bytes(&mut self, label: Label, bytes: Vec<u8>) -> Size<u32> {
-        let image = image::load_from_memory(&bytes).expect("Failed to load image bytes");
-        let size: Size<u32> = image.dimensions().into();
-
-        let region = self
-            .packer
-            .pack(size.width as i32, size.height as i32, false)
-            .expect("Failed to pack image");
-
-        self.write_texture_to_buffer(image, size, region);
-        self.regions.insert(label, region);
-
-        size
-    }
-
-    /// Add raw RGBA image data directly (used for font glyphs)
-    fn add_raw_image(
-        &mut self,
-        label: Label,
-        rgba_data: Vec<u8>,
-        width: u32,
-        height: u32,
-    ) -> Size<u32> {
-        let size = Size::new(width, height);
-
-        let region = self
-            .packer
-            .pack(size.width as i32, size.height as i32, false)
-            .expect("Failed to pack image");
-
-        let image = RgbaImage::from_raw(width, height, rgba_data)
-            .expect("Failed to create RGBA image from raw data");
-
-        let queue = gpu::queue();
-
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                aspect: wgpu::TextureAspect::All,
-                texture: self.texture.inner(),
-                mip_level: 0,
-                origin: wgpu::Origin3d {
-                    x: region.x as u32,
-                    y: region.y as u32,
-                    z: 0,
-                },
-            },
-            &image,
+            rgba,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * width),
@@ -197,9 +131,25 @@ impl TextureAtlas {
                 depth_or_array_layers: 1,
             },
         );
+    }
 
+    /// Add raw RGBA image data to the atlas
+    pub fn add_rgba(&mut self, label: Label, rgba: &[u8], width: u32, height: u32) -> Size<u32> {
+        debug_assert_eq!(
+            rgba.len(),
+            (width * height * 4) as usize,
+            "RGBA buffer size mismatch"
+        );
+
+        let region = self
+            .packer
+            .pack(width as i32, height as i32, false)
+            .expect("Failed to pack image into atlas");
+
+        self.write_rgba(rgba, width, height, &region);
         self.regions.insert(label, region);
-        size
+
+        Size::new(width, height)
     }
 
     pub fn rasterize_characters(&mut self, label: Label, font: &mut Font, size: f32) {
@@ -207,27 +157,23 @@ impl TextureAtlas {
 
         for ch in chars {
             let (metrics, bitmap) = font.rasterize(ch, size);
-            let size = Size::new(metrics.width as u32, metrics.height as u32);
+            let width = metrics.width as u32;
+            let height = metrics.height as u32;
 
-            if size.width == 0 || size.height == 0 {
+            if width == 0 || height == 0 {
                 continue;
             }
 
-            font.add_glyph(ch, size.width, size.height);
+            font.add_glyph(ch, width, height);
 
-            // Just load a white sample of the character,
-            // Keeping only the alpha values that define the character.
-            // Color and transform can be handled via transforms
-            // and material changes
-            let mut rgba_buffer = Vec::with_capacity(bitmap.len() * 4);
-
+            // Convert grayscale alpha to white RGBA
+            let mut rgba = Vec::with_capacity(bitmap.len() * 4);
             for &alpha in &bitmap {
-                rgba_buffer.extend_from_slice(&[255, 255, 255, alpha]);
+                rgba.extend_from_slice(&[255, 255, 255, alpha]);
             }
 
-            let label = Label::new(&format!("{}_{}", label.raw(), ch));
-
-            self.add_raw_image(label, rgba_buffer, size.width, size.height);
+            let glyph_label = Label::new(&format!("{}_{}", label.raw(), ch));
+            self.add_rgba(glyph_label, &rgba, width, height);
         }
     }
 }
