@@ -317,6 +317,57 @@ impl Geometry {
         Self::rect((1.0, 1.0))
     }
 
+    pub fn sphere(radius: f32, stacks: u32, slices: u32) -> Self {
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
+
+        for stack in 0..=stacks {
+            let phi = std::f32::consts::PI * stack as f32 / stacks as f32;
+            let sin_phi = phi.sin();
+            let cos_phi = phi.cos();
+
+            for slice in 0..=slices {
+                let theta = 2.0 * std::f32::consts::PI * slice as f32 / slices as f32;
+                let sin_theta = theta.sin();
+                let cos_theta = theta.cos();
+
+                let x = sin_phi * cos_theta;
+                let y = cos_phi;
+                let z = sin_phi * sin_theta;
+
+                let position = Vector3::new(x * radius, y * radius, z * radius);
+                let color = Vector4::new(1.0, 1.0, 1.0, 1.0);
+                let uv = Vector2::new(slice as f32 / slices as f32, stack as f32 / stacks as f32);
+
+                vertices.push(Vertex::new(position, color, uv));
+            }
+        }
+
+        for stack in 0..stacks {
+            for slice in 0..slices {
+                let first = stack * (slices + 1) + slice;
+                let second = first + slices + 1;
+
+                indices.push(first);
+                indices.push(second);
+                indices.push(first + 1);
+
+                indices.push(second);
+                indices.push(second + 1);
+                indices.push(first + 1);
+            }
+        }
+
+        let id = Self::hash(&vertices, &indices);
+        let buffer = get_or_insert(id, || GeometryBuffer::new(&vertices, &indices));
+        Self { id, buffer }
+    }
+
+    /// Creates a unit sphere (radius 1.0) with default subdivisions
+    pub fn unit_sphere() -> Self {
+        Self::sphere(1.0, 16, 16)
+    }
+
     pub fn new(vertices: &Vec<Vertex>, indices: &Vec<u32>) -> Self {
         let id = Self::hash(vertices, indices);
         let buffer = get_or_insert(id, || GeometryBuffer::new(vertices, indices));

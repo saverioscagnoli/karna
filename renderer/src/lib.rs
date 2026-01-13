@@ -94,6 +94,7 @@ pub struct Renderer {
     world: RenderLayer,
     ui: RenderLayer,
     user_layers: Vec<RenderLayer>,
+    #[set]
     active_layer: Layer,
     /// Cached viewport size
     view: Size<u32>,
@@ -264,5 +265,8 @@ impl Renderer {
 
         gpu.queue().submit([encoder.finish()]);
         output.present();
+
+        // Reset to world at the end of each frame
+        self.set_active_layer(Layer::World);
     }
 }

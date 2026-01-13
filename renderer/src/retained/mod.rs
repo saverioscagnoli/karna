@@ -12,7 +12,6 @@ use crate::{
 };
 use assets::AssetServerGuard;
 use globals::{consts, profiling};
-use logging::warn;
 use utils::{FastHashMap, Handle, SlotMap};
 
 pub use handle::*;

@@ -214,7 +214,7 @@ fn main() {
             WindowBuilder::new()
                 .with_title("Auto-Instanced Particle Fountain")
                 .with_size((1280, 720))
-                .with_resizable(true)
+                .with_resizable(false)
                 .with_initial_scene(Demo::default()),
         )
         .build()
