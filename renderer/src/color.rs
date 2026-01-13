@@ -51,6 +51,44 @@ impl Color {
         Self { r, g, b, a }
     }
 
+    /// Creates a Color from HSV (Hue, Saturation, Value) color space
+    ///
+    /// # Arguments
+    /// * `hue` - Hue value in degrees (0.0 to 360.0)
+    /// * `saturation` - Saturation (0.0 to 1.0)
+    /// * `value` - Value/Brightness (0.0 to 1.0)
+    pub fn hsv(hue: f32, saturation: f32, value: f32) -> Self {
+        let saturation = saturation.clamp(0.0, 1.0);
+        let value = value.clamp(0.0, 1.0);
+        let hue = hue % 360.0;
+        let hue = if hue < 0.0 { hue + 360.0 } else { hue };
+
+        let c = value * saturation;
+        let x = c * (1.0 - ((hue / 60.0) % 2.0 - 1.0).abs());
+        let m = value - c;
+
+        let (r, g, b) = if hue < 60.0 {
+            (c, x, 0.0)
+        } else if hue < 120.0 {
+            (x, c, 0.0)
+        } else if hue < 180.0 {
+            (0.0, c, x)
+        } else if hue < 240.0 {
+            (0.0, x, c)
+        } else if hue < 300.0 {
+            (x, 0.0, c)
+        } else {
+            (c, 0.0, x)
+        };
+
+        Self::rgb(r + m, g + m, b + m)
+    }
+
+    /// Creates a Color from HSVA (HSV with Alpha)
+    pub fn from_hsva(hue: f32, saturation: f32, value: f32, alpha: f32) -> Self {
+        Self::hsv(hue, saturation, value).with_alpha(alpha)
+    }
+
     #[inline]
     pub fn random() -> Self {
         let r = rng(0.0..=1.0);

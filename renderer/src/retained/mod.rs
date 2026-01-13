@@ -12,7 +12,6 @@ use crate::{
 };
 use assets::AssetServerGuard;
 use globals::{consts, profiling};
-use logging::warn;
 use utils::{FastHashMap, Handle, SlotMap};
 
 pub use handle::*;
@@ -125,35 +124,31 @@ impl RetainedRenderer {
                 continue;
             }
 
-            if batch.needs_rebuild {
-                // Full rebuild: collect all instance data
-                warn!("Rebuilding instance buffer");
-                let instance_data: Vec<MeshGpu> = batch
-                    .handles
-                    .iter()
-                    .filter_map(|&h| {
-                        let mesh = self.meshes.get_mut(h)?;
-                        mesh.prepare(assets);
-                        Some(mesh.gpu)
-                    })
-                    .collect();
+            let instance_count = batch.handles.len();
 
-                batch.instance_buffer.write_from_index(0, &instance_data);
-                batch.needs_rebuild = false;
+            if batch.ensure_capacity(instance_count) {
+                batch.needs_rebuild = true;
+            }
 
-                writes = instance_data.len() as u32;
-            } else {
-                for (buffer_idx, &handle) in batch.handles.iter().enumerate() {
-                    if let Some(mesh) = self.meshes.get_mut(handle)
-                        && mesh.prepare(assets)
-                    {
-                        batch
-                            .instance_buffer
-                            .write_from_index(buffer_idx, &[mesh.gpu]);
+            let mut instance_data = Vec::with_capacity(instance_count);
+            let mut any_dirty = batch.needs_rebuild;
 
-                        writes += 1;
+            for &handle in &batch.handles {
+                if let Some(mesh) = self.meshes.get_mut(handle) {
+                    if mesh.prepare(assets) {
+                        any_dirty = true;
                     }
+                    instance_data.push(mesh.gpu);
+                } else {
+                    instance_data.push(MeshGpu::default());
                 }
+            }
+
+            if any_dirty {
+                batch.instance_buffer.write_from_index(0, &instance_data);
+
+                writes += instance_data.len() as u32;
+                batch.needs_rebuild = false;
             }
         }
 
@@ -166,15 +161,18 @@ impl RetainedRenderer {
 
             let vertex_count = batch.buffer.vertex_buffer.len() as u32;
             let index_count = batch.buffer.index_buffer.len() as u32;
+            let instance_count = batch.handles.len() as u32;
 
             render_pass.set_vertex_buffer(0, batch.buffer.vertex_buffer.slice(..));
+
             render_pass.set_vertex_buffer(1, batch.instance_buffer.slice(..));
+
             render_pass.set_index_buffer(
                 batch.buffer.index_buffer.slice(..),
                 wgpu::IndexFormat::Uint32,
             );
 
-            render_pass.draw_indexed(0..index_count, 0, 0..batch.handles.len() as u32);
+            render_pass.draw_indexed(0..index_count, 0, 0..instance_count);
             profiling::record_draw_call(vertex_count, index_count);
         }
     }

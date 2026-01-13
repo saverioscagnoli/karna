@@ -9,6 +9,7 @@ pub struct MeshBatch {
     pub handles: Vec<Handle<Mesh>>,
     pub instance_buffer: GpuBuffer<MeshGpu>,
     pub needs_rebuild: bool,
+    capacity: usize,
 }
 
 impl MeshBatch {
@@ -23,6 +24,28 @@ impl MeshBatch {
                 .capacity(consts::MESH_INSTANCE_BASE_CAPACITY)
                 .build(),
             needs_rebuild: false,
+            capacity: consts::MESH_INSTANCE_BASE_CAPACITY,
         }
+    }
+
+    /// Ensures the instance buffer can hold at least `required` instances.
+    /// Returns true if the buffer was reallocated.
+    pub fn ensure_capacity(&mut self, required: usize) -> bool {
+        if required <= self.capacity {
+            return false;
+        }
+
+        // Grow by 2x or to required size, whichever is larger
+        let new_capacity = self.capacity.max(1).max(required).next_power_of_two();
+
+        self.instance_buffer = GpuBufferBuilder::new()
+            .label("Batch Instance Buffer")
+            .vertex()
+            .copy_dst()
+            .capacity(new_capacity)
+            .build();
+
+        self.capacity = new_capacity;
+        true
     }
 }
