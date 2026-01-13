@@ -168,8 +168,6 @@ impl Scene for Demo {
 
         draw.debug_text(format!("FOV: {}", self.fov), 10.0, 90.0);
         draw.debug_text("Scroll the wheel to change FOV", 10.0, 110.0);
-
-        draw.set_layer(Layer::World);
     }
 }
 
