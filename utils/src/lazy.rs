@@ -1,6 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
 #[derive(Debug)]
+#[derive(Default)]
 pub struct Lazy<T>(Option<T>);
 
 impl<T> Lazy<T> {

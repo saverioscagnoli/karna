@@ -1,207 +1,63 @@
-pub mod input;
-pub mod states;
-pub mod sysinfo;
-
-mod monitors;
-mod scene_changer;
+mod draw;
 mod time;
-mod tween;
 mod window;
 
-use crate::{
-    AppOwned,
-    context::{
-        input::Input,
-        scene_changer::SceneChanger,
-        states::{GlobalStates, States},
-        sysinfo::SystemInfo,
-    },
-};
-use assets::{AssetServer, AssetServerGuard};
-use globals::profiling::{self, Statistics};
-use renderer::{Draw, Renderer, Scene};
-use std::sync::Arc;
-use winit::{
-    event::{DeviceEvent, MouseScrollDelta, WindowEvent},
-    keyboard::PhysicalKey,
-};
-
-// === RE-EXPORTS ===
-pub use crate::context::time::Time;
-pub use monitors::{Monitor, Monitors};
+use renderer::Renderer;
+pub use time::Time;
 pub use window::Window;
-pub(crate) use window::WinitWindow;
 
-/// Holds the state of the game loop for a single window
-/// for all its life, shares its content to [`Context`]
-/// and [`RenderContext`]
-///
-/// So that the state can be mutable when `Scene::load` and `Scene::update`
-/// But not on Scene::render, where a [`SceneView`] will be created, so that
-/// scene information can be read, but not written.
-pub struct AppContext {
-    pub window: Window,
-    pub time: Time,
-    pub input: Input,
-    pub render: Renderer,
-    pub scenes: SceneChanger,
-    pub monitors: Monitors,
-    pub assets: AssetServer,
-    pub states: States,
-    pub globals: GlobalStates,
-    pub info: Arc<SystemInfo>,
-    pub profiling: Statistics,
-}
+use crate::context::draw::Draw;
 
-unsafe impl Send for AppContext {}
-unsafe impl Sync for AppContext {}
-
-/// Holds all the references from [`AppContext`],
-/// And permits the user to mutate the window state, but only during
-/// `Scene::load` and `Scene::update`
-pub struct Context<'a> {
-    pub window: &'a Window,
+pub struct ContextRefMut<'a> {
     pub time: &'a mut Time,
-    pub input: &'a mut Input,
-    pub scene: Scene<'a>,
-    pub scenes: &'a mut SceneChanger,
-    pub monitors: &'a Monitors,
-    pub assets: &'a mut AssetServer,
-    pub states: &'a mut States,
-    pub globals: &'a GlobalStates,
-    pub info: &'a SystemInfo,
-    pub profiling: &'a Statistics,
+    pub window: &'a mut Window,
 }
 
-/// Basically equal to [`Context`], but will be immutable,
-/// where it will be accompanied by a mutable [`Draw`] handle, for immediate rendering.
-pub struct RenderContext<'a> {
-    pub window: &'a Window,
+pub struct ContextRef<'a> {
     pub time: &'a Time,
-    pub input: &'a Input,
-    pub monitors: &'a Monitors,
-    pub assets: AssetServerGuard<'a>,
-    pub states: &'a States,
-    pub globals: &'a GlobalStates,
-    pub info: &'a SystemInfo,
-    pub profiling: &'a Statistics,
+    pub window: &'a Window,
 }
 
-impl AppContext {
-    pub(crate) fn new(window: Window, renderer: Renderer, app_owned: AppOwned) -> Self {
-        let scenes = SceneChanger::new();
-        let monitors = Monitors::new(Arc::clone(window.inner()));
-        let states = States::new();
+pub struct WindowContext {
+    pub time: Time,
+    pub window: Window,
+    pub render: Renderer,
+}
 
+impl WindowContext {
+    pub(crate) fn new(window: Window, render: Renderer) -> Self {
         Self {
-            window,
             time: Time::default(),
-            input: Input::default(),
-            render: renderer,
-            scenes,
-            monitors,
-            assets: app_owned.assets,
-            states,
-            globals: app_owned.globals,
-            info: app_owned.info,
-            profiling: profiling::get_stats(),
+            window,
+            render,
         }
     }
 
-    #[inline]
-    pub(crate) fn as_temp_mut(&mut self) -> Context<'_> {
-        Context {
-            window: &mut self.window,
+    pub(crate) fn as_ref_mut<'a>(&'a mut self) -> ContextRefMut<'a> {
+        ContextRefMut {
             time: &mut self.time,
-            input: &mut self.input,
-            scene: Scene::new(&mut self.render),
-            scenes: &mut self.scenes,
-            monitors: &self.monitors,
-            assets: &mut self.assets,
-            globals: &self.globals,
-            states: &mut self.states,
-            info: &self.info,
-            profiling: &self.profiling,
+            window: &mut self.window,
+        }
+    }
+
+    pub(crate) fn as_ref<'a>(&'a self) -> ContextRef<'a> {
+        ContextRef {
+            time: &self.time,
+            window: &self.window,
         }
     }
 
     #[inline]
-    pub(crate) fn as_render_context(&mut self) -> (RenderContext<'_>, Draw<'_>) {
-        let ctx = RenderContext {
-            window: &self.window,
+    pub(crate) fn split<'a>(&'a mut self) -> (ContextRef<'a>, Draw<'a>) {
+        let context_ref = ContextRef {
             time: &self.time,
-            input: &self.input,
-            monitors: &self.monitors,
-            assets: self.assets.guard(),
-            states: &self.states,
-            globals: &self.globals,
-            info: &self.info,
-            profiling: &self.profiling,
+            window: &self.window,
         };
 
-        let draw = Draw::new(&mut self.render, self.assets.guard());
+        let draw = Draw {
+            renderer: &mut self.render,
+        };
 
-        (ctx, draw)
-    }
-
-    #[inline]
-    pub(crate) fn handle_device_event(&mut self, event: DeviceEvent) {
-        match event {
-            DeviceEvent::MouseMotion { delta } => {
-                self.input.mouse_delta.x += delta.0 as f32;
-                self.input.mouse_delta.y += delta.1 as f32;
-            }
-
-            _ => {}
-        }
-    }
-
-    #[inline]
-    pub(crate) fn handle_event(&mut self, event: WindowEvent) {
-        match event {
-            WindowEvent::Resized(size) => {
-                self.render.resize(size.into());
-            }
-
-            WindowEvent::KeyboardInput { event, .. } => match event.physical_key {
-                PhysicalKey::Code(code) => {
-                    if event.state.is_pressed() {
-                        if !event.repeat {
-                            self.input.pressed_keys.insert(code);
-                        }
-                        self.input.held_keys.insert(code);
-                    } else {
-                        self.input.held_keys.remove(&code);
-                        self.input.released_keys.insert(code);
-                    }
-                }
-                PhysicalKey::Unidentified(_) => {}
-            },
-
-            WindowEvent::CursorMoved { position, .. } => {
-                self.input.mouse_position.x = position.x as f32;
-                self.input.mouse_position.y = position.y as f32;
-            }
-
-            WindowEvent::MouseInput { state, button, .. } => {
-                if state.is_pressed() {
-                    if !self.input.pressed_mouse.contains(&button) {
-                        self.input.pressed_mouse.insert(button);
-                    }
-                    self.input.held_mouse.insert(button);
-                } else {
-                    self.input.held_mouse.remove(&button);
-                }
-            }
-
-            WindowEvent::MouseWheel { delta, .. } => {
-                self.input.wheel_delta = match delta {
-                    MouseScrollDelta::LineDelta(_x, y) => y,
-                    MouseScrollDelta::PixelDelta(pos) => pos.y as f32,
-                };
-            }
-
-            _ => {}
-        }
+        (context_ref, draw)
     }
 }

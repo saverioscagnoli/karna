@@ -1,11 +1,12 @@
-use globals::{consts, profiling};
+use std::collections::VecDeque;
+use std::time::Duration;
+use std::time::Instant;
+
+use globals::consts;
 use logging::info;
-use macros::{Get, Set};
+use macros::Get;
+use macros::Set;
 use spin_sleep::SpinSleeper;
-use std::{
-    collections::VecDeque,
-    time::{Duration, Instant},
-};
 use utils::Timer;
 
 #[derive(Debug)]
@@ -147,8 +148,6 @@ impl Time {
         } else {
             0.0
         };
-
-        profiling::update_time(self.delta_time, self.fps, self.tps);
 
         if self.tick_timer.is_finished() {
             self.tps = self.tick_counter;

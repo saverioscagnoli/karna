@@ -1,6 +1,6 @@
 /// Implement Deref + DerefMut by transmuting from one type to another.
 ///
-/// IMPORTANT: Both types MUST have the same memory layout!!
+/// IMPORTANT: Both types MUST have the same memory layout!
 #[macro_export]
 macro_rules! impl_deref_to {
     ($from:ty => $to:ty) => {

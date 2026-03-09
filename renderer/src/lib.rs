@@ -1,111 +1,20 @@
-mod camera;
 mod color;
-mod immediate;
-mod layer;
-mod retained;
-mod shader;
-mod traits;
-mod vertex;
 
-use assets::AssetServerGuard;
+use std::sync::Arc;
+
+pub use color::Color;
 use logging::info;
-use macros::{Get, Set};
 use math::Size;
-use std::sync::{Arc, OnceLock};
 use winit::window::Window;
 
-// === RE-EXPORTS ===
-use crate::shader::Shader;
-pub use camera::{Camera, Projection};
-pub use color::Color;
-pub use immediate::Draw;
-pub use layer::{Layer, RenderLayer};
-pub use retained::{
-    Scene, SceneView, Text,
-    mesh::{Geometry, Material, Mesh, TextureKind, Transform3d},
-};
-
-/// FIXME: Try to find a better solution to this shit
-#[derive(Debug)]
-struct Shaders {
-    retained: Shader,
-    text: Shader,
-    immediate: Shader,
-    immediate_circle: Shader,
-}
-
-static SHADERS: OnceLock<Shaders> = OnceLock::new();
-
-pub(crate) fn retained_shader() -> &'static Shader {
-    &SHADERS.get().unwrap().retained
-}
-
-pub(crate) fn text_shader() -> &'static Shader {
-    &SHADERS.get().unwrap().text
-}
-
-pub(crate) fn immediate_shader() -> &'static Shader {
-    &SHADERS.get().unwrap().immediate
-}
-
-pub(crate) fn immediate_circle_shader() -> &'static Shader {
-    &SHADERS.get().unwrap().immediate_circle
-}
-
-pub fn init() {
-    let retained_shader = Shader::from_wgsl_file(
-        include_str!("../../shaders/basic_2d.wgsl"),
-        Some("Retained shader"),
-    );
-
-    let text_shader =
-        Shader::from_wgsl_file(include_str!("../../shaders/text.wgsl"), Some("Text shader"));
-
-    let immediate_shader = Shader::from_wgsl_file(
-        include_str!("../../shaders/immediate.wgsl"),
-        Some("Immediate shader"),
-    );
-
-    let immediate_circle_shader = Shader::from_wgsl_file(
-        include_str!("../../shaders/immediate_circle.wgsl"),
-        Some("Immediate Circle shader"),
-    );
-
-    SHADERS
-        .set(Shaders {
-            retained: retained_shader,
-            text: text_shader,
-            immediate: immediate_shader,
-            immediate_circle: immediate_circle_shader,
-        })
-        .unwrap();
-
-    info!("Built-in shaders loaded.");
-}
-
-#[derive(Get, Set)]
 pub struct Renderer {
-    // Internal stuff
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
-
-    clear_color: Color,
-
-    world: RenderLayer,
-    ui: RenderLayer,
-    user_layers: Vec<RenderLayer>,
-
-    #[set]
-    active_layer: Layer,
-    /// Cached viewport size
     view: Size<u32>,
+    clear_color: Color,
 }
 
 impl Renderer {
-    /// Have to separate the surface creation from the `new` function
-    /// because on windows, the surface must be created on the main thread
-    ///
-    /// Windows sucks ass
     #[doc(hidden)]
     pub fn create_surface(
         window: Arc<Window>,
@@ -142,85 +51,38 @@ impl Renderer {
         (surface, config)
     }
 
+    /// Renderer creation cannot be combined with surface creation because
+    /// the surface is only one, but the renderers are per-window, so
+    /// `create_surface` must be called once in the main thread, while this one
+    /// must be called at the start of each window thread.
     #[doc(hidden)]
     pub fn from_surface(
         surface: wgpu::Surface<'static>,
         surface_config: wgpu::SurfaceConfiguration,
-        assets: &AssetServerGuard<'_>,
     ) -> Self {
         let view = Size::new(surface_config.width, surface_config.height);
-
-        let world_camera = Camera::new(Projection::Orthographic {
-            left: 0.0,
-            right: view.width as f32,
-            bottom: view.height as f32,
-            top: 0.0,
-            near: -1.0,
-            far: 1.0,
-        });
-
-        let ui_camera = Camera::new(Projection::Orthographic {
-            left: 0.0,
-            right: view.width as f32,
-            bottom: view.height as f32,
-            top: 0.0,
-            near: -1.0,
-            far: 1.0,
-        });
-
-        let world = RenderLayer::new(&surface_config, assets, world_camera);
-        let ui = RenderLayer::new(&surface_config, assets, ui_camera);
 
         Self {
             surface,
             config: surface_config,
-            clear_color: Color::rgb(1.0 / 25.0, 1.0 / 25.0, 1.0 / 25.0),
-            world,
-            ui,
-            user_layers: Vec::new(),
-            active_layer: Layer::default(),
             view,
+            clear_color: Color::rgb(1.0 / 25.0, 1.0 / 25.0, 1.0 / 25.0),
         }
     }
 
-    #[inline]
     #[doc(hidden)]
     pub fn resize(&mut self, view: Size<u32>) {
-        info!("Resizing viewport to {}x{}", view.width, view.height);
-
-        self.world.queue_resize();
-        self.ui.queue_resize();
-        self.user_layers.iter_mut().for_each(|l| l.queue_resize());
+        info!("Resizing window to {}x{}", view.width, view.height);
 
         self.config.width = view.width;
         self.config.height = view.height;
         self.surface.configure(gpu::device(), &self.config);
-        self.view = view;
     }
 
-    #[inline]
-    fn layer(&self, id: Layer) -> &RenderLayer {
-        match id {
-            Layer::World => &self.world,
-            Layer::Ui => &self.ui,
-            Layer::Custom(i) => &self.user_layers[i],
-        }
-    }
-
-    #[inline]
-    fn layer_mut(&mut self, id: Layer) -> &mut RenderLayer {
-        match id {
-            Layer::World => &mut self.world,
-            Layer::Ui => &mut self.ui,
-            Layer::Custom(i) => &mut self.user_layers[i],
-        }
-    }
-
-    #[inline]
     #[doc(hidden)]
-    pub fn present(&mut self, assets: &AssetServerGuard<'_>) {
+    pub fn present(&mut self) {
         let gpu = gpu::get();
-        let output = self.surface.get_current_texture().expect("Ouch");
+        let output = self.surface.get_current_texture().expect("Bruh");
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -228,12 +90,12 @@ impl Renderer {
         let mut encoder = gpu
             .device()
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
+                label: Some("Render encoder"),
             });
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
+                label: Some("render pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
@@ -248,26 +110,9 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-
-            render_pass.set_bind_group(0, self.world.camera.bg(), &[]);
-            render_pass.set_bind_group(1, assets.atlas_bg(), &[]);
-
-            self.world.present(self.view, &mut render_pass, assets);
-
-            render_pass.set_bind_group(0, self.ui.camera.bg(), &[]);
-
-            self.ui.present(self.view, &mut render_pass, assets);
-
-            self.user_layers.iter_mut().for_each(|l| {
-                render_pass.set_bind_group(0, l.camera.bg(), &[]);
-                l.present(self.view, &mut render_pass, assets);
-            });
         }
 
-        gpu.queue().submit([encoder.finish()]);
+        gpu.queue().submit(std::iter::once(encoder.finish()));
         output.present();
-
-        // Reset active layer to world
-        self.set_active_layer(Layer::World);
     }
 }
