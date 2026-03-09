@@ -1,8 +1,15 @@
+mod camera;
 mod color;
+pub mod immediate;
 
 use std::sync::Arc;
 
+pub use camera::Camera;
+pub use camera::OrthographicProjection;
+pub use camera::PerspectiveProjection;
+pub use camera::Projection;
 pub use color::Color;
+pub use immediate::ImmediateRenderer;
 use logging::info;
 use math::Size;
 use winit::window::Window;
@@ -12,6 +19,7 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     view: Size<u32>,
     clear_color: Color,
+    pub(crate) immediate: ImmediateRenderer,
 }
 
 impl Renderer {
@@ -61,12 +69,14 @@ impl Renderer {
         surface_config: wgpu::SurfaceConfiguration,
     ) -> Self {
         let view = Size::new(surface_config.width, surface_config.height);
+        let immediate = ImmediateRenderer::new(surface_config.format);
 
         Self {
             surface,
             config: surface_config,
             view,
             clear_color: Color::rgb(1.0 / 25.0, 1.0 / 25.0, 1.0 / 25.0),
+            immediate,
         }
     }
 
@@ -76,7 +86,21 @@ impl Renderer {
 
         self.config.width = view.width;
         self.config.height = view.height;
+        self.view = view;
         self.surface.configure(gpu::device(), &self.config);
+    }
+
+    /// Returns the current viewport size.
+    #[inline]
+    pub fn view(&self) -> Size<u32> {
+        self.view
+    }
+
+    /// Returns a mutable reference to the immediate renderer so callers
+    /// (e.g. `Draw`) can push geometry before `present` flushes it.
+    #[inline]
+    pub fn immediate_mut(&mut self) -> &mut ImmediateRenderer {
+        &mut self.immediate
     }
 
     #[doc(hidden)]
@@ -110,6 +134,9 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
+
+            // Flush all immediate-mode geometry that was accumulated this frame.
+            self.immediate.flush(self.view, &mut render_pass);
         }
 
         gpu.queue().submit(std::iter::once(encoder.finish()));

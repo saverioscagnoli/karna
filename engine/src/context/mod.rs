@@ -2,11 +2,10 @@ mod draw;
 mod time;
 mod window;
 
+pub use draw::Draw;
 use renderer::Renderer;
 pub use time::Time;
 pub use window::Window;
-
-use crate::context::draw::Draw;
 
 pub struct ContextRefMut<'a> {
     pub time: &'a mut Time,
@@ -54,9 +53,7 @@ impl WindowContext {
             window: &self.window,
         };
 
-        let draw = Draw {
-            renderer: &mut self.render,
-        };
+        let draw = Draw::new(&mut self.render);
 
         (context_ref, draw)
     }

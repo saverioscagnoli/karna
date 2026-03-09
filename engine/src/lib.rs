@@ -2,6 +2,7 @@ mod builder;
 mod context;
 mod events;
 mod lifecycle;
+mod scene;
 
 use std::mem;
 use std::sync::Arc;
@@ -11,6 +12,7 @@ pub use builder::AppBuilder;
 pub use builder::WindowBuilder;
 pub use context::ContextRef;
 pub use context::ContextRefMut;
+pub use context::Draw;
 pub use context::Time;
 pub use context::Window;
 use logging::LogLevel;
@@ -19,6 +21,9 @@ use logging::info;
 use logging::trace;
 use logging::warn;
 use renderer::Renderer;
+pub use scene::Scene;
+pub use scene::SceneManager;
+pub use scene::SceneMap;
 use utils::FastHashMap;
 use winit::application::ApplicationHandler;
 use winit::event::DeviceEvent;
@@ -86,7 +91,7 @@ impl App {
         self.window_builders.push(builder);
     }
 
-    fn spawn_window(&mut self, window: winit::window::Window) {
+    fn spawn_window(&mut self, window: winit::window::Window, scenes: SceneMap) {
         let (window_tx, window_rx) = crossbeam_channel::unbounded::<WindowEvent>();
 
         let window_id = window.id();
@@ -99,7 +104,7 @@ impl App {
         let window = Window::new(winit_window);
 
         let thread = thread::spawn(move || {
-            let mut lifecycle = WindowLifecycle::new(window_rx, window, surface, config);
+            let mut lifecycle = WindowLifecycle::new(window_rx, window, surface, config, scenes);
 
             lifecycle.game_loop();
         });
@@ -123,7 +128,7 @@ impl ApplicationHandler for App {
 
         for b in mem::take(&mut self.window_builders) {
             match event_loop.create_window(b.attributes()) {
-                Ok(w) => self.spawn_window(w),
+                Ok(w) => self.spawn_window(w, b.scenes),
                 Err(e) => error!("Failed to create window: {}", e),
             }
         }

@@ -1,16 +1,16 @@
-use std::time::Duration;
-
 use crossbeam_channel::Receiver;
-use crossbeam_channel::RecvTimeoutError;
 use renderer::Renderer;
 use winit::event::WindowEvent;
 
 use crate::context::Window;
 use crate::context::WindowContext;
+use crate::scene::SceneManager;
+use crate::scene::SceneMap;
 
 pub struct WindowLifecycle {
     event_rx: Receiver<WindowEvent>,
     context: WindowContext,
+    scene_manager: SceneManager,
 }
 
 impl WindowLifecycle {
@@ -19,17 +19,20 @@ impl WindowLifecycle {
         window: Window,
         window_surface: wgpu::Surface<'static>,
         surface_config: wgpu::SurfaceConfiguration,
+        scenes: SceneMap,
     ) -> Self {
         let render = Renderer::from_surface(window_surface, surface_config);
 
         Self {
             event_rx,
             context: WindowContext::new(window, render),
+            scene_manager: SceneManager::new(scenes),
         }
     }
 
     pub fn game_loop(&mut self) {
         self.context.window.request_redraw();
+        self.scene_manager.load(self.context.as_ref_mut());
 
         loop {
             // Drain all pending events, blocking only up to a short timeout
@@ -82,10 +85,17 @@ impl WindowLifecycle {
         self.context.time.update();
 
         while let Some(tick_start) = self.context.time.next_tick() {
+            self.scene_manager.fixed_update(self.context.as_ref_mut());
             self.context.time.do_tick(tick_start);
         }
 
-        println!("dt {}", self.context.time.delta());
+        self.scene_manager.update(self.context.as_ref_mut());
+
+        {
+            let (ctx, mut draw) = self.context.split();
+
+            self.scene_manager.draw(ctx, &mut draw);
+        }
 
         self.context.render.present();
         self.context.time.frame_end();
