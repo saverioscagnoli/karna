@@ -82,6 +82,7 @@ impl App {
     fn init(&mut self) {
         gpu::init();
         init_logging();
+        renderer::init();
 
         info!("App initialized successfully.");
     }

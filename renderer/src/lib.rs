@@ -1,8 +1,11 @@
 mod camera;
 mod color;
 pub mod immediate;
+mod layer;
+mod shader;
 
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 pub use camera::Camera;
 pub use camera::OrthographicProjection;
@@ -14,12 +17,73 @@ use logging::info;
 use math::Size;
 use winit::window::Window;
 
+use crate::layer::RenderLayer;
+use crate::shader::Shader;
+
+/// FIXME: Try to find a better solution to this shit
+#[derive(Debug)]
+struct Shaders {
+    // retained: Shader,
+    // text: Shader,
+    immediate: Shader,
+    //immediate_circle: Shader,
+}
+
+static SHADERS: OnceLock<Shaders> = OnceLock::new();
+
+//pub(crate) fn retained_shader() -> &'static Shader {
+//    &SHADERS.get().unwrap().retained
+//}
+
+//pub(crate) fn text_shader() -> &'static Shader {
+//    &SHADERS.get().unwrap().text
+//}
+
+pub(crate) fn immediate_shader() -> &'static Shader {
+    &SHADERS.get().unwrap().immediate
+}
+
+//pub(crate) fn immediate_circle_shader() -> &'static Shader {
+//    &SHADERS.get().unwrap().immediate_circle
+//}
+
+pub fn init() {
+    // let retained_shader = Shader::from_wgsl_file(
+    // include_str!("../../shaders/basic_2d.wgsl"),
+    // Some("Retained shader"),
+    // );
+
+    // let text_shader =
+    // Shader::from_wgsl_file(include_str!("../../shaders/text.wgsl"), Some("Text shader"));
+
+    let immediate_shader = Shader::from_wgsl_file(
+        include_str!("../../shaders/immediate.wgsl"),
+        Some("Immediate shader"),
+    );
+
+    // let immediate_circle_shader = Shader::from_wgsl_file(
+    //     include_str!("../../shaders/immediate_circle.wgsl"),
+    //     Some("Immediate Circle shader"),
+    // );
+
+    SHADERS
+        .set(Shaders {
+            //        retained: retained_shader,
+            //        text: text_shader,
+            immediate: immediate_shader,
+            //       immediate_circle: immediate_circle_shader,
+        })
+        .unwrap();
+
+    info!("Built-in shaders loaded.");
+}
+
 pub struct Renderer {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     view: Size<u32>,
     clear_color: Color,
-    pub(crate) immediate: ImmediateRenderer,
+    world: RenderLayer,
 }
 
 impl Renderer {
