@@ -1,7 +1,11 @@
 mod batcher;
+mod draw_handle;
 
 use std::mem;
 
+pub use draw_handle::Draw;
+use macros::Get;
+use macros::Set;
 use math::Vector2;
 use math::Vector3;
 use math::Vector4;
@@ -15,11 +19,16 @@ use crate::immediate_shader;
 pub struct ImmediateVertex {
     pub position: Vector3,
     pub color: Vector4,
+    pub uv: Vector2,
 }
 
 impl ImmediateVertex {
-    fn new(p: Vector3, color: Vector4) -> Self {
-        Self { position: p, color }
+    fn new(x: f32, y: f32, z: f32, color: Vector4, u: f32, v: f32) -> Self {
+        Self {
+            position: Vector3::new(x, y, z),
+            color,
+            uv: Vector2::new(u, v),
+        }
     }
 
     fn desc() -> wgpu::VertexBufferLayout<'static> {
@@ -48,8 +57,11 @@ impl ImmediateVertex {
     }
 }
 
+#[derive(Get, Set)]
 pub struct ImmediateRenderer {
-    draw_color: Color,
+    #[get]
+    #[set(into)]
+    draw_color: Vector4,
     triangle_batcher: Batcher<ImmediateVertex>,
 }
 
@@ -65,22 +77,20 @@ impl ImmediateRenderer {
             .build(surface_format, &[camera_bgl], &[ImmediateVertex::desc()]);
 
         Self {
-            draw_color: Color::Gray,
+            draw_color: Color::White.into(),
             triangle_batcher: Batcher::new(triangle_pipeline),
         }
     }
 
     #[inline]
-    pub fn fill_rect(&mut self, pos: Vector2, w: f32, h: f32) {
-        let color: Vector4 = self.draw_color.into();
-
+    pub fn push_quad(&mut self, x: f32, y: f32, w: f32, h: f32) {
         let base = self.triangle_batcher.vertices.len() as u32;
 
         self.triangle_batcher.vertices.extend_from_slice(&[
-            ImmediateVertex::new(pos.extend(0.0), color),
-            ImmediateVertex::new(Vector3::new(pos.x + w, pos.y, 0.0), color),
-            ImmediateVertex::new(Vector3::new(pos.x + w, pos.y + h, 0.0), color),
-            ImmediateVertex::new(Vector3::new(pos.x, pos.y + h, 0.0), color),
+            ImmediateVertex::new(x, y, 0.0, self.draw_color, 0.0, 0.0),
+            ImmediateVertex::new(x + w, y, 0.0, self.draw_color, 1.0, 0.0),
+            ImmediateVertex::new(x + w, y + h, 0.0, self.draw_color, 1.0, 1.0),
+            ImmediateVertex::new(x, y + h, 0.0, self.draw_color, 0.0, 1.0),
         ]);
 
         self.triangle_batcher.indices.extend_from_slice(&[

@@ -1,0 +1,37 @@
+use math::Vector4;
+
+use crate::Color;
+use crate::Renderer;
+
+pub struct Draw<'r> {
+    renderer: &'r mut Renderer,
+}
+
+impl<'r> Draw<'r> {
+    #[inline]
+    #[doc(hidden)]
+    pub fn new(renderer: &'r mut Renderer) -> Self {
+        Self { renderer }
+    }
+
+    #[inline]
+    pub fn color(&self) -> Color {
+        (*self.renderer.active_layer().immediate().draw_color()).into()
+    }
+
+    #[inline]
+    pub fn set_color<C: Into<Vector4>>(&mut self, color: C) {
+        self.renderer
+            .active_layer_mut()
+            .immediate_mut()
+            .set_draw_color(color);
+    }
+
+    #[inline]
+    pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
+        self.renderer
+            .active_layer_mut()
+            .immediate_mut()
+            .push_quad(x, y, w, h);
+    }
+}

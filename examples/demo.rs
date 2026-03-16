@@ -2,7 +2,8 @@ use karna::App;
 use karna::Scene;
 use karna::WindowBuilder;
 use karna::math::Size;
-use renderer::Color;
+use karna::render::Color;
+use karna::render::Draw;
 
 struct S;
 
@@ -13,9 +14,9 @@ impl Scene for S {
         println!("dt {}", ctx.time.delta());
     }
 
-    fn draw<'a>(&'a self, ctx: karna::ContextRef, draw: &mut karna::Draw<'a>) {
+    fn draw(&self, ctx: karna::ContextRef, draw: &mut Draw) {
         draw.set_color(Color::Red);
-        draw.fill_rect(0.0, 0.0, 1280.0, 50.0);
+        draw.rect(0.0, 0.0, 1280.0, 50.0);
     }
 }
 

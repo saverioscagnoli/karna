@@ -1,14 +1,14 @@
+use renderer::Draw;
 use utils::FastHashMap;
 
 use crate::ContextRef;
 use crate::ContextRefMut;
-use crate::context::Draw;
 
 pub trait Scene: Send {
     fn load(&mut self, ctx: ContextRefMut);
     fn update(&mut self, ctx: ContextRefMut);
     fn fixed_update(&mut self, ctx: ContextRefMut) {}
-    fn draw<'a>(&'a self, ctx: ContextRef, draw: &mut Draw<'a>);
+    fn draw(&self, ctx: ContextRef, draw: &mut Draw);
 }
 
 pub type SceneMap = FastHashMap<String, Box<dyn Scene>>;
@@ -48,7 +48,7 @@ impl SceneManager {
     }
 
     #[inline]
-    pub(crate) fn draw<'a>(&'a self, ctx: ContextRef, draw: &mut Draw<'a>) {
+    pub(crate) fn draw(&self, ctx: ContextRef, draw: &mut Draw) {
         if let Some(scene) = self.scenes.get(&self.active_scene) {
             scene.draw(ctx, draw);
         }

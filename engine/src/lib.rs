@@ -12,7 +12,6 @@ pub use builder::AppBuilder;
 pub use builder::WindowBuilder;
 pub use context::ContextRef;
 pub use context::ContextRefMut;
-pub use context::Draw;
 pub use context::Time;
 pub use context::Window;
 use logging::LogLevel;

@@ -12,11 +12,13 @@ pub use camera::OrthographicProjection;
 pub use camera::PerspectiveProjection;
 pub use camera::Projection;
 pub use color::Color;
+pub use immediate::Draw;
 pub use immediate::ImmediateRenderer;
 use logging::info;
 use math::Size;
 use winit::window::Window;
 
+use crate::layer::ActiveLayer;
 use crate::layer::RenderLayer;
 use crate::shader::Shader;
 
@@ -83,7 +85,9 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     view: Size<u32>,
     clear_color: Color,
+    active_layer: ActiveLayer,
     world: RenderLayer,
+    ui: RenderLayer,
 }
 
 impl Renderer {
@@ -133,14 +137,35 @@ impl Renderer {
         surface_config: wgpu::SurfaceConfiguration,
     ) -> Self {
         let view = Size::new(surface_config.width, surface_config.height);
-        let immediate = ImmediateRenderer::new(surface_config.format);
+        let world = RenderLayer::new(view, surface_config.format);
+        let ui = RenderLayer::new(view, surface_config.format);
 
         Self {
             surface,
             config: surface_config,
             view,
             clear_color: Color::rgb(1.0 / 25.0, 1.0 / 25.0, 1.0 / 25.0),
-            immediate,
+            world,
+            active_layer: ActiveLayer::World,
+            ui,
+        }
+    }
+
+    #[inline]
+    fn active_layer(&self) -> &RenderLayer {
+        match self.active_layer {
+            ActiveLayer::World => &self.world,
+            ActiveLayer::Ui => &self.ui,
+            ActiveLayer::Custom(index) => todo!("Siopera"),
+        }
+    }
+
+    #[inline]
+    fn active_layer_mut(&mut self) -> &mut RenderLayer {
+        match self.active_layer {
+            ActiveLayer::World => &mut self.world,
+            ActiveLayer::Ui => &mut self.ui,
+            ActiveLayer::Custom(index) => todo!("Siopera"),
         }
     }
 
@@ -163,8 +188,9 @@ impl Renderer {
     /// Returns a mutable reference to the immediate renderer so callers
     /// (e.g. `Draw`) can push geometry before `present` flushes it.
     #[inline]
+    #[doc(hidden)]
     pub fn immediate_mut(&mut self) -> &mut ImmediateRenderer {
-        &mut self.immediate
+        self.active_layer_mut().immediate_mut()
     }
 
     #[doc(hidden)]
@@ -200,7 +226,7 @@ impl Renderer {
             });
 
             // Flush all immediate-mode geometry that was accumulated this frame.
-            self.immediate.flush(self.view, &mut render_pass);
+            self.active_layer_mut().flush(&mut render_pass);
         }
 
         gpu.queue().submit(std::iter::once(encoder.finish()));

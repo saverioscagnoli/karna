@@ -1,8 +1,7 @@
-mod draw;
 mod time;
 mod window;
 
-pub use draw::Draw;
+use renderer::Draw;
 use renderer::Renderer;
 pub use time::Time;
 pub use window::Window;

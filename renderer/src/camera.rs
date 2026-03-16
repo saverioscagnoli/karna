@@ -1,4 +1,5 @@
 use gpu::core::GpuBuffer;
+use macros::Get;
 use math::Matrix4;
 use math::Size;
 use math::Vector3;
@@ -80,10 +81,15 @@ impl Projection for PerspectiveProjection {
     }
 }
 
+#[derive(Get)]
 pub struct Camera {
     projection: Box<dyn Projection>,
     vp_buffer: GpuBuffer<Matrix4>,
+
+    #[get(visibility = "pub(crate)")]
     vp_bgl: wgpu::BindGroupLayout,
+
+    #[get(visibility = "pub(crate)")]
     vp_bg: wgpu::BindGroup,
 
     position: Vector3,
