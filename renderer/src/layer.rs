@@ -45,6 +45,11 @@ impl RenderLayer {
     }
 
     #[inline]
+    pub fn update(&mut self, view: Size<u32>) {
+        self.camera.update(view);
+    }
+
+    #[inline]
     pub fn flush<'pass>(&'pass mut self, render_pass: &mut wgpu::RenderPass<'pass>) {
         // The immediate pipeline expects the camera bind group at index 0:
         //   @group(0) @binding(0) var<uniform> view_projection: mat4x4<f32>;

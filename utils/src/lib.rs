@@ -3,7 +3,7 @@ mod macros;
 mod timer;
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     hash::{BuildHasher, BuildHasherDefault, Hasher},
     mem,
 };
@@ -42,3 +42,4 @@ impl BuildHasher for IdentityHasherBuilder {
 }
 
 pub type FastHashMap<K, V> = HashMap<K, V, BuildHasherDefault<rustc_hash::FxHasher>>;
+pub type FastHashSet<V> = HashSet<V, BuildHasherDefault<rustc_hash::FxHasher>>;

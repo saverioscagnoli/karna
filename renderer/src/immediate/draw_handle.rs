@@ -1,3 +1,5 @@
+use math::Size;
+use math::Vector2;
 use math::Vector4;
 
 use crate::Color;
@@ -33,5 +35,13 @@ impl<'r> Draw<'r> {
             .active_layer_mut()
             .immediate_mut()
             .push_quad(x, y, w, h);
+    }
+
+    #[inline]
+    pub fn rect_v<P: Into<Vector2>, S: Into<Size<f32>>>(&mut self, pos: P, size: S) {
+        let pos: Vector2 = pos.into();
+        let size: Size<f32> = size.into();
+
+        self.rect(pos.x, pos.y, size.width, size.height);
     }
 }

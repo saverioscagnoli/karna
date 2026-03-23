@@ -28,7 +28,7 @@ struct Shaders {
     // retained: Shader,
     // text: Shader,
     immediate: Shader,
-    //immediate_circle: Shader,
+    immediate_circle: Shader,
 }
 
 static SHADERS: OnceLock<Shaders> = OnceLock::new();
@@ -45,9 +45,9 @@ pub(crate) fn immediate_shader() -> &'static Shader {
     &SHADERS.get().unwrap().immediate
 }
 
-//pub(crate) fn immediate_circle_shader() -> &'static Shader {
-//    &SHADERS.get().unwrap().immediate_circle
-//}
+pub(crate) fn immediate_circle_shader() -> &'static Shader {
+    &SHADERS.get().unwrap().immediate_circle
+}
 
 pub fn init() {
     // let retained_shader = Shader::from_wgsl_file(
@@ -63,17 +63,17 @@ pub fn init() {
         Some("Immediate shader"),
     );
 
-    // let immediate_circle_shader = Shader::from_wgsl_file(
-    //     include_str!("../../shaders/immediate_circle.wgsl"),
-    //     Some("Immediate Circle shader"),
-    // );
+    let immediate_circle_shader = Shader::from_wgsl_file(
+        include_str!("../../shaders/immediate_circle.wgsl"),
+        Some("Immediate Circle shader"),
+    );
 
     SHADERS
         .set(Shaders {
             //        retained: retained_shader,
             //        text: text_shader,
             immediate: immediate_shader,
-            //       immediate_circle: immediate_circle_shader,
+            immediate_circle: immediate_circle_shader,
         })
         .unwrap();
 
@@ -177,6 +177,9 @@ impl Renderer {
         self.config.height = view.height;
         self.view = view;
         self.surface.configure(gpu::device(), &self.config);
+
+        self.world.update(view);
+        self.ui.update(view);
     }
 
     /// Returns the current viewport size.

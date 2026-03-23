@@ -75,8 +75,8 @@ pub struct Time {
     sleeper: SpinSleeper,
 }
 
-impl Default for Time {
-    fn default() -> Self {
+impl Time {
+    pub(crate) fn new() -> Self {
         Self {
             this_frame: Instant::now(),
             last_frame: Instant::now(),
@@ -101,9 +101,6 @@ impl Default for Time {
             sleeper: SpinSleeper::default(),
         }
     }
-}
-
-impl Time {
     /// Marks the start of the frame
     #[inline]
     pub(crate) fn frame_start(&mut self) {

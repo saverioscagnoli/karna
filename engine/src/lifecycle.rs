@@ -1,7 +1,11 @@
 use crossbeam_channel::Receiver;
+use logging::warn;
 use renderer::Renderer;
+use winit::event::KeyEvent;
 use winit::event::WindowEvent;
+use winit::keyboard::PhysicalKey;
 
+use crate::context::KeyState;
 use crate::context::Window;
 use crate::context::WindowContext;
 use crate::scene::SceneManager;
@@ -99,12 +103,59 @@ impl WindowLifecycle {
 
         self.context.render.present();
         self.context.time.frame_end();
+        self.context.input.flush();
+
         self.context.time.wait_for_next_frame();
     }
 
     fn handle_window_event(&mut self, event: WindowEvent) -> bool {
         if let WindowEvent::CloseRequested = event {
             return true;
+        }
+
+        match event {
+            WindowEvent::KeyboardInput {
+                event: key_event, ..
+            } => {
+                let KeyEvent {
+                    physical_key,
+                    state,
+                    repeat,
+                    ..
+                } = key_event;
+
+                match physical_key {
+                    PhysicalKey::Code(code) => {
+                        if state.is_pressed() {
+                            if !repeat {
+                                self.context
+                                    .input
+                                    .update_keystate(code, KeyState::Pressed, false);
+                            }
+
+                            self.context
+                                .input
+                                .update_keystate(code, KeyState::Held, false);
+                        } else {
+                            self.context
+                                .input
+                                .update_keystate(code, KeyState::Held, true);
+
+                            self.context
+                                .input
+                                .update_keystate(code, KeyState::Released, false);
+                        }
+                    }
+
+                    PhysicalKey::Unidentified(code) => {
+                        warn!("Unidentified key code: {:?}", code);
+                    }
+                }
+            }
+
+            WindowEvent::Resized(view) => self.context.render.resize(view.into()),
+
+            _ => {}
         }
 
         false

@@ -12,6 +12,7 @@ use math::Vector4;
 
 use crate::Color;
 use crate::immediate::batcher::Batcher;
+use crate::immediate_circle_shader;
 use crate::immediate_shader;
 
 #[repr(C)]
@@ -57,12 +58,77 @@ impl ImmediateVertex {
     }
 }
 
+/// Vertex type Specifically used for rendering
+/// circles in immediate mode via `draw.cirlce()`
+///
+/// Uses a shader for cutting out pixels and make it
+/// into a circle.
+#[repr(C)]
+#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct ImmediateCircleVertex {
+    pub position: Vector3, // 12 bytes
+    pub color: Vector4,    // 16 bytes
+    pub center: Vector2,   // 8 bytes
+    pub radius: f32,       // 4 bytes
+}
+
+impl ImmediateCircleVertex {
+    #[inline]
+    pub fn new(position: Vector3, color: Vector4, center: Vector2, radius: f32) -> Self {
+        Self {
+            position,
+            color,
+            center,
+            radius,
+        }
+    }
+
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                // position: vec3<f32>
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                // color: vec4<f32>
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<Vector3>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                // center: vec2<f32>
+                wgpu::VertexAttribute {
+                    offset: (mem::size_of::<Vector3>() + mem::size_of::<Vector4>())
+                        as wgpu::BufferAddress,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                // radius: f32
+                wgpu::VertexAttribute {
+                    offset: (mem::size_of::<Vector3>()
+                        + mem::size_of::<Vector4>()
+                        + mem::size_of::<Vector2>())
+                        as wgpu::BufferAddress,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Float32,
+                },
+            ],
+        }
+    }
+}
+
 #[derive(Get, Set)]
 pub struct ImmediateRenderer {
     #[get]
     #[set(into)]
     draw_color: Vector4,
     triangle_batcher: Batcher<ImmediateVertex>,
+    circle_batcher: Batcher<ImmediateCircleVertex>,
 }
 
 impl ImmediateRenderer {
@@ -76,9 +142,22 @@ impl ImmediateRenderer {
             .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
             .build(surface_format, &[camera_bgl], &[ImmediateVertex::desc()]);
 
+        let circle_pipeline = immediate_circle_shader()
+            .pipeline_builder()
+            .vertex_entry("vs_main")
+            .fragment_entry("fs_main")
+            .topology(wgpu::PrimitiveTopology::TriangleList)
+            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
+            .build(
+                surface_format,
+                &[camera_bgl],
+                &[ImmediateCircleVertex::desc()],
+            );
+
         Self {
             draw_color: Color::White.into(),
             triangle_batcher: Batcher::new(triangle_pipeline),
+            circle_batcher: Batcher::new(circle_pipeline),
         }
     }
 
@@ -94,6 +173,48 @@ impl ImmediateRenderer {
         ]);
 
         self.triangle_batcher.indices.extend_from_slice(&[
+            base,
+            base + 1,
+            base + 2,
+            base,
+            base + 2,
+            base + 3,
+        ]);
+    }
+
+    #[inline]
+    pub fn push_circle(&mut self, x: f32, y: f32, radius: f32) {
+        let base = self.circle_batcher.vertices.len() as u32;
+        let center = Vector2::new(x, y);
+
+        self.circle_batcher.vertices.extend_from_slice(&[
+            ImmediateCircleVertex::new(
+                Vector3::new(x - radius, y - radius, 0.0),
+                self.draw_color,
+                center,
+                radius,
+            ),
+            ImmediateCircleVertex::new(
+                Vector3::new(x + radius, y - radius, 0.0),
+                self.draw_color,
+                center,
+                radius,
+            ),
+            ImmediateCircleVertex::new(
+                Vector3::new(x + radius, y + radius, 0.0),
+                self.draw_color,
+                center,
+                radius,
+            ),
+            ImmediateCircleVertex::new(
+                Vector3::new(x - radius, y + radius, 0.0),
+                self.draw_color,
+                center,
+                radius,
+            ),
+        ]);
+
+        self.circle_batcher.indices.extend_from_slice(&[
             base,
             base + 1,
             base + 2,

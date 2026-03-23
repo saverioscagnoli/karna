@@ -31,6 +31,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
+pub use winit::keyboard::KeyCode;
 use winit::window::WindowId;
 
 use crate::events::EventHandler;
