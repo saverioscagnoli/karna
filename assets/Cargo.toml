@@ -4,3 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+wgpu.workspace = true
+math.workspace = true
+gpu.workspace = true
+rect_packer = "0.2.1"
+utils.workspace = true
+fontdue.workspace = true

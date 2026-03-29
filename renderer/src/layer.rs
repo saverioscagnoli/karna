@@ -46,6 +46,14 @@ impl RenderLayer {
 
     #[inline]
     pub fn update(&mut self, view: Size<u32>) {
+        self.camera.set_projection(OrthographicProjection::new(
+            0.0,
+            view.width as f32,
+            view.height as f32,
+            0.0,
+            -1.0,
+            1.0,
+        ));
         self.camera.update(view);
     }
 

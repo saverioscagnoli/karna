@@ -171,6 +171,10 @@ impl Renderer {
 
     #[doc(hidden)]
     pub fn resize(&mut self, view: Size<u32>) {
+        if view.width == 0 || view.height == 0 {
+            return;
+        }
+
         info!("Resizing window to {}x{}", view.width, view.height);
 
         self.config.width = view.width;

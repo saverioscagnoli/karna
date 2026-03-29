@@ -1,4 +1,5 @@
 use crossbeam_channel::Receiver;
+use crossbeam_channel::Sender;
 use logging::warn;
 use renderer::Renderer;
 use winit::event::KeyEvent;
@@ -13,13 +14,16 @@ use crate::scene::SceneMap;
 
 pub struct WindowLifecycle {
     event_rx: Receiver<WindowEvent>,
+    ack_tx: Sender<()>,
     context: WindowContext,
     scene_manager: SceneManager,
+    needs_ack: bool,
 }
 
 impl WindowLifecycle {
     pub fn new(
         event_rx: Receiver<WindowEvent>,
+        ack_tx: Sender<()>,
         window: Window,
         window_surface: wgpu::Surface<'static>,
         surface_config: wgpu::SurfaceConfiguration,
@@ -29,8 +33,10 @@ impl WindowLifecycle {
 
         Self {
             event_rx,
+            ack_tx,
             context: WindowContext::new(window, render),
             scene_manager: SceneManager::new(scenes),
+            needs_ack: false,
         }
     }
 
@@ -47,6 +53,11 @@ impl WindowLifecycle {
             }
 
             self.frame();
+
+            if self.needs_ack {
+                let _ = self.ack_tx.send(());
+                self.needs_ack = false;
+            }
         }
     }
 
@@ -153,7 +164,10 @@ impl WindowLifecycle {
                 }
             }
 
-            WindowEvent::Resized(view) => self.context.render.resize(view.into()),
+            WindowEvent::Resized(view) => {
+                self.context.render.resize(view.into());
+                self.needs_ack = true;
+            }
 
             _ => {}
         }

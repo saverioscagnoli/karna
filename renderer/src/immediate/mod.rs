@@ -127,12 +127,32 @@ pub struct ImmediateRenderer {
     #[get]
     #[set(into)]
     draw_color: Vector4,
+    point_batcher: Batcher<ImmediateVertex>,
+    line_batcher: Batcher<ImmediateVertex>,
     triangle_batcher: Batcher<ImmediateVertex>,
     circle_batcher: Batcher<ImmediateCircleVertex>,
 }
 
 impl ImmediateRenderer {
     pub fn new(surface_format: wgpu::TextureFormat, camera_bgl: &wgpu::BindGroupLayout) -> Self {
+        let point_pipeline = immediate_shader()
+            .pipeline_builder()
+            .label("Immediate Point pipeline")
+            .vertex_entry("vs_main")
+            .fragment_entry("fs_main")
+            .topology(wgpu::PrimitiveTopology::PointList)
+            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
+            .build(surface_format, &[camera_bgl], &[ImmediateVertex::desc()]);
+
+        let immediate_pipeline = immediate_shader()
+            .pipeline_builder()
+            .label("Immediate Line pipeline")
+            .vertex_entry("vs_main")
+            .fragment_entry("fs_main")
+            .topology(wgpu::PrimitiveTopology::LineList)
+            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
+            .build(surface_format, &[camera_bgl], &[ImmediateVertex::desc()]);
+
         let triangle_pipeline = immediate_shader()
             .pipeline_builder()
             .label("Immediate Triangle pipeline")
@@ -156,9 +176,41 @@ impl ImmediateRenderer {
 
         Self {
             draw_color: Color::White.into(),
+            point_batcher: Batcher::new(point_pipeline),
+            line_batcher: Batcher::new(immediate_pipeline),
             triangle_batcher: Batcher::new(triangle_pipeline),
             circle_batcher: Batcher::new(circle_pipeline),
         }
+    }
+
+    #[inline]
+    pub fn push_point(&mut self, x: f32, y: f32) {
+        self.point_batcher.vertices.push(ImmediateVertex::new(
+            x,
+            y,
+            0.0,
+            self.draw_color,
+            0.0,
+            0.0,
+        ));
+
+        self.point_batcher
+            .indices
+            .push(self.point_batcher.vertices.len() as u32 - 1);
+    }
+
+    #[inline]
+    pub fn push_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
+        let base = self.line_batcher.vertices.len() as u32;
+
+        self.line_batcher.vertices.extend_from_slice(&[
+            ImmediateVertex::new(x1, y1, 0.0, self.draw_color, 0.0, 0.0),
+            ImmediateVertex::new(x2, y2, 0.0, self.draw_color, 1.0, 0.0),
+        ]);
+
+        self.line_batcher
+            .indices
+            .extend_from_slice(&[base, base + 1]);
     }
 
     #[inline]
@@ -226,6 +278,9 @@ impl ImmediateRenderer {
 
     #[inline]
     pub fn present<'pass>(&'pass mut self, render_pass: &mut wgpu::RenderPass<'pass>) {
+        self.point_batcher.present(render_pass);
+        self.line_batcher.present(render_pass);
         self.triangle_batcher.present(render_pass);
+        self.circle_batcher.present(render_pass);
     }
 }

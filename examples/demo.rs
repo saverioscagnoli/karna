@@ -2,6 +2,7 @@ use karna::App;
 use karna::KeyCode;
 use karna::Scene;
 use karna::WindowBuilder;
+use karna::log::info;
 use karna::math::Size;
 use karna::math::Vector2;
 use karna::render::Color;
@@ -16,8 +17,9 @@ impl Scene for S {
     fn load(&mut self, ctx: karna::ContextRefMut) {}
 
     fn update(&mut self, ctx: karna::ContextRefMut) {
+        info!("fps {}", ctx.time.fps());
+
         let accel = 5000.0;
-        let friction = 0.85;
         let dt = ctx.time.delta();
 
         if ctx.input.key_held(&KeyCode::KeyW) {
@@ -30,16 +32,27 @@ impl Scene for S {
             self.vel.y += accel * dt;
         }
         if ctx.input.key_held(&KeyCode::KeyD) {
-            self.vel.x += accel * dt;
+            self.vel.x += accel * dt
         }
 
-        self.vel *= friction;
+        self.vel *= 0.85f32.powf(60.0).powf(dt);
         self.pos += self.vel * dt;
     }
 
     fn draw(&self, ctx: karna::ContextRef, draw: &mut Draw) {
-        draw.set_color(Color::Red);
-        draw.rect(self.pos.x, self.pos.y, 50.0, 50.0);
+        draw.set_color(Color::White);
+        draw.circle(self.pos.x, self.pos.y, 50.0);
+
+        draw.set_color(Color::Cyan);
+
+        for i in 0..10 {
+            for j in 0..10 {
+                draw.point(i as f32 * 10.0, j as f32 * 10.0);
+            }
+        }
+
+        draw.set_color(Color::Magenta);
+        draw.line_v([300.0, 100.0], self.pos);
     }
 }
 

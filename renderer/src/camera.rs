@@ -146,6 +146,16 @@ impl Camera {
     }
 
     #[inline]
+    pub fn projection_mut(&mut self) -> &mut dyn Projection {
+        &mut *self.projection
+    }
+
+    #[inline]
+    pub fn set_projection<P: Projection + 'static>(&mut self, projection: P) {
+        self.projection = Box::new(projection);
+    }
+
+    #[inline]
     pub fn view_projection(&self, view: Size<u32>) -> Matrix4 {
         let projection = self.projection.matrix(view);
         let view_mat = self
