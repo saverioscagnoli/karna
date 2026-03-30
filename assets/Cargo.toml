@@ -10,3 +10,5 @@ gpu.workspace = true
 rect_packer = "0.2.1"
 utils.workspace = true
 fontdue.workspace = true
+png.workspace = true
+parking_lot.workspace = true

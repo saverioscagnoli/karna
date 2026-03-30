@@ -1,14 +1,17 @@
 mod lazy;
 mod macros;
+mod slotmap;
 mod timer;
 
-use std::{
-    collections::{HashMap, HashSet},
-    hash::{BuildHasher, BuildHasherDefault, Hasher},
-    mem,
-};
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::hash::BuildHasher;
+use std::hash::BuildHasherDefault;
+use std::hash::Hasher;
+use std::mem;
 
 pub use lazy::*;
+pub use slotmap::*;
 pub use timer::*;
 
 pub fn as_u8_slice<T: Sized>(slice: &[T]) -> &[u8] {

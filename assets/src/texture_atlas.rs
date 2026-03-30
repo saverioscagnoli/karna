@@ -1,12 +1,25 @@
+use std::sync::Arc;
+
 use math::Size;
+use parking_lot::RwLock;
 use utils::FastHashMap;
+use utils::SlotMap;
+
+use crate::decoding::decode_png;
+
+#[derive(Debug, Clone)]
+pub struct Image {
+    label: String,
+    size: Size<u32>,
+}
 
 pub struct TextureAtlas {
     size: Size<u32>,
     texture: gpu::Texture,
     bgl: wgpu::BindGroupLayout,
-    regions: FastHashMap<String, rect_packer::Rect>,
     packer: rect_packer::DensePacker,
+    regions: FastHashMap<String, rect_packer::Rect>,
+    images: Arc<RwLock<SlotMap<Image>>>,
 }
 
 impl TextureAtlas {
@@ -88,6 +101,49 @@ impl TextureAtlas {
             size,
             packer,
             regions,
+            images: Arc::new(RwLock::new(SlotMap::new())),
         }
+    }
+
+    fn insert_region(&mut self, data: &[u8], size: Size<u32>) -> rect_packer::Rect {
+        let region = self
+            .packer
+            .pack(size.width as i32, size.height as i32, false)
+            .expect("Failed to pack");
+
+        let queue = gpu::queue();
+
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                aspect: wgpu::TextureAspect::All,
+                texture: self.texture.inner(),
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: region.x as u32,
+                    y: region.y as u32,
+                    z: 0,
+                },
+            },
+            data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * size.width),
+                rows_per_image: Some(size.height),
+            },
+            wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        region
+    }
+
+    pub fn load_image(&mut self, bytes: &[u8]) {
+        let (data, size) = decode_png(bytes);
+        let region = self.insert_region(&data, size);
+
+        let images_lock = self.images.write();
     }
 }

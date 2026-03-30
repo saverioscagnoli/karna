@@ -17,4 +17,9 @@ impl Window {
     pub(crate) fn request_redraw(&self) {
         self.inner.request_redraw();
     }
+
+    #[inline]
+    pub fn set_title<T: Into<String>>(&self, title: T) {
+        self.inner.set_title(&title.into());
+    }
 }
