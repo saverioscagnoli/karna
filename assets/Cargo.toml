@@ -12,3 +12,4 @@ utils.workspace = true
 fontdue.workspace = true
 png.workspace = true
 parking_lot.workspace = true
+logging.workspace = true

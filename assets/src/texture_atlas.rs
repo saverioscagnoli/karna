@@ -1,8 +1,12 @@
 use std::sync::Arc;
 
+use logging::info;
 use math::Size;
 use parking_lot::RwLock;
+use utils::ByteSize;
 use utils::FastHashMap;
+use utils::Handle;
+use utils::Slot;
 use utils::SlotMap;
 
 use crate::decoding::decode_png;
@@ -19,7 +23,7 @@ pub struct TextureAtlas {
     bgl: wgpu::BindGroupLayout,
     packer: rect_packer::DensePacker,
     regions: FastHashMap<String, rect_packer::Rect>,
-    images: Arc<RwLock<SlotMap<Image>>>,
+    images: SlotMap<Image>,
 }
 
 impl TextureAtlas {
@@ -101,7 +105,7 @@ impl TextureAtlas {
             size,
             packer,
             regions,
-            images: Arc::new(RwLock::new(SlotMap::new())),
+            images: SlotMap::new(),
         }
     }
 
@@ -140,10 +144,21 @@ impl TextureAtlas {
         region
     }
 
-    pub fn load_image(&mut self, bytes: &[u8]) {
+    pub fn load_image(&mut self, bytes: &[u8]) -> Handle<Image> {
         let (data, size) = decode_png(bytes);
         let region = self.insert_region(&data, size);
 
-        let images_lock = self.images.write();
+        self.images.insert_with_key(|key| {
+            let label = format!("img_{}", key.index());
+            self.regions.insert(label.clone(), region);
+
+            info!(
+                "Loading image with label={}, size={}",
+                label,
+                ByteSize::from_bytes(bytes.len() as u64)
+            );
+
+            Image { label, size }
+        })
     }
 }

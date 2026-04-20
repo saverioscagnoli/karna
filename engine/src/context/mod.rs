@@ -2,6 +2,7 @@ mod input;
 mod time;
 mod window;
 
+use assets::AssetServer;
 pub use input::Input;
 pub use input::KeyState;
 use renderer::Draw;
@@ -13,12 +14,14 @@ pub struct ContextRefMut<'a> {
     pub time: &'a mut Time,
     pub window: &'a mut Window,
     pub input: &'a mut Input,
+    pub assets: &'a mut AssetServer,
 }
 
 pub struct ContextRef<'a> {
     pub time: &'a Time,
     pub window: &'a Window,
     pub input: &'a Input,
+    pub assets: &'a AssetServer,
 }
 
 pub struct WindowContext {
@@ -26,6 +29,7 @@ pub struct WindowContext {
     pub window: Window,
     pub input: Input,
     pub render: Renderer,
+    pub assets: AssetServer,
 }
 
 impl WindowContext {
@@ -35,6 +39,7 @@ impl WindowContext {
             window,
             input: Input::new(),
             render,
+            assets: AssetServer::new(),
         }
     }
 
@@ -43,6 +48,7 @@ impl WindowContext {
             time: &mut self.time,
             window: &mut self.window,
             input: &mut self.input,
+            assets: &mut self.assets,
         }
     }
 
@@ -52,6 +58,7 @@ impl WindowContext {
             time: &self.time,
             window: &self.window,
             input: &self.input,
+            assets: &self.assets,
         };
 
         let draw = Draw::new(&mut self.render);

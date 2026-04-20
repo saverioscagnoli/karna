@@ -1,5 +1,6 @@
 mod lazy;
 mod macros;
+mod size;
 mod slotmap;
 mod timer;
 
@@ -11,6 +12,7 @@ use std::hash::Hasher;
 use std::mem;
 
 pub use lazy::*;
+pub use size::*;
 pub use slotmap::*;
 pub use timer::*;
 
