@@ -1,6 +1,7 @@
 mod builder;
 mod context;
 mod events;
+mod init;
 mod lifecycle;
 mod scene;
 
@@ -36,28 +37,8 @@ use winit::window::WindowId;
 
 use crate::events::EventHandler;
 use crate::events::WindowHandle;
+use crate::init::init_logging;
 use crate::lifecycle::WindowLifecycle;
-
-struct EngineLogTarget;
-
-impl logging::target::Target for EngineLogTarget {
-    fn write(&self, level: LogLevel, message: &str) -> Result<(), logging::LogError> {
-        let mut logs = globals::logs::get().write();
-
-        logs.push((level, message.to_string()));
-
-        Ok(())
-    }
-}
-
-fn init_logging() {
-    logging::init(
-        logging::Config::default().with_target(logging::TargetConfig {
-            target: Box::new(EngineLogTarget),
-            formatter: None,
-        }),
-    );
-}
 
 pub struct App {
     window_builders: Vec<WindowBuilder>,
@@ -94,7 +75,6 @@ impl App {
 
     fn spawn_window(&mut self, window: winit::window::Window, scenes: SceneMap) {
         let (window_tx, window_rx) = crossbeam_channel::unbounded::<WindowEvent>();
-        let (ack_tx, ack_rx) = crossbeam_channel::unbounded::<()>();
 
         let window_id = window.id();
         let winit_window = Arc::new(window);
@@ -106,13 +86,12 @@ impl App {
         let window = Window::new(winit_window);
 
         let thread = thread::spawn(move || {
-            let mut lifecycle =
-                WindowLifecycle::new(window_rx, ack_tx, window, surface, config, scenes);
+            let mut lifecycle = WindowLifecycle::new(window_rx, window, surface, config, scenes);
 
             lifecycle.game_loop();
         });
 
-        let window_handle = WindowHandle::new(window_tx, ack_rx, thread);
+        let window_handle = WindowHandle::new(window_tx, thread);
 
         self.threads.insert(window_id, window_handle);
     }
@@ -149,11 +128,7 @@ impl ApplicationHandler for App {
                 return;
             };
 
-            let WindowHandle {
-                event_tx,
-                ack_rx: _,
-                thread,
-            } = window;
+            let WindowHandle { event_tx, thread } = window;
 
             // Send close event so the window thread's game loop exits.
             let _ = event_tx.send(event);
@@ -183,16 +158,16 @@ impl ApplicationHandler for App {
             return;
         };
 
-        let is_resize = matches!(event, WindowEvent::Resized(_));
-
         // Propagate the event to the respective window
+        //
+        // IMPORTANT (Windows): never block the winit event loop thread waiting for a window-thread
+        // acknowledgement (e.g. on resize). If the window thread is stalled (GPU, surface, etc),
+        // blocking here stops message pumping and the OS will mark the window as "Not Responding".
         if let Err(e) = window.event_tx.try_send(event) {
             warn!(
                 "Event dropped: {} - Window channel full. Window id: {:?}",
                 e, window_id
             );
-        } else if is_resize {
-            let _ = window.ack_rx.recv();
         }
     }
 

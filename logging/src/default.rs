@@ -1,9 +1,11 @@
 //! Default logger implementation.
 
-use crate::{
-    Config, LogLevel, Logger, Record,
-    formatter::{DefaultFormatter, Formatter},
-};
+use crate::Config;
+use crate::LogLevel;
+use crate::Logger;
+use crate::Record;
+use crate::formatter::DefaultFormatter;
+use crate::formatter::Formatter;
 
 pub struct DefaultLogger {
     config: Config,

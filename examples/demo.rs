@@ -14,7 +14,9 @@ struct S {
 }
 
 impl Scene for S {
-    fn load(&mut self, ctx: karna::ContextRefMut) {}
+    fn load(&mut self, ctx: karna::ContextRefMut) {
+        ctx.time.set_target_fps(120);
+    }
 
     fn update(&mut self, ctx: karna::ContextRefMut) {
         ctx.window.set_title(format!("fps: {}", ctx.time.fps()));
@@ -25,12 +27,15 @@ impl Scene for S {
         if ctx.input.key_held(&KeyCode::KeyW) {
             self.vel.y -= accel * dt;
         }
+
         if ctx.input.key_held(&KeyCode::KeyA) {
             self.vel.x -= accel * dt;
         }
+
         if ctx.input.key_held(&KeyCode::KeyS) {
             self.vel.y += accel * dt;
         }
+
         if ctx.input.key_held(&KeyCode::KeyD) {
             self.vel.x += accel * dt
         }

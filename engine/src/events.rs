@@ -1,6 +1,5 @@
 use std::thread::JoinHandle;
 
-use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
 use winit::event::DeviceEvent;
 use winit::event::WindowEvent;
@@ -11,21 +10,12 @@ use winit::event::WindowEvent;
 /// Each window has its own thread
 pub struct WindowHandle {
     pub event_tx: Sender<WindowEvent>,
-    pub ack_rx: Receiver<()>,
     pub thread: JoinHandle<()>,
 }
 
 impl WindowHandle {
-    pub fn new(
-        event_tx: Sender<WindowEvent>,
-        ack_rx: Receiver<()>,
-        thread: JoinHandle<()>,
-    ) -> Self {
-        Self {
-            event_tx,
-            ack_rx,
-            thread,
-        }
+    pub fn new(event_tx: Sender<WindowEvent>, thread: JoinHandle<()>) -> Self {
+        Self { event_tx, thread }
     }
 }
 
@@ -34,7 +24,7 @@ impl WindowHandle {
 /// they should be available to all windows
 pub struct EventHandler {
     pub device_tx: Sender<DeviceEvent>,
-    pub device_rx: Receiver<DeviceEvent>,
+    pub device_rx: crossbeam_channel::Receiver<DeviceEvent>,
 }
 
 impl EventHandler {

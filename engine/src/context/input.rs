@@ -2,6 +2,7 @@ use utils::FastHashSet;
 pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyState {
     Held,
     Pressed,
@@ -29,13 +30,13 @@ impl Input {
             match state {
                 KeyState::Held => self.held_keys.remove(&key),
                 KeyState::Pressed => self.pressed_keys.remove(&key),
-                KeyState::Released => self.pressed_keys.remove(&key),
+                KeyState::Released => self.released_keys.remove(&key),
             };
         } else {
             match state {
                 KeyState::Held => self.held_keys.insert(key),
                 KeyState::Pressed => self.pressed_keys.insert(key),
-                KeyState::Released => self.pressed_keys.insert(key),
+                KeyState::Released => self.released_keys.insert(key),
             };
         }
     }
