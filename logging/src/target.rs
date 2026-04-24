@@ -3,10 +3,17 @@
 //! Contains the trait that one must implement to create a custom target.
 //! The crate provides 2 default targets: Console and File.
 
-use crate::{
-    Color, Colorize, LogLevel, Record, err::LogError, format_context, formatter::Formatter,
-};
-use std::{io::Write, path::Path, sync::Mutex};
+use std::io::Write;
+use std::path::Path;
+use std::sync::Mutex;
+
+use crate::Color;
+use crate::Colorize;
+use crate::LogLevel;
+use crate::Record;
+use crate::err::LogError;
+use crate::format_context;
+use crate::formatter::Formatter;
 
 /// Defines an output destination for log messages.
 ///

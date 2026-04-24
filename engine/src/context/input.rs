@@ -1,5 +1,4 @@
 use utils::FastHashSet;
-pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

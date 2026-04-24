@@ -235,6 +235,20 @@ impl ImmediateRenderer {
     }
 
     #[inline]
+    pub fn push_textured_quad(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        uv_x: f32,
+        uv_y: f32,
+        uv_w: f32,
+        uv_h: f32,
+    ) {
+    }
+
+    #[inline]
     pub fn push_circle(&mut self, x: f32, y: f32, radius: f32) {
         let base = self.circle_batcher.vertices.len() as u32;
         let center = Vector2::new(x, y);

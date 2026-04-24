@@ -101,6 +101,7 @@ impl Time {
             sleeper: SpinSleeper::default(),
         }
     }
+
     /// Marks the start of the frame
     #[inline]
     pub(crate) fn frame_start(&mut self) {
@@ -151,8 +152,6 @@ impl Time {
             self.tick_counter = 0;
             self.tick_timer.reset();
         }
-
-        self.last_frame = self.this_frame;
     }
 
     /// Checks whether the game loop should do a tick or not
@@ -178,6 +177,7 @@ impl Time {
     /// Marks the end of the frame
     #[inline]
     pub(crate) fn frame_end(&mut self) {
+        self.last_frame = self.this_frame;
         self.frame_time = Instant::now() - self.this_frame;
     }
 

@@ -9,15 +9,23 @@ mod formatter;
 mod macros;
 mod style;
 
-use crate::target::{Console, DefaultConsoleFormatter, Target};
-use std::{collections::HashMap, fmt, sync::OnceLock};
+use std::collections::HashMap;
+use std::fmt;
+use std::sync::OnceLock;
 
+pub use chrono;
+use chrono::DateTime;
+use chrono::Local;
 // Re-exports
 pub use context::*;
 pub use default::DefaultLogger;
 pub use err::LogError;
 pub use formatter::*;
 pub use style::*;
+
+use crate::target::Console;
+use crate::target::DefaultConsoleFormatter;
+use crate::target::Target;
 
 /// Logging severity levels in ascending order of importance.
 ///
@@ -76,16 +84,24 @@ pub struct Record {
     pub level: LogLevel,
     pub message: String,
     pub timestamp: u64,
+    pub date: DateTime<Local>,
     pub target: String,
     pub context: HashMap<String, String>,
 }
 
 impl Record {
-    pub fn new(level: LogLevel, message: String, target: String, timestamp: u64) -> Self {
+    pub fn new(
+        level: LogLevel,
+        message: String,
+        target: String,
+        timestamp: u64,
+        date: DateTime<Local>,
+    ) -> Self {
         Self {
             level,
             message,
             timestamp,
+            date,
             target,
             context: context::snapshot(),
         }

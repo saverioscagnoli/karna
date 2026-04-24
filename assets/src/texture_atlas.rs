@@ -1,12 +1,8 @@
-use std::sync::Arc;
-
 use logging::info;
 use math::Size;
-use parking_lot::RwLock;
 use utils::ByteSize;
 use utils::FastHashMap;
 use utils::Handle;
-use utils::Slot;
 use utils::SlotMap;
 
 use crate::decoding::decode_png;
@@ -153,7 +149,7 @@ impl TextureAtlas {
             self.regions.insert(label.clone(), region);
 
             info!(
-                "Loading image with label={}, size={}",
+                "Loaded image with label={}, size={}",
                 label,
                 ByteSize::from_bytes(bytes.len() as u64)
             );
@@ -161,4 +157,7 @@ impl TextureAtlas {
             Image { label, size }
         })
     }
+
+    #[inline]
+    pub fn get_uv_coordinates(&self, image: Handle<Image>) {}
 }

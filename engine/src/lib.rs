@@ -15,7 +15,6 @@ pub use context::ContextRef;
 pub use context::ContextRefMut;
 pub use context::Time;
 pub use context::Window;
-use logging::LogLevel;
 use logging::error;
 use logging::info;
 use logging::trace;

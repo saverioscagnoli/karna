@@ -1,8 +1,7 @@
 use std::collections::HashMap;
-use std::time::SystemTime;
 
+use logging::Colorize;
 use logging::LogLevel;
-use logging::TargetConfig;
 
 struct EngineLogTarget;
 
@@ -20,19 +19,35 @@ struct EngineLogFormatter;
 
 impl logging::Formatter for EngineLogFormatter {
     fn format(&self, record: &logging::Record) -> String {
-        let level = format!("[{}]", record.level);
+        let level = format!("[{}]", record.level).color(record.level.console_color());
         let padding = " ".repeat(LogLevel::MAX_WIDTH - record.level.to_string().len());
         let level = format!("{}{}", level, padding);
 
         if record.context.is_empty() {
-            format!("{} {} {} ciao!", record.timestamp, level, record.message)
+            format!(
+                "{} {} {}",
+                record
+                    .date
+                    .format("[%Y/%m/%d %H:%M:%S]")
+                    .to_string()
+                    .color(logging::Color::BrightCyan),
+                level,
+                record.message
+            )
         } else {
             let ctx = format_context(&record.context);
             let ctx_formatted = format!("{{ {} }}", ctx);
 
             format!(
                 "{} {} {} {}",
-                record.timestamp, level, ctx_formatted, record.message
+                record
+                    .date
+                    .format("[%Y/%m/%d %H:%M:%S]")
+                    .to_string()
+                    .color(logging::Color::BrightCyan),
+                level,
+                ctx_formatted,
+                record.message
             )
         }
     }
@@ -59,7 +74,7 @@ pub fn init_logging() {
         vec![
             logging::TargetConfig {
                 target: Box::new(logging::target::Console),
-                formatter: None,
+                formatter: Some(Box::new(EngineLogFormatter)),
             },
             logging::TargetConfig {
                 target: Box::new(EngineLogTarget),

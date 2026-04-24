@@ -2,7 +2,8 @@
 macro_rules! log {
    ($level:expr, $($arg:tt)*) => {{
         let logger = $crate::logger();
-        let record = $crate::Record::new($level, format!($($arg)*), module_path!().to_string(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or(std::time::Duration::ZERO).as_millis() as u64);
+        let record = $crate::Record::new($level, format!($($arg)*), module_path!().to_string(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or(std::time::Duration::ZERO).as_millis() as u64, $crate::chrono::Local::now());
+
 
         logger.log(&record);
     }};
