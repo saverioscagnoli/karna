@@ -3,12 +3,15 @@ mod draw_handle;
 
 use std::mem;
 
+use assets::AssetServerGuard;
+use assets::Image;
 pub use draw_handle::Draw;
 use macros::Get;
 use macros::Set;
 use math::Vector2;
 use math::Vector3;
 use math::Vector4;
+use utils::Handle;
 
 use crate::Color;
 use crate::immediate::batcher::Batcher;
@@ -24,11 +27,11 @@ pub struct ImmediateVertex {
 }
 
 impl ImmediateVertex {
-    fn new(x: f32, y: f32, z: f32, color: Vector4, u: f32, v: f32) -> Self {
+    fn new(x: f32, y: f32, z: f32, color: Vector4, uv: Vector2) -> Self {
         Self {
             position: Vector3::new(x, y, z),
             color,
-            uv: Vector2::new(u, v),
+            uv,
         }
     }
 
@@ -134,7 +137,11 @@ pub struct ImmediateRenderer {
 }
 
 impl ImmediateRenderer {
-    pub fn new(surface_format: wgpu::TextureFormat, camera_bgl: &wgpu::BindGroupLayout) -> Self {
+    pub fn new(
+        surface_format: wgpu::TextureFormat,
+        camera_bgl: &wgpu::BindGroupLayout,
+        atlas_bgl: &wgpu::BindGroupLayout,
+    ) -> Self {
         let point_pipeline = immediate_shader()
             .pipeline_builder()
             .label("Immediate Point pipeline")
@@ -142,7 +149,11 @@ impl ImmediateRenderer {
             .fragment_entry("fs_main")
             .topology(wgpu::PrimitiveTopology::PointList)
             .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(surface_format, &[camera_bgl], &[ImmediateVertex::desc()]);
+            .build(
+                surface_format,
+                &[camera_bgl, &atlas_bgl],
+                &[ImmediateVertex::desc()],
+            );
 
         let immediate_pipeline = immediate_shader()
             .pipeline_builder()
@@ -151,7 +162,11 @@ impl ImmediateRenderer {
             .fragment_entry("fs_main")
             .topology(wgpu::PrimitiveTopology::LineList)
             .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(surface_format, &[camera_bgl], &[ImmediateVertex::desc()]);
+            .build(
+                surface_format,
+                &[camera_bgl, &atlas_bgl],
+                &[ImmediateVertex::desc()],
+            );
 
         let triangle_pipeline = immediate_shader()
             .pipeline_builder()
@@ -160,7 +175,11 @@ impl ImmediateRenderer {
             .fragment_entry("fs_main")
             .topology(wgpu::PrimitiveTopology::TriangleList)
             .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(surface_format, &[camera_bgl], &[ImmediateVertex::desc()]);
+            .build(
+                surface_format,
+                &[camera_bgl, &atlas_bgl],
+                &[ImmediateVertex::desc()],
+            );
 
         let circle_pipeline = immediate_circle_shader()
             .pipeline_builder()
@@ -190,8 +209,7 @@ impl ImmediateRenderer {
             y,
             0.0,
             self.draw_color,
-            0.0,
-            0.0,
+            Vector2::new(0.0, 0.0),
         ));
 
         self.point_batcher
@@ -204,8 +222,8 @@ impl ImmediateRenderer {
         let base = self.line_batcher.vertices.len() as u32;
 
         self.line_batcher.vertices.extend_from_slice(&[
-            ImmediateVertex::new(x1, y1, 0.0, self.draw_color, 0.0, 0.0),
-            ImmediateVertex::new(x2, y2, 0.0, self.draw_color, 1.0, 0.0),
+            ImmediateVertex::new(x1, y1, 0.0, self.draw_color, Vector2::new(0.0, 0.0)),
+            ImmediateVertex::new(x2, y2, 0.0, self.draw_color, Vector2::new(1.0, 0.0)),
         ]);
 
         self.line_batcher
@@ -214,14 +232,20 @@ impl ImmediateRenderer {
     }
 
     #[inline]
-    pub fn push_quad(&mut self, x: f32, y: f32, w: f32, h: f32) {
+    pub fn push_quad(&mut self, assets: &AssetServerGuard, x: f32, y: f32, w: f32, h: f32) {
+        let uv = assets.white_uv();
+        let uv_tl = Vector2::new(uv.x, uv.y);
+        let uv_tr = Vector2::new(uv.x + uv.z, uv.y);
+        let uv_bl = Vector2::new(uv.x, uv.y + uv.w);
+        let uv_br = Vector2::new(uv.x + uv.z, uv.y + uv.w);
+
         let base = self.triangle_batcher.vertices.len() as u32;
 
         self.triangle_batcher.vertices.extend_from_slice(&[
-            ImmediateVertex::new(x, y, 0.0, self.draw_color, 0.0, 0.0),
-            ImmediateVertex::new(x + w, y, 0.0, self.draw_color, 1.0, 0.0),
-            ImmediateVertex::new(x + w, y + h, 0.0, self.draw_color, 1.0, 1.0),
-            ImmediateVertex::new(x, y + h, 0.0, self.draw_color, 0.0, 1.0),
+            ImmediateVertex::new(x, y, 0.0, self.draw_color, uv_tl),
+            ImmediateVertex::new(x + w, y, 0.0, self.draw_color, uv_tr),
+            ImmediateVertex::new(x, y + h, 0.0, self.draw_color, uv_bl),
+            ImmediateVertex::new(x + w, y + h, 0.0, self.draw_color, uv_br),
         ]);
 
         self.triangle_batcher.indices.extend_from_slice(&[
@@ -237,15 +261,34 @@ impl ImmediateRenderer {
     #[inline]
     pub fn push_textured_quad(
         &mut self,
+        image: Handle<Image>,
+        assets: AssetServerGuard,
         x: f32,
         y: f32,
-        w: f32,
-        h: f32,
-        uv_x: f32,
-        uv_y: f32,
-        uv_w: f32,
-        uv_h: f32,
     ) {
+        let uv = assets.uv(image);
+        let uv_tl = Vector2::new(uv.x, uv.y);
+        let uv_tr = Vector2::new(uv.x + uv.z, uv.y);
+        let uv_bl = Vector2::new(uv.x, uv.y + uv.w);
+        let uv_br = Vector2::new(uv.x + uv.z, uv.y + uv.w);
+
+        let base = self.triangle_batcher.vertices.len() as u32;
+
+        self.triangle_batcher.vertices.extend_from_slice(&[
+            ImmediateVertex::new(x, y, 0.0, self.draw_color, uv_tl),
+            ImmediateVertex::new(x + uv.z, y, 0.0, self.draw_color, uv_tr),
+            ImmediateVertex::new(x, y + uv.w, 0.0, self.draw_color, uv_bl),
+            ImmediateVertex::new(x + uv.z, y + uv.w, 0.0, self.draw_color, uv_br),
+        ]);
+
+        self.triangle_batcher.indices.extend_from_slice(&[
+            base,
+            base + 1,
+            base + 2,
+            base,
+            base + 2,
+            base + 3,
+        ]);
     }
 
     #[inline]

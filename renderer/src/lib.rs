@@ -7,6 +7,7 @@ mod shader;
 use std::sync::Arc;
 use std::sync::OnceLock;
 
+use assets::AssetServerGuard;
 pub use camera::Camera;
 pub use camera::OrthographicProjection;
 pub use camera::PerspectiveProjection;
@@ -135,10 +136,11 @@ impl Renderer {
     pub fn from_surface(
         surface: wgpu::Surface<'static>,
         surface_config: wgpu::SurfaceConfiguration,
+        assets: &AssetServerGuard,
     ) -> Self {
         let view = Size::new(surface_config.width, surface_config.height);
-        let world = RenderLayer::new(view, surface_config.format);
-        let ui = RenderLayer::new(view, surface_config.format);
+        let world = RenderLayer::new(view, surface_config.format, assets);
+        let ui = RenderLayer::new(view, surface_config.format, assets);
 
         Self {
             surface,
@@ -201,7 +203,7 @@ impl Renderer {
     }
 
     #[doc(hidden)]
-    pub fn present(&mut self) {
+    pub fn present(&mut self, assets: &AssetServerGuard) {
         let gpu = gpu::get();
         let output = self.surface.get_current_texture().expect("Bruh");
         let view = output
@@ -233,7 +235,7 @@ impl Renderer {
             });
 
             // Flush all immediate-mode geometry that was accumulated this frame.
-            self.active_layer_mut().flush(&mut render_pass);
+            self.active_layer_mut().flush(&mut render_pass, assets);
         }
 
         gpu.queue().submit(std::iter::once(encoder.finish()));

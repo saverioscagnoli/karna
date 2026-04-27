@@ -1,3 +1,4 @@
+use assets::AssetServerGuard;
 use macros::Get;
 use math::Size;
 
@@ -23,7 +24,11 @@ pub struct RenderLayer {
 }
 
 impl RenderLayer {
-    pub fn new(view: Size<u32>, surface_format: wgpu::TextureFormat) -> Self {
+    pub fn new(
+        view: Size<u32>,
+        surface_format: wgpu::TextureFormat,
+        assets: &AssetServerGuard,
+    ) -> Self {
         let camera = Camera::new(OrthographicProjection::new(
             0.0,
             view.width as f32,
@@ -39,7 +44,11 @@ impl RenderLayer {
         camera.update(view);
 
         Self {
-            immediate: ImmediateRenderer::new(surface_format, &camera.vp_bgl()),
+            immediate: ImmediateRenderer::new(
+                surface_format,
+                &camera.vp_bgl(),
+                &assets.atlas_bgl(),
+            ),
             camera,
         }
     }
@@ -58,10 +67,19 @@ impl RenderLayer {
     }
 
     #[inline]
-    pub fn flush<'pass>(&'pass mut self, render_pass: &mut wgpu::RenderPass<'pass>) {
+    pub fn flush<'pass>(
+        &'pass mut self,
+        render_pass: &mut wgpu::RenderPass<'pass>,
+        assets: &AssetServerGuard,
+    ) {
         // The immediate pipeline expects the camera bind group at index 0:
         //   @group(0) @binding(0) var<uniform> view_projection: mat4x4<f32>;
         render_pass.set_bind_group(0, self.camera.vp_bg(), &[]);
+
+        // The immediate shader samples from the texture atlas at group(1):
+        //   @group(1) @binding(0) var texture_atlas: texture_2d<f32>;
+        //   @group(1) @binding(1) var texture_sampler: sampler;
+        render_pass.set_bind_group(1, assets.atlas_bg(), &[]);
 
         self.immediate.present(render_pass);
     }

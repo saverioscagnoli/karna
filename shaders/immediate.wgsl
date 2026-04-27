@@ -16,15 +16,11 @@ struct VertexOutput {
 @group(0) @binding(0)
 var<uniform> view_projection: mat4x4<f32>;
 
-// Texture atlas (DISABLED for now: pipeline only provides group(0) layout).
-// Re-enable later by adding a bind group layout for group(1) with:
-// - @binding(0): texture_2d<f32>
-// - @binding(1): sampler
-//
-// @group(1) @binding(0)
-// var texture_atlas: texture_2d<f32>;
-// @group(1) @binding(1)
-// var texture_sampler: sampler;
+// Texture atlas
+@group(1) @binding(0)
+var texture_atlas: texture_2d<f32>;
+@group(1) @binding(1)
+var texture_sampler: sampler;
 
 @vertex
 fn vs_main(vertex: VertexInput) -> VertexOutput {
@@ -40,11 +36,6 @@ fn vs_main(vertex: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Untextured for now: just output vertex color.
-    //
-    // Re-enable later:
-    // let tex_color = textureSample(texture_atlas, texture_sampler, in.uv_coords);
-    // return in.color * tex_color;
-
-    return in.color;
+    let tex_color = textureSample(texture_atlas, texture_sampler, in.uv_coords);
+    return in.color * tex_color;
 }

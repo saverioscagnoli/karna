@@ -1,3 +1,4 @@
+use assets::AssetServerGuard;
 use math::Size;
 use math::Vector2;
 use math::Vector4;
@@ -6,14 +7,15 @@ use crate::Color;
 use crate::Renderer;
 
 pub struct Draw<'r> {
+    assets: AssetServerGuard<'r>,
     renderer: &'r mut Renderer,
 }
 
 impl<'r> Draw<'r> {
     #[inline]
     #[doc(hidden)]
-    pub fn new(renderer: &'r mut Renderer) -> Self {
-        Self { renderer }
+    pub fn new(assets: AssetServerGuard<'r>, renderer: &'r mut Renderer) -> Self {
+        Self { assets, renderer }
     }
 
     #[inline]
@@ -65,7 +67,7 @@ impl<'r> Draw<'r> {
         self.renderer
             .active_layer_mut()
             .immediate_mut()
-            .push_quad(x, y, w, h);
+            .push_quad(&self.assets, x, y, w, h);
     }
 
     #[inline]

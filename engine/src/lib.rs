@@ -9,6 +9,7 @@ use std::mem;
 use std::sync::Arc;
 use std::thread;
 
+use assets::AssetServer;
 pub use builder::AppBuilder;
 pub use builder::WindowBuilder;
 pub use context::ContextRef;
@@ -24,6 +25,7 @@ pub use scene::Scene;
 pub use scene::SceneManager;
 pub use scene::SceneMap;
 use utils::FastHashMap;
+use utils::Lazy;
 use winit::application::ApplicationHandler;
 use winit::event::DeviceEvent;
 use winit::event::DeviceId;
@@ -44,6 +46,7 @@ pub struct App {
 
     threads: FastHashMap<WindowId, WindowHandle>,
     events: EventHandler,
+    asset_server: Lazy<AssetServer>,
 }
 
 impl App {
@@ -52,6 +55,7 @@ impl App {
             window_builders: Vec::new(),
             threads: FastHashMap::default(),
             events: EventHandler::new(),
+            asset_server: Lazy::new(),
         }
     }
 
@@ -63,6 +67,7 @@ impl App {
         gpu::init();
         init_logging();
         renderer::init();
+        self.asset_server.set(AssetServer::new());
 
         info!("App initialized successfully.");
     }
@@ -82,10 +87,20 @@ impl App {
         // because it sucks ass
         let (surface, config) = Renderer::create_surface(winit_window.clone());
 
+        // Arc underneath so clone is the same instance
+        let asset_server_clone = self.asset_server.clone();
+
         let window = Window::new(winit_window);
 
         let thread = thread::spawn(move || {
-            let mut lifecycle = WindowLifecycle::new(window_rx, window, surface, config, scenes);
+            let mut lifecycle = WindowLifecycle::new(
+                window_rx,
+                window,
+                surface,
+                config,
+                scenes,
+                &asset_server_clone.guard(),
+            );
 
             lifecycle.game_loop();
         });

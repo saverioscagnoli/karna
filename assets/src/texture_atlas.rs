@@ -1,5 +1,6 @@
 use logging::info;
 use math::Size;
+use math::Vector4;
 use utils::ByteSize;
 use utils::FastHashMap;
 use utils::Handle;
@@ -20,6 +21,24 @@ pub struct TextureAtlas {
     packer: rect_packer::DensePacker,
     regions: FastHashMap<String, rect_packer::Rect>,
     images: SlotMap<Image>,
+}
+
+impl TextureAtlas {
+    /// Bind group layout for the texture atlas texture+sampler.
+    ///
+    /// Expected bindings:
+    /// - binding(0): `texture_2d<f32>`
+    /// - binding(1): sampler
+    #[inline]
+    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.bgl
+    }
+
+    /// Bind group containing the atlas texture view + sampler.
+    #[inline]
+    pub fn bind_group(&self) -> &wgpu::BindGroup {
+        &self.texture.bind_group
+    }
 }
 
 impl TextureAtlas {
@@ -159,5 +178,34 @@ impl TextureAtlas {
     }
 
     #[inline]
-    pub fn get_uv_coordinates(&self, image: Handle<Image>) {}
+    pub fn get_uv_coordinates(&self, image: Handle<Image>) -> Vector4 {
+        let image = self.images.get(image).expect("Failed to get image");
+        let rect = self.regions.get(&image.label).expect("Failed to get rect");
+
+        Vector4::new(
+            rect.x as f32,
+            rect.y as f32,
+            rect.width as f32,
+            rect.height as f32,
+        )
+    }
+
+    #[inline]
+    pub fn get_image_dimensions(&self, image: Handle<Image>) -> Size<u32> {
+        let image = self.images.get(image).expect("Failed to get image");
+
+        image.size
+    }
+
+    #[inline]
+    pub fn get_white_uv_coordinates(&self) -> Vector4 {
+        let rect = self.regions.get("_white").unwrap();
+
+        Vector4::new(
+            rect.x as f32,
+            rect.y as f32,
+            rect.width as f32,
+            rect.height as f32,
+        )
+    }
 }

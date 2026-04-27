@@ -1,3 +1,4 @@
+use assets::AssetServerGuard;
 use crossbeam_channel::Receiver;
 use renderer::Renderer;
 use winit::event::ElementState;
@@ -25,8 +26,9 @@ impl WindowLifecycle {
         window_surface: wgpu::Surface<'static>,
         surface_config: wgpu::SurfaceConfiguration,
         scenes: SceneMap,
+        assets: &AssetServerGuard,
     ) -> Self {
-        let render = Renderer::from_surface(window_surface, surface_config);
+        let render = Renderer::from_surface(window_surface, surface_config, assets);
 
         Self {
             event_rx,
@@ -95,7 +97,7 @@ impl WindowLifecycle {
             self.scenes.draw(ctx, &mut draw);
         }
 
-        self.context.render.present();
+        self.context.render.present(&self.context.assets.guard());
 
         // Per-frame input cleanup. `Pressed` / `Released` should only live for a single frame.
         self.context.input.flush();
