@@ -53,6 +53,11 @@ impl<'a> AssetServerGuard<'a> {
         self.atlas.get_white_uv_coordinates()
     }
 
+    #[inline]
+    pub fn image_size(&self, image: Handle<Image>) -> Size<u32> {
+        self.atlas.get_image_dimensions(image)
+    }
+
     /// Bind group layout for the texture atlas.
     ///
     /// This matches the atlas shader bindings:

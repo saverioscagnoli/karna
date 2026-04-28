@@ -17,6 +17,7 @@ pub struct WindowLifecycle {
     scenes: SceneManager,
     loaded: bool,
     focused: bool,
+    pending_resize: Option<winit::dpi::PhysicalSize<u32>>,
 }
 
 impl WindowLifecycle {
@@ -36,6 +37,7 @@ impl WindowLifecycle {
             scenes: SceneManager::new(scenes),
             loaded: false,
             focused: true,
+            pending_resize: None,
         }
     }
 
@@ -77,6 +79,12 @@ impl WindowLifecycle {
     }
 
     fn frame(&mut self) {
+        if let Some(size) = self.pending_resize.take() {
+            self.context
+                .render
+                .resize(math::Size::new(size.width, size.height));
+        }
+
         self.context.time.frame_start();
         self.context.time.update();
 
@@ -109,6 +117,10 @@ impl WindowLifecycle {
     fn handle_window_event(&mut self, event: WindowEvent) -> bool {
         match event {
             WindowEvent::CloseRequested => return true,
+
+            WindowEvent::Resized(physical_size) => {
+                self.pending_resize = Some(physical_size);
+            }
 
             // Track focus so you can decide how to treat input when unfocused.
             WindowEvent::Focused(focused) => {

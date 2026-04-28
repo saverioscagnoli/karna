@@ -1,7 +1,9 @@
 use assets::AssetServerGuard;
+use assets::Image;
 use math::Size;
 use math::Vector2;
 use math::Vector4;
+use utils::Handle;
 
 use crate::Color;
 use crate::Renderer;
@@ -32,11 +34,32 @@ impl<'r> Draw<'r> {
     }
 
     #[inline]
+    pub fn scale(&self) -> f32 {
+        self.renderer.active_layer().immediate().scale()
+    }
+
+    #[inline]
+    pub fn set_scale(&mut self, scale: f32) {
+        self.renderer
+            .active_layer_mut()
+            .immediate_mut()
+            .set_scale(scale);
+    }
+
+    #[inline]
+    pub fn reset_scale(&mut self) {
+        self.renderer
+            .active_layer_mut()
+            .immediate_mut()
+            .set_scale(1.0);
+    }
+
+    #[inline]
     pub fn point(&mut self, x: f32, y: f32) {
         self.renderer
             .active_layer_mut()
             .immediate_mut()
-            .push_point(x, y);
+            .push_point(&self.assets, x, y);
     }
 
     #[inline]
@@ -51,7 +74,7 @@ impl<'r> Draw<'r> {
         self.renderer
             .active_layer_mut()
             .immediate_mut()
-            .push_line(x1, y1, x2, y2);
+            .push_line(&self.assets, x1, y1, x2, y2);
     }
 
     #[inline]
@@ -76,6 +99,21 @@ impl<'r> Draw<'r> {
         let size: Size<f32> = size.into();
 
         self.rect(pos.x, pos.y, size.width, size.height);
+    }
+
+    #[inline]
+    pub fn image(&mut self, image: Handle<Image>, x: f32, y: f32) {
+        self.renderer
+            .active_layer_mut()
+            .immediate_mut()
+            .push_textured_quad(image, &self.assets, x, y);
+    }
+
+    #[inline]
+    pub fn image_v<P: Into<Vector2>>(&mut self, image: Handle<Image>, pos: P) {
+        let pos: Vector2 = pos.into();
+
+        self.image(image, pos.x, pos.y);
     }
 
     #[inline]

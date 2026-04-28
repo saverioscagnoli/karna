@@ -134,6 +134,10 @@ pub struct ImmediateRenderer {
     line_batcher: Batcher<ImmediateVertex>,
     triangle_batcher: Batcher<ImmediateVertex>,
     circle_batcher: Batcher<ImmediateCircleVertex>,
+
+    #[get(copied)]
+    #[set]
+    scale: f32,
 }
 
 impl ImmediateRenderer {
@@ -199,18 +203,20 @@ impl ImmediateRenderer {
             line_batcher: Batcher::new(immediate_pipeline),
             triangle_batcher: Batcher::new(triangle_pipeline),
             circle_batcher: Batcher::new(circle_pipeline),
+            scale: 1.0,
         }
     }
 
     #[inline]
-    pub fn push_point(&mut self, x: f32, y: f32) {
-        self.point_batcher.vertices.push(ImmediateVertex::new(
-            x,
-            y,
-            0.0,
-            self.draw_color,
-            Vector2::new(0.0, 0.0),
-        ));
+    pub fn push_point(&mut self, assets: &AssetServerGuard, x: f32, y: f32) {
+        // Sample from the 1x1 white texel in the atlas so untextured primitives
+        // don't depend on whatever is stored at (0,0) or the atlas edges.
+        let uv = assets.white_uv();
+        let uv_tl = Vector2::new(uv.x, uv.y);
+
+        self.point_batcher
+            .vertices
+            .push(ImmediateVertex::new(x, y, 0.0, self.draw_color, uv_tl));
 
         self.point_batcher
             .indices
@@ -218,12 +224,16 @@ impl ImmediateRenderer {
     }
 
     #[inline]
-    pub fn push_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
+    pub fn push_line(&mut self, assets: &AssetServerGuard, x1: f32, y1: f32, x2: f32, y2: f32) {
+        // Lines are untextured; sample the white texel so color is preserved.
+        let uv = assets.white_uv();
+        let uv_tl = Vector2::new(uv.x, uv.y);
+
         let base = self.line_batcher.vertices.len() as u32;
 
         self.line_batcher.vertices.extend_from_slice(&[
-            ImmediateVertex::new(x1, y1, 0.0, self.draw_color, Vector2::new(0.0, 0.0)),
-            ImmediateVertex::new(x2, y2, 0.0, self.draw_color, Vector2::new(1.0, 0.0)),
+            ImmediateVertex::new(x1, y1, 0.0, self.draw_color, uv_tl),
+            ImmediateVertex::new(x2, y2, 0.0, self.draw_color, uv_tl),
         ]);
 
         self.line_batcher
@@ -252,8 +262,8 @@ impl ImmediateRenderer {
             base,
             base + 1,
             base + 2,
-            base,
             base + 2,
+            base + 1,
             base + 3,
         ]);
     }
@@ -262,31 +272,37 @@ impl ImmediateRenderer {
     pub fn push_textured_quad(
         &mut self,
         image: Handle<Image>,
-        assets: AssetServerGuard,
+        assets: &AssetServerGuard,
         x: f32,
         y: f32,
     ) {
+        // `assets.uv(image)` returns normalized UV rect: (u, v, du, dv) in 0..1.
+        // For quad size in screen-space, we need the image dimensions in pixels.
         let uv = assets.uv(image);
         let uv_tl = Vector2::new(uv.x, uv.y);
         let uv_tr = Vector2::new(uv.x + uv.z, uv.y);
         let uv_bl = Vector2::new(uv.x, uv.y + uv.w);
         let uv_br = Vector2::new(uv.x + uv.z, uv.y + uv.w);
 
+        let size = assets.image_size(image);
+        let w = size.width as f32 * self.scale;
+        let h = size.height as f32 * self.scale;
+
         let base = self.triangle_batcher.vertices.len() as u32;
 
         self.triangle_batcher.vertices.extend_from_slice(&[
             ImmediateVertex::new(x, y, 0.0, self.draw_color, uv_tl),
-            ImmediateVertex::new(x + uv.z, y, 0.0, self.draw_color, uv_tr),
-            ImmediateVertex::new(x, y + uv.w, 0.0, self.draw_color, uv_bl),
-            ImmediateVertex::new(x + uv.z, y + uv.w, 0.0, self.draw_color, uv_br),
+            ImmediateVertex::new(x + w, y, 0.0, self.draw_color, uv_tr),
+            ImmediateVertex::new(x, y + h, 0.0, self.draw_color, uv_bl),
+            ImmediateVertex::new(x + w, y + h, 0.0, self.draw_color, uv_br),
         ]);
 
         self.triangle_batcher.indices.extend_from_slice(&[
             base,
             base + 1,
             base + 2,
-            base,
             base + 2,
+            base + 1,
             base + 3,
         ]);
     }

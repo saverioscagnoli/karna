@@ -15,6 +15,7 @@ pub use camera::Projection;
 pub use color::Color;
 pub use immediate::Draw;
 pub use immediate::ImmediateRenderer;
+use logging::error;
 use logging::info;
 use math::Size;
 use winit::window::Window;
@@ -194,18 +195,19 @@ impl Renderer {
         self.view
     }
 
-    /// Returns a mutable reference to the immediate renderer so callers
-    /// (e.g. `Draw`) can push geometry before `present` flushes it.
-    #[inline]
-    #[doc(hidden)]
-    pub fn immediate_mut(&mut self) -> &mut ImmediateRenderer {
-        self.active_layer_mut().immediate_mut()
-    }
-
     #[doc(hidden)]
     pub fn present(&mut self, assets: &AssetServerGuard) {
         let gpu = gpu::get();
-        let output = self.surface.get_current_texture().expect("Bruh");
+
+        let output = match self.surface.get_current_texture() {
+            Ok(output) => output,
+            Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => return,
+            Err(e) => {
+                error!("{}", e);
+                return;
+            }
+        };
+
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());

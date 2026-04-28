@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["assets", "utils", "engine", "gpu","macros","math", "renderer", "globals", "logging"]
+members = ["assets", "utils", "engine", "gpu","macros","math", "renderer", "globals", "logging", "info"]
 
 [workspace.dependencies]
 utils = { path = "utils" }
@@ -21,6 +21,7 @@ globals = { path = "globals" }
 logging = { path = "logging" }
 parking_lot = "0.12.5"
 png = "0.18.0"
+info = { path = "info" }
 
 [dependencies]
 math.workspace = true

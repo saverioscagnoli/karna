@@ -182,11 +182,14 @@ impl TextureAtlas {
         let image = self.images.get(image).expect("Failed to get image");
         let rect = self.regions.get(&image.label).expect("Failed to get rect");
 
+        let atlas_w = self.size.width as f32;
+        let atlas_h = self.size.height as f32;
+
         Vector4::new(
-            rect.x as f32,
-            rect.y as f32,
-            rect.width as f32,
-            rect.height as f32,
+            rect.x as f32 / atlas_w,
+            rect.y as f32 / atlas_h,
+            rect.width as f32 / atlas_w,
+            rect.height as f32 / atlas_h,
         )
     }
 
@@ -201,11 +204,14 @@ impl TextureAtlas {
     pub fn get_white_uv_coordinates(&self) -> Vector4 {
         let rect = self.regions.get("_white").unwrap();
 
+        let atlas_w = self.size.width as f32;
+        let atlas_h = self.size.height as f32;
+
         Vector4::new(
-            rect.x as f32,
-            rect.y as f32,
-            rect.width as f32,
-            rect.height as f32,
+            rect.x as f32 / atlas_w,
+            rect.y as f32 / atlas_h,
+            rect.width as f32 / atlas_w,
+            rect.height as f32 / atlas_h,
         )
     }
 }

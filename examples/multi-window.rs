@@ -73,6 +73,14 @@ fn main() {
                     vel: Vector2::zeros(),
                 }),
         )
+        .with_window(
+            WindowBuilder::new()
+                .with_size(Size::new(1280, 720))
+                .with_initial_scene(S {
+                    pos: Vector2::new(50.0, 50.0),
+                    vel: Vector2::zeros(),
+                }),
+        )
         .build()
         .run();
 }

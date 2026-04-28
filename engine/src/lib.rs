@@ -16,6 +16,7 @@ pub use context::ContextRef;
 pub use context::ContextRefMut;
 pub use context::Time;
 pub use context::Window;
+use info::SystemInfo;
 use logging::error;
 use logging::info;
 use logging::trace;
@@ -24,6 +25,7 @@ use renderer::Renderer;
 pub use scene::Scene;
 pub use scene::SceneManager;
 pub use scene::SceneMap;
+use utils::ByteSize;
 use utils::FastHashMap;
 use utils::Lazy;
 use winit::application::ApplicationHandler;
@@ -47,6 +49,7 @@ pub struct App {
     threads: FastHashMap<WindowId, WindowHandle>,
     events: EventHandler,
     asset_server: Lazy<AssetServer>,
+    sysinfo: Lazy<SystemInfo>,
 }
 
 impl App {
@@ -56,6 +59,7 @@ impl App {
             threads: FastHashMap::default(),
             events: EventHandler::new(),
             asset_server: Lazy::new(),
+            sysinfo: Lazy::new(),
         }
     }
 
@@ -64,11 +68,21 @@ impl App {
     }
 
     fn init(&mut self) {
-        gpu::init();
         init_logging();
-        renderer::init();
-        self.asset_server.set(AssetServer::new());
 
+        gpu::init();
+        renderer::init();
+
+        self.asset_server.set(AssetServer::new());
+        self.sysinfo
+            .set(SystemInfo::fetch(gpu::adapter().get_info()));
+
+        info!("Cpu: {}", self.sysinfo.cpu_model);
+        info!("Cpu cores: {}", self.sysinfo.cpu_cores);
+        info!("Mem: {}", ByteSize::from_bytes(self.sysinfo.mem_total));
+        info!("Gpu: {}", self.sysinfo.gpu_model);
+        info!("Gpu driver: {}", self.sysinfo.graphics_driver);
+        info!("Graphics backend: {}", self.sysinfo.graphics_backend);
         info!("App initialized successfully.");
     }
 

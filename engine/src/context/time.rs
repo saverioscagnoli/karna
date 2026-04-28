@@ -210,7 +210,7 @@ impl Time {
     pub fn set_target_fps(&mut self, target: u32) {
         let step = 1.0 / target as f32;
 
-        info!("Setting target fps to {}. frame step: {}", target, step);
+        info!("Setting target fps to {}. frame step: {}s", target, step);
 
         self.fps_uncap = false;
         self.frame_step = Duration::from_secs_f32(step);
@@ -237,7 +237,7 @@ impl Time {
     pub fn set_target_tps(&mut self, target: u32) {
         let step = 1.0 / target as f32;
 
-        info!("Setting target tps to {}. tick step: {}", target, step);
+        info!("Setting target tps to {}. tick step: {}s", target, step);
 
         self.tick_step = Duration::from_secs_f32(step);
         self.tick_step_f32 = step;
