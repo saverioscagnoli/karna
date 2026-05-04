@@ -5,6 +5,7 @@ mod texture_atlas;
 use std::sync::Arc;
 
 use logging::info;
+use macros::Get;
 use math::Size;
 use math::Vector4;
 use parking_lot::RwLock;
@@ -45,6 +46,7 @@ impl AssetServer {
         AssetServerGuard {
             atlas: self.atlas.read(),
             fonts: self.fonts.read(),
+            debug_font: self.debug_font,
         }
     }
 
@@ -69,9 +71,13 @@ impl AssetServer {
     }
 }
 
+#[derive(Get)]
 pub struct AssetServerGuard<'a> {
     atlas: RwLockReadGuard<'a, TextureAtlas>,
     fonts: RwLockReadGuard<'a, SlotMap<Font>>,
+
+    #[get(copied)]
+    debug_font: Handle<Font>,
 }
 
 impl<'a> AssetServerGuard<'a> {

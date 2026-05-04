@@ -194,10 +194,13 @@ impl TextureAtlas {
             }
 
             let region = self.write_region(&rgba_data, size);
-            self.images.insert(Image {
+            let handle = self.images.insert(Image {
                 size,
                 uv: Self::uv(&self.size.to_f32(), region),
             });
+
+            // Associate this character with its atlas image handle.
+            font.insert_glyph_image(ch, size, handle);
         }
     }
 
@@ -215,7 +218,4 @@ impl TextureAtlas {
             region.height as f32 / atlas_size.height,
         )
     }
-
-    #[inline]
-    pub fn get_glyph_uv_coordinates(&self, font: &Font, ch: char) {}
 }

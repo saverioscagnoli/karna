@@ -132,7 +132,7 @@ impl App {
     pub fn run(mut self) {
         let event_loop = EventLoop::new().expect("Failed to create event loop");
 
-        event_loop.set_control_flow(ControlFlow::Poll);
+        event_loop.set_control_flow(ControlFlow::Wait);
         event_loop.run_app(&mut self).expect("Failed to run app");
     }
 }
@@ -193,7 +193,7 @@ impl ApplicationHandler for App {
 
         // Propagate the event to the respective window
         //
-        // IMPORTANT (Windows): never block the winit event loop thread waiting for a window-thread
+        // IMPORTANT (Windows [wow!]): never block the winit event loop thread waiting for a window-thread
         // acknowledgement (e.g. on resize). If the window thread is stalled (GPU, surface, etc),
         // blocking here stops message pumping and the OS will mark the window as "Not Responding".
         if let Err(e) = window.event_tx.try_send(event) {

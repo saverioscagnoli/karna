@@ -10,6 +10,7 @@ pub use draw_handle::Draw;
 use fontdue::layout::CoordinateSystem;
 use fontdue::layout::Layout;
 use fontdue::layout::TextStyle;
+use logging::fatal;
 use macros::Get;
 use macros::Set;
 use math::Vector2;
@@ -355,7 +356,15 @@ impl ImmediateRenderer {
         ]);
     }
 
-    pub fn push_text(&mut self, font: Handle<Font>, text: &str, assets: &AssetServerGuard) {
+    #[inline]
+    pub fn push_text(
+        &mut self,
+        font: Handle<Font>,
+        text: &str,
+        assets: &AssetServerGuard,
+        x: f32,
+        y: f32,
+    ) {
         let font = assets.get_font(font);
 
         self.text_layout.clear();
@@ -364,9 +373,21 @@ impl ImmediateRenderer {
             &TextStyle::new(text, font.size() as f32, 0),
         );
 
-        let glyph_layout = self.text_layout.glyphs();
+        let glyphs: Vec<_> = self
+            .text_layout
+            .glyphs()
+            .iter()
+            .map(|g| (g.parent, g.x, g.y, g.width, g.height))
+            .collect();
 
-        for glyph in glyph_layout {}
+        for (parent, gx, gy, w, h) in glyphs {
+            if w == 0 || h == 0 {
+                continue;
+            }
+
+            let image = font.glyph_image(parent);
+            self.push_textured_quad(image, assets, x + gx, y + gy);
+        }
     }
 
     #[inline]
@@ -375,5 +396,7 @@ impl ImmediateRenderer {
         self.line_batcher.present(render_pass);
         self.triangle_batcher.present(render_pass);
         self.circle_batcher.present(render_pass);
+
+        self.draw_color = Color::White.into();
     }
 }

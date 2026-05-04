@@ -1,4 +1,5 @@
 use assets::AssetServerGuard;
+use assets::Font;
 use assets::Image;
 use math::Size;
 use math::Vector2;
@@ -129,6 +130,38 @@ impl<'r> Draw<'r> {
         let pos: Vector2 = pos.into();
 
         self.image(image, pos.x, pos.y);
+    }
+
+    #[inline]
+    pub fn text(&mut self, font: Handle<Font>, text: &str, x: f32, y: f32) {
+        self.renderer
+            .active_layer_mut()
+            .immediate_mut()
+            .push_text(font, text, &self.assets, x, y);
+    }
+
+    pub fn text_v<P: Into<Vector2>>(&mut self, font: Handle<Font>, text: &str, pos: P) {
+        let pos: Vector2 = pos.into();
+
+        self.text(font, text, pos.x, pos.y);
+    }
+
+    #[inline]
+    pub fn debug_text(&mut self, text: &str, x: f32, y: f32) {
+        self.renderer.active_layer_mut().immediate_mut().push_text(
+            self.assets.debug_font(),
+            text,
+            &self.assets,
+            x,
+            y,
+        );
+    }
+
+    #[inline]
+    pub fn debug_text_v<P: Into<Vector2>>(&mut self, text: &str, pos: P) {
+        let pos: Vector2 = pos.into();
+
+        self.debug_text(text, pos.x, pos.y);
     }
 
     #[inline]

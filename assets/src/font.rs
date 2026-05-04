@@ -1,11 +1,17 @@
+use logging::fatal;
 use macros::Get;
 use math::Size;
 use utils::FastHashMap;
+use utils::Handle;
+
+use crate::Image;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Glyph {
     pub width: u32,
     pub height: u32,
+    /// Handle of the glyph image stored in the texture atlas.
+    pub image: Handle<Image>,
 }
 
 #[derive(Get)]
@@ -36,14 +42,26 @@ impl Font {
         let (metrics, bitmap) = self.inner.rasterize(ch, self.size as f32);
         let size = Size::new(metrics.width as u32, metrics.height as u32);
 
+        (size, bitmap)
+    }
+
+    #[inline]
+    pub fn insert_glyph_image(&mut self, ch: char, size: Size<u32>, image: Handle<Image>) {
         self.glyphs.insert(
             ch,
             Glyph {
                 width: size.width,
                 height: size.height,
+                image,
             },
         );
+    }
 
-        (size, bitmap)
+    #[inline]
+    pub fn glyph_image(&self, ch: char) -> Handle<Image> {
+        self.glyphs
+            .get(&ch)
+            .expect("Failed to get glyph image")
+            .image
     }
 }
