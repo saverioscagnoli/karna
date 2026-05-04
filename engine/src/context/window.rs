@@ -19,6 +19,11 @@ impl Window {
     }
 
     #[inline]
+    pub fn title(&self) -> String {
+        self.inner.title()
+    }
+
+    #[inline]
     pub fn set_title<T: Into<String>>(&self, title: T) {
         self.inner.set_title(&title.into());
     }

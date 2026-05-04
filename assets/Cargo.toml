@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 wgpu.workspace = true
 math.workspace = true
+macros.workspace = true
 gpu.workspace = true
 rect_packer = "0.2.1"
 utils.workspace = true

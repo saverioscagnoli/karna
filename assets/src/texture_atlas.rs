@@ -1,44 +1,31 @@
 use logging::info;
+use macros::Get;
 use math::Size;
 use math::Vector4;
 use utils::ByteSize;
-use utils::FastHashMap;
 use utils::Handle;
 use utils::SlotMap;
 
 use crate::decoding::decode_png;
+use crate::font::Font;
 
 #[derive(Debug, Clone)]
 pub struct Image {
-    label: String,
-    size: Size<u32>,
+    pub size: Size<u32>,
+    pub uv: Vector4,
 }
 
+#[derive(Get)]
 pub struct TextureAtlas {
+    #[get]
     size: Size<u32>,
     texture: gpu::Texture,
     bgl: wgpu::BindGroupLayout,
     packer: rect_packer::DensePacker,
-    regions: FastHashMap<String, rect_packer::Rect>,
     images: SlotMap<Image>,
-}
 
-impl TextureAtlas {
-    /// Bind group layout for the texture atlas texture+sampler.
-    ///
-    /// Expected bindings:
-    /// - binding(0): `texture_2d<f32>`
-    /// - binding(1): sampler
-    #[inline]
-    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-        &self.bgl
-    }
-
-    /// Bind group containing the atlas texture view + sampler.
-    #[inline]
-    pub fn bind_group(&self) -> &wgpu::BindGroup {
-        &self.texture.bind_group
-    }
+    pub(super) white_pixel_handle: Handle<Image>,
+    pub(super) handle: Handle<Image>,
 }
 
 impl TextureAtlas {
@@ -69,12 +56,25 @@ impl TextureAtlas {
             ],
         });
 
+        let mut images = SlotMap::new();
+
         let texture = gpu::Texture::new_empty("Texture Atlas", size, &bgl, device);
         let mut packer = rect_packer::DensePacker::new(size.width as i32, size.height as i32);
 
-        let white_pixel = packer
+        let pixel_region = packer
             .pack(1, 1, false)
             .expect("Failed to pack white pixel");
+
+        let pixel_handle = images.insert(Image {
+            size: Size::new(1, 1),
+            uv: Self::uv(&size.to_f32(), pixel_region),
+        });
+
+        let atlas_region = rect_packer::Rect::new(0, 0, size.width as i32, size.height as i32);
+        let atlas_handle = images.insert(Image {
+            size,
+            uv: Self::uv(&size.to_f32(), atlas_region),
+        });
 
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -82,8 +82,8 @@ impl TextureAtlas {
                 texture: texture.inner(),
                 mip_level: 0,
                 origin: wgpu::Origin3d {
-                    x: white_pixel.x as u32,
-                    y: white_pixel.y as u32,
+                    x: pixel_region.x as u32,
+                    y: pixel_region.y as u32,
                     z: 0,
                 },
             },
@@ -100,31 +100,34 @@ impl TextureAtlas {
             },
         );
 
-        let mut regions = FastHashMap::default();
-
-        regions.insert(String::from("_white"), white_pixel);
-
-        regions.insert(
-            String::from("_atlas"),
-            rect_packer::Rect {
-                x: 0,
-                y: 0,
-                width: size.width as i32,
-                height: size.height as i32,
-            },
-        );
-
         Self {
             texture,
             bgl,
             size,
             packer,
-            regions,
-            images: SlotMap::new(),
+            images,
+            white_pixel_handle: pixel_handle,
+            handle: atlas_handle,
         }
     }
 
-    fn insert_region(&mut self, data: &[u8], size: Size<u32>) -> rect_packer::Rect {
+    /// Bind group layout for the texture atlas texture+sampler.
+    ///
+    /// Expected bindings:
+    /// - binding(0): `texture_2d<f32>`
+    /// - binding(1): sampler
+    #[inline]
+    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.bgl
+    }
+
+    /// Bind group containing the atlas texture view + sampler.
+    #[inline]
+    pub fn bind_group(&self) -> &wgpu::BindGroup {
+        &self.texture.bind_group
+    }
+
+    fn write_region(&mut self, data: &[u8], size: Size<u32>) -> rect_packer::Rect {
         let region = self
             .packer
             .pack(size.width as i32, size.height as i32, false)
@@ -161,57 +164,58 @@ impl TextureAtlas {
 
     pub fn load_image(&mut self, bytes: &[u8]) -> Handle<Image> {
         let (data, size) = decode_png(bytes);
-        let region = self.insert_region(&data, size);
+        let region = self.write_region(&data, size);
+        let handle = self.images.insert(Image {
+            size,
+            uv: Self::uv(&self.size.to_f32(), region),
+        });
 
-        self.images.insert_with_key(|key| {
-            let label = format!("img_{}", key.index());
-            self.regions.insert(label.clone(), region);
+        info!(
+            "Loaded image with size={}",
+            ByteSize::from_bytes(bytes.len() as u64)
+        );
 
-            info!(
-                "Loaded image with label={}, size={}",
-                label,
-                ByteSize::from_bytes(bytes.len() as u64)
-            );
+        handle
+    }
 
-            Image { label, size }
-        })
+    pub fn register_font(&mut self, font: &mut Font) {
+        for ch in font.chars() {
+            let (size, bitmap) = font.rasterize_char(ch);
+
+            if size.width == 0 || size.height == 0 {
+                continue;
+            }
+
+            let mut rgba_data = Vec::with_capacity(bitmap.len() * 4);
+
+            // Add a white character, will be recolored in the shaders
+            for &alpha in &bitmap {
+                rgba_data.extend_from_slice(&[255, 255, 255, alpha]);
+            }
+
+            let region = self.write_region(&rgba_data, size);
+            self.images.insert(Image {
+                size,
+                uv: Self::uv(&self.size.to_f32(), region),
+            });
+        }
     }
 
     #[inline]
-    pub fn get_uv_coordinates(&self, image: Handle<Image>) -> Vector4 {
-        let image = self.images.get(image).expect("Failed to get image");
-        let rect = self.regions.get(&image.label).expect("Failed to get rect");
+    pub fn get_image(&self, handle: Handle<Image>) -> &Image {
+        self.images.get(handle).expect("Cannot find image")
+    }
 
-        let atlas_w = self.size.width as f32;
-        let atlas_h = self.size.height as f32;
-
+    #[inline]
+    pub fn uv(atlas_size: &Size<f32>, region: rect_packer::Rect) -> Vector4 {
         Vector4::new(
-            rect.x as f32 / atlas_w,
-            rect.y as f32 / atlas_h,
-            rect.width as f32 / atlas_w,
-            rect.height as f32 / atlas_h,
+            region.x as f32 / atlas_size.width,
+            region.y as f32 / atlas_size.height,
+            region.width as f32 / atlas_size.width,
+            region.height as f32 / atlas_size.height,
         )
     }
 
     #[inline]
-    pub fn get_image_dimensions(&self, image: Handle<Image>) -> Size<u32> {
-        let image = self.images.get(image).expect("Failed to get image");
-
-        image.size
-    }
-
-    #[inline]
-    pub fn get_white_uv_coordinates(&self) -> Vector4 {
-        let rect = self.regions.get("_white").unwrap();
-
-        let atlas_w = self.size.width as f32;
-        let atlas_h = self.size.height as f32;
-
-        Vector4::new(
-            rect.x as f32 / atlas_w,
-            rect.y as f32 / atlas_h,
-            rect.width as f32 / atlas_w,
-            rect.height as f32 / atlas_h,
-        )
-    }
+    pub fn get_glyph_uv_coordinates(&self, font: &Font, ch: char) {}
 }

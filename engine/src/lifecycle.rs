@@ -1,3 +1,4 @@
+use assets::AssetServer;
 use assets::AssetServerGuard;
 use crossbeam_channel::Receiver;
 use renderer::Renderer;
@@ -27,13 +28,13 @@ impl WindowLifecycle {
         window_surface: wgpu::Surface<'static>,
         surface_config: wgpu::SurfaceConfiguration,
         scenes: SceneMap,
-        assets: &AssetServerGuard,
+        assets: AssetServer,
     ) -> Self {
-        let render = Renderer::from_surface(window_surface, surface_config, assets);
+        let render = Renderer::from_surface(window_surface, surface_config, &assets.guard());
 
         Self {
             event_rx,
-            context: WindowContext::new(window, render),
+            context: WindowContext::new(window, render, assets),
             scenes: SceneManager::new(scenes),
             loaded: false,
             focused: true,

@@ -34,13 +34,13 @@ pub struct WindowContext {
 }
 
 impl WindowContext {
-    pub(crate) fn new(window: Window, render: Renderer) -> Self {
+    pub(crate) fn new(window: Window, render: Renderer, assets: AssetServer) -> Self {
         Self {
             time: Time::new(),
             window,
             input: Input::new(),
             render,
-            assets: AssetServer::new(),
+            assets,
         }
     }
 

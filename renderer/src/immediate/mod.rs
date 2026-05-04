@@ -4,8 +4,12 @@ mod draw_handle;
 use std::mem;
 
 use assets::AssetServerGuard;
+use assets::Font;
 use assets::Image;
 pub use draw_handle::Draw;
+use fontdue::layout::CoordinateSystem;
+use fontdue::layout::Layout;
+use fontdue::layout::TextStyle;
 use macros::Get;
 use macros::Set;
 use math::Vector2;
@@ -130,6 +134,7 @@ pub struct ImmediateRenderer {
     #[get]
     #[set(into)]
     draw_color: Vector4,
+    text_layout: Layout,
     point_batcher: Batcher<ImmediateVertex>,
     line_batcher: Batcher<ImmediateVertex>,
     triangle_batcher: Batcher<ImmediateVertex>,
@@ -199,6 +204,7 @@ impl ImmediateRenderer {
 
         Self {
             draw_color: Color::White.into(),
+            text_layout: Layout::new(CoordinateSystem::PositiveYDown),
             point_batcher: Batcher::new(point_pipeline),
             line_batcher: Batcher::new(immediate_pipeline),
             triangle_batcher: Batcher::new(triangle_pipeline),
@@ -211,7 +217,7 @@ impl ImmediateRenderer {
     pub fn push_point(&mut self, assets: &AssetServerGuard, x: f32, y: f32) {
         // Sample from the 1x1 white texel in the atlas so untextured primitives
         // don't depend on whatever is stored at (0,0) or the atlas edges.
-        let uv = assets.white_uv();
+        let uv = assets.white_pixel().uv;
         let uv_tl = Vector2::new(uv.x, uv.y);
 
         self.point_batcher
@@ -226,7 +232,7 @@ impl ImmediateRenderer {
     #[inline]
     pub fn push_line(&mut self, assets: &AssetServerGuard, x1: f32, y1: f32, x2: f32, y2: f32) {
         // Lines are untextured; sample the white texel so color is preserved.
-        let uv = assets.white_uv();
+        let uv = assets.white_pixel().uv;
         let uv_tl = Vector2::new(uv.x, uv.y);
 
         let base = self.line_batcher.vertices.len() as u32;
@@ -243,50 +249,11 @@ impl ImmediateRenderer {
 
     #[inline]
     pub fn push_quad(&mut self, assets: &AssetServerGuard, x: f32, y: f32, w: f32, h: f32) {
-        let uv = assets.white_uv();
+        let uv = assets.white_pixel().uv;
         let uv_tl = Vector2::new(uv.x, uv.y);
         let uv_tr = Vector2::new(uv.x + uv.z, uv.y);
         let uv_bl = Vector2::new(uv.x, uv.y + uv.w);
         let uv_br = Vector2::new(uv.x + uv.z, uv.y + uv.w);
-
-        let base = self.triangle_batcher.vertices.len() as u32;
-
-        self.triangle_batcher.vertices.extend_from_slice(&[
-            ImmediateVertex::new(x, y, 0.0, self.draw_color, uv_tl),
-            ImmediateVertex::new(x + w, y, 0.0, self.draw_color, uv_tr),
-            ImmediateVertex::new(x, y + h, 0.0, self.draw_color, uv_bl),
-            ImmediateVertex::new(x + w, y + h, 0.0, self.draw_color, uv_br),
-        ]);
-
-        self.triangle_batcher.indices.extend_from_slice(&[
-            base,
-            base + 1,
-            base + 2,
-            base + 2,
-            base + 1,
-            base + 3,
-        ]);
-    }
-
-    #[inline]
-    pub fn push_textured_quad(
-        &mut self,
-        image: Handle<Image>,
-        assets: &AssetServerGuard,
-        x: f32,
-        y: f32,
-    ) {
-        // `assets.uv(image)` returns normalized UV rect: (u, v, du, dv) in 0..1.
-        // For quad size in screen-space, we need the image dimensions in pixels.
-        let uv = assets.uv(image);
-        let uv_tl = Vector2::new(uv.x, uv.y);
-        let uv_tr = Vector2::new(uv.x + uv.z, uv.y);
-        let uv_bl = Vector2::new(uv.x, uv.y + uv.w);
-        let uv_br = Vector2::new(uv.x + uv.z, uv.y + uv.w);
-
-        let size = assets.image_size(image);
-        let w = size.width as f32 * self.scale;
-        let h = size.height as f32 * self.scale;
 
         let base = self.triangle_batcher.vertices.len() as u32;
 
@@ -347,6 +314,59 @@ impl ImmediateRenderer {
             base + 2,
             base + 3,
         ]);
+    }
+
+    #[inline]
+    pub fn push_textured_quad(
+        &mut self,
+        image: Handle<Image>,
+        assets: &AssetServerGuard,
+        x: f32,
+        y: f32,
+    ) {
+        // `assets.uv(image)` returns normalized UV rect: (u, v, du, dv) in 0..1.
+        // For quad size in screen-space, we need the image dimensions in pixels.
+        let image = assets.get_image(image);
+        let uv = image.uv;
+        let uv_tl = Vector2::new(uv.x, uv.y);
+        let uv_tr = Vector2::new(uv.x + uv.z, uv.y);
+        let uv_bl = Vector2::new(uv.x, uv.y + uv.w);
+        let uv_br = Vector2::new(uv.x + uv.z, uv.y + uv.w);
+
+        let w = image.size.width as f32 * self.scale;
+        let h = image.size.height as f32 * self.scale;
+
+        let base = self.triangle_batcher.vertices.len() as u32;
+
+        self.triangle_batcher.vertices.extend_from_slice(&[
+            ImmediateVertex::new(x, y, 0.0, self.draw_color, uv_tl),
+            ImmediateVertex::new(x + w, y, 0.0, self.draw_color, uv_tr),
+            ImmediateVertex::new(x, y + h, 0.0, self.draw_color, uv_bl),
+            ImmediateVertex::new(x + w, y + h, 0.0, self.draw_color, uv_br),
+        ]);
+
+        self.triangle_batcher.indices.extend_from_slice(&[
+            base,
+            base + 1,
+            base + 2,
+            base + 2,
+            base + 1,
+            base + 3,
+        ]);
+    }
+
+    pub fn push_text(&mut self, font: Handle<Font>, text: &str, assets: &AssetServerGuard) {
+        let font = assets.get_font(font);
+
+        self.text_layout.clear();
+        self.text_layout.append(
+            &[font.inner()],
+            &TextStyle::new(text, font.size() as f32, 0),
+        );
+
+        let glyph_layout = self.text_layout.glyphs();
+
+        for glyph in glyph_layout {}
     }
 
     #[inline]

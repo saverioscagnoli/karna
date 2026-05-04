@@ -17,6 +17,9 @@ pub use context::ContextRefMut;
 pub use context::Time;
 pub use context::Window;
 use info::SystemInfo;
+use logging::Color;
+use logging::Colorize;
+use logging::ctx;
 use logging::error;
 use logging::info;
 use logging::trace;
@@ -107,13 +110,15 @@ impl App {
         let window = Window::new(winit_window);
 
         let thread = thread::spawn(move || {
+            let _ctx = ctx!("window", window.title().color(Color::Magenta));
+
             let mut lifecycle = WindowLifecycle::new(
                 window_rx,
                 window,
                 surface,
                 config,
                 scenes,
-                &asset_server_clone.guard(),
+                asset_server_clone,
             );
 
             lifecycle.game_loop();

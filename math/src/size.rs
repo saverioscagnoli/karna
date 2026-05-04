@@ -1,11 +1,14 @@
-use macros::{Get, Set, With};
-use num::{Num, cast::AsPrimitive};
+use macros::Get;
+use macros::Set;
+use macros::With;
+use num::Num;
+use num::cast::AsPrimitive;
 use winit::dpi::PhysicalSize;
 
 use crate::Vector2;
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Hash)]
 #[derive(Get, Set, With)]
 pub struct Size<T: Num + Copy> {
     #[get(copied)]

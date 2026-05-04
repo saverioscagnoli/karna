@@ -102,6 +102,21 @@ impl<'r> Draw<'r> {
     }
 
     #[inline]
+    pub fn circle(&mut self, x: f32, y: f32, r: f32) {
+        self.renderer
+            .active_layer_mut()
+            .immediate_mut()
+            .push_circle(x, y, r);
+    }
+
+    #[inline]
+    pub fn circle_v<P: Into<Vector2>>(&mut self, pos: P, r: f32) {
+        let pos: Vector2 = pos.into();
+
+        self.circle(pos.x, pos.y, r);
+    }
+
+    #[inline]
     pub fn image(&mut self, image: Handle<Image>, x: f32, y: f32) {
         self.renderer
             .active_layer_mut()
@@ -117,17 +132,17 @@ impl<'r> Draw<'r> {
     }
 
     #[inline]
-    pub fn circle(&mut self, x: f32, y: f32, r: f32) {
+    pub fn atlas(&mut self, x: f32, y: f32) {
         self.renderer
             .active_layer_mut()
             .immediate_mut()
-            .push_circle(x, y, r);
+            .push_textured_quad(self.assets.atlas_handle(), &self.assets, x, y);
     }
 
     #[inline]
-    pub fn circle_v<P: Into<Vector2>>(&mut self, pos: P, r: f32) {
+    pub fn atlas_v<P: Into<Vector2>>(&mut self, pos: P) {
         let pos: Vector2 = pos.into();
 
-        self.circle(pos.x, pos.y, r);
+        self.atlas(pos.x, pos.y);
     }
 }
