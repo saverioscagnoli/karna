@@ -12,6 +12,7 @@ use crate::font::Font;
 #[derive(Debug, Clone)]
 pub struct Image {
     pub size: Size<u32>,
+    pub rgba: Vec<u8>,
     pub uv: Vector4,
 }
 
@@ -67,12 +68,14 @@ impl TextureAtlas {
 
         let pixel_handle = images.insert(Image {
             size: Size::new(1, 1),
+            rgba: vec![255, 255, 255, 255],
             uv: Self::uv(&size.to_f32(), pixel_region),
         });
 
         let atlas_region = rect_packer::Rect::new(0, 0, size.width as i32, size.height as i32);
         let atlas_handle = images.insert(Image {
             size,
+            rgba: vec![255, 255, 255, 255],
             uv: Self::uv(&size.to_f32(), atlas_region),
         });
 
@@ -167,6 +170,7 @@ impl TextureAtlas {
         let region = self.write_region(&data, size);
         let handle = self.images.insert(Image {
             size,
+            rgba: data,
             uv: Self::uv(&self.size.to_f32(), region),
         });
 
@@ -196,6 +200,7 @@ impl TextureAtlas {
             let region = self.write_region(&rgba_data, size);
             let handle = self.images.insert(Image {
                 size,
+                rgba: rgba_data,
                 uv: Self::uv(&self.size.to_f32(), region),
             });
 

@@ -27,7 +27,7 @@ pub struct AssetServer {
 
 impl AssetServer {
     pub fn new() -> Self {
-        let atlas = TextureAtlas::new(Size::new(1024, 1024));
+        let atlas = TextureAtlas::new(Size::new(2048, 2048));
 
         let mut assset_server = Self {
             atlas: Arc::new(RwLock::new(atlas)),

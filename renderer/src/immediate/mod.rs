@@ -10,7 +10,6 @@ pub use draw_handle::Draw;
 use fontdue::layout::CoordinateSystem;
 use fontdue::layout::Layout;
 use fontdue::layout::TextStyle;
-use logging::fatal;
 use macros::Get;
 use macros::Set;
 use math::Vector2;
@@ -219,7 +218,7 @@ impl ImmediateRenderer {
         // Sample from the 1x1 white texel in the atlas so untextured primitives
         // don't depend on whatever is stored at (0,0) or the atlas edges.
         let uv = assets.white_pixel().uv;
-        let uv_tl = Vector2::new(uv.x, uv.y);
+        let uv_tl = uv.xy();
 
         self.point_batcher
             .vertices
@@ -234,7 +233,7 @@ impl ImmediateRenderer {
     pub fn push_line(&mut self, assets: &AssetServerGuard, x1: f32, y1: f32, x2: f32, y2: f32) {
         // Lines are untextured; sample the white texel so color is preserved.
         let uv = assets.white_pixel().uv;
-        let uv_tl = Vector2::new(uv.x, uv.y);
+        let uv_tl = uv.xy();
 
         let base = self.line_batcher.vertices.len() as u32;
 
@@ -249,22 +248,37 @@ impl ImmediateRenderer {
     }
 
     #[inline]
-    pub fn push_quad(&mut self, assets: &AssetServerGuard, x: f32, y: f32, w: f32, h: f32) {
-        let uv = assets.white_pixel().uv;
-        let uv_tl = Vector2::new(uv.x, uv.y);
-        let uv_tr = Vector2::new(uv.x + uv.z, uv.y);
-        let uv_bl = Vector2::new(uv.x, uv.y + uv.w);
-        let uv_br = Vector2::new(uv.x + uv.z, uv.y + uv.w);
+    fn create_vertices(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        uv: Vector4,
+    ) -> [ImmediateVertex; 4] {
+        let w = w * self.scale;
+        let h = h * self.scale;
+        let uv_tl = uv.xy();
+        let uv_tr = uv.xy() + Vector2::new(uv.z, 0.0);
+        let uv_bl = uv.xy() + Vector2::new(0.0, uv.w);
+        let uv_br = uv.xy() + Vector2::new(uv.z, uv.w);
 
-        let base = self.triangle_batcher.vertices.len() as u32;
-
-        self.triangle_batcher.vertices.extend_from_slice(&[
+        [
             ImmediateVertex::new(x, y, 0.0, self.draw_color, uv_tl),
             ImmediateVertex::new(x + w, y, 0.0, self.draw_color, uv_tr),
             ImmediateVertex::new(x, y + h, 0.0, self.draw_color, uv_bl),
             ImmediateVertex::new(x + w, y + h, 0.0, self.draw_color, uv_br),
-        ]);
+        ]
+    }
 
+    #[inline]
+    pub fn push_quad(&mut self, assets: &AssetServerGuard, x: f32, y: f32, w: f32, h: f32) {
+        let uv = assets.white_pixel().uv;
+        let vertices = self.create_vertices(x, y, w, h, uv);
+
+        let base = self.triangle_batcher.vertices.len() as u32;
+
+        self.triangle_batcher.vertices.extend_from_slice(&vertices);
         self.triangle_batcher.indices.extend_from_slice(&[
             base,
             base + 1,
@@ -329,23 +343,14 @@ impl ImmediateRenderer {
         // For quad size in screen-space, we need the image dimensions in pixels.
         let image = assets.get_image(image);
         let uv = image.uv;
-        let uv_tl = Vector2::new(uv.x, uv.y);
-        let uv_tr = Vector2::new(uv.x + uv.z, uv.y);
-        let uv_bl = Vector2::new(uv.x, uv.y + uv.w);
-        let uv_br = Vector2::new(uv.x + uv.z, uv.y + uv.w);
 
         let w = image.size.width as f32 * self.scale;
         let h = image.size.height as f32 * self.scale;
 
+        let vertices = self.create_vertices(x, y, w, h, uv);
         let base = self.triangle_batcher.vertices.len() as u32;
 
-        self.triangle_batcher.vertices.extend_from_slice(&[
-            ImmediateVertex::new(x, y, 0.0, self.draw_color, uv_tl),
-            ImmediateVertex::new(x + w, y, 0.0, self.draw_color, uv_tr),
-            ImmediateVertex::new(x, y + h, 0.0, self.draw_color, uv_bl),
-            ImmediateVertex::new(x + w, y + h, 0.0, self.draw_color, uv_br),
-        ]);
-
+        self.triangle_batcher.vertices.extend_from_slice(&vertices);
         self.triangle_batcher.indices.extend_from_slice(&[
             base,
             base + 1,
@@ -398,5 +403,6 @@ impl ImmediateRenderer {
         self.circle_batcher.present(render_pass);
 
         self.draw_color = Color::White.into();
+        self.scale = 1.0;
     }
 }

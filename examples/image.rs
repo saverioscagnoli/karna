@@ -18,6 +18,13 @@ impl Scene for S {
         let bytes = include_bytes!("images/tetsuo.png");
 
         self.image = ctx.assets.load_png(bytes);
+
+        let duck_bytes = include_bytes!("images/duck-cursor.png");
+        let duck_image = ctx.assets.load_png(duck_bytes);
+
+        ctx.window.set_icon(duck_image);
+
+        ctx.window.set_cursor_image(duck_image, 0, 0);
     }
 
     fn update(&mut self, ctx: karna::ContextRefMut) {

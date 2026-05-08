@@ -41,6 +41,7 @@ use winit::event_loop::EventLoop;
 pub use winit::keyboard::KeyCode;
 use winit::window::WindowId;
 
+use crate::events::AppCommand;
 use crate::events::EventHandler;
 use crate::events::WindowHandle;
 use crate::init::init_logging;
@@ -50,6 +51,10 @@ pub struct App {
     window_builders: Vec<WindowBuilder>,
 
     threads: FastHashMap<WindowId, WindowHandle>,
+    /// Winit windows live on the winit thread. Keep them here so we can apply
+    /// winit-thread-only operations (like creating/applying custom cursors).
+    windows: FastHashMap<WindowId, Arc<winit::window::Window>>,
+
     events: EventHandler,
     asset_server: Lazy<AssetServer>,
     sysinfo: Lazy<SystemInfo>,
@@ -60,6 +65,7 @@ impl App {
         Self {
             window_builders: Vec::new(),
             threads: FastHashMap::default(),
+            windows: FastHashMap::default(),
             events: EventHandler::new(),
             asset_server: Lazy::new(),
             sysinfo: Lazy::new(),
@@ -100,6 +106,9 @@ impl App {
         let window_id = window.id();
         let winit_window = Arc::new(window);
 
+        // Keep a handle on the winit thread for cursor/icon/etc operations.
+        self.windows.insert(window_id, winit_window.clone());
+
         // Window surface must be created on the main thread on windows
         // because it sucks ass
         let (surface, config) = Renderer::create_surface(winit_window.clone());
@@ -107,7 +116,11 @@ impl App {
         // Arc underneath so clone is the same instance
         let asset_server_clone = self.asset_server.clone();
 
-        let window = Window::new(winit_window);
+        let window = Window::new(
+            winit_window,
+            self.asset_server.clone(),
+            self.events.cmd_tx.clone(),
+        );
 
         let thread = thread::spawn(move || {
             let _ctx = ctx!("window", window.title().color(Color::Magenta));
@@ -155,6 +168,48 @@ impl ApplicationHandler for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
+        // Drain any pending app commands. These must execute on the winit thread.
+        while let Ok(cmd) = self.events.cmd_rx.try_recv() {
+            match cmd {
+                AppCommand::SetCustomCursor {
+                    window_id,
+                    image,
+                    hotspot_x,
+                    hotspot_y,
+                } => {
+                    let Some(winit_window) = self.windows.get(&window_id) else {
+                        warn!("SetCustomCursor for unknown window_id={:?}", window_id);
+                        continue;
+                    };
+
+                    let guard = self.asset_server.guard();
+                    let img = guard.get_image(image);
+
+                    let width: u16 = img
+                        .size
+                        .width
+                        .try_into()
+                        .expect("cursor width must fit in u16");
+                    let height: u16 = img
+                        .size
+                        .height
+                        .try_into()
+                        .expect("cursor height must fit in u16");
+
+                    let source = winit::window::CustomCursor::from_rgba(
+                        img.rgba.clone(),
+                        width,
+                        height,
+                        hotspot_x,
+                        hotspot_y,
+                    )
+                    .expect("failed to create custom cursor source from rgba");
+
+                    let cursor = event_loop.create_custom_cursor(source);
+                    winit_window.set_cursor(cursor);
+                }
+            }
+        }
         if let WindowEvent::CloseRequested = event {
             let Some(window) = self.threads.remove(&window_id) else {
                 error!("Trying to close a non-existing window");
@@ -177,6 +232,8 @@ impl ApplicationHandler for App {
             if let Err(e) = thread.join() {
                 error!("Window thread panicked: {:?}", e);
             }
+
+            let _ = self.windows.remove(&window_id);
 
             if self.threads.is_empty() {
                 warn!("All windows were closed. Exiting.");

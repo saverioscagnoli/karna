@@ -2,7 +2,6 @@ use karna::App;
 use karna::KeyCode;
 use karna::Scene;
 use karna::WindowBuilder;
-use karna::log::info;
 use karna::math::Size;
 use karna::math::Vector2;
 use karna::render::Color;
@@ -46,20 +45,26 @@ impl Scene for S {
 
     fn draw(&self, ctx: karna::ContextRef, draw: &mut Draw) {
         draw.set_color(Color::White);
-        draw.set_scale(10.0);
+
+        draw.set_scale(1.0);
         draw.rect(self.pos.x, self.pos.y, 50.0, 50.0);
 
         draw.set_color(Color::Cyan);
 
-        for i in 0..10 {
-            for j in 0..10 {
-                draw.point(i as f32 * 10.0, j as f32 * 10.0);
-            }
-        }
+        draw.set_scale(1.5);
+        draw.rect(self.pos.x + 100.0, self.pos.y, 50.0, 50.0);
 
         draw.set_color(Color::Magenta);
+
+        draw.set_scale(2.0);
+        draw.rect(self.pos.x, self.pos.y + 100.0, 50.0, 50.0);
         draw.line_v([300.0, 100.0], self.pos + Vector2::new(25.0, 25.0));
+
         draw.reset_scale();
+
+        draw.set_color(Color::Yellow);
+        draw.debug_text(&format!("fps: {}", ctx.time.fps()), 10.0, 10.0);
+        draw.debug_text(&format!("dt: {}", ctx.time.delta()), 10.0, 730.0);
     }
 }
 
