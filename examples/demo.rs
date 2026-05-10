@@ -1,3 +1,5 @@
+use std::f32;
+
 use karna::App;
 use karna::KeyCode;
 use karna::Scene;
@@ -14,7 +16,9 @@ struct S {
 
 impl Scene for S {
     fn load(&mut self, ctx: karna::ContextRefMut) {
-        ctx.time.set_target_fps(120);
+        if let Some(m) = ctx.monitors.current() {
+            ctx.time.set_target_fps(m.refresh_rate());
+        }
     }
 
     fn update(&mut self, ctx: karna::ContextRefMut) {
@@ -41,30 +45,39 @@ impl Scene for S {
 
         self.vel *= 0.85f32.powf(60.0).powf(dt);
         self.pos += self.vel * dt;
+
+        if ctx.input.key_pressed(&KeyCode::KeyF) {
+            ctx.window.toggle_fullscreen();
+        }
     }
 
     fn draw(&self, ctx: karna::ContextRef, draw: &mut Draw) {
         draw.set_color(Color::White);
 
-        draw.set_scale(1.0);
         draw.rect(self.pos.x, self.pos.y, 50.0, 50.0);
 
         draw.set_color(Color::Cyan);
 
-        draw.set_scale(1.5);
-        draw.rect(self.pos.x + 100.0, self.pos.y, 50.0, 50.0);
+        draw.push_state();
+        draw.translate(self.pos.x + 100.0, self.pos.y);
+        draw.rotate(f32::consts::PI / 4.0);
+        draw.rect(0.0, 0.0, 50.0, 50.0);
+        draw.pop_state();
 
         draw.set_color(Color::Magenta);
 
-        draw.set_scale(2.0);
-        draw.rect(self.pos.x, self.pos.y + 100.0, 50.0, 50.0);
-        draw.line_v([300.0, 100.0], self.pos + Vector2::new(25.0, 25.0));
+        draw.push_state();
+        draw.translate(self.pos.x, self.pos.y + 100.0);
+        draw.rotate(f32::consts::PI / 2.5);
+        draw.scale(2.0, 1.0);
+        draw.rect(0.0, 0.0, 50.0, 50.0);
+        draw.pop_state();
 
-        draw.reset_scale();
+        draw.line_v([300.0, 100.0], self.pos + Vector2::new(25.0, 25.0));
 
         draw.set_color(Color::Yellow);
         draw.debug_text(&format!("fps: {}", ctx.time.fps()), 10.0, 10.0);
-        draw.debug_text(&format!("dt: {}", ctx.time.delta()), 10.0, 730.0);
+        draw.debug_text(&format!("dt: {}", ctx.time.delta()), 10.0, 30.0);
     }
 }
 

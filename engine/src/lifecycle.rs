@@ -1,5 +1,4 @@
 use assets::AssetServer;
-use assets::AssetServerGuard;
 use crossbeam_channel::Receiver;
 use renderer::Renderer;
 use winit::event::ElementState;
@@ -7,6 +6,7 @@ use winit::event::WindowEvent;
 use winit::keyboard::PhysicalKey;
 
 use crate::context::KeyState;
+use crate::context::Monitors;
 use crate::context::Window;
 use crate::context::WindowContext;
 use crate::scene::SceneManager;
@@ -27,6 +27,7 @@ impl WindowLifecycle {
         window: Window,
         window_surface: wgpu::Surface<'static>,
         surface_config: wgpu::SurfaceConfiguration,
+        monitors: Monitors,
         scenes: SceneMap,
         assets: AssetServer,
     ) -> Self {
@@ -34,7 +35,7 @@ impl WindowLifecycle {
 
         Self {
             event_rx,
-            context: WindowContext::new(window, render, assets),
+            context: WindowContext::new(window, render, monitors, assets),
             scenes: SceneManager::new(scenes),
             loaded: false,
             focused: true,

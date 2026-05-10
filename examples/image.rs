@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use karna::App;
 use karna::Handle;
 use karna::Image;
@@ -19,7 +21,7 @@ impl Scene for S {
 
         self.image = ctx.assets.load_png(bytes);
 
-        let duck_bytes = include_bytes!("images/duck-cursor.png");
+        let duck_bytes = include_bytes!("images/duck.png");
         let duck_image = ctx.assets.load_png(duck_bytes);
 
         ctx.window.set_icon(duck_image);
@@ -47,7 +49,7 @@ impl Scene for S {
         }
     }
 
-    fn draw(&self, ctx: karna::ContextRef, draw: &mut Draw) {
+    fn draw(&self, _ctx: karna::ContextRef, draw: &mut Draw) {
         draw.image_v(self.image, self.pos);
     }
 }

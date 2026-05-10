@@ -1,5 +1,3 @@
-use sysinfo::CpuRefreshKind;
-use sysinfo::RefreshKind;
 use sysinfo::System;
 
 #[derive(Debug, Clone)]

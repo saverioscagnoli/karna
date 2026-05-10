@@ -39,10 +39,12 @@ use winit::event_loop::ActiveEventLoop;
 use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
 pub use winit::keyboard::KeyCode;
+use winit::window::CustomCursor;
 use winit::window::WindowId;
 
-use crate::events::AppCommand;
+use crate::context::Monitors;
 use crate::events::EventHandler;
+use crate::events::MainCmd;
 use crate::events::WindowHandle;
 use crate::init::init_logging;
 use crate::lifecycle::WindowLifecycle;
@@ -100,7 +102,12 @@ impl App {
         self.window_builders.push(builder);
     }
 
-    fn spawn_window(&mut self, window: winit::window::Window, scenes: SceneMap) {
+    fn spawn_window(
+        &mut self,
+        window: winit::window::Window,
+        event_loop: &ActiveEventLoop,
+        scenes: SceneMap,
+    ) {
         let (window_tx, window_rx) = crossbeam_channel::unbounded::<WindowEvent>();
 
         let window_id = window.id();
@@ -122,6 +129,10 @@ impl App {
             self.events.cmd_tx.clone(),
         );
 
+        let mut monitors = Monitors::new(window.clone());
+
+        monitors.update(Monitors::collect(event_loop));
+
         let thread = thread::spawn(move || {
             let _ctx = ctx!("window", window.title().color(Color::Magenta));
 
@@ -130,6 +141,7 @@ impl App {
                 window,
                 surface,
                 config,
+                monitors,
                 scenes,
                 asset_server_clone,
             );
@@ -156,7 +168,7 @@ impl ApplicationHandler for App {
 
         for b in mem::take(&mut self.window_builders) {
             match event_loop.create_window(b.attributes()) {
-                Ok(w) => self.spawn_window(w, b.scenes),
+                Ok(w) => self.spawn_window(w, event_loop, b.scenes),
                 Err(e) => error!("Failed to create window: {}", e),
             }
         }
@@ -171,13 +183,13 @@ impl ApplicationHandler for App {
         // Drain any pending app commands. These must execute on the winit thread.
         while let Ok(cmd) = self.events.cmd_rx.try_recv() {
             match cmd {
-                AppCommand::SetCustomCursor {
+                MainCmd::SetCustomCursor {
                     window_id,
                     image,
                     hotspot_x,
                     hotspot_y,
                 } => {
-                    let Some(winit_window) = self.windows.get(&window_id) else {
+                    let Some(window) = self.windows.get(&window_id) else {
                         warn!("SetCustomCursor for unknown window_id={:?}", window_id);
                         continue;
                     };
@@ -185,31 +197,21 @@ impl ApplicationHandler for App {
                     let guard = self.asset_server.guard();
                     let img = guard.get_image(image);
 
-                    let width: u16 = img
-                        .size
-                        .width
-                        .try_into()
-                        .expect("cursor width must fit in u16");
-                    let height: u16 = img
-                        .size
-                        .height
-                        .try_into()
-                        .expect("cursor height must fit in u16");
-
-                    let source = winit::window::CustomCursor::from_rgba(
+                    let source = CustomCursor::from_rgba(
                         img.rgba.clone(),
-                        width,
-                        height,
+                        img.size.width as u16,
+                        img.size.height as u16,
                         hotspot_x,
                         hotspot_y,
                     )
                     .expect("failed to create custom cursor source from rgba");
 
                     let cursor = event_loop.create_custom_cursor(source);
-                    winit_window.set_cursor(cursor);
+                    window.set_cursor(cursor);
                 }
             }
         }
+
         if let WindowEvent::CloseRequested = event {
             let Some(window) = self.threads.remove(&window_id) else {
                 error!("Trying to close a non-existing window");

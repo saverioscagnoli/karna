@@ -1,11 +1,8 @@
 use assets::Font;
 use karna::App;
-use karna::KeyCode;
 use karna::Scene;
 use karna::WindowBuilder;
-use karna::log::info;
 use karna::math::Size;
-use karna::math::Vector2;
 use karna::render::Color;
 use karna::render::Draw;
 use utils::Handle;
@@ -19,9 +16,9 @@ impl Scene for S {
         self.jbmono = ctx.assets.load_font(include_bytes!("fonts/jbmono.ttf"), 16);
     }
 
-    fn update(&mut self, ctx: karna::ContextRefMut) {}
+    fn update(&mut self, _ctx: karna::ContextRefMut) {}
 
-    fn draw(&self, ctx: karna::ContextRef, draw: &mut Draw) {
+    fn draw(&self, _ctx: karna::ContextRef, draw: &mut Draw) {
         draw.debug_text("Hello world!!\nThis is my text", 50.0, 50.0);
 
         draw.set_color(Color::Cyan);

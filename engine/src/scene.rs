@@ -7,6 +7,8 @@ use crate::ContextRefMut;
 pub trait Scene: Send {
     fn load(&mut self, ctx: ContextRefMut);
     fn update(&mut self, ctx: ContextRefMut);
+
+    #[allow(unused)]
     fn fixed_update(&mut self, ctx: ContextRefMut) {}
     fn draw(&self, ctx: ContextRef, draw: &mut Draw);
 }

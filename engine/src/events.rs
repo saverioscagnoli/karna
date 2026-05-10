@@ -26,7 +26,7 @@ impl WindowHandle {
 /// General app event handlers, all events that should be streamed to all windows
 /// go here, as an example, since input device events are general, such as mouse delta,
 /// they should be available to all windows
-pub enum AppCommand {
+pub enum MainCmd {
     SetCustomCursor {
         window_id: WindowId,
         image: Handle<Image>,
@@ -39,8 +39,8 @@ pub struct EventHandler {
     pub device_tx: Sender<DeviceEvent>,
     pub device_rx: Receiver<DeviceEvent>,
 
-    pub cmd_tx: Sender<AppCommand>,
-    pub cmd_rx: Receiver<AppCommand>,
+    pub cmd_tx: Sender<MainCmd>,
+    pub cmd_rx: Receiver<MainCmd>,
 }
 
 impl EventHandler {

@@ -10,8 +10,10 @@ pub use draw_handle::Draw;
 use fontdue::layout::CoordinateSystem;
 use fontdue::layout::Layout;
 use fontdue::layout::TextStyle;
+use logging::warn;
 use macros::Get;
 use macros::Set;
+use math::Matrix4;
 use math::Vector2;
 use math::Vector3;
 use math::Vector4;
@@ -129,20 +131,30 @@ impl ImmediateCircleVertex {
     }
 }
 
-#[derive(Get, Set)]
-pub struct ImmediateRenderer {
-    #[get]
-    #[set(into)]
+#[derive(Debug, Clone, Copy)]
+struct RenderState {
     draw_color: Vector4,
+    transform: Matrix4,
+}
+
+impl Default for RenderState {
+    fn default() -> Self {
+        Self {
+            draw_color: Color::White.into(),
+            transform: Matrix4::identity(),
+        }
+    }
+}
+
+pub struct ImmediateRenderer {
+    current_state: RenderState,
+    state_stack: Vec<RenderState>,
+
     text_layout: Layout,
     point_batcher: Batcher<ImmediateVertex>,
     line_batcher: Batcher<ImmediateVertex>,
     triangle_batcher: Batcher<ImmediateVertex>,
     circle_batcher: Batcher<ImmediateCircleVertex>,
-
-    #[get(copied)]
-    #[set]
-    scale: f32,
 }
 
 impl ImmediateRenderer {
@@ -203,14 +215,64 @@ impl ImmediateRenderer {
             );
 
         Self {
-            draw_color: Color::White.into(),
+            current_state: RenderState::default(),
+            state_stack: Vec::new(),
             text_layout: Layout::new(CoordinateSystem::PositiveYDown),
             point_batcher: Batcher::new(point_pipeline),
             line_batcher: Batcher::new(immediate_pipeline),
             triangle_batcher: Batcher::new(triangle_pipeline),
             circle_batcher: Batcher::new(circle_pipeline),
-            scale: 1.0,
         }
+    }
+
+    #[inline]
+    pub fn push_state(&mut self) {
+        self.state_stack.push(self.current_state);
+    }
+
+    #[inline]
+    pub fn pop_state(&mut self) {
+        if let Some(state) = self.state_stack.pop() {
+            self.current_state = state
+        } else {
+            warn!("Immediate renderer: popped a state without pushing first");
+        }
+    }
+
+    #[inline]
+    pub fn draw_color(&self) -> Vector4 {
+        self.current_state.draw_color
+    }
+
+    #[inline]
+    pub fn set_draw_color(&mut self, color: Vector4) {
+        self.current_state.draw_color = color;
+    }
+
+    #[inline]
+    pub fn translate(&mut self, x: f32, y: f32) {
+        let translation = Matrix4::from_translation(Vector3::new(x, y, 0.0));
+        self.current_state.transform = self.current_state.transform * translation;
+    }
+
+    #[inline]
+    pub fn rotate(&mut self, angle_radians: f32) {
+        let rotation = Matrix4::from_rotation_z(angle_radians);
+        self.current_state.transform = self.current_state.transform * rotation;
+    }
+
+    #[inline]
+    pub fn scale(&mut self, x: f32, y: f32) {
+        let scale = Matrix4::from_scale(Vector3::new(x, y, 1.0));
+        self.current_state.transform = self.current_state.transform * scale;
+    }
+
+    #[inline]
+    fn transform_point(&self, x: f32, y: f32) -> Vector3 {
+        let pos = Vector4::new(x, y, 0.0, 1.0);
+        let transformed = self.current_state.transform * pos;
+
+        transformed.xyz()
     }
 
     #[inline]
@@ -220,9 +282,13 @@ impl ImmediateRenderer {
         let uv = assets.white_pixel().uv;
         let uv_tl = uv.xy();
 
-        self.point_batcher
-            .vertices
-            .push(ImmediateVertex::new(x, y, 0.0, self.draw_color, uv_tl));
+        self.point_batcher.vertices.push(ImmediateVertex::new(
+            x,
+            y,
+            0.0,
+            self.current_state.draw_color,
+            uv_tl,
+        ));
 
         self.point_batcher
             .indices
@@ -231,15 +297,18 @@ impl ImmediateRenderer {
 
     #[inline]
     pub fn push_line(&mut self, assets: &AssetServerGuard, x1: f32, y1: f32, x2: f32, y2: f32) {
-        // Lines are untextured; sample the white texel so color is preserved.
         let uv = assets.white_pixel().uv;
         let uv_tl = uv.xy();
 
         let base = self.line_batcher.vertices.len() as u32;
 
+        let p1 = self.transform_point(x1, y1);
+        let p2 = self.transform_point(x2, y2);
+        let color = self.current_state.draw_color;
+
         self.line_batcher.vertices.extend_from_slice(&[
-            ImmediateVertex::new(x1, y1, 0.0, self.draw_color, uv_tl),
-            ImmediateVertex::new(x2, y2, 0.0, self.draw_color, uv_tl),
+            ImmediateVertex::new(p1.x, p1.y, p1.z, color, uv_tl),
+            ImmediateVertex::new(p2.x, p2.y, p2.z, color, uv_tl),
         ]);
 
         self.line_batcher
@@ -248,7 +317,7 @@ impl ImmediateRenderer {
     }
 
     #[inline]
-    fn create_vertices(
+    fn create_quad_vertices(
         &mut self,
         x: f32,
         y: f32,
@@ -256,25 +325,31 @@ impl ImmediateRenderer {
         h: f32,
         uv: Vector4,
     ) -> [ImmediateVertex; 4] {
-        let w = w * self.scale;
-        let h = h * self.scale;
         let uv_tl = uv.xy();
         let uv_tr = uv.xy() + Vector2::new(uv.z, 0.0);
         let uv_bl = uv.xy() + Vector2::new(0.0, uv.w);
         let uv_br = uv.xy() + Vector2::new(uv.z, uv.w);
 
+        // Apply transformations to each corner
+        let p_tl = self.transform_point(x, y);
+        let p_tr = self.transform_point(x + w, y);
+        let p_bl = self.transform_point(x, y + h);
+        let p_br = self.transform_point(x + w, y + h);
+
+        let color = self.current_state.draw_color;
+
         [
-            ImmediateVertex::new(x, y, 0.0, self.draw_color, uv_tl),
-            ImmediateVertex::new(x + w, y, 0.0, self.draw_color, uv_tr),
-            ImmediateVertex::new(x, y + h, 0.0, self.draw_color, uv_bl),
-            ImmediateVertex::new(x + w, y + h, 0.0, self.draw_color, uv_br),
+            ImmediateVertex::new(p_tl.x, p_tl.y, p_tl.z, color, uv_tl),
+            ImmediateVertex::new(p_tr.x, p_tr.y, p_tr.z, color, uv_tr),
+            ImmediateVertex::new(p_bl.x, p_bl.y, p_bl.z, color, uv_bl),
+            ImmediateVertex::new(p_br.x, p_br.y, p_br.z, color, uv_br),
         ]
     }
 
     #[inline]
     pub fn push_quad(&mut self, assets: &AssetServerGuard, x: f32, y: f32, w: f32, h: f32) {
         let uv = assets.white_pixel().uv;
-        let vertices = self.create_vertices(x, y, w, h, uv);
+        let vertices = self.create_quad_vertices(x, y, w, h, uv);
 
         let base = self.triangle_batcher.vertices.len() as u32;
 
@@ -293,29 +368,30 @@ impl ImmediateRenderer {
     pub fn push_circle(&mut self, x: f32, y: f32, radius: f32) {
         let base = self.circle_batcher.vertices.len() as u32;
         let center = Vector2::new(x, y);
+        let radius = radius;
 
         self.circle_batcher.vertices.extend_from_slice(&[
             ImmediateCircleVertex::new(
                 Vector3::new(x - radius, y - radius, 0.0),
-                self.draw_color,
+                self.current_state.draw_color,
                 center,
                 radius,
             ),
             ImmediateCircleVertex::new(
                 Vector3::new(x + radius, y - radius, 0.0),
-                self.draw_color,
+                self.current_state.draw_color,
                 center,
                 radius,
             ),
             ImmediateCircleVertex::new(
                 Vector3::new(x + radius, y + radius, 0.0),
-                self.draw_color,
+                self.current_state.draw_color,
                 center,
                 radius,
             ),
             ImmediateCircleVertex::new(
                 Vector3::new(x - radius, y + radius, 0.0),
-                self.draw_color,
+                self.current_state.draw_color,
                 center,
                 radius,
             ),
@@ -344,10 +420,10 @@ impl ImmediateRenderer {
         let image = assets.get_image(image);
         let uv = image.uv;
 
-        let w = image.size.width as f32 * self.scale;
-        let h = image.size.height as f32 * self.scale;
+        let w = image.size.width as f32;
+        let h = image.size.height as f32;
 
-        let vertices = self.create_vertices(x, y, w, h, uv);
+        let vertices = self.create_quad_vertices(x, y, w, h, uv);
         let base = self.triangle_batcher.vertices.len() as u32;
 
         self.triangle_batcher.vertices.extend_from_slice(&vertices);
@@ -402,7 +478,7 @@ impl ImmediateRenderer {
         self.triangle_batcher.present(render_pass);
         self.circle_batcher.present(render_pass);
 
-        self.draw_color = Color::White.into();
-        self.scale = 1.0;
+        self.current_state.draw_color = Color::White.into();
+        self.current_state.transform = Matrix4::identity();
     }
 }

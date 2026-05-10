@@ -22,8 +22,56 @@ impl<'r> Draw<'r> {
     }
 
     #[inline]
+    pub fn push_state(&mut self) {
+        self.renderer
+            .active_layer_mut()
+            .immediate_mut()
+            .push_state();
+    }
+
+    #[inline]
+    pub fn pop_state(&mut self) {
+        self.renderer.active_layer_mut().immediate_mut().pop_state();
+    }
+
+    #[inline]
+    pub fn translate(&mut self, x: f32, y: f32) {
+        self.renderer
+            .active_layer_mut()
+            .immediate_mut()
+            .translate(x, y);
+    }
+
+    #[inline]
+    pub fn translate_v<T: Into<Vector2>>(&mut self, translation: T) {
+        let t: Vector2 = translation.into();
+
+        self.translate(t.x, t.y);
+    }
+
+    #[inline]
+    pub fn rotate(&mut self, angle_radians: f32) {
+        self.renderer
+            .active_layer_mut()
+            .immediate_mut()
+            .rotate(angle_radians);
+    }
+
+    #[inline]
+    pub fn scale(&mut self, x: f32, y: f32) {
+        self.renderer.active_layer_mut().immediate_mut().scale(x, y);
+    }
+
+    #[inline]
+    pub fn scale_v<S: Into<Vector2>>(&mut self, scale: S) {
+        let s: Vector2 = scale.into();
+
+        self.scale(s.x, s.y)
+    }
+
+    #[inline]
     pub fn color(&self) -> Color {
-        (*self.renderer.active_layer().immediate().draw_color()).into()
+        self.renderer.active_layer().immediate().draw_color().into()
     }
 
     #[inline]
@@ -31,28 +79,7 @@ impl<'r> Draw<'r> {
         self.renderer
             .active_layer_mut()
             .immediate_mut()
-            .set_draw_color(color);
-    }
-
-    #[inline]
-    pub fn scale(&self) -> f32 {
-        self.renderer.active_layer().immediate().scale()
-    }
-
-    #[inline]
-    pub fn set_scale(&mut self, scale: f32) {
-        self.renderer
-            .active_layer_mut()
-            .immediate_mut()
-            .set_scale(scale);
-    }
-
-    #[inline]
-    pub fn reset_scale(&mut self) {
-        self.renderer
-            .active_layer_mut()
-            .immediate_mut()
-            .set_scale(1.0);
+            .set_draw_color(color.into());
     }
 
     #[inline]

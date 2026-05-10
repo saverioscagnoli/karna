@@ -1,4 +1,5 @@
 mod input;
+mod monitor;
 mod time;
 mod window;
 
@@ -6,6 +7,7 @@ use assets::AssetServer;
 use assets::AssetServerGuard;
 pub use input::Input;
 pub use input::KeyState;
+pub use monitor::Monitors;
 use renderer::Draw;
 use renderer::Renderer;
 pub use time::Time;
@@ -15,6 +17,7 @@ pub struct ContextRefMut<'a> {
     pub time: &'a mut Time,
     pub window: &'a mut Window,
     pub input: &'a mut Input,
+    pub monitors: &'a Monitors,
     pub assets: &'a mut AssetServer,
 }
 
@@ -22,6 +25,7 @@ pub struct ContextRef<'a> {
     pub time: &'a Time,
     pub window: &'a Window,
     pub input: &'a Input,
+    pub monitors: &'a Monitors,
     pub assets: AssetServerGuard<'a>,
 }
 
@@ -29,16 +33,23 @@ pub struct WindowContext {
     pub time: Time,
     pub window: Window,
     pub input: Input,
+    pub monitors: Monitors,
     pub render: Renderer,
     pub assets: AssetServer,
 }
 
 impl WindowContext {
-    pub(crate) fn new(window: Window, render: Renderer, assets: AssetServer) -> Self {
+    pub(crate) fn new(
+        window: Window,
+        render: Renderer,
+        monitors: Monitors,
+        assets: AssetServer,
+    ) -> Self {
         Self {
             time: Time::new(),
             window,
             input: Input::new(),
+            monitors,
             render,
             assets,
         }
@@ -49,6 +60,7 @@ impl WindowContext {
             time: &mut self.time,
             window: &mut self.window,
             input: &mut self.input,
+            monitors: &self.monitors,
             assets: &mut self.assets,
         }
     }
@@ -59,6 +71,7 @@ impl WindowContext {
             time: &self.time,
             window: &self.window,
             input: &self.input,
+            monitors: &self.monitors,
             assets: self.assets.guard(),
         };
 

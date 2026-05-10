@@ -3,7 +3,6 @@ use karna::Image;
 use karna::KeyCode;
 use karna::Scene;
 use karna::WindowBuilder;
-use karna::log::info;
 use karna::math::Size;
 use karna::math::Vector2;
 use karna::render::Color;
@@ -48,9 +47,8 @@ impl Scene for S {
         self.pos += self.vel * dt;
     }
 
-    fn draw(&self, ctx: karna::ContextRef, draw: &mut Draw) {
+    fn draw(&self, _ctx: karna::ContextRef, draw: &mut Draw) {
         draw.set_color(Color::White);
-        draw.set_scale(10.0);
         draw.rect(self.pos.x, self.pos.y, 50.0, 50.0);
 
         draw.set_color(Color::Cyan);
@@ -63,7 +61,6 @@ impl Scene for S {
 
         draw.set_color(Color::Magenta);
         draw.line_v([300.0, 100.0], self.pos + Vector2::new(25.0, 25.0));
-        draw.reset_scale();
     }
 }
 
@@ -94,9 +91,9 @@ impl Scene for AtlasDemo {
         }
     }
 
-    fn update(&mut self, ctx: karna::ContextRefMut) {}
+    fn update(&mut self, _ctx: karna::ContextRefMut) {}
 
-    fn draw(&self, ctx: karna::ContextRef, draw: &mut Draw) {
+    fn draw(&self, _ctx: karna::ContextRef, draw: &mut Draw) {
         // Draw the whole atlas
         draw.atlas(0.0, 0.0);
     }
