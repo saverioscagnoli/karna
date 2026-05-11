@@ -167,6 +167,11 @@ impl WindowLifecycle {
                     }
                 }
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.context
+                    .input
+                    .update_mouse(position.x as f32, position.y as f32);
+            }
 
             _ => {}
         }

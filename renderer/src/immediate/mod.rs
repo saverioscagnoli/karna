@@ -1,7 +1,6 @@
 mod batcher;
 mod draw_handle;
-
-use std::mem;
+mod vertex;
 
 use assets::AssetServerGuard;
 use assets::Font;
@@ -11,8 +10,6 @@ use fontdue::layout::CoordinateSystem;
 use fontdue::layout::Layout;
 use fontdue::layout::TextStyle;
 use logging::warn;
-use macros::Get;
-use macros::Set;
 use math::Matrix4;
 use math::Vector2;
 use math::Vector3;
@@ -21,120 +18,16 @@ use utils::Handle;
 
 use crate::Color;
 use crate::immediate::batcher::Batcher;
+use crate::immediate::vertex::ImmediateCircleVertex;
+use crate::immediate::vertex::ImmediateVertex;
 use crate::immediate_circle_shader;
 use crate::immediate_shader;
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct ImmediateVertex {
-    pub position: Vector3,
-    pub color: Vector4,
-    pub uv: Vector2,
-}
-
-impl ImmediateVertex {
-    fn new(x: f32, y: f32, z: f32, color: Vector4, uv: Vector2) -> Self {
-        Self {
-            position: Vector3::new(x, y, z),
-            color,
-            uv,
-        }
-    }
-
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<Vector3>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<Vector3>() as wgpu::BufferAddress
-                        + mem::size_of::<Vector4>() as wgpu::BufferAddress,
-                    shader_location: 2,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
-}
-
-/// Vertex type Specifically used for rendering
-/// circles in immediate mode via `draw.cirlce()`
-///
-/// Uses a shader for cutting out pixels and make it
-/// into a circle.
-#[repr(C)]
-#[derive(Default)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct ImmediateCircleVertex {
-    pub position: Vector3, // 12 bytes
-    pub color: Vector4,    // 16 bytes
-    pub center: Vector2,   // 8 bytes
-    pub radius: f32,       // 4 bytes
-}
-
-impl ImmediateCircleVertex {
-    #[inline]
-    pub fn new(position: Vector3, color: Vector4, center: Vector2, radius: f32) -> Self {
-        Self {
-            position,
-            color,
-            center,
-            radius,
-        }
-    }
-
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                // position: vec3<f32>
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                // color: vec4<f32>
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<Vector3>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                // center: vec2<f32>
-                wgpu::VertexAttribute {
-                    offset: (mem::size_of::<Vector3>() + mem::size_of::<Vector4>())
-                        as wgpu::BufferAddress,
-                    shader_location: 2,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-                // radius: f32
-                wgpu::VertexAttribute {
-                    offset: (mem::size_of::<Vector3>()
-                        + mem::size_of::<Vector4>()
-                        + mem::size_of::<Vector2>())
-                        as wgpu::BufferAddress,
-                    shader_location: 3,
-                    format: wgpu::VertexFormat::Float32,
-                },
-            ],
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy)]
 struct RenderState {
     draw_color: Vector4,
     transform: Matrix4,
+    depth: f32,
 }
 
 impl Default for RenderState {
@@ -142,6 +35,7 @@ impl Default for RenderState {
         Self {
             draw_color: Color::White.into(),
             transform: Matrix4::identity(),
+            depth: 0.0,
         }
     }
 }
@@ -163,44 +57,31 @@ impl ImmediateRenderer {
         camera_bgl: &wgpu::BindGroupLayout,
         atlas_bgl: &wgpu::BindGroupLayout,
     ) -> Self {
-        let point_pipeline = immediate_shader()
-            .pipeline_builder()
-            .label("Immediate Point pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::PointList)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[camera_bgl, &atlas_bgl],
-                &[ImmediateVertex::desc()],
-            );
+        let make_immediate_pipeline = |label, topology| {
+            immediate_shader()
+                .pipeline_builder()
+                .label(label)
+                .vertex_entry("vs_main")
+                .fragment_entry("fs_main")
+                .topology(topology)
+                .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
+                .build(
+                    surface_format,
+                    &[camera_bgl, atlas_bgl],
+                    &[ImmediateVertex::desc()],
+                )
+        };
 
-        let immediate_pipeline = immediate_shader()
-            .pipeline_builder()
-            .label("Immediate Line pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::LineList)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[camera_bgl, &atlas_bgl],
-                &[ImmediateVertex::desc()],
-            );
-
-        let triangle_pipeline = immediate_shader()
-            .pipeline_builder()
-            .label("Immediate Triangle pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::TriangleList)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[camera_bgl, &atlas_bgl],
-                &[ImmediateVertex::desc()],
-            );
+        let point_pipeline = make_immediate_pipeline(
+            "Immediate Point pipeline",
+            wgpu::PrimitiveTopology::PointList,
+        );
+        let line_pipeline =
+            make_immediate_pipeline("Immediate Line pipeline", wgpu::PrimitiveTopology::LineList);
+        let triangle_pipeline = make_immediate_pipeline(
+            "Immediate Triangle pipeline",
+            wgpu::PrimitiveTopology::TriangleList,
+        );
 
         let circle_pipeline = immediate_circle_shader()
             .pipeline_builder()
@@ -210,7 +91,7 @@ impl ImmediateRenderer {
             .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
             .build(
                 surface_format,
-                &[camera_bgl],
+                &[camera_bgl, atlas_bgl],
                 &[ImmediateCircleVertex::desc()],
             );
 
@@ -219,7 +100,7 @@ impl ImmediateRenderer {
             state_stack: Vec::new(),
             text_layout: Layout::new(CoordinateSystem::PositiveYDown),
             point_batcher: Batcher::new(point_pipeline),
-            line_batcher: Batcher::new(immediate_pipeline),
+            line_batcher: Batcher::new(line_pipeline),
             triangle_batcher: Batcher::new(triangle_pipeline),
             circle_batcher: Batcher::new(circle_pipeline),
         }
@@ -233,7 +114,7 @@ impl ImmediateRenderer {
     #[inline]
     pub fn pop_state(&mut self) {
         if let Some(state) = self.state_stack.pop() {
-            self.current_state = state
+            self.current_state = state;
         } else {
             warn!("Immediate renderer: popped a state without pushing first");
         }
@@ -243,198 +124,191 @@ impl ImmediateRenderer {
     pub fn draw_color(&self) -> Vector4 {
         self.current_state.draw_color
     }
-
     #[inline]
     pub fn set_draw_color(&mut self, color: Vector4) {
         self.current_state.draw_color = color;
     }
 
     #[inline]
+    pub fn depth(&self) -> f32 {
+        self.current_state.depth
+    }
+    #[inline]
+    pub fn set_depth(&mut self, depth: f32) {
+        self.current_state.depth = depth;
+    }
+
+    #[inline]
     pub fn translate(&mut self, x: f32, y: f32) {
-        let translation = Matrix4::from_translation(Vector3::new(x, y, 0.0));
-        self.current_state.transform = self.current_state.transform * translation;
+        self.current_state.transform =
+            self.current_state.transform * Matrix4::from_translation(Vector3::new(x, y, 0.0));
     }
 
     #[inline]
     pub fn rotate(&mut self, angle_radians: f32) {
-        let rotation = Matrix4::from_rotation_z(angle_radians);
-        self.current_state.transform = self.current_state.transform * rotation;
+        self.current_state.transform =
+            self.current_state.transform * Matrix4::from_rotation_z(angle_radians);
     }
 
     #[inline]
     pub fn scale(&mut self, x: f32, y: f32) {
-        let scale = Matrix4::from_scale(Vector3::new(x, y, 1.0));
-        self.current_state.transform = self.current_state.transform * scale;
+        self.current_state.transform =
+            self.current_state.transform * Matrix4::from_scale(Vector3::new(x, y, 1.0));
     }
 
+    /// Transform a 2-D point through the current matrix, returning a 3-D position
+    /// that carries the configured depth in the z component.
     #[inline]
-    fn transform_point(&self, x: f32, y: f32) -> Vector3 {
+    fn tp(&self, x: f32, y: f32) -> Vector3 {
         let pos = Vector4::new(x, y, 0.0, 1.0);
         let transformed = self.current_state.transform * pos;
 
-        transformed.xyz()
+        Vector3::new(transformed.x, transformed.y, self.current_state.depth)
+    }
+
+    /// Build an [`ImmediateVertex`] at `(x, y)` with the current color and the
+    /// given atlas UV.
+    #[inline]
+    fn vert(&self, x: f32, y: f32, uv: Vector2) -> ImmediateVertex {
+        let p = self.tp(x, y);
+        ImmediateVertex::new(p.x, p.y, p.z, self.current_state.draw_color, uv)
+    }
+
+    /// Push `vertices` into `batcher` and append indices that offset each
+    /// element in `pattern` by the current vertex base.
+    #[inline]
+    fn push_verts<V: Copy>(batcher: &mut Batcher<V>, vertices: &[V], pattern: &[u32]) {
+        let base = batcher.vertices.len() as u32;
+        batcher.vertices.extend_from_slice(vertices);
+        batcher.indices.extend(pattern.iter().map(|i| base + i));
     }
 
     #[inline]
     pub fn push_point(&mut self, assets: &AssetServerGuard, x: f32, y: f32) {
-        // Sample from the 1x1 white texel in the atlas so untextured primitives
-        // don't depend on whatever is stored at (0,0) or the atlas edges.
-        let uv = assets.white_pixel().uv;
-        let uv_tl = uv.xy();
+        let white = assets.white_pixel_handle();
+        let uv = assets.get_image(white).uv.xy();
+        let v = self.vert(x, y, uv);
 
-        self.point_batcher.vertices.push(ImmediateVertex::new(
-            x,
-            y,
-            0.0,
-            self.current_state.draw_color,
-            uv_tl,
-        ));
-
-        self.point_batcher
-            .indices
-            .push(self.point_batcher.vertices.len() as u32 - 1);
+        Self::push_verts(&mut self.point_batcher, &[v], &[0]);
     }
 
     #[inline]
     pub fn push_line(&mut self, assets: &AssetServerGuard, x1: f32, y1: f32, x2: f32, y2: f32) {
-        let uv = assets.white_pixel().uv;
-        let uv_tl = uv.xy();
+        let white = assets.white_pixel_handle();
+        let uv = assets.get_image(white).uv.xy();
+        let verts = [self.vert(x1, y1, uv), self.vert(x2, y2, uv)];
 
-        let base = self.line_batcher.vertices.len() as u32;
-
-        let p1 = self.transform_point(x1, y1);
-        let p2 = self.transform_point(x2, y2);
-        let color = self.current_state.draw_color;
-
-        self.line_batcher.vertices.extend_from_slice(&[
-            ImmediateVertex::new(p1.x, p1.y, p1.z, color, uv_tl),
-            ImmediateVertex::new(p2.x, p2.y, p2.z, color, uv_tl),
-        ]);
-
-        self.line_batcher
-            .indices
-            .extend_from_slice(&[base, base + 1]);
+        Self::push_verts(&mut self.line_batcher, &verts, &[0, 1]);
     }
 
     #[inline]
-    fn create_quad_vertices(
+    fn push_quad_uvs(&mut self, x: f32, y: f32, w: f32, h: f32, uv: Vector4) {
+        let uv_tl = uv.xy();
+        let uv_tr = uv_tl + Vector2::new(uv.z, 0.0);
+        let uv_bl = uv_tl + Vector2::new(0.0, uv.w);
+        let uv_br = uv_tl + Vector2::new(uv.z, uv.w);
+
+        let verts = [
+            self.vert(x, y, uv_tl),
+            self.vert(x + w, y, uv_tr),
+            self.vert(x, y + h, uv_bl),
+            self.vert(x + w, y + h, uv_br),
+        ];
+
+        Self::push_verts(&mut self.triangle_batcher, &verts, &[0, 1, 2, 2, 1, 3]);
+    }
+
+    #[inline]
+    pub fn push_rect(&mut self, assets: &AssetServerGuard, x: f32, y: f32, w: f32, h: f32) {
+        let white = assets.white_pixel_handle();
+        let uv = assets.get_image(white).uv;
+
+        self.push_quad_uvs(x, y, w, h, uv);
+    }
+
+    #[inline]
+    pub fn push_rect_outline(&mut self, assets: &AssetServerGuard, x: f32, y: f32, w: f32, h: f32) {
+        let white = assets.white_pixel_handle();
+        let uv = assets.get_image(white).uv.xy();
+
+        let verts = [
+            self.vert(x, y, uv),         // 0 TL
+            self.vert(x + w, y, uv),     // 1 TR
+            self.vert(x + w, y + h, uv), // 2 BR
+            self.vert(x, y + h, uv),     // 3 BL
+        ];
+
+        Self::push_verts(&mut self.line_batcher, &verts, &[0, 1, 1, 2, 2, 3, 3, 0]);
+    }
+
+    #[inline]
+    pub fn push_quad(&mut self, image: Handle<Image>, assets: &AssetServerGuard, x: f32, y: f32) {
+        let image = assets.get_image(image);
+        let w = image.size.width as f32;
+        let h = image.size.height as f32;
+
+        self.push_quad_uvs(x, y, w, h, image.uv);
+    }
+
+    #[inline]
+    pub fn push_triangle(
         &mut self,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        uv: Vector4,
-    ) -> [ImmediateVertex; 4] {
-        let uv_tl = uv.xy();
-        let uv_tr = uv.xy() + Vector2::new(uv.z, 0.0);
-        let uv_bl = uv.xy() + Vector2::new(0.0, uv.w);
-        let uv_br = uv.xy() + Vector2::new(uv.z, uv.w);
+        assets: &AssetServerGuard,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        x3: f32,
+        y3: f32,
+    ) {
+        let white = assets.white_pixel_handle();
+        let uv = assets.get_image(white).uv.xy();
+        let verts = [
+            self.vert(x1, y1, uv),
+            self.vert(x2, y2, uv),
+            self.vert(x3, y3, uv),
+        ];
 
-        // Apply transformations to each corner
-        let p_tl = self.transform_point(x, y);
-        let p_tr = self.transform_point(x + w, y);
-        let p_bl = self.transform_point(x, y + h);
-        let p_br = self.transform_point(x + w, y + h);
-
-        let color = self.current_state.draw_color;
-
-        [
-            ImmediateVertex::new(p_tl.x, p_tl.y, p_tl.z, color, uv_tl),
-            ImmediateVertex::new(p_tr.x, p_tr.y, p_tr.z, color, uv_tr),
-            ImmediateVertex::new(p_bl.x, p_bl.y, p_bl.z, color, uv_bl),
-            ImmediateVertex::new(p_br.x, p_br.y, p_br.z, color, uv_br),
-        ]
-    }
-
-    #[inline]
-    pub fn push_quad(&mut self, assets: &AssetServerGuard, x: f32, y: f32, w: f32, h: f32) {
-        let uv = assets.white_pixel().uv;
-        let vertices = self.create_quad_vertices(x, y, w, h, uv);
-
-        let base = self.triangle_batcher.vertices.len() as u32;
-
-        self.triangle_batcher.vertices.extend_from_slice(&vertices);
-        self.triangle_batcher.indices.extend_from_slice(&[
-            base,
-            base + 1,
-            base + 2,
-            base + 2,
-            base + 1,
-            base + 3,
-        ]);
+        Self::push_verts(&mut self.triangle_batcher, &verts, &[0, 1, 2]);
     }
 
     #[inline]
     pub fn push_circle(&mut self, x: f32, y: f32, radius: f32) {
-        let base = self.circle_batcher.vertices.len() as u32;
-        let center = Vector2::new(x, y);
-        let radius = radius;
+        let center_world = self.tp(x, y);
+        let color = self.current_state.draw_color;
+        let center_2d = Vector2::new(center_world.x, center_world.y);
 
-        self.circle_batcher.vertices.extend_from_slice(&[
+        let p_edge = self.tp(x + radius, y);
+        let transformed_radius = (Vector2::new(p_edge.x, p_edge.y) - center_2d).length();
+
+        let verts = [
             ImmediateCircleVertex::new(
-                Vector3::new(x - radius, y - radius, 0.0),
-                self.current_state.draw_color,
-                center,
-                radius,
+                self.tp(x - radius, y - radius),
+                color,
+                center_2d,
+                transformed_radius,
             ),
             ImmediateCircleVertex::new(
-                Vector3::new(x + radius, y - radius, 0.0),
-                self.current_state.draw_color,
-                center,
-                radius,
+                self.tp(x + radius, y - radius),
+                color,
+                center_2d,
+                transformed_radius,
             ),
             ImmediateCircleVertex::new(
-                Vector3::new(x + radius, y + radius, 0.0),
-                self.current_state.draw_color,
-                center,
-                radius,
+                self.tp(x + radius, y + radius),
+                color,
+                center_2d,
+                transformed_radius,
             ),
             ImmediateCircleVertex::new(
-                Vector3::new(x - radius, y + radius, 0.0),
-                self.current_state.draw_color,
-                center,
-                radius,
+                self.tp(x - radius, y + radius),
+                color,
+                center_2d,
+                transformed_radius,
             ),
-        ]);
+        ];
 
-        self.circle_batcher.indices.extend_from_slice(&[
-            base,
-            base + 1,
-            base + 2,
-            base,
-            base + 2,
-            base + 3,
-        ]);
-    }
-
-    #[inline]
-    pub fn push_textured_quad(
-        &mut self,
-        image: Handle<Image>,
-        assets: &AssetServerGuard,
-        x: f32,
-        y: f32,
-    ) {
-        // `assets.uv(image)` returns normalized UV rect: (u, v, du, dv) in 0..1.
-        // For quad size in screen-space, we need the image dimensions in pixels.
-        let image = assets.get_image(image);
-        let uv = image.uv;
-
-        let w = image.size.width as f32;
-        let h = image.size.height as f32;
-
-        let vertices = self.create_quad_vertices(x, y, w, h, uv);
-        let base = self.triangle_batcher.vertices.len() as u32;
-
-        self.triangle_batcher.vertices.extend_from_slice(&vertices);
-        self.triangle_batcher.indices.extend_from_slice(&[
-            base,
-            base + 1,
-            base + 2,
-            base + 2,
-            base + 1,
-            base + 3,
-        ]);
+        Self::push_verts(&mut self.circle_batcher, &verts, &[0, 1, 2, 0, 2, 3]);
     }
 
     #[inline]
@@ -454,23 +328,27 @@ impl ImmediateRenderer {
             &TextStyle::new(text, font.size() as f32, 0),
         );
 
+        // Collect first to avoid borrowing `self` through `font` while also
+        // calling `push_textured_quad`.
         let glyphs: Vec<_> = self
             .text_layout
             .glyphs()
             .iter()
-            .map(|g| (g.parent, g.x, g.y, g.width, g.height))
+            .filter(|g| g.width > 0 && g.height > 0)
+            .map(|g| (font.glyph_image(g.parent), g.x, g.y))
             .collect();
 
-        for (parent, gx, gy, w, h) in glyphs {
-            if w == 0 || h == 0 {
-                continue;
-            }
-
-            let image = font.glyph_image(parent);
-            self.push_textured_quad(image, assets, x + gx, y + gy);
+        for (image, gx, gy) in glyphs {
+            self.push_quad(image, assets, x + gx, y + gy);
         }
     }
 
+    /// Flush all batchers to the render pass.
+    ///
+    /// State (color, transform, depth) is intentionally **not** reset here —
+    /// use [`push_state`] / [`pop_state`] to scope mutations, or reset
+    /// manually.  Resetting silently caused hard-to-find bugs when drawing
+    /// spanned across multiple subsystems in the same frame.
     #[inline]
     pub fn present<'pass>(&'pass mut self, render_pass: &mut wgpu::RenderPass<'pass>) {
         self.point_batcher.present(render_pass);
@@ -478,7 +356,6 @@ impl ImmediateRenderer {
         self.triangle_batcher.present(render_pass);
         self.circle_batcher.present(render_pass);
 
-        self.current_state.draw_color = Color::White.into();
-        self.current_state.transform = Matrix4::identity();
+        self.current_state = RenderState::default();
     }
 }

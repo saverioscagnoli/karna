@@ -1,3 +1,5 @@
+use macros::Get;
+use math::Vector2;
 use utils::FastHashSet;
 pub use winit::keyboard::KeyCode;
 
@@ -8,10 +10,14 @@ pub enum KeyState {
     Released,
 }
 
+#[derive(Get)]
+#[derive(Debug)]
 pub struct Input {
     held_keys: FastHashSet<KeyCode>,
     pressed_keys: FastHashSet<KeyCode>,
     released_keys: FastHashSet<KeyCode>,
+    #[get(copied)]
+    mouse_position: Vector2,
 }
 
 impl Input {
@@ -20,6 +26,7 @@ impl Input {
             held_keys: FastHashSet::default(),
             pressed_keys: FastHashSet::default(),
             released_keys: FastHashSet::default(),
+            mouse_position: Vector2::zeros(),
         }
     }
 
@@ -38,6 +45,11 @@ impl Input {
                 KeyState::Released => self.released_keys.insert(key),
             };
         }
+    }
+
+    #[inline]
+    pub(crate) fn update_mouse(&mut self, mx: f32, my: f32) {
+        self.mouse_position.set(mx, my);
     }
 
     /// Returns true if a key is being held at the point of calling this function

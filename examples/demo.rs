@@ -68,16 +68,26 @@ impl Scene for S {
 
         draw.push_state();
         draw.translate(self.pos.x, self.pos.y + 100.0);
-        draw.rotate(f32::consts::PI / 2.5);
         draw.scale(2.0, 1.0);
         draw.rect(0.0, 0.0, 50.0, 50.0);
         draw.pop_state();
+
+        draw.set_color(Color::Orange);
+
+        draw.push_state();
+        draw.translate(200.0, 300.0);
+        draw.circle(0.0, 0.0, 20.0);
+        draw.scale(2.0, 2.0);
+        draw.circle(100.0, 100.0, 20.0);
+        draw.pop_state();
+
+        draw.set_color(Color::Magenta);
 
         draw.line_v([300.0, 100.0], self.pos + Vector2::new(25.0, 25.0));
 
         draw.set_color(Color::Yellow);
         draw.debug_text(&format!("fps: {}", ctx.time.fps()), 10.0, 10.0);
-        draw.debug_text(&format!("dt: {}", ctx.time.delta()), 10.0, 30.0);
+        draw.debug_text(&format!("dt: {:.6}", ctx.time.delta()), 10.0, 30.0);
     }
 }
 

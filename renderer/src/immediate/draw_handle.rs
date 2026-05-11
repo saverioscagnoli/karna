@@ -118,7 +118,7 @@ impl<'r> Draw<'r> {
         self.renderer
             .active_layer_mut()
             .immediate_mut()
-            .push_quad(&self.assets, x, y, w, h);
+            .push_rect(&self.assets, x, y, w, h);
     }
 
     #[inline]
@@ -149,7 +149,7 @@ impl<'r> Draw<'r> {
         self.renderer
             .active_layer_mut()
             .immediate_mut()
-            .push_textured_quad(image, &self.assets, x, y);
+            .push_quad(image, &self.assets, x, y);
     }
 
     #[inline]
@@ -193,10 +193,12 @@ impl<'r> Draw<'r> {
 
     #[inline]
     pub fn atlas(&mut self, x: f32, y: f32) {
-        self.renderer
-            .active_layer_mut()
-            .immediate_mut()
-            .push_textured_quad(self.assets.atlas_handle(), &self.assets, x, y);
+        self.renderer.active_layer_mut().immediate_mut().push_quad(
+            self.assets.atlas_handle(),
+            &self.assets,
+            x,
+            y,
+        );
     }
 
     #[inline]

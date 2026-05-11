@@ -82,8 +82,8 @@ pub struct AssetServerGuard<'a> {
 
 impl<'a> AssetServerGuard<'a> {
     #[inline]
-    pub fn white_pixel(&self) -> &Image {
-        self.get_image(self.atlas.white_pixel_handle)
+    pub fn white_pixel_handle(&self) -> Handle<Image> {
+        self.atlas.white_pixel_handle
     }
 
     #[inline]
