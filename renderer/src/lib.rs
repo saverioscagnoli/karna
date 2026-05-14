@@ -3,6 +3,7 @@ mod color;
 pub mod immediate;
 mod layer;
 mod shader;
+pub mod sprite;
 
 use std::sync::Arc;
 use std::sync::OnceLock;

@@ -241,6 +241,88 @@ impl ImmediateRenderer {
         Self::push_verts(&mut self.line_batcher, &verts, &[0, 1, 1, 2, 2, 3, 3, 0]);
     }
 
+    /// Push a quad with a custom UV rect into the atlas.
+    ///
+    /// `uv` is expressed as `(u0, v0, du, dv)` in atlas space.
+    #[inline]
+    pub fn push_quad_uv(&mut self, x: f32, y: f32, w: f32, h: f32, uv: Vector4) {
+        self.push_quad_uvs(x, y, w, h, uv);
+    }
+
+    /// Push a sub-region of an atlas `image`.
+    ///
+    /// - `src_*` are in *pixels* within the source image (not the atlas).
+    /// - `dst_w` / `dst_h` are destination size in world pixels.
+    /// - `flip_x` / `flip_y` flip by mirroring UVs (no transform side effects).
+    #[inline]
+    pub fn push_quad_region_ex(
+        &mut self,
+        image: Handle<Image>,
+        assets: &AssetServerGuard,
+        x: f32,
+        y: f32,
+        dst_w: f32,
+        dst_h: f32,
+        src_x: u32,
+        src_y: u32,
+        src_w: u32,
+        src_h: u32,
+        flip_x: bool,
+        flip_y: bool,
+    ) {
+        let img = assets.get_image(image);
+
+        // Convert pixel region inside `img` into atlas UVs.
+        let iw = img.size.width.max(1) as f32;
+        let ih = img.size.height.max(1) as f32;
+
+        let mut u0 = img.uv.x + (src_x as f32 / iw) * img.uv.z;
+        let mut v0 = img.uv.y + (src_y as f32 / ih) * img.uv.w;
+        let mut du = (src_w as f32 / iw) * img.uv.z;
+        let mut dv = (src_h as f32 / ih) * img.uv.w;
+
+        if flip_x {
+            u0 += du;
+            du = -du;
+        }
+        if flip_y {
+            v0 += dv;
+            dv = -dv;
+        }
+
+        self.push_quad_uvs(x, y, dst_w, dst_h, Vector4::new(u0, v0, du, dv));
+    }
+
+    /// Convenience wrapper for the common case where destination size matches
+    /// the region size and no flipping is required.
+    #[inline]
+    pub fn push_quad_region(
+        &mut self,
+        image: Handle<Image>,
+        assets: &AssetServerGuard,
+        x: f32,
+        y: f32,
+        src_x: u32,
+        src_y: u32,
+        src_w: u32,
+        src_h: u32,
+    ) {
+        self.push_quad_region_ex(
+            image,
+            assets,
+            x,
+            y,
+            src_w as f32,
+            src_h as f32,
+            src_x,
+            src_y,
+            src_w,
+            src_h,
+            false,
+            false,
+        );
+    }
+
     #[inline]
     pub fn push_quad(&mut self, image: Handle<Image>, assets: &AssetServerGuard, x: f32, y: f32) {
         let image = assets.get_image(image);

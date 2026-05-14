@@ -160,6 +160,71 @@ impl<'r> Draw<'r> {
     }
 
     #[inline]
+    pub fn image_region(
+        &mut self,
+        image: Handle<Image>,
+        x: f32,
+        y: f32,
+        src_x: u32,
+        src_y: u32,
+        src_w: u32,
+        src_h: u32,
+    ) {
+        self.renderer
+            .active_layer_mut()
+            .immediate_mut()
+            .push_quad_region(image, &self.assets, x, y, src_x, src_y, src_w, src_h);
+    }
+
+    #[inline]
+    pub fn image_region_ex(
+        &mut self,
+        image: Handle<Image>,
+        x: f32,
+        y: f32,
+        dst_w: f32,
+        dst_h: f32,
+        src_x: u32,
+        src_y: u32,
+        src_w: u32,
+        src_h: u32,
+        flip_x: bool,
+        flip_y: bool,
+    ) {
+        self.renderer
+            .active_layer_mut()
+            .immediate_mut()
+            .push_quad_region_ex(
+                image,
+                &self.assets,
+                x,
+                y,
+                dst_w,
+                dst_h,
+                src_x,
+                src_y,
+                src_w,
+                src_h,
+                flip_x,
+                flip_y,
+            );
+    }
+
+    #[inline]
+    pub fn image_region_v<P: Into<Vector2>>(
+        &mut self,
+        image: Handle<Image>,
+        pos: P,
+        src_x: u32,
+        src_y: u32,
+        src_w: u32,
+        src_h: u32,
+    ) {
+        let pos: Vector2 = pos.into();
+        self.image_region(image, pos.x, pos.y, src_x, src_y, src_w, src_h);
+    }
+
+    #[inline]
     pub fn text(&mut self, font: Handle<Font>, text: &str, x: f32, y: f32) {
         self.renderer
             .active_layer_mut()
