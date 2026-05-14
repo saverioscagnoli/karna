@@ -66,10 +66,12 @@ pub struct Time {
 
     /// 1.0 / TARGET FPS
     frame_step: Duration,
+    #[get(copied, name = "frame_step")]
     frame_step_f32: f32,
 
     /// 1.0 / TARGET TPS
     tick_step: Duration,
+    #[get(copied, name = "tick_step")]
     tick_step_f32: f32,
 
     sleeper: SpinSleeper,

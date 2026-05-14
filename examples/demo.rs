@@ -22,8 +22,6 @@ impl Scene for S {
     }
 
     fn update(&mut self, ctx: karna::ContextRefMut) {
-        ctx.window.set_title(format!("fps: {}", ctx.time.fps()));
-
         let accel = 5000.0;
         let dt = ctx.time.delta();
 
