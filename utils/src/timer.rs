@@ -24,6 +24,18 @@ impl Timer {
         }
     }
 
+    /// Updates the timer **without** clamping to `duration`.
+    ///
+    /// This is useful when you want to use [`Timer`] as a simple time accumulator
+    /// (e.g. for animation frame stepping), while still reusing helpers like
+    /// [`Timer::elapsed`], [`Timer::reset`], and [`Timer::subtract`].
+    #[inline]
+    pub fn tick_unbounded(&mut self, dt: f32) {
+        if !self.paused {
+            self.elapsed += dt;
+        }
+    }
+
     /// Returns true only on the frame where the timer finishes.
     /// Useful for one-time events.
     pub fn just_finished(&self, dt: f32) -> bool {
@@ -67,5 +79,14 @@ impl Timer {
     #[inline]
     pub fn remaining(&self) -> f32 {
         (self.duration - self.elapsed).max(0.0)
+    }
+
+    #[inline]
+    pub fn elapsed(&self) -> f32 {
+        self.elapsed
+    }
+
+    pub fn subtract(&mut self, dt: f32) {
+        self.elapsed = (self.elapsed - dt).max(0.0);
     }
 }

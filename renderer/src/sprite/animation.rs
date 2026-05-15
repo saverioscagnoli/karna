@@ -139,4 +139,9 @@ impl Animations {
     pub fn iter(&self) -> impl Iterator<Item = (&str, &Animation)> {
         self.0.iter().map(|(k, v)| (k.as_str(), v))
     }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
 }

@@ -211,20 +211,6 @@ impl<'r> Draw<'r> {
     }
 
     #[inline]
-    pub fn image_region_v<P: Into<Vector2>>(
-        &mut self,
-        image: Handle<Image>,
-        pos: P,
-        src_x: u32,
-        src_y: u32,
-        src_w: u32,
-        src_h: u32,
-    ) {
-        let pos: Vector2 = pos.into();
-        self.image_region(image, pos.x, pos.y, src_x, src_y, src_w, src_h);
-    }
-
-    #[inline]
     pub fn text(&mut self, font: Handle<Font>, text: &str, x: f32, y: f32) {
         self.renderer
             .active_layer_mut()
@@ -232,6 +218,7 @@ impl<'r> Draw<'r> {
             .push_text(font, text, &self.assets, x, y);
     }
 
+    #[inline]
     pub fn text_v<P: Into<Vector2>>(&mut self, font: Handle<Font>, text: &str, pos: P) {
         let pos: Vector2 = pos.into();
 

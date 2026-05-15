@@ -1,7 +1,8 @@
-use std::time::Duration;
-
 use assets::Image;
+use logging::warn;
+use macros::With;
 use utils::Handle;
+use utils::Timer;
 
 use crate::Draw;
 use crate::sprite::animation::Animations;
@@ -31,16 +32,21 @@ impl SpriteSource {
 ///
 /// This is intentionally **data-only**. Put movement/transform in your game
 /// objects/components; call [`Sprite::draw`] to push geometry.
+#[derive(With)]
 #[derive(Default)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sprite {
     pub image: Handle<Image>,
+
+    #[with]
     pub source: SpriteSource,
 
     /// Flip the sprite without changing transforms (UV mirror).
+    #[with]
     pub flip_x: bool,
 
     /// Flip the sprite without changing transforms (UV mirror).
+    #[with]
     pub flip_y: bool,
 }
 
@@ -56,26 +62,8 @@ impl Sprite {
     }
 
     #[inline]
-    pub fn with_source(mut self, source: SpriteSource) -> Self {
-        self.source = source;
-        self
-    }
-
-    #[inline]
     pub fn with_region(mut self, x: u32, y: u32, w: u32, h: u32) -> Self {
         self.source = SpriteSource::Region { x, y, w, h };
-        self
-    }
-
-    #[inline]
-    pub fn with_flip_x(mut self, flip: bool) -> Self {
-        self.flip_x = flip;
-        self
-    }
-
-    #[inline]
-    pub fn with_flip_y(mut self, flip: bool) -> Self {
-        self.flip_y = flip;
         self
     }
 
@@ -107,9 +95,6 @@ impl Sprite {
 }
 
 /// Runtime state for playing one animation out of an [`Animations`] set.
-///
-/// This is the "solid" part: it is frame-rate independent, handles large `dt`
-/// by stepping multiple frames, and supports loop modes.
 #[derive(Default)]
 #[derive(Debug, Clone)]
 pub struct SpriteAnimator {
@@ -117,7 +102,7 @@ pub struct SpriteAnimator {
 
     current: Option<String>,
     frame_index: usize,
-    frame_elapsed: Duration,
+    frame_elapsed: Timer,
 
     // For ping-pong.
     dir: i32,
@@ -132,7 +117,7 @@ impl SpriteAnimator {
             animations,
             current: None,
             frame_index: 0,
-            frame_elapsed: Duration::ZERO,
+            frame_elapsed: Timer::default(),
             dir: 1,
             finished: false,
         }
@@ -146,23 +131,31 @@ impl SpriteAnimator {
 
     /// Start playing `name`.
     ///
-    /// - If `restart` is `false` and the same animation is already playing, this
-    ///   does nothing.
+    /// - If `restart` is `false` and the same animation is already playing,
+    ///   this will **resume** it if it was paused.
     /// - Returns `false` if the animation doesn't exist.
-    pub fn play(&mut self, name: impl Into<String>, restart: bool) -> bool {
+    pub fn play<N: Into<String>>(&mut self, name: N, restart: bool) -> bool {
         let name: String = name.into();
 
         if !self.animations.contains(&name) {
             return false;
         }
 
-        if !restart && self.current.as_deref() == Some(name.as_str()) {
+        let same = self.current.as_deref() == Some(name.as_str());
+
+        // Common case: "keep playing" every frame while moving.
+        // If we were paused (e.g. idle state), calling `play(..., false)` should
+        // resume instead of doing nothing.
+        if same && !restart && !self.finished {
+            self.frame_elapsed.resume();
             return true;
         }
 
+        // Otherwise (different animation, explicit restart, or we previously
+        // finished a `LoopMode::Once` animation), restart from frame 0.
         self.current = Some(name);
         self.frame_index = 0;
-        self.frame_elapsed = Duration::ZERO;
+        self.frame_elapsed = Timer::default();
         self.dir = 1;
         self.finished = false;
 
@@ -170,10 +163,20 @@ impl SpriteAnimator {
     }
 
     #[inline]
+    pub fn pause(&mut self) {
+        self.frame_elapsed.pause();
+    }
+
+    #[inline]
+    pub fn resume(&mut self) {
+        self.frame_elapsed.resume();
+    }
+
+    #[inline]
     pub fn stop(&mut self) {
         self.current = None;
         self.frame_index = 0;
-        self.frame_elapsed = Duration::ZERO;
+        self.frame_elapsed = Timer::default();
         self.dir = 1;
         self.finished = false;
     }
@@ -184,8 +187,8 @@ impl SpriteAnimator {
     }
 
     /// Advance the animation by `dt`.
-    pub fn update(&mut self, dt: Duration) {
-        if dt.is_zero() {
+    pub fn update(&mut self, dt: f32) {
+        if dt <= 0.0 {
             return;
         }
 
@@ -215,7 +218,10 @@ impl SpriteAnimator {
         let len = anim.len();
         let loop_mode = anim.loop_mode();
 
-        self.frame_elapsed = self.frame_elapsed.saturating_add(dt);
+        // We use `Timer` as an accumulator here.
+        // `Timer::tick()` stops updating once it is "finished", and `Timer::default()`
+        // has a 0 duration (always finished), so we use `tick_unbounded()`.
+        self.frame_elapsed.tick_unbounded(dt);
 
         // Handle big dt: step multiple frames if needed.
         //
@@ -228,14 +234,14 @@ impl SpriteAnimator {
             steps += 1;
             if steps > max_steps {
                 // Don't get stuck; drop any remaining accumulated time.
-                self.frame_elapsed = Duration::ZERO;
+                self.frame_elapsed.reset();
                 break;
             }
 
             let Some(frame) = anim.frame(self.frame_index) else {
                 // Shouldn't happen, but keep it robust.
                 self.frame_index = 0;
-                self.frame_elapsed = Duration::ZERO;
+                self.frame_elapsed.reset();
                 break;
             };
 
@@ -244,12 +250,12 @@ impl SpriteAnimator {
                 continue;
             }
 
-            if self.frame_elapsed < frame.duration {
+            if self.frame_elapsed.elapsed() < frame.duration.as_secs_f32() {
                 break;
             }
 
             // Consume the current frame duration and advance.
-            self.frame_elapsed -= frame.duration;
+            self.frame_elapsed.subtract(frame.duration.as_secs_f32());
             self.advance(loop_mode, len);
         }
     }
@@ -297,6 +303,41 @@ impl SpriteAnimator {
             .and_then(|name| self.animations.get(name))?;
         anim.frame(self.frame_index)
     }
+
+    #[inline]
+    pub fn set_frame(&mut self, frame_index: usize) -> bool {
+        let Some(name) = self.current.as_deref() else {
+            warn!(
+                "set_frame({}) called but no animation is currently selected",
+                frame_index
+            );
+            return false;
+        };
+
+        let Some(anim) = self.animations.get(name) else {
+            warn!(
+                "set_frame({}) called but current animation '{}' no longer exists",
+                frame_index, name
+            );
+            return false;
+        };
+
+        if frame_index >= anim.len() {
+            warn!(
+                "frame_index {} is out of bounds for animation '{}' of length {}",
+                frame_index,
+                name,
+                anim.len()
+            );
+            return false;
+        }
+
+        self.frame_index = frame_index;
+        self.frame_elapsed.reset();
+        self.finished = false;
+
+        true
+    }
 }
 
 /// Convenience wrapper: an image handle + animator + flips.
@@ -321,7 +362,7 @@ impl AnimatedSprite {
     }
 
     #[inline]
-    pub fn update(&mut self, dt: Duration) {
+    pub fn update(&mut self, dt: f32) {
         self.animator.update(dt);
     }
 
@@ -339,6 +380,42 @@ impl AnimatedSprite {
             y,
             frame.width as f32,
             frame.height as f32,
+            frame.x,
+            frame.y,
+            frame.width,
+            frame.height,
+            self.flip_x,
+            self.flip_y,
+        );
+    }
+
+    /// Draw the sprite using an anchor point inside the current frame.
+    ///
+    /// `anchor_x` / `anchor_y` are in normalized frame space:
+    /// - (0, 0) = top-left
+    /// - (0.5, 1.0) = bottom-center
+    ///
+    /// This helps reduce jitter when frames have different sizes, because you
+    /// can keep e.g. the "feet" locked to a world position.
+    #[inline]
+    pub fn draw_aligned(&self, draw: &mut Draw, x: f32, y: f32, anchor_x: f32, anchor_y: f32) {
+        let Some(frame) = self.animator.frame() else {
+            draw.image(self.image, x, y);
+            return;
+        };
+
+        let w = frame.width as f32;
+        let h = frame.height as f32;
+
+        let dx = x - w * anchor_x;
+        let dy = y - h * anchor_y;
+
+        draw.image_region_ex(
+            self.image,
+            dx,
+            dy,
+            w,
+            h,
             frame.x,
             frame.y,
             frame.width,
