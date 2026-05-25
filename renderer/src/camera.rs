@@ -1,7 +1,9 @@
 use gpu::core::GpuBuffer;
 use macros::Get;
+use macros::Set;
 use math::Matrix4;
 use math::Size;
+use math::Vector2;
 use math::Vector3;
 
 pub trait Projection {
@@ -81,7 +83,7 @@ impl Projection for PerspectiveProjection {
     }
 }
 
-#[derive(Get)]
+#[derive(Get, Set)]
 pub struct Camera {
     projection: Box<dyn Projection>,
     vp_buffer: GpuBuffer<Matrix4>,
@@ -92,7 +94,14 @@ pub struct Camera {
     #[get(visibility = "pub(crate)")]
     vp_bg: wgpu::BindGroup,
 
+    #[get(copied)]
+    #[get(mut)]
+    #[set(into)]
     position: Vector3,
+
+    #[get(copied)]
+    #[get(mut)]
+    #[set(into)]
     target: Vector3,
     up: Vector3,
 }
@@ -165,8 +174,17 @@ impl Camera {
         projection * view_mat
     }
 
+    #[inline]
     pub fn update(&self, view: Size<u32>) {
         let vp = self.view_projection(view);
         self.vp_buffer.write(0, &[vp]);
+    }
+
+    #[inline]
+    pub fn set_position_2d<P: Into<Vector2>>(&mut self, pos: P) {
+        let pos_2d: Vector2 = pos.into();
+        let pos = pos_2d.extend(self.position.z);
+
+        self.position = pos;
     }
 }

@@ -4,6 +4,11 @@ use math::Vector2;
 use renderer::Draw;
 use renderer::sprite::AnimatedSprite;
 
+use crate::consts::GRID_HEIGHT_TILES;
+use crate::consts::GRID_WIDTH_TILES;
+use crate::consts::TILE_SIZE;
+
+#[derive(Debug, Clone, Copy)]
 enum Direction {
     Up,
     Down,
@@ -11,11 +16,12 @@ enum Direction {
     Right,
 }
 
+#[derive(Debug)]
 pub struct Bomberman {
-    position: Vector2,
-    velocity: Vector2,
-    sprite: AnimatedSprite,
-    last_direction: Direction,
+    pub position: Vector2,
+    pub velocity: Vector2,
+    pub sprite: AnimatedSprite,
+    pub last_direction: Direction,
 }
 
 impl Bomberman {
@@ -29,6 +35,17 @@ impl Bomberman {
             last_direction: Direction::Down,
         }
     }
+
+    pub fn world_to_tile(pos: Vector2) -> Option<(usize, usize)> {
+        let tile_size = TILE_SIZE as f32;
+
+        let tx = (pos.x / tile_size).round() as isize;
+        let ty = (pos.y / tile_size).round() as isize;
+
+        Some((tx as usize, ty as usize))
+    }
+
+    // usage:
 
     pub fn load(&mut self) {
         self.sprite.animator.play("walk-down", true);

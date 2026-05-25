@@ -17,6 +17,8 @@ pub enum ActiveLayer {
 
 #[derive(Get)]
 pub struct RenderLayer {
+    #[get]
+    #[get(mut)]
     camera: Camera,
     #[get]
     #[get(mut)]

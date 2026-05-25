@@ -19,6 +19,8 @@ pub use immediate::ImmediateRenderer;
 use logging::error;
 use logging::info;
 use math::Size;
+use math::Vector2;
+use math::Vector3;
 use winit::window::Window;
 
 use crate::layer::ActiveLayer;
@@ -194,6 +196,31 @@ impl Renderer {
     #[inline]
     pub fn view(&self) -> Size<u32> {
         self.view
+    }
+
+    #[inline]
+    pub fn camera(&self) -> &Camera {
+        self.active_layer().camera()
+    }
+
+    #[inline]
+    pub fn camera_mut(&mut self) -> &mut Camera {
+        self.active_layer_mut().camera_mut()
+    }
+
+    #[inline]
+    pub fn camera_position(&self) -> Vector3 {
+        self.active_layer().camera().position()
+    }
+
+    #[inline]
+    pub fn set_camera_position<P: Into<Vector3>>(&mut self, pos: P) {
+        self.active_layer_mut().camera_mut().set_position(pos);
+    }
+
+    #[inline]
+    pub fn set_camera_position_2d<P: Into<Vector2>>(&mut self, pos: P) {
+        self.active_layer_mut().camera_mut().set_position_2d(pos);
     }
 
     #[doc(hidden)]
