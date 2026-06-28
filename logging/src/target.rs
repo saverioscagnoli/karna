@@ -1,97 +1,96 @@
-//! Target module
-//!
-//! Contains the trait that one must implement to create a custom target.
-//! The crate provides 2 default targets: Console and File.
+use std::fs;
+use std::io;
+use std::io::Write;
+use std::path::Path;
 
-use crate::{
-    Color, Colorize, LogLevel, Record, err::LogError, format_context, formatter::Formatter,
-};
-use std::{io::Write, path::Path, sync::Mutex};
+use parking_lot::Mutex;
 
-/// Defines an output destination for log messages.
-///
-/// This trait allows the logger to write formatted messages to different
-/// destinations such as console, files, or custom targets.
-pub trait Target {
-    /// Writes a formatted log message to the target.
-    ///
-    /// # Arguments
-    ///
-    /// * `level` - The log level of the message
-    /// * `formatted` - The formatted log message to write
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` if successful, or an error if the write operation failed
-    fn write(&self, level: LogLevel, message: &str) -> Result<(), LogError>;
+pub trait Target: Send + Sync {
+    fn write(&self, level: log::Level, message: &str) -> Result<(), Box<dyn std::error::Error>>;
+    fn flush(&self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
 }
 
-/// Standard console output target.
-///
-/// This target writes log messages to the standard output (stdout) or standard error (stderr)
-/// using the Rust `println!` | `eprintln!` macro.
+#[derive(Default, Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum Output {
+    Stdout,
+    #[default]
+    Stderr,
+}
+
 #[derive(Default)]
-pub struct Console;
+pub struct Console {
+    output: Output,
+}
 
 impl Console {
-    pub fn new() -> Self {
-        Self
+    pub fn new(output: Output) -> Self {
+        Self { output }
     }
 }
 
 impl Target for Console {
-    /// Always returns `Ok(())`.
-    fn write(&self, level: LogLevel, message: &str) -> Result<(), LogError> {
-        match level {
-            LogLevel::Error | LogLevel::Fatal => eprintln!("{}", message),
-            _ => println!("{}", message),
+    fn write(&self, _level: log::Level, message: &str) -> Result<(), Box<dyn std::error::Error>> {
+        match self.output {
+            Output::Stdout => writeln!(io::stdout(), "{}", message)?,
+            Output::Stderr => writeln!(io::stderr(), "{}", message)?,
         }
 
         Ok(())
     }
 }
 
-#[derive(Default)]
-pub struct DefaultConsoleFormatter;
-
-impl Formatter for DefaultConsoleFormatter {
-    fn format(&self, record: &Record) -> String {
-        let level_colored = format!("[{}]", record.level).color(record.level.console_color());
-        let padding = " ".repeat(LogLevel::MAX_WIDTH - record.level.to_string().len());
-        let level = format!("{}{}", level_colored, padding);
-
-        let ctx = format_context(&record.context);
-
-        if record.context.is_empty() {
-            format!("{} {}", level, record.message)
-        } else {
-            let ctx_formatted = format!("{{ {} }}", ctx).color(Color::RGB(128, 128, 128));
-
-            format!("{} {} {}", level, ctx_formatted, record.message)
-        }
-    }
-}
-
 pub struct File {
-    fd: Mutex<std::fs::File>,
+    mu: Mutex<fs::File>,
 }
 
 impl File {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, LogError> {
-        let file = std::fs::File::create(path).map_err(LogError::IoError)?;
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, io::Error> {
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
 
         Ok(Self {
-            fd: Mutex::new(file),
+            mu: Mutex::new(file),
         })
     }
 }
 
 impl Target for File {
-    fn write(&self, _level: LogLevel, message: &str) -> Result<(), LogError> {
-        let mut file = self.fd.lock().map_err(|_| LogError::PoisonError)?;
+    fn write(&self, _: log::Level, message: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let mut file = self.mu.lock();
+        let message = strip_ansi(message);
 
         writeln!(file, "{}", message)?;
 
         Ok(())
     }
+
+    fn flush(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.mu.lock().flush()?;
+        Ok(())
+    }
+}
+
+fn strip_ansi(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\x1b' && chars.peek() == Some(&'[') {
+            chars.next();
+
+            for c in chars.by_ref() {
+                if c.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
 }

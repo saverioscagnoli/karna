@@ -1,9 +1,0 @@
-[package]
-name = "utils"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-hashbrown = "0.16.1"
-rustc-hash = "2.1.1"
-macros.workspace = true

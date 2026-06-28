@@ -1,10 +1,70 @@
-//! ANSI color codes for terminal output.
-//!
-//! Provides utilities for adding color to log messages in terminal output.
-//! These colors are automatically stripped when writing to non-terminal
-//! targets like files.
+use std::fmt;
 
-use std::fmt::Display;
+use log::kv;
+
+use crate::Timestamp;
+
+pub trait Formatter: Send + Sync {
+    fn format(&self, record: &log::Record, timestamp: Timestamp) -> String;
+}
+
+pub struct DefaultFormatter;
+
+impl Formatter for DefaultFormatter {
+    fn format(&self, record: &log::Record, timestamp: Timestamp) -> String {
+        let color = match record.level() {
+            log::Level::Trace => Color::Cyan,
+            log::Level::Debug => Color::Blue,
+            log::Level::Info => Color::Green,
+            log::Level::Warn => Color::Yellow,
+            log::Level::Error => Color::Red,
+        };
+
+        let level = format!("[{}]", record.level()).color(color);
+        let timestamp =
+            format!("[{}]", timestamp.format("%Y/%m/%d %H:%M:%S")).color(Color::BrightBlack);
+        let target = format!("[{}]", record.target()).color(Color::BrightBlack);
+
+        // collect key-value pairs
+        let kvs = collect_kvs(record);
+        let kv_str = if kvs.is_empty() {
+            String::new()
+        } else {
+            let pairs = kvs
+                .iter()
+                .map(|(k, v)| format!("{}={}", k.color(Color::BrightBlack), v))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(" ({})", pairs)
+        };
+
+        format!(
+            "{} {} {}: {}{}",
+            timestamp,
+            target,
+            level,
+            record.args(),
+            kv_str
+        )
+    }
+}
+
+fn collect_kvs(record: &log::Record) -> Vec<(String, String)> {
+    let mut visitor = KvCollector { pairs: vec![] };
+    record.key_values().visit(&mut visitor).ok();
+    visitor.pairs
+}
+
+struct KvCollector {
+    pairs: Vec<(String, String)>,
+}
+
+impl<'kvs> kv::VisitSource<'kvs> for KvCollector {
+    fn visit_pair(&mut self, key: kv::Key<'kvs>, value: kv::Value<'kvs>) -> Result<(), kv::Error> {
+        self.pairs.push((key.to_string(), value.to_string()));
+        Ok(())
+    }
+}
 
 /// Terminal colors for text output.
 ///
@@ -120,7 +180,7 @@ impl Color {
 /// Trait for applying colors to strings.
 ///
 /// This trait provides the ability to color text using ANSI escape codes.
-pub trait Colorize: Display {
+pub trait Colorize: fmt::Display {
     /// Applies a color to the string.
     ///
     /// # Arguments
@@ -151,7 +211,7 @@ pub trait Colorize: Display {
 impl Colorize for str {}
 impl Colorize for String {}
 
-pub trait Style: Display {
+pub trait Style: fmt::Display {
     /// Applies bold style to the string.
     fn bold(&self) -> String {
         format!("\x1b[1m{}\x1b[0m", self)
@@ -193,4 +253,4 @@ pub trait Style: Display {
     }
 }
 
-impl<T: Display> Style for T {}
+impl<T: fmt::Display> Style for T {}
