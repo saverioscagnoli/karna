@@ -1,6 +1,9 @@
 use std::sync::Arc;
+use std::sync::mpsc::Sender;
+use std::thread::JoinHandle;
 
 use math::Size;
+use winit::event::WindowEvent;
 
 pub(crate) type WinitWindow = winit::window::Window;
 
@@ -24,4 +27,9 @@ impl Window {
     pub(crate) fn request_redraw(&self) {
         self.inner.request_redraw();
     }
+}
+
+pub struct WindowHandle {
+    pub sender: Sender<WindowEvent>,
+    pub thread: JoinHandle<()>,
 }
