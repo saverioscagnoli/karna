@@ -4,11 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["engine","logging", "renderer"]
+members = ["engine","logging", "math", "renderer", "utils"]
 
 [workspace.dependencies]
 parking_lot = "0.12.5"
 wgpu = "29.0.3"
+utils = { path = "utils" }
+
 
 [dependencies]
 logging = { path = "logging" }
