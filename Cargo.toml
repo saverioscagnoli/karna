@@ -10,6 +10,8 @@ members = ["engine","logging", "math", "renderer", "utils"]
 parking_lot = "0.12.5"
 wgpu = "29.0.3"
 utils = { path = "utils" }
+winit = "0.30.13"
+math = {path = "math" }
 
 
 [dependencies]

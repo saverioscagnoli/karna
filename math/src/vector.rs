@@ -300,7 +300,7 @@ impl<const N: usize, T: Float> Vector<N, T> {
     }
 }
 
-type Vector2<T> = Vector<2, T>;
+pub type Vector2<T> = Vector<2, T>;
 
 impl_deref_to_generic!(Vector2<T> => Point2<T> where T: Num + Copy);
 
@@ -338,7 +338,7 @@ impl<T: Float> Vector2<T> {
     }
 }
 
-type Vector3<T> = Vector<3, T>;
+pub type Vector3<T> = Vector<3, T>;
 
 impl_deref_to_generic!(Vector3<T> => Point3<T> where T: Num + Copy);
 
@@ -367,7 +367,7 @@ impl<T: Float> Vector3<T> {
     }
 }
 
-type Vector4<T> = Vector<4, T>;
+pub type Vector4<T> = Vector<4, T>;
 
 impl_deref_to_generic!(Vector4<T> => Point4<T> where T: Num + Copy);
 
