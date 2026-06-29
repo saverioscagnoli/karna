@@ -7,6 +7,12 @@ use std::sync::OnceLock;
 
 use chrono::Local;
 use log::LevelFilter;
+pub use log::debug;
+pub use log::error;
+pub use log::info;
+pub use log::log;
+pub use log::trace;
+pub use log::warn;
 
 pub use crate::style::Color;
 pub use crate::style::Colorize;

@@ -1,7 +1,8 @@
 [package]
-name = "utils"
+name = "gpu"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-rustc-hash = "2.1.2"
+pollster = "0.4.0"
+wgpu.workspace = true

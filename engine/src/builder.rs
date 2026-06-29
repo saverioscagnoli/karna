@@ -1,16 +1,16 @@
-use std::collections::HashMap;
-
 use math::Size;
 use winit::dpi::PhysicalSize;
 use winit::window::WindowAttributes;
 
 use crate::App;
 use crate::scene::Scene;
+use crate::scene::Scenes;
 
 #[derive(Default)]
 pub struct WindowBuilder {
-    attrs: WindowAttributes,
-    scenes: HashMap<String, Box<dyn Scene>>,
+    pub(crate) attrs: WindowAttributes,
+    pub(crate) scenes: Scenes,
+    pub(crate) initial_active: Vec<String>,
 }
 
 impl WindowBuilder {
@@ -40,6 +40,11 @@ impl WindowBuilder {
         self.scenes.insert(label.to_owned(), Box::new(scene));
         self
     }
+
+    pub fn with_active_scene(mut self, label: &str) -> Self {
+        self.initial_active.push(label.to_owned());
+        self
+    }
 }
 
 #[derive(Default)]
@@ -60,6 +65,10 @@ impl AppBuilder {
     pub fn build(self) -> App {
         let mut app = App::new();
 
-        for (i, b) = self.windows.iter().enumerate() {}
+        for (_, b) in self.windows.into_iter().enumerate() {
+            app.request_window(b);
+        }
+
+        return app;
     }
 }

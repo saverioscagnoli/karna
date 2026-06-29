@@ -3,7 +3,8 @@ use std::sync::mpsc::Sender;
 use std::thread::JoinHandle;
 
 use math::Size;
-use winit::event::WindowEvent;
+
+use crate::AppEvent;
 
 pub(crate) type WinitWindow = winit::window::Window;
 
@@ -12,6 +13,10 @@ pub struct Window {
 }
 
 impl Window {
+    pub(crate) fn new(inner: Arc<WinitWindow>) -> Self {
+        Self { inner }
+    }
+
     pub fn size(&self) -> Size<u32> {
         self.inner.inner_size().into()
     }
@@ -30,6 +35,6 @@ impl Window {
 }
 
 pub struct WindowHandle {
-    pub sender: Sender<WindowEvent>,
+    pub sender: Sender<AppEvent>,
     pub thread: JoinHandle<()>,
 }
