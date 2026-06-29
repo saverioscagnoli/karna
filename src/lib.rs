@@ -7,3 +7,4 @@ pub use engine::SceneManager;
 pub use engine::WindowBuilder;
 pub use logging;
 pub use math;
+pub use renderer as render;

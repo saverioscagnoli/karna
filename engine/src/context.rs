@@ -1,3 +1,4 @@
+use renderer::Draw;
 use renderer::Renderer;
 
 use crate::scene::SceneManager;
@@ -30,13 +31,16 @@ impl WindowContext {
         }
     }
 
-    pub fn as_ref<'ctx>(&'ctx self) -> ContextRef<'ctx> {
-        ContextRef {
+    pub fn split<'ctx>(&'ctx mut self) -> (ContextRef<'ctx>, Draw<'ctx>) {
+        let ctx = ContextRef {
             window: &self.window,
             time: &self.time,
             scenes: &self.scenes,
-            render: &self.renderer,
-        }
+        };
+
+        let draw = Draw::_new(&mut self.renderer);
+
+        (ctx, draw)
     }
 }
 
@@ -54,5 +58,4 @@ pub struct ContextRef<'ctx> {
     pub window: &'ctx Window,
     pub time: &'ctx Time,
     pub scenes: &'ctx SceneManager,
-    pub render: &'ctx Renderer,
 }

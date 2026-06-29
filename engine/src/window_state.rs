@@ -68,8 +68,10 @@ impl WindowState {
             }
 
             for label in &self.active_scenes {
-                if let Some(scene) = self.scenes.get(label) {
-                    scene.draw(self.context.as_ref());
+                let (ctx, mut draw) = self.context.split();
+
+                if let Some(scene) = self.scenes.get_mut(label) {
+                    scene.draw(ctx, &mut draw);
                 }
             }
 

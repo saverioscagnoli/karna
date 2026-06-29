@@ -1,13 +1,22 @@
 mod buffer;
+mod pipeline;
+mod shaders;
 
 use std::sync::OnceLock;
 
 pub use crate::buffer::Buffer;
+pub use crate::pipeline::PipelineCache;
+pub use crate::pipeline::PipelineDesc;
+use crate::shaders::ShaderStore;
 
 static SINGLETON: OnceLock<GpuState> = OnceLock::new();
 
-pub fn init() {
-    GpuState::get();
+pub fn init(f: impl FnOnce(&mut ShaderStore, &wgpu::Device)) {
+    SINGLETON.get_or_init(|| {
+        let mut state = pollster::block_on(GpuState::new());
+        f(&mut state.shaders, &state.device);
+        state
+    });
 }
 
 #[derive(Debug)]
@@ -16,6 +25,7 @@ pub struct GpuState {
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
+    pub shaders: ShaderStore,
 }
 
 impl GpuState {
@@ -56,6 +66,7 @@ impl GpuState {
             adapter,
             device,
             queue,
+            shaders: ShaderStore::new(),
         }
     }
 }

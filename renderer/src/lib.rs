@@ -1,18 +1,35 @@
 mod camera;
 mod color;
+mod immediate;
+mod layer;
 mod vertex;
 
 use gpu::GpuState;
+use gpu::PipelineCache;
+use math::Size;
 
+pub use crate::camera::Camera;
+pub use crate::camera::Projection;
 pub use crate::color::Color;
+pub use crate::immediate::ImmediateRenderer;
+pub use crate::immediate::handle::Draw;
+pub use crate::layer::LayerId;
+pub use crate::layer::RenderLayer;
 pub use crate::vertex::Vertex;
 
 pub struct Renderer {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     is_surface_configured: bool,
+    pipeline_cache: PipelineCache,
 
     clear_color: Color,
+
+    layers: Vec<RenderLayer>,
+
+    pub world: LayerId,
+    pub ui: LayerId,
+    pub debug: LayerId,
 }
 
 impl Renderer {
@@ -51,13 +68,63 @@ impl Renderer {
         surface: wgpu::Surface<'static>,
         config: wgpu::SurfaceConfiguration,
     ) -> Self {
+        let mut pipelines = PipelineCache::new();
+
+        let mut layers = Vec::new();
+        let size = Size::new(config.width, config.height);
+
+        let world = LayerId(layers.len());
+        let world_camera = Camera::new(Projection::standard_2d(size));
+
+        pipelines.create_pipeline(
+            gpu::PipelineDesc {
+                shader: "immediate-2d",
+                vertex_layout: Vertex::desc(),
+                blend: wgpu::BlendState::ALPHA_BLENDING,
+                topology: wgpu::PrimitiveTopology::TriangleList,
+            },
+            &[&world_camera.bgl],
+            config.format,
+        );
+
+        layers.push(RenderLayer::new(world_camera));
+
+        let ui = LayerId(layers.len());
+        let ui_camera = Camera::new(Projection::standard_2d(size));
+        layers.push(RenderLayer::new(ui_camera));
+
+        let debug = LayerId(layers.len());
+        let debug_camera = Camera::new(Projection::standard_2d(size));
+        layers.push(RenderLayer::new(debug_camera));
+
         Self {
             surface,
             config,
             is_surface_configured: false,
-
-            clear_color: Color::Gray,
+            pipeline_cache: pipelines,
+            clear_color: Color::Black,
+            layers,
+            world,
+            ui,
+            debug,
         }
+    }
+
+    pub fn add_layer(&mut self, camera_proj: Projection) -> LayerId {
+        let camera = Camera::new(camera_proj);
+        let id = LayerId(self.layers.len());
+
+        self.layers.push(RenderLayer::new(camera));
+
+        id
+    }
+
+    pub fn layer(&self, id: &LayerId) -> &RenderLayer {
+        &self.layers[id.0]
+    }
+
+    pub fn layer_mut(&mut self, id: &LayerId) -> &mut RenderLayer {
+        &mut self.layers[id.0]
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -69,7 +136,7 @@ impl Renderer {
         self.is_surface_configured = true;
     }
 
-    pub fn present(&self) {
+    pub fn present(&mut self) {
         if !self.is_surface_configured {
             return;
         }
@@ -105,7 +172,7 @@ impl Renderer {
             });
 
         {
-            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("render pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -121,6 +188,15 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
+
+            for layer in &mut self.layers {
+                rp.set_bind_group(0, &layer.camera.bg, &[]);
+                layer.present(
+                    Size::new(self.config.width, self.config.height),
+                    &mut rp,
+                    &self.pipeline_cache,
+                );
+            }
         }
 
         gpu.queue.submit(std::iter::once(encoder.finish()));

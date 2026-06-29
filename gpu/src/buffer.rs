@@ -6,6 +6,7 @@ use wgpu::util::DeviceExt;
 
 use crate::GpuState;
 
+#[derive(Debug)]
 pub struct Buffer<T> {
     label: String,
     inner: wgpu::Buffer,
@@ -71,6 +72,10 @@ impl<T> Buffer<T> {
             len: 0,
             _data: PhantomData,
         }
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.capacity
     }
 
     /// Resize the buffer to a new capacity

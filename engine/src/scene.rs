@@ -1,3 +1,4 @@
+use renderer::Draw;
 use utils::IndexMap;
 
 use crate::context::ContextRef;
@@ -8,7 +9,7 @@ pub trait Scene: Send {
     fn load(&mut self, ctx: ContextRefMut);
     fn update(&mut self, ctx: ContextRefMut);
     fn fixed_update(&mut self, ctx: ContextRefMut) {}
-    fn draw(&self, ctx: ContextRef);
+    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw);
 }
 
 pub type Scenes = IndexMap<Box<dyn Scene>>;

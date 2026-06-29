@@ -52,7 +52,10 @@ impl App {
     }
 
     fn init(&self) {
-        gpu::init();
+        gpu::init(|shader_store, d| {
+            let immediate_2d_src = include_str!("../../shaders/immediate-2d.wgsl");
+            shader_store.load("immediate-2d", immediate_2d_src, d);
+        });
 
         info!("Gpu initalized");
         info!("App initialization complete")
