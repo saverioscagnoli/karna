@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 pollster = "0.4.0"
 wgpu.workspace = true
+utils.workspace = true

@@ -1,12 +1,12 @@
-use std::sync::Arc;
 use std::sync::mpsc::Receiver;
 
+use renderer::Renderer;
 use winit::event::WindowEvent;
 
 use crate::AppEvent;
 use crate::context::WindowContext;
 use crate::scene::Scenes;
-use crate::window::WinitWindow;
+use crate::window::Window;
 
 pub struct WindowState {
     context: WindowContext,
@@ -17,13 +17,14 @@ pub struct WindowState {
 
 impl WindowState {
     pub fn new(
-        winit_window: Arc<WinitWindow>,
+        window: Window,
+        renderer: Renderer,
         scenes: Scenes,
         active_scenes: Vec<String>,
         events: Receiver<AppEvent>,
     ) -> Self {
         let mut state = Self {
-            context: WindowContext::new(winit_window),
+            context: WindowContext::new(window, renderer),
             events,
             scenes,
             active_scenes: Vec::new(),

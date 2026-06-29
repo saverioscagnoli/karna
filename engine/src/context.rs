@@ -1,11 +1,8 @@
-use std::sync::Arc;
-
 use renderer::Renderer;
 
 use crate::scene::SceneManager;
 use crate::time::Time;
 use crate::window::Window;
-use crate::window::WinitWindow;
 
 pub struct WindowContext {
     pub window: Window,
@@ -15,12 +12,12 @@ pub struct WindowContext {
 }
 
 impl WindowContext {
-    pub fn new(winit_window: Arc<WinitWindow>) -> Self {
+    pub fn new(window: Window, renderer: Renderer) -> Self {
         Self {
-            window: Window::new(winit_window.clone()),
+            window,
             time: Time::new(),
             scenes: SceneManager::new(),
-            renderer: Renderer::new(winit_window),
+            renderer,
         }
     }
 

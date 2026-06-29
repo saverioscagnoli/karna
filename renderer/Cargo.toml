@@ -6,4 +6,4 @@ edition = "2024"
 [dependencies]
 wgpu.workspace = true
 gpu.workspace = true
-winit.workspace = true
+math.workspace = true

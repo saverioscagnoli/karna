@@ -28,6 +28,16 @@ use crate::point::Point4;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Vector<const N: usize, T: Num + Copy>([T; N]);
 
+pub type Vector2<T> = Vector<2, T>;
+pub type Vector3<T> = Vector<3, T>;
+pub type Vector4<T> = Vector<4, T>;
+
+impl<const N: usize, T: Num + Copy> Default for Vector<N, T> {
+    fn default() -> Self {
+        Self::zero()
+    }
+}
+
 macro_rules! impl_bin_op {
     ($trait:ident, $method:ident) => {
         impl<const N: usize, T: Num + Copy> $trait for Vector<N, T> {
@@ -300,8 +310,6 @@ impl<const N: usize, T: Float> Vector<N, T> {
     }
 }
 
-pub type Vector2<T> = Vector<2, T>;
-
 impl_deref_to_generic!(Vector2<T> => Point2<T> where T: Num + Copy);
 
 impl<T: Num + Copy> Vector2<T> {
@@ -338,8 +346,6 @@ impl<T: Float> Vector2<T> {
     }
 }
 
-pub type Vector3<T> = Vector<3, T>;
-
 impl_deref_to_generic!(Vector3<T> => Point3<T> where T: Num + Copy);
 
 impl<T: Num + Copy> Vector3<T> {
@@ -366,8 +372,6 @@ impl<T: Float> Vector3<T> {
         cos.acos()
     }
 }
-
-pub type Vector4<T> = Vector<4, T>;
 
 impl_deref_to_generic!(Vector4<T> => Point4<T> where T: Num + Copy);
 

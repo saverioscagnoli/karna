@@ -1,5 +1,6 @@
 mod index_map;
 mod macros;
+mod mem;
 mod sleep;
 
 use std::collections::HashMap;
@@ -7,8 +8,9 @@ use std::hash::BuildHasher;
 use std::hash::BuildHasherDefault;
 use std::hash::Hasher;
 
-pub use index_map::*;
-pub use sleep::*;
+pub use crate::index_map::*;
+pub use crate::mem::*;
+pub use crate::sleep::*;
 
 pub struct IdentityHasher(u64);
 

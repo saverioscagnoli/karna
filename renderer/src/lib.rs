@@ -1,25 +1,37 @@
-use std::sync::Arc;
+mod camera;
+mod color;
+mod vertex;
 
 use gpu::GpuState;
-use wgpu::SurfaceTarget;
+
+pub use crate::color::Color;
+pub use crate::vertex::Vertex;
 
 pub struct Renderer {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     is_surface_configured: bool,
+
+    clear_color: Color,
 }
 
 impl Renderer {
-    pub fn new(window: Arc<winit::window::Window>) -> Self {
+    pub fn create_surface<S: Into<wgpu::SurfaceTarget<'static>>>(
+        surface: S,
+    ) -> (wgpu::Surface<'static>, wgpu::SurfaceConfiguration) {
         let gpu = GpuState::get();
-
         let surface = gpu
             .instance
-            .create_surface(window)
+            .create_surface(surface.into())
             .expect("Failed to create surface");
 
         let caps = surface.get_capabilities(&gpu.adapter);
-        let format = caps.formats[0];
+        let format = caps
+            .formats
+            .iter()
+            .find(|f| f.is_srgb())
+            .copied()
+            .unwrap_or(caps.formats[0]);
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -32,15 +44,25 @@ impl Renderer {
             desired_maximum_frame_latency: 2,
         };
 
+        (surface, config)
+    }
+
+    pub fn from_surface(
+        surface: wgpu::Surface<'static>,
+        config: wgpu::SurfaceConfiguration,
+    ) -> Self {
         Self {
             surface,
             config,
             is_surface_configured: false,
+
+            clear_color: Color::Gray,
         }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
         let gpu = GpuState::get();
+
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&gpu.device, &self.config);
@@ -89,12 +111,7 @@ impl Renderer {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.1,
-                            b: 0.1,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Clear(self.clear_color.into()),
                         store: wgpu::StoreOp::Store,
                     },
                     depth_slice: None,

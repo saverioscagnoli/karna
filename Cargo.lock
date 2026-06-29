@@ -551,6 +551,7 @@ name = "gpu"
 version = "0.1.0"
 dependencies = [
  "pollster",
+ "utils",
  "wgpu",
 ]
 
@@ -1551,8 +1552,8 @@ name = "renderer"
 version = "0.1.0"
 dependencies = [
  "gpu",
+ "math",
  "wgpu",
- "winit",
 ]
 
 [[package]]

@@ -6,6 +6,7 @@ use std::thread;
 use logging::error;
 use logging::info;
 use logging::warn;
+use renderer::Renderer;
 use utils::FastHashMap;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -21,6 +22,7 @@ pub use crate::context::ContextRefMut;
 pub use crate::scene::Scene;
 pub use crate::scene::SceneManager;
 use crate::scene::Scenes;
+use crate::window::Window;
 use crate::window::WindowHandle;
 use crate::window::WinitWindow;
 use crate::window_state::WindowState;
@@ -75,16 +77,23 @@ impl App {
 impl App {
     fn spawn_window_thread(
         &mut self,
-        window: WinitWindow,
+        winit_window: Arc<WinitWindow>,
         scenes: Scenes,
         active_scenes: Vec<String>,
     ) {
         let (tx, rx) = mpsc::channel::<AppEvent>();
-        let window = Arc::new(window);
-        let window_id = window.id();
+        let window_id = winit_window.id();
+
+        // On Windows, the surface must be created on the winit thread,
+        // hence why the renderer creation is split.
+        // If we were to create the renderer in the thread::spawn it would crash
+        let (surface, config) = Renderer::create_surface(winit_window.clone());
 
         let thread_handle = thread::spawn(move || {
-            WindowState::new(window, scenes, active_scenes, rx).start_loop();
+            let window = Window::new(winit_window);
+            let renderer = Renderer::from_surface(surface, config);
+
+            WindowState::new(window, renderer, scenes, active_scenes, rx).start_loop();
         });
 
         let window_handle = WindowHandle {
@@ -102,7 +111,7 @@ impl ApplicationHandler for App {
 
         for b in mem::take(&mut self.enqueued_windows) {
             match event_loop.create_window(b.attrs) {
-                Ok(w) => self.spawn_window_thread(w, b.scenes, b.initial_active),
+                Ok(w) => self.spawn_window_thread(Arc::new(w), b.scenes, b.initial_active),
                 Err(e) => error!("Failed to spawn window: {}", e),
             }
         }

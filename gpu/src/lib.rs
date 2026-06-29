@@ -1,4 +1,8 @@
+mod buffer;
+
 use std::sync::OnceLock;
+
+pub use crate::buffer::Buffer;
 
 static SINGLETON: OnceLock<GpuState> = OnceLock::new();
 
