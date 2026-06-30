@@ -1,6 +1,7 @@
 mod builder;
 mod context;
 pub mod input;
+mod monitors;
 mod scene;
 mod time;
 mod window;
@@ -22,6 +23,7 @@ use winit::application::ApplicationHandler;
 use winit::event::DeviceEvent;
 use winit::event::DeviceId;
 use winit::event::WindowEvent;
+use winit::event::WindowEvent::CloseRequested;
 use winit::event_loop::ActiveEventLoop;
 use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
@@ -34,6 +36,8 @@ pub use crate::context::ContextRefMut;
 pub use crate::input::Input;
 pub use crate::input::KeyCode;
 pub use crate::input::MouseButton;
+use crate::monitors::Monitor;
+use crate::monitors::Monitors;
 pub use crate::scene::Scene;
 pub use crate::scene::SceneManager;
 use crate::scene::Scenes;
@@ -45,6 +49,11 @@ use crate::window_state::WindowState;
 pub enum AppEvent {
     WindowEvent(WindowEvent),
     DeviceEvent(Arc<DeviceEvent>),
+    QueryMonitors(Vec<Monitor>),
+}
+
+enum UserEvent {
+    Shutdown,
 }
 
 pub struct App {
@@ -65,16 +74,19 @@ impl App {
             let immediate_2d_src = include_str!("../../shaders/immediate-2d.wgsl");
             shader_store.load("immediate-2d", immediate_2d_src, d);
 
-            info!("Built-in shaders loaded.");
+            info!("Built-in shaders loaded");
         });
 
         let gpu = GpuState::get();
+
+        info!("GPU initialization complete");
+
         let info = gpu.device.adapter_info();
 
-        info!("Gpu: {}", info.name);
-        info!("Gpu type: {:?}", info.device_type);
-        info!("Backend: {}", info.backend);
-        info!("Driver: {}", info.driver_info);
+        info!(
+            "GPU: {} ({:?}, {}, driver {})",
+            info.name, info.device_type, info.backend, info.driver_info
+        );
         info!("App initialization complete")
     }
 
@@ -87,7 +99,16 @@ impl App {
     }
 
     pub fn run(mut self) {
-        let event_loop = EventLoop::new().expect("Failed to create event loop");
+        let event_loop = EventLoop::<UserEvent>::with_user_event()
+            .build()
+            .expect("Failed to create event loop");
+
+        let proxy = event_loop.create_proxy();
+
+        ctrlc::set_handler(move || {
+            _ = proxy.send_event(UserEvent::Shutdown);
+        })
+        .expect("Failed to set Ctrl+C handler");
 
         event_loop.set_control_flow(ControlFlow::Wait);
         event_loop.run_app(&mut self).expect("Failed to run app")
@@ -97,12 +118,22 @@ impl App {
 impl App {
     fn spawn_window_thread(
         &mut self,
+        event_loop: &ActiveEventLoop,
         winit_window: Arc<WinitWindow>,
         scenes: Scenes,
         active_scenes: Vec<String>,
     ) {
+        info!("Creating window  '{}'", winit_window.title());
+
         let (tx, rx) = mpsc::channel::<AppEvent>();
         let window_id = winit_window.id();
+
+        // We must query the monitor before the
+        // scene(s) are loaded, so that they are
+        // available during that time
+        // otherwise, in the inital scene loading, the
+        // vector will be empty
+        let monitors = Monitors::collect(event_loop);
 
         // On Windows, the surface must be created on the winit thread,
         // hence why the renderer creation is split.
@@ -113,7 +144,9 @@ impl App {
             let window = Window::new(winit_window);
             let renderer = Renderer::from_surface(surface, config);
 
-            WindowState::new(window, renderer, scenes, active_scenes, rx).start_loop();
+            info!("Renderer initialization complete");
+
+            WindowState::new(rx, window, renderer, scenes, active_scenes, monitors).start_loop();
         });
 
         let window_handle = WindowHandle {
@@ -125,14 +158,29 @@ impl App {
     }
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler<UserEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.init();
 
         for b in mem::take(&mut self.enqueued_windows) {
             match event_loop.create_window(b.attrs) {
-                Ok(w) => self.spawn_window_thread(Arc::new(w), b.scenes, b.initial_active),
+                Ok(w) => {
+                    self.spawn_window_thread(event_loop, Arc::new(w), b.scenes, b.initial_active)
+                }
                 Err(e) => error!("Failed to spawn window: {}", e),
+            }
+        }
+    }
+
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
+        match event {
+            UserEvent::Shutdown => {
+                for (_, window) in self.windows.drain() {
+                    _ = window.sender.send(AppEvent::WindowEvent(CloseRequested));
+                    _ = window.thread.join();
+                }
+
+                event_loop.exit();
             }
         }
     }
@@ -143,30 +191,46 @@ impl ApplicationHandler for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        if let WindowEvent::CloseRequested = event {
-            let Some(window) = self.windows.remove(&window_id) else {
-                error!("CloseRequested on a non existing window");
-                return;
-            };
+        match event {
+            WindowEvent::CloseRequested => {
+                let Some(window) = self.windows.remove(&window_id) else {
+                    error!("CloseRequested on a non existing window");
+                    return;
+                };
 
-            _ = window.sender.send(AppEvent::WindowEvent(event));
-            _ = window.thread.join();
+                _ = window.sender.send(AppEvent::WindowEvent(event));
+                _ = window.thread.join();
 
-            if self.windows.is_empty() {
-                info!("All windows were closed. Exiting.");
-                event_loop.exit();
+                if self.windows.is_empty() {
+                    info!("All windows were closed. Exiting.");
+                    event_loop.exit();
+                }
             }
 
-            return;
-        }
+            WindowEvent::ScaleFactorChanged { .. } => {
+                let Some(window) = self.windows.get(&window_id) else {
+                    return;
+                };
 
-        let Some(window) = self.windows.get(&window_id) else {
-            debug!("Event received on a non existing window");
-            return;
-        };
+                let monitors = Monitors::collect(event_loop);
 
-        if let Err(e) = window.sender.send(AppEvent::WindowEvent(event)) {
-            warn!(e:err; "Event dropped, channel full.");
+                info!("queried {} monitor(s)", monitors.len());
+
+                if let Err(e) = window.sender.send(AppEvent::QueryMonitors(monitors)) {
+                    warn!(e:err;"Dropped event '{:?}'", event);
+                }
+            }
+
+            event => {
+                let Some(window) = self.windows.get(&window_id) else {
+                    debug!("Event received on a non existing window");
+                    return;
+                };
+
+                if let Err(e) = window.sender.send(AppEvent::WindowEvent(event)) {
+                    warn!(e:err;"Dropped event'");
+                }
+            }
         }
     }
 
@@ -182,6 +246,15 @@ impl ApplicationHandler for App {
             if let Err(e) = w.sender.send(AppEvent::DeviceEvent(event.clone())) {
                 error!(e:err;  "Failed to broadcast device event");
             }
+        }
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        for (_, window) in self.windows.drain() {
+            let _ = window.sender.send(AppEvent::WindowEvent(CloseRequested));
+            let _ = window.thread.join();
         }
     }
 }

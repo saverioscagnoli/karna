@@ -9,6 +9,7 @@ use winit::keyboard::PhysicalKey;
 
 use crate::AppEvent;
 use crate::context::WindowContext;
+use crate::monitors::Monitor;
 use crate::scene::Scenes;
 use crate::window::Window;
 
@@ -21,14 +22,15 @@ pub struct WindowState {
 
 impl WindowState {
     pub fn new(
+        events: Receiver<AppEvent>,
         window: Window,
         renderer: Renderer,
         scenes: Scenes,
         active_scenes: Vec<String>,
-        events: Receiver<AppEvent>,
+        monitors: Vec<Monitor>,
     ) -> Self {
         let mut state = Self {
-            context: WindowContext::new(window, renderer),
+            context: WindowContext::new(window, renderer, monitors),
             events,
             scenes,
             active_scenes: Vec::new(),
@@ -58,8 +60,14 @@ impl WindowState {
                     }
 
                     AppEvent::WindowEvent(WindowEvent::Resized(size)) => {
+                        info!("Setting window size to {}x{}", size.width, size.height);
                         self.context.renderer.resize(size.width, size.height);
                     }
+
+                    AppEvent::QueryMonitors(monitors) => {
+                        self.context.monitors.monitors = monitors;
+                    }
+
                     AppEvent::WindowEvent(event) => match event {
                         WindowEvent::KeyboardInput {
                             event: key_event, ..

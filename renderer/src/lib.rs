@@ -66,14 +66,13 @@ impl Renderer {
         (surface, config)
     }
 
-    pub fn from_surface(
-        surface: wgpu::Surface<'static>,
-        config: wgpu::SurfaceConfiguration,
-    ) -> Self {
-        let mut pipelines = PipelineCache::new();
-        let camera_bgl = Camera::create_bind_group_layout();
+    fn init_pipelines(
+        camera_bgl: &wgpu::BindGroupLayout,
+        format: wgpu::TextureFormat,
+    ) -> PipelineCache {
+        let mut cache = PipelineCache::new();
 
-        pipelines.create_pipeline(
+        cache.create_pipeline(
             gpu::PipelineDesc {
                 shader: "immediate-2d",
                 vertex_layout: Vertex::desc(),
@@ -81,10 +80,10 @@ impl Renderer {
                 topology: wgpu::PrimitiveTopology::PointList,
             },
             &[&camera_bgl],
-            config.format,
+            format,
         );
 
-        pipelines.create_pipeline(
+        cache.create_pipeline(
             gpu::PipelineDesc {
                 shader: "immediate-2d",
                 vertex_layout: Vertex::desc(),
@@ -92,10 +91,10 @@ impl Renderer {
                 topology: wgpu::PrimitiveTopology::LineList,
             },
             &[&camera_bgl],
-            config.format,
+            format,
         );
 
-        pipelines.create_pipeline(
+        cache.create_pipeline(
             gpu::PipelineDesc {
                 shader: "immediate-2d",
                 vertex_layout: Vertex::desc(),
@@ -103,8 +102,17 @@ impl Renderer {
                 topology: wgpu::PrimitiveTopology::TriangleList,
             },
             &[&camera_bgl],
-            config.format,
+            format,
         );
+
+        cache
+    }
+
+    pub fn from_surface(
+        surface: wgpu::Surface<'static>,
+        config: wgpu::SurfaceConfiguration,
+    ) -> Self {
+        let camera_bgl = Camera::create_bind_group_layout();
 
         let mut layers = Vec::new();
         let size = Size::new(config.width, config.height);
@@ -122,11 +130,13 @@ impl Renderer {
         let debug_camera = Camera::new(Projection::standard_2d(size), &camera_bgl);
         layers.push(RenderLayer::new(debug_camera));
 
+        let pipeline_cache = Self::init_pipelines(&camera_bgl, config.format);
+
         Self {
             surface,
             config,
             is_surface_configured: false,
-            pipeline_cache: pipelines,
+            pipeline_cache,
             camera_bgl,
             clear_color: Color::Black,
             layers,

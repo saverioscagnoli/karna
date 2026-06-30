@@ -8,6 +8,8 @@ use karna::logging;
 use karna::math::Vector2;
 use karna::render::Color;
 use karna::render::Draw;
+use log::LevelFilter;
+use log::error;
 
 struct S {
     pos: Vector2<f32>,
@@ -18,6 +20,10 @@ struct S {
 impl Scene for S {
     fn load(&mut self, ctx: ContextRefMut) {
         ctx.time.set_target_fps(120);
+
+        if let Some(m) = ctx.monitors.current() {
+            error!("monitor {} - {} hz", m.name(), m.refresh_rate());
+        }
     }
 
     fn fixed_update(&mut self, ctx: ContextRefMut) {
@@ -67,8 +73,14 @@ impl Scene for S {
 }
 
 fn main() {
-    logging::init(logging::Config::default().with_min_level(log::LevelFilter::Debug))
-        .expect("Failed to init logging");
+    logging::init(
+        logging::Config::default()
+            .with_min_level(log::LevelFilter::Debug)
+            .with_module_filter("sctk", LevelFilter::Error)
+            .with_module_filter("naga", log::LevelFilter::Error)
+            .with_module_filter("wgpu", log::LevelFilter::Error),
+    )
+    .expect("Failed to init logging");
 
     App::builder()
         .with_window(

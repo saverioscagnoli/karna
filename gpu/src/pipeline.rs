@@ -1,3 +1,4 @@
+use logging::debug;
 use logging::info;
 use utils::FastHashMap;
 
@@ -91,7 +92,7 @@ impl PipelineCache {
         let gpu = GpuState::get();
         let pipeline = build_pipeline(&desc, &gpu.shaders, bgls, surface_format);
 
-        info!(
+        debug!(
             "Creating pipeline from shader '{}' topology = {:?}",
             desc.shader, desc.topology
         );

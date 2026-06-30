@@ -10,3 +10,4 @@ logging.workspace = true
 utils.workspace = true
 gpu.workspace = true
 renderer.workspace = true
+ctrlc = "3.5.2"

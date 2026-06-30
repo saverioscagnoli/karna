@@ -50,11 +50,21 @@ pub struct Logger {
     min_level: log::LevelFilter,
     targets: Vec<Box<dyn Target>>,
     formatter: Box<dyn Formatter>,
+    module_filters: Vec<(String, LevelFilter)>,
 }
 
 impl log::Log for Logger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
-        metadata.level() <= self.min_level
+        let target = metadata.target();
+        let level = self
+            .module_filters
+            .iter()
+            .filter(|(prefix, _)| target.starts_with(prefix.as_str()))
+            .max_by_key(|(prefix, _)| prefix.len())
+            .map(|(_, lvl)| *lvl)
+            .unwrap_or(self.min_level);
+
+        metadata.level() <= level
     }
 
     fn log(&self, record: &log::Record) {
@@ -80,6 +90,7 @@ pub struct Config {
     pub min_level: LevelFilter,
     pub targets: Vec<Box<dyn Target>>,
     pub formatter: Box<dyn Formatter>,
+    pub module_filters: Vec<(String, LevelFilter)>,
 }
 
 impl Default for Config {
@@ -88,6 +99,7 @@ impl Default for Config {
             min_level: log::LevelFilter::Info,
             targets: vec![Box::new(Console::new(Output::Stderr))],
             formatter: Box::new(DefaultFormatter),
+            module_filters: Vec::new(),
         }
     }
 }
@@ -113,11 +125,17 @@ impl Config {
         self
     }
 
+    pub fn with_module_filter<T: Into<String>>(mut self, module: T, level: LevelFilter) -> Self {
+        self.module_filters.push((module.into(), level));
+        self
+    }
+
     fn build_logger(self) -> Logger {
         Logger {
             min_level: self.min_level,
             targets: self.targets,
             formatter: self.formatter,
+            module_filters: self.module_filters,
         }
     }
 }

@@ -4,6 +4,9 @@ mod shaders;
 
 use std::sync::OnceLock;
 
+use logging::debug;
+use wgpu::naga::back;
+
 pub use crate::buffer::Buffer;
 pub use crate::pipeline::PipelineCache;
 pub use crate::pipeline::PipelineDesc;
@@ -34,13 +37,28 @@ impl GpuState {
     }
 
     async fn new() -> Self {
+        let backend_options = wgpu::BackendOptions::default();
+
+        debug!(
+            "Creating instance with backend options {:?}",
+            backend_options
+        );
+
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
-            backend_options: wgpu::BackendOptions::default(),
+            backend_options,
             display: None,
             flags: wgpu::InstanceFlags::default(),
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
         });
+
+        // Will be parsed from a configuration file maybe?
+        let power_preference = wgpu::PowerPreference::HighPerformance;
+
+        debug!(
+            "Requesting adapter with power preference {:?}",
+            power_preference
+        );
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -51,11 +69,17 @@ impl GpuState {
             .await
             .expect("Failed to request adapter");
 
+        // Will be parsed from a configuration file maybe?
+        let required_limits = wgpu::Limits::default();
+        let required_features = wgpu::Features::default();
+
+        debug!("Requesting device features={:?}", required_features);
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
-                required_limits: wgpu::Limits::defaults(),
                 label: Some("device"),
-                required_features: wgpu::Features::default(),
+                required_limits,
+                required_features,
                 ..Default::default()
             })
             .await

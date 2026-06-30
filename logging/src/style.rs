@@ -11,7 +11,7 @@ pub trait Formatter: Send + Sync {
 pub struct DefaultFormatter;
 
 impl Formatter for DefaultFormatter {
-    fn format(&self, record: &log::Record, timestamp: Timestamp) -> String {
+    fn format(&self, record: &log::Record, _: Timestamp) -> String {
         let color = match record.level() {
             log::Level::Trace => Color::Cyan,
             log::Level::Debug => Color::Blue,
@@ -21,8 +21,6 @@ impl Formatter for DefaultFormatter {
         };
 
         let level = format!("[{}]", record.level()).color(color);
-        let timestamp =
-            format!("[{}]", timestamp.format("%Y/%m/%d %H:%M:%S")).color(Color::BrightBlack);
         let target = format!("[{}]", record.target()).color(Color::BrightBlack);
 
         // collect key-value pairs
@@ -38,14 +36,7 @@ impl Formatter for DefaultFormatter {
             format!(" ({})", pairs)
         };
 
-        format!(
-            "{} {} {}: {}{}",
-            timestamp,
-            target,
-            level,
-            record.args(),
-            kv_str
-        )
+        format!("{} {}{} {}", level, record.args(), kv_str, target)
     }
 }
 

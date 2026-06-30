@@ -9,7 +9,7 @@ use crate::AppEvent;
 pub(crate) type WinitWindow = winit::window::Window;
 
 pub struct Window {
-    inner: Arc<WinitWindow>,
+    pub(crate) inner: Arc<WinitWindow>,
 }
 
 impl Window {
