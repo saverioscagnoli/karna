@@ -1,14 +1,25 @@
+mod builder;
+mod context;
+pub mod input;
+mod scene;
+mod time;
+mod window;
+mod window_state;
+
 use std::mem;
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
 
+use gpu::GpuState;
 use logging::error;
 use logging::info;
 use logging::warn;
 use renderer::Renderer;
 use utils::FastHashMap;
 use winit::application::ApplicationHandler;
+use winit::event::DeviceEvent;
+use winit::event::DeviceId;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::event_loop::ControlFlow;
@@ -19,23 +30,20 @@ pub use crate::builder::AppBuilder;
 pub use crate::builder::WindowBuilder;
 pub use crate::context::ContextRef;
 pub use crate::context::ContextRefMut;
+pub use crate::input::Input;
+pub use crate::input::KeyCode;
+pub use crate::input::MouseButton;
 pub use crate::scene::Scene;
 pub use crate::scene::SceneManager;
 use crate::scene::Scenes;
-use crate::window::Window;
+pub use crate::window::Window;
 use crate::window::WindowHandle;
 use crate::window::WinitWindow;
 use crate::window_state::WindowState;
 
-mod builder;
-mod context;
-mod scene;
-mod time;
-mod window;
-mod window_state;
-
 pub enum AppEvent {
     WindowEvent(WindowEvent),
+    DeviceEvent(Arc<DeviceEvent>),
 }
 
 pub struct App {
@@ -57,7 +65,13 @@ impl App {
             shader_store.load("immediate-2d", immediate_2d_src, d);
         });
 
-        info!("Gpu initalized");
+        let gpu = GpuState::get();
+        let info = gpu.device.adapter_info();
+
+        info!("Gpu {}", info.name);
+        info!("Gpu type {:?}", info.device_type);
+        info!("Backend {}", info.backend);
+        info!("Driver {}", info.driver_info);
         info!("App initialization complete")
     }
 
@@ -150,6 +164,21 @@ impl ApplicationHandler for App {
 
         if let Err(e) = window.sender.send(AppEvent::WindowEvent(event)) {
             warn!(e:err; "Event dropped, channel full.");
+        }
+    }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: DeviceId,
+        event: DeviceEvent,
+    ) {
+        let event = Arc::new(event);
+
+        for w in self.windows.values() {
+            if let Err(e) = w.sender.send(AppEvent::DeviceEvent(event.clone())) {
+                error!(e:err;  "Failed to broadcast device event");
+            }
         }
     }
 }

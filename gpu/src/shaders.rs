@@ -2,8 +2,6 @@ use std::borrow::Cow;
 
 use utils::FastHashMap;
 
-use crate::GpuState;
-
 #[derive(Debug)]
 pub struct ShaderStore {
     shaders: FastHashMap<String, wgpu::ShaderModule>,

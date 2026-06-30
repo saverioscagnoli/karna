@@ -118,6 +118,18 @@ macro_rules! impl_scalar_op {
     };
 }
 
+macro_rules! impl_scalar_assign_op {
+    ($trait:ident, $method:ident, $bin_method:ident) => {
+        impl<const N: usize, T: Num + Copy> $trait<T> for Vector<N, T> {
+            fn $method(&mut self, rhs: T) {
+                for i in 0..N {
+                    self.0[i] = self.0[i].$bin_method(rhs);
+                }
+            }
+        }
+    };
+}
+
 impl_bin_op!(Add, add);
 impl_bin_op!(Sub, sub);
 impl_bin_op!(Mul, mul);
@@ -137,6 +149,11 @@ impl_scalar_op!(Add, add);
 impl_scalar_op!(Sub, sub);
 impl_scalar_op!(Mul, mul);
 impl_scalar_op!(Div, div);
+
+impl_scalar_assign_op!(AddAssign, add_assign, add);
+impl_scalar_assign_op!(SubAssign, sub_assign, sub);
+impl_scalar_assign_op!(MulAssign, mul_assign, mul);
+impl_scalar_assign_op!(DivAssign, div_assign, div);
 
 impl<const N: usize, T: Num + Copy> Index<usize> for Vector<N, T> {
     type Output = T;
@@ -196,6 +213,10 @@ impl<const N: usize, T: Num + Copy> Vector<N, T> {
 
     pub fn splat(v: T) -> Self {
         Self([v; N])
+    }
+
+    pub fn set(&mut self, v: [T; N]) {
+        self.0 = v;
     }
 
     pub fn dot(&self, other: &Self) -> T {

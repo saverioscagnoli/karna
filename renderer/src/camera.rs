@@ -1,5 +1,4 @@
 use gpu::GpuState;
-use math::Matrix;
 use math::Matrix4;
 use math::Size;
 use math::Vector3;

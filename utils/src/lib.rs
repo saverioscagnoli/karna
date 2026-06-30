@@ -4,6 +4,7 @@ mod mem;
 mod sleep;
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::hash::BuildHasher;
 use std::hash::BuildHasherDefault;
 use std::hash::Hasher;
@@ -40,3 +41,4 @@ impl BuildHasher for IdentityHasherBuilder {
 }
 
 pub type FastHashMap<K, V> = HashMap<K, V, BuildHasherDefault<rustc_hash::FxHasher>>;
+pub type FastHashSet<V> = HashSet<V, BuildHasherDefault<rustc_hash::FxHasher>>;

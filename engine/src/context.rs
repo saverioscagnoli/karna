@@ -1,6 +1,7 @@
 use renderer::Draw;
 use renderer::Renderer;
 
+use crate::input::Input;
 use crate::scene::SceneManager;
 use crate::time::Time;
 use crate::window::Window;
@@ -8,6 +9,7 @@ use crate::window::Window;
 pub struct WindowContext {
     pub window: Window,
     pub time: Time,
+    pub input: Input,
     pub scenes: SceneManager,
     pub renderer: Renderer,
 }
@@ -17,6 +19,7 @@ impl WindowContext {
         Self {
             window,
             time: Time::new(),
+            input: Input::new(),
             scenes: SceneManager::new(),
             renderer,
         }
@@ -26,6 +29,7 @@ impl WindowContext {
         ContextRefMut {
             window: &self.window,
             time: &mut self.time,
+            input: &mut self.input,
             scenes: &mut self.scenes,
             render: &mut self.renderer,
         }
@@ -35,6 +39,7 @@ impl WindowContext {
         let ctx = ContextRef {
             window: &self.window,
             time: &self.time,
+            input: &self.input,
             scenes: &self.scenes,
         };
 
@@ -44,12 +49,10 @@ impl WindowContext {
     }
 }
 
-unsafe impl Send for WindowContext {}
-unsafe impl Sync for WindowContext {}
-
 pub struct ContextRefMut<'ctx> {
     pub window: &'ctx Window,
     pub time: &'ctx mut Time,
+    pub input: &'ctx mut Input,
     pub scenes: &'ctx mut SceneManager,
     pub render: &'ctx mut Renderer,
 }
@@ -57,5 +60,6 @@ pub struct ContextRefMut<'ctx> {
 pub struct ContextRef<'ctx> {
     pub window: &'ctx Window,
     pub time: &'ctx Time,
+    pub input: &'ctx Input,
     pub scenes: &'ctx SceneManager,
 }

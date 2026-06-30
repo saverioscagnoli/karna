@@ -1,7 +1,10 @@
 use std::sync::mpsc::Receiver;
 
 use renderer::Renderer;
+use winit::event::DeviceEvent;
+use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent;
+use winit::keyboard::PhysicalKey;
 
 use crate::AppEvent;
 use crate::context::WindowContext;
@@ -45,25 +48,88 @@ impl WindowState {
         let mut should_close = false;
 
         while !should_close {
-            if let Ok(first) = self.events.recv() {
-                for event in std::iter::once(first).chain(self.events.try_iter()) {
-                    match event {
-                        AppEvent::WindowEvent(WindowEvent::CloseRequested) => {
-                            should_close = true;
-                            break;
+            for event in self.events.try_iter() {
+                match event {
+                    AppEvent::WindowEvent(WindowEvent::CloseRequested) => {
+                        should_close = true;
+                        break;
+                    }
+
+                    AppEvent::WindowEvent(WindowEvent::Resized(size)) => {
+                        self.context.renderer.resize(size.width, size.height);
+                    }
+                    AppEvent::WindowEvent(event) => match event {
+                        WindowEvent::KeyboardInput {
+                            event: key_event, ..
+                        } => match key_event.physical_key {
+                            PhysicalKey::Code(c) => {
+                                if key_event.state.is_pressed() {
+                                    if !key_event.repeat {
+                                        self.context.input.pressed_keys.insert(c);
+                                    }
+
+                                    self.context.input.held_keys.insert(c);
+                                } else {
+                                    self.context.input.held_keys.remove(&c);
+                                    self.context.input.released_keys.insert(c);
+                                }
+                            }
+
+                            _ => {}
+                        },
+
+                        WindowEvent::CursorMoved { position, .. } => {
+                            self.context
+                                .input
+                                .mouse_position
+                                .set([position.x as f32, position.y as f32]);
                         }
 
-                        AppEvent::WindowEvent(WindowEvent::Resized(size)) => {
-                            self.context.renderer.resize(size.width, size.height);
+                        WindowEvent::MouseInput { button, state, .. } => {
+                            if state.is_pressed() {
+                                self.context.input.pressed_mouse_buttons.insert(button);
+                                self.context.input.held_mouse_buttons.insert(button);
+                            } else {
+                                self.context.input.held_mouse_buttons.remove(&button);
+                            }
                         }
-                        AppEvent::WindowEvent(_) => {}
-                    }
+
+                        WindowEvent::MouseWheel { delta, .. } => {
+                            self.context.input.wheel_delta = match delta {
+                                MouseScrollDelta::LineDelta(_x, y) => y,
+                                MouseScrollDelta::PixelDelta(pos) => pos.y as f32,
+                            }
+                        }
+
+                        _ => {}
+                    },
+
+                    AppEvent::DeviceEvent(event) => match event.as_ref() {
+                        DeviceEvent::MouseMotion { delta } => {
+                            self.context
+                                .input
+                                .mouse_delta
+                                .set([delta.0 as f32, delta.1 as f32]);
+                        }
+
+                        _ => {}
+                    },
                 }
             }
 
             for label in &self.active_scenes {
                 if let Some(scene) = self.scenes.get_mut(label) {
                     scene.update(self.context.as_ref_mut());
+                }
+            }
+
+            while let Some(tick_start) = self.context.time.next_tick() {
+                self.context.time.do_tick(tick_start);
+
+                for label in &self.active_scenes {
+                    if let Some(scene) = self.scenes.get_mut(label) {
+                        scene.fixed_update(self.context.as_ref_mut());
+                    }
                 }
             }
 
