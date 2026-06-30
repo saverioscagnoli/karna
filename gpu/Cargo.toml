@@ -8,3 +8,4 @@ pollster = "0.4.0"
 wgpu.workspace = true
 utils.workspace = true
 parking_lot.workspace = true
+logging.workspace = true

@@ -413,3 +413,23 @@ impl<T: Float> Vector4<T> {
         Vector3::new(self.x / w, self.y / w, self.z / w)
     }
 }
+
+// Helpers
+
+impl<const N: usize, T: Num + Copy> From<[T; N]> for Vector<N, T> {
+    fn from(arr: [T; N]) -> Self {
+        let mut result = Self::default();
+
+        for i in 0..N {
+            result[i] = arr[i]
+        }
+
+        result
+    }
+}
+
+impl<const N: usize, T: Num + Copy> Into<[T; N]> for Vector<N, T> {
+    fn into(self) -> [T; N] {
+        self.0
+    }
+}

@@ -29,24 +29,14 @@ impl<V> Batcher<V> {
         }
     }
 
-    pub fn push_quad(&mut self, verts: [V; 4]) {
-        let base = self.vertices.len() as u32;
-        self.vertices.extend(verts);
-
-        self.indices.extend_from_slice(&[
-            base,
-            base + 1,
-            base + 2, // triangle 1
-            base + 2,
-            base + 1,
-            base + 3, // triangle 2
-        ]);
-    }
-
     #[inline]
     fn clear(&mut self) {
         self.vertices.clear();
         self.indices.clear();
+    }
+
+    pub fn vertex_count(&self) -> u32 {
+        self.vertices.len() as u32
     }
 
     #[inline]

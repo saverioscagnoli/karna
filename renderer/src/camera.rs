@@ -71,7 +71,6 @@ impl Projection {
 pub struct Camera {
     uniform_buffer: gpu::Buffer<Matrix4<f32>>,
 
-    pub(crate) bgl: wgpu::BindGroupLayout,
     pub(crate) bg: wgpu::BindGroup,
 
     pub projection: Projection,
@@ -81,16 +80,10 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub(crate) fn new(proj: Projection) -> Self {
+    pub(crate) fn create_bind_group_layout() -> wgpu::BindGroupLayout {
         let gpu = GpuState::get();
-        let uniform_buffer = gpu::Buffer::new_with_capacity(
-            "camera uniform buffer",
-            wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            1,
-        );
 
-        let bgl = gpu
-            .device
+        gpu.device
             .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("camera projection buffer bind group layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
@@ -103,7 +96,16 @@ impl Camera {
                     },
                     count: None,
                 }],
-            });
+            })
+    }
+
+    pub(crate) fn new(proj: Projection, bgl: &wgpu::BindGroupLayout) -> Self {
+        let gpu = GpuState::get();
+        let uniform_buffer = gpu::Buffer::new_with_capacity(
+            "camera uniform buffer",
+            wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            1,
+        );
 
         let bg = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("camera projection buffer bind group"),
@@ -121,7 +123,6 @@ impl Camera {
         Self {
             uniform_buffer,
             bg,
-            bgl,
             projection: proj,
             position: Vector3::new(0.0, 0.0, -5.0),
             target: Vector3::new(0.0, 0.0, 1.0),

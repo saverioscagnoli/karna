@@ -550,6 +550,7 @@ dependencies = [
 name = "gpu"
 version = "0.1.0"
 dependencies = [
+ "logging",
  "parking_lot",
  "pollster",
  "utils",

@@ -77,9 +77,9 @@ impl log::Log for Logger {
 }
 
 pub struct Config {
-    min_level: LevelFilter,
-    targets: Vec<Box<dyn Target>>,
-    formatter: Box<dyn Formatter>,
+    pub min_level: LevelFilter,
+    pub targets: Vec<Box<dyn Target>>,
+    pub formatter: Box<dyn Formatter>,
 }
 
 impl Default for Config {

@@ -22,10 +22,12 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     is_surface_configured: bool,
     pipeline_cache: PipelineCache,
+    camera_bgl: wgpu::BindGroupLayout,
 
     clear_color: Color,
 
     layers: Vec<RenderLayer>,
+    active_layer: LayerId,
 
     pub world: LayerId,
     pub ui: LayerId,
@@ -69,12 +71,29 @@ impl Renderer {
         config: wgpu::SurfaceConfiguration,
     ) -> Self {
         let mut pipelines = PipelineCache::new();
+        let camera_bgl = Camera::create_bind_group_layout();
 
-        let mut layers = Vec::new();
-        let size = Size::new(config.width, config.height);
+        pipelines.create_pipeline(
+            gpu::PipelineDesc {
+                shader: "immediate-2d",
+                vertex_layout: Vertex::desc(),
+                blend: wgpu::BlendState::ALPHA_BLENDING,
+                topology: wgpu::PrimitiveTopology::PointList,
+            },
+            &[&camera_bgl],
+            config.format,
+        );
 
-        let world = LayerId(layers.len());
-        let world_camera = Camera::new(Projection::standard_2d(size));
+        pipelines.create_pipeline(
+            gpu::PipelineDesc {
+                shader: "immediate-2d",
+                vertex_layout: Vertex::desc(),
+                blend: wgpu::BlendState::ALPHA_BLENDING,
+                topology: wgpu::PrimitiveTopology::LineList,
+            },
+            &[&camera_bgl],
+            config.format,
+        );
 
         pipelines.create_pipeline(
             gpu::PipelineDesc {
@@ -83,18 +102,24 @@ impl Renderer {
                 blend: wgpu::BlendState::ALPHA_BLENDING,
                 topology: wgpu::PrimitiveTopology::TriangleList,
             },
-            &[&world_camera.bgl],
+            &[&camera_bgl],
             config.format,
         );
+
+        let mut layers = Vec::new();
+        let size = Size::new(config.width, config.height);
+
+        let world = LayerId(layers.len());
+        let world_camera = Camera::new(Projection::standard_2d(size), &camera_bgl);
 
         layers.push(RenderLayer::new(world_camera));
 
         let ui = LayerId(layers.len());
-        let ui_camera = Camera::new(Projection::standard_2d(size));
+        let ui_camera = Camera::new(Projection::standard_2d(size), &camera_bgl);
         layers.push(RenderLayer::new(ui_camera));
 
         let debug = LayerId(layers.len());
-        let debug_camera = Camera::new(Projection::standard_2d(size));
+        let debug_camera = Camera::new(Projection::standard_2d(size), &camera_bgl);
         layers.push(RenderLayer::new(debug_camera));
 
         Self {
@@ -102,8 +127,10 @@ impl Renderer {
             config,
             is_surface_configured: false,
             pipeline_cache: pipelines,
+            camera_bgl,
             clear_color: Color::Black,
             layers,
+            active_layer: world,
             world,
             ui,
             debug,
@@ -111,7 +138,7 @@ impl Renderer {
     }
 
     pub fn add_layer(&mut self, camera_proj: Projection) -> LayerId {
-        let camera = Camera::new(camera_proj);
+        let camera = Camera::new(camera_proj, &self.camera_bgl);
         let id = LayerId(self.layers.len());
 
         self.layers.push(RenderLayer::new(camera));
@@ -125,6 +152,14 @@ impl Renderer {
 
     pub fn layer_mut(&mut self, id: &LayerId) -> &mut RenderLayer {
         &mut self.layers[id.0]
+    }
+
+    pub fn active_layer(&self) -> &RenderLayer {
+        &self.layers[self.active_layer.0]
+    }
+
+    pub fn active_layer_mut(&mut self) -> &mut RenderLayer {
+        &mut self.layers[self.active_layer.0]
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {

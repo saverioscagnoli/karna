@@ -51,7 +51,7 @@ impl Vertex {
 }
 
 impl Vertex {
-    pub(crate) fn desc() -> wgpu::VertexBufferLayout<'static> {
+    pub(crate) const fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -75,4 +75,31 @@ impl Vertex {
             ],
         }
     }
+}
+
+#[macro_export]
+macro_rules! vertex {
+    (
+        [$px:expr, $py:expr, $pz:expr],
+        [$cr:expr, $cg:expr, $cb:expr, $ca:expr],
+        [$u:expr, $v:expr]
+    ) => {
+        Vertex::new(
+            Vector3::new($px as f32, $py as f32, $pz as f32),
+            Vector4::new($cr as f32, $cg as f32, $cb as f32, $ca as f32),
+            Vector2::new($u as f32, $v as f32),
+        )
+    };
+
+    (
+        [$px:expr, $py:expr, $pz:expr],
+        $color:expr,
+        [$u:expr, $v:expr]
+    ) => {
+        Vertex::new(
+            Vector3::new($px as f32, $py as f32, $pz as f32),
+            $color,
+            Vector2::new($u as f32, $v as f32),
+        )
+    };
 }

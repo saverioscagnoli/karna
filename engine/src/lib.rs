@@ -12,6 +12,7 @@ use std::sync::mpsc;
 use std::thread;
 
 use gpu::GpuState;
+use logging::debug;
 use logging::error;
 use logging::info;
 use logging::warn;
@@ -63,15 +64,17 @@ impl App {
         gpu::init(|shader_store, d| {
             let immediate_2d_src = include_str!("../../shaders/immediate-2d.wgsl");
             shader_store.load("immediate-2d", immediate_2d_src, d);
+
+            info!("Built-in shaders loaded.");
         });
 
         let gpu = GpuState::get();
         let info = gpu.device.adapter_info();
 
-        info!("Gpu {}", info.name);
-        info!("Gpu type {:?}", info.device_type);
-        info!("Backend {}", info.backend);
-        info!("Driver {}", info.driver_info);
+        info!("Gpu: {}", info.name);
+        info!("Gpu type: {:?}", info.device_type);
+        info!("Backend: {}", info.backend);
+        info!("Driver: {}", info.driver_info);
         info!("App initialization complete")
     }
 
@@ -158,7 +161,7 @@ impl ApplicationHandler for App {
         }
 
         let Some(window) = self.windows.get(&window_id) else {
-            error!("Event received on a non existing window");
+            debug!("Event received on a non existing window");
             return;
         };
 

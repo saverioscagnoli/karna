@@ -8,35 +8,33 @@ use karna::logging;
 use karna::math::Vector2;
 use karna::render::Color;
 use karna::render::Draw;
-use log::info;
-use math::Vector;
 
 struct S {
     pos: Vector2<f32>,
+    prev_pos: Vector2<f32>,
     vel: Vector2<f32>,
 }
 
 impl Scene for S {
     fn load(&mut self, ctx: ContextRefMut) {
-        info!("Scene loaded");
-        ctx.time.set_target_fps(u32::MAX);
+        ctx.time.set_target_fps(120);
     }
 
     fn fixed_update(&mut self, ctx: ContextRefMut) {
         const VEL: f32 = 250.0;
 
+        // snapshot before mutating this tick
+        self.prev_pos = self.pos;
+
         if ctx.input.key_held(&KeyCode::KeyW) {
             self.vel.y = -VEL;
         }
-
         if ctx.input.key_held(&KeyCode::KeyA) {
             self.vel.x = -VEL;
         }
-
         if ctx.input.key_held(&KeyCode::KeyS) {
             self.vel.y = VEL;
         }
-
         if ctx.input.key_held(&KeyCode::KeyD) {
             self.vel.x = VEL;
         }
@@ -47,20 +45,30 @@ impl Scene for S {
         if self.vel.length_sq() < 0.01 {
             self.vel.set([0.0, 0.0]);
         }
-
-        println!("fps {}", ctx.time.fps());
     }
 
     fn update(&mut self, ctx: ContextRefMut) {}
 
     fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
         draw.set_color(Color::Cyan);
-        draw.rect(self.pos.x, self.pos.y, 50.0, 50.0);
+
+        for i in 0..10 {
+            for j in 0..10 {
+                draw.point(40.0 + i as f32 * 10.0, 100.0 + j as f32 * 10.0);
+            }
+        }
+
+        let alpha = ctx.time.alpha();
+        let render_pos = self.prev_pos.lerp(&self.pos, alpha);
+
+        draw.set_color(Color::Red);
+        draw.rect(render_pos.x, render_pos.y, 50.0, 50.0);
     }
 }
 
 fn main() {
-    logging::init(logging::Config::default()).expect("Failed to init logging");
+    logging::init(logging::Config::default().with_min_level(log::LevelFilter::Debug))
+        .expect("Failed to init logging");
 
     App::builder()
         .with_window(
@@ -70,6 +78,7 @@ fn main() {
                     "initial",
                     S {
                         pos: Vector2::new(10.0, 10.0),
+                        prev_pos: Vector2::new(10.0, 10.0),
                         vel: Vector2::zero(),
                     },
                 )

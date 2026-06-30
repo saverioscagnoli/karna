@@ -1,3 +1,4 @@
+use logging::info;
 use utils::FastHashMap;
 
 use crate::GpuState;
@@ -89,6 +90,11 @@ impl PipelineCache {
     ) {
         let gpu = GpuState::get();
         let pipeline = build_pipeline(&desc, &gpu.shaders, bgls, surface_format);
+
+        info!(
+            "Creating pipeline from shader '{}' topology = {:?}",
+            desc.shader, desc.topology
+        );
 
         self.pipelines.insert(desc, pipeline);
     }

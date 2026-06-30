@@ -1,5 +1,6 @@
 use std::sync::mpsc::Receiver;
 
+use logging::info;
 use renderer::Renderer;
 use winit::event::DeviceEvent;
 use winit::event::MouseScrollDelta;
@@ -36,6 +37,7 @@ impl WindowState {
         for label in active_scenes {
             if let Some(scene) = state.scenes.get_mut(&label) {
                 scene.load(state.context.as_ref_mut());
+                info!("Scene '{}' loaded", label);
             }
 
             state.active_scenes.push(label);
@@ -150,7 +152,9 @@ impl WindowState {
                 if !self.active_scenes.contains(&label) {
                     if let Some(scene) = self.scenes.get_mut(&label) {
                         scene.load(self.context.as_ref_mut());
+                        info!("Scene '{}' loaded", label);
                     }
+
                     self.active_scenes.push(label);
                 }
             }
