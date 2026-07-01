@@ -185,6 +185,7 @@ dependencies = [
  "log",
  "logging",
  "math",
+ "sokol",
 ]
 
 [[package]]
