@@ -4,24 +4,20 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["engine", "gpu","logging", "math", "renderer", "utils"]
+members = ["engine","logging", "math", "utils"]
 
 [workspace.dependencies]
 parking_lot = "0.12.5"
-wgpu = "29.0.3"
 utils = { path = "utils" }
-winit = "0.30.13"
-math = {path = "math" }
+math = { path = "math" }
 logging = { path = "logging" }
-gpu = { path = "gpu" }
-renderer = { path = "renderer" }
+sokol = { version="*", git="https://github.com/floooh/sokol-rust.git" }
 
 
 [dependencies]
 logging.workspace = true
 engine = { path = "engine" }
 math.workspace = true
-renderer.workspace = true
 
 [dev-dependencies]
 log = "0.4.33"

@@ -4,10 +4,4 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-winit.workspace = true
-math.workspace = true
-logging.workspace = true
-utils.workspace = true
-gpu.workspace = true
-renderer.workspace = true
-ctrlc = "3.5.2"
+sokol.workspace = true

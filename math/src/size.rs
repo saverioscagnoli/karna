@@ -1,6 +1,5 @@
 use num::Float;
 use num::Num;
-use winit::dpi::PhysicalSize;
 
 use crate::Vector2;
 
@@ -81,17 +80,5 @@ impl<T: Num + Copy> From<Vector2<T>> for Size<T> {
 impl<T: Num + Copy> Into<Vector2<T>> for Size<T> {
     fn into(self) -> Vector2<T> {
         Vector2::new(self.width, self.height)
-    }
-}
-
-impl<T: Num + Copy> From<PhysicalSize<T>> for Size<T> {
-    fn from(value: PhysicalSize<T>) -> Self {
-        Self::new(value.width, value.height)
-    }
-}
-
-impl<T: Num + Copy> Into<PhysicalSize<T>> for Size<T> {
-    fn into(self) -> PhysicalSize<T> {
-        PhysicalSize::new(self.width, self.height)
     }
 }

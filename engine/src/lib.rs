@@ -1,260 +1,121 @@
-mod builder;
-mod context;
-pub mod input;
-mod monitors;
-mod scene;
-mod time;
-mod window;
-mod window_state;
+use std::ffi;
 
-use std::mem;
-use std::sync::Arc;
-use std::sync::mpsc;
-use std::thread;
+use sokol::app as sapp;
+use sokol::gfx as sg;
+use sokol::glue as sglue;
 
-use gpu::GpuState;
-use logging::debug;
-use logging::error;
-use logging::info;
-use logging::warn;
-use renderer::Renderer;
-use utils::FastHashMap;
-use winit::application::ApplicationHandler;
-use winit::event::DeviceEvent;
-use winit::event::DeviceId;
-use winit::event::WindowEvent;
-use winit::event::WindowEvent::CloseRequested;
-use winit::event_loop::ActiveEventLoop;
-use winit::event_loop::ControlFlow;
-use winit::event_loop::EventLoop;
-use winit::window::WindowId;
-
-pub use crate::builder::AppBuilder;
-pub use crate::builder::WindowBuilder;
-pub use crate::context::ContextRef;
-pub use crate::context::ContextRefMut;
-pub use crate::input::Input;
-pub use crate::input::KeyCode;
-pub use crate::input::MouseButton;
-use crate::monitors::Monitor;
-use crate::monitors::Monitors;
-pub use crate::scene::Scene;
-pub use crate::scene::SceneManager;
-use crate::scene::Scenes;
-pub use crate::window::Window;
-use crate::window::WindowHandle;
-use crate::window::WinitWindow;
-use crate::window_state::WindowState;
-
-pub enum AppEvent {
-    WindowEvent(WindowEvent),
-    DeviceEvent(Arc<DeviceEvent>),
-    QueryMonitors(Vec<Monitor>),
+pub trait Application {
+    fn init(&mut self);
+    fn frame(&mut self);
+    fn cleanup(&mut self) {}
 }
 
-enum UserEvent {
-    Shutdown,
+pub struct Window<A: Application> {
+    app: A,
+    title: &'static ffi::CStr,
+    width: i32,
+    height: i32,
+    sample_count: i32,
 }
 
-pub struct App {
-    enqueued_windows: Vec<WindowBuilder>,
-    windows: FastHashMap<WindowId, WindowHandle>,
-}
-
-impl App {
-    pub(crate) fn new() -> Self {
+impl<A: Application> Window<A> {
+    pub fn new(app: A, title: &'static ffi::CStr, width: i32, height: i32) -> Self {
         Self {
-            windows: FastHashMap::default(),
-            enqueued_windows: Vec::new(),
+            app,
+            title,
+            width,
+            height,
+            sample_count: 4,
         }
     }
 
-    fn init(&self) {
-        gpu::init(|shader_store, d| {
-            let immediate_2d_src = include_str!("../../shaders/immediate-2d.wgsl");
-            shader_store.load("immediate-2d", immediate_2d_src, d);
+    pub fn run(self) {
+        let user_data = Box::into_raw(Box::new(self.app)) as *mut ffi::c_void;
 
-            info!("Built-in shaders loaded");
+        extern "C" fn init_cb<A: Application>(user_data: *mut ffi::c_void) {
+            let app = unsafe { &mut *(user_data as *mut A) };
+            sg::setup(&sg::Desc {
+                environment: sglue::environment(),
+                logger: sg::Logger {
+                    func: Some(sokol::log::slog_func),
+                    ..Default::default()
+                },
+                ..Default::default()
+            });
+            app.init();
+        }
+
+        extern "C" fn frame_cb<A: Application>(user_data: *mut ffi::c_void) {
+            let app = unsafe { &mut *(user_data as *mut A) };
+            app.frame();
+        }
+
+        extern "C" fn cleanup_cb<A: Application>(user_data: *mut ffi::c_void) {
+            let mut app = unsafe { Box::from_raw(user_data as *mut A) };
+            app.cleanup();
+            sg::shutdown();
+        }
+
+        sapp::run(&sapp::Desc {
+            init_userdata_cb: Some(init_cb::<A>),
+            frame_userdata_cb: Some(frame_cb::<A>),
+            cleanup_userdata_cb: Some(cleanup_cb::<A>),
+            user_data,
+            window_title: self.title.as_ptr(),
+            width: self.width,
+            height: self.height,
+            sample_count: self.sample_count,
+            logger: sapp::Logger {
+                func: Some(sokol::log::slog_func),
+                ..Default::default()
+            },
+            icon: sapp::IconDesc {
+                sokol_default: true,
+                ..Default::default()
+            },
+            ..Default::default()
         });
-
-        let gpu = GpuState::get();
-
-        info!("GPU initialization complete");
-
-        let info = gpu.device.adapter_info();
-
-        info!(
-            "GPU: {} ({:?}, {}, driver {})",
-            info.name, info.device_type, info.backend, info.driver_info
-        );
-        info!("App initialization complete")
-    }
-
-    pub fn builder() -> AppBuilder {
-        AppBuilder::default()
-    }
-
-    pub(crate) fn request_window(&mut self, b: WindowBuilder) {
-        self.enqueued_windows.push(b)
-    }
-
-    pub fn run(mut self) {
-        let event_loop = EventLoop::<UserEvent>::with_user_event()
-            .build()
-            .expect("Failed to create event loop");
-
-        let proxy = event_loop.create_proxy();
-
-        ctrlc::set_handler(move || {
-            _ = proxy.send_event(UserEvent::Shutdown);
-        })
-        .expect("Failed to set Ctrl+C handler");
-
-        event_loop.set_control_flow(ControlFlow::Wait);
-        event_loop.run_app(&mut self).expect("Failed to run app")
     }
 }
 
-impl App {
-    fn spawn_window_thread(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        winit_window: Arc<WinitWindow>,
-        scenes: Scenes,
-        active_scenes: Vec<String>,
-    ) {
-        info!("Creating window  '{}'", winit_window.title());
+struct ClearApp {
+    pass_action: sg::PassAction,
+}
 
-        let (tx, rx) = mpsc::channel::<AppEvent>();
-        let window_id = winit_window.id();
-
-        // We must query the monitor before the
-        // scene(s) are loaded, so that they are
-        // available during that time
-        // otherwise, in the inital scene loading, the
-        // vector will be empty
-        let monitors = Monitors::collect(event_loop);
-
-        // On Windows, the surface must be created on the winit thread,
-        // hence why the renderer creation is split.
-        // If we were to create the renderer in the thread::spawn it would crash
-        let (surface, config) = Renderer::create_surface(winit_window.clone());
-
-        let thread_handle = thread::spawn(move || {
-            let window = Window::new(winit_window);
-            let renderer = Renderer::from_surface(surface, config);
-
-            info!("Renderer initialization complete");
-
-            WindowState::new(rx, window, renderer, scenes, active_scenes, monitors).start_loop();
-        });
-
-        let window_handle = WindowHandle {
-            sender: tx,
-            thread: thread_handle,
+impl Application for ClearApp {
+    fn init(&mut self) {
+        self.pass_action.colors[0] = sg::ColorAttachmentAction {
+            load_action: sg::LoadAction::Clear,
+            clear_value: sg::Color {
+                r: 1.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+            ..Default::default()
         };
 
-        self.windows.insert(window_id, window_handle);
+        let backend = sg::query_backend();
+        println!("Using backend: {:?}", backend);
+    }
+
+    fn frame(&mut self) {
+        let g = self.pass_action.colors[0].clear_value.g + 0.01;
+        self.pass_action.colors[0].clear_value.g = if g > 1.0 { 0.0 } else { g };
+
+        sg::begin_pass(&sg::Pass {
+            action: self.pass_action,
+            swapchain: sglue::swapchain(),
+            ..Default::default()
+        });
+        sg::end_pass();
+        sg::commit();
     }
 }
 
-impl ApplicationHandler<UserEvent> for App {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.init();
-
-        for b in mem::take(&mut self.enqueued_windows) {
-            match event_loop.create_window(b.attrs) {
-                Ok(w) => {
-                    self.spawn_window_thread(event_loop, Arc::new(w), b.scenes, b.initial_active)
-                }
-                Err(e) => error!("Failed to spawn window: {}", e),
-            }
-        }
-    }
-
-    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
-        match event {
-            UserEvent::Shutdown => {
-                for (_, window) in self.windows.drain() {
-                    _ = window.sender.send(AppEvent::WindowEvent(CloseRequested));
-                    _ = window.thread.join();
-                }
-
-                event_loop.exit();
-            }
-        }
-    }
-
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        window_id: WindowId,
-        event: WindowEvent,
-    ) {
-        match event {
-            WindowEvent::CloseRequested => {
-                let Some(window) = self.windows.remove(&window_id) else {
-                    error!("CloseRequested on a non existing window");
-                    return;
-                };
-
-                _ = window.sender.send(AppEvent::WindowEvent(event));
-                _ = window.thread.join();
-
-                if self.windows.is_empty() {
-                    info!("All windows were closed. Exiting.");
-                    event_loop.exit();
-                }
-            }
-
-            WindowEvent::ScaleFactorChanged { .. } => {
-                let Some(window) = self.windows.get(&window_id) else {
-                    return;
-                };
-
-                let monitors = Monitors::collect(event_loop);
-
-                info!("queried {} monitor(s)", monitors.len());
-
-                if let Err(e) = window.sender.send(AppEvent::QueryMonitors(monitors)) {
-                    warn!(e:err;"Dropped event '{:?}'", event);
-                }
-            }
-
-            event => {
-                let Some(window) = self.windows.get(&window_id) else {
-                    debug!("Event received on a non existing window");
-                    return;
-                };
-
-                if let Err(e) = window.sender.send(AppEvent::WindowEvent(event)) {
-                    warn!(e:err;"Dropped event'");
-                }
-            }
-        }
-    }
-
-    fn device_event(
-        &mut self,
-        _event_loop: &ActiveEventLoop,
-        _device_id: DeviceId,
-        event: DeviceEvent,
-    ) {
-        let event = Arc::new(event);
-
-        for w in self.windows.values() {
-            if let Err(e) = w.sender.send(AppEvent::DeviceEvent(event.clone())) {
-                error!(e:err;  "Failed to broadcast device event");
-            }
-        }
-    }
-}
-
-impl Drop for App {
-    fn drop(&mut self) {
-        for (_, window) in self.windows.drain() {
-            let _ = window.sender.send(AppEvent::WindowEvent(CloseRequested));
-            let _ = window.thread.join();
-        }
-    }
+pub fn run() {
+    let app = ClearApp {
+        pass_action: sg::PassAction::new(),
+    };
+    Window::new(app, c"clear.rs", 800, 600).run();
 }
