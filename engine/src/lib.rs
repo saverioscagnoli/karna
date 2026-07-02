@@ -134,6 +134,8 @@ impl App {
                 ..Default::default()
             });
 
+            state.ctx.init_gpu(); // build Renderer AFTER setup
+
             state
                 .scenes
                 .get_mut("initial")
@@ -143,6 +145,7 @@ impl App {
 
         extern "C" fn frame_cb(user_data: *mut ffi::c_void) {
             let state = unsafe { &mut *(user_data as *mut AppState) };
+            let view = state.ctx.window.size();
 
             while let Some(tick_start) = state.ctx.time.next_tick() {
                 if let Some(scene) = state.scenes.get_mut("initial") {
@@ -160,6 +163,7 @@ impl App {
                 scene.draw(ctx, &mut draw);
             }
 
+            state.ctx.render_mut().present(view);
             state.ctx.input.flush();
             state.ctx.time.wait_for_next_frame();
         }
@@ -182,7 +186,7 @@ impl App {
                 sapp::EventType::Resized => {
                     let new_size = math::Size::new(sapp::width() as u32, sapp::height() as u32);
                     state.ctx.window.size = new_size;
-                    state.ctx.render.resize(new_size);
+                    state.ctx.render_mut().resize(new_size);
                 }
                 sapp::EventType::KeyDown => {
                     let k = event.key_code;

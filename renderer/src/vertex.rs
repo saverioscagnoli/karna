@@ -54,26 +54,18 @@ impl Vertex {
 impl Vertex {
     /// Vertex layout state for sokol pipelines. `shd` is the generated
     /// shader module (for ATTR_* slot constants).
-
     pub(crate) fn layout() -> sg::VertexLayoutState {
         let mut layout = sg::VertexLayoutState::new();
 
-        // Tell sokol the real stride of the whole Vertex struct.
+        // Explicitly set the buffer stride so sokol packs correctly.
         layout.buffers[0].stride = std::mem::size_of::<Vertex>() as i32; // 36
 
         // Location 0: position (float3) at offset 0
-        layout.attrs[shd::ATTR_SHADER_POSITION as usize] = sg::VertexAttrState {
-            format: sg::VertexFormat::Float3,
-            offset: 0,
-            buffer_index: 0,
-        };
-
+        layout.attrs[shd::ATTR_SHADER_POSITION as usize].format = sg::VertexFormat::Float3;
         // Location 1: color (float4) at offset 12
-        layout.attrs[shd::ATTR_SHADER_COLOR as usize] = sg::VertexAttrState {
-            format: sg::VertexFormat::Float4,
-            offset: std::mem::offset_of!(Vertex, color) as i32, // 12
-            buffer_index: 0,
-        };
+        layout.attrs[shd::ATTR_SHADER_COLOR as usize].format = sg::VertexFormat::Float4;
+        // uv (float2) at offset 28 — declare it so stride/offsets are right
+        layout.attrs[shd::ATTR_SHADER_UV as usize].format = sg::VertexFormat::Float2;
 
         layout
     }

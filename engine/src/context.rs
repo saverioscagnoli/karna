@@ -9,7 +9,7 @@ pub struct Context {
     pub window: Window,
     pub time: Time,
     pub input: Input,
-    pub render: Renderer,
+    pub render: Option<Renderer>,
 }
 
 impl Context {
@@ -19,8 +19,20 @@ impl Context {
             window,
             time: Time::new(),
             input: Input::new(),
-            render: Renderer::new(view),
+            render: None,
         }
+    }
+
+    pub(crate) fn render(&self) -> &Renderer {
+        self.render.as_ref().expect("renderer not initialized")
+    }
+
+    pub(crate) fn render_mut(&mut self) -> &mut Renderer {
+        self.render.as_mut().expect("renderer not initialized")
+    }
+
+    pub(crate) fn init_gpu(&mut self) {
+        self.render = Some(Renderer::new(self.window.size()));
     }
 
     pub(crate) fn as_mut<'a>(&'a mut self) -> ContextRefMut<'a> {
@@ -38,7 +50,8 @@ impl Context {
             input: &self.input,
         };
 
-        (ctx, Draw::_new(&mut self.render))
+        let renderer = self.render.as_mut().expect("renderer not initialized");
+        (ctx, Draw::_new(renderer))
     }
 }
 

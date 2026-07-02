@@ -65,7 +65,6 @@ impl Scene for S {
 
         draw.set_color(Color::Red);
         draw.rect(render_pos.x, render_pos.y, 50.0, 50.0);
-        draw.rect(-0.5, -0.5, 1.0, 1.0);
     }
 }
 

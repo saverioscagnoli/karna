@@ -7,6 +7,7 @@ layout(binding=0) uniform vs_params {
 // Vertex inputs (per-vertex data only)
 in vec3 position;   // @location(0)
 in vec4 color;      // @location(1)
+in vec2 uv;
 
 // Vertex -> fragment varying
 out vec4 v_color;
