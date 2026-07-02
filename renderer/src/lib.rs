@@ -62,7 +62,7 @@ impl Renderer {
 
         Self {
             pipeline_cache,
-            clear_color: Color::White,
+            clear_color: Color::Black,
             layers,
             active_layer: world,
             world,
@@ -108,7 +108,6 @@ impl Renderer {
         });
 
         for layer in &mut self.layers {
-            layer.camera.update(view);
             layer.present(view, &self.pipeline_cache);
         }
 

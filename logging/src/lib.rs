@@ -1,11 +1,8 @@
 mod style;
 mod target;
 
-use std::ops::Deref;
-use std::ops::DerefMut;
 use std::sync::OnceLock;
 
-use chrono::Local;
 use log::LevelFilter;
 pub use log::debug;
 pub use log::error;
@@ -23,28 +20,6 @@ pub use crate::target::Console;
 pub use crate::target::File;
 pub use crate::target::Output;
 pub use crate::target::Target;
-
-pub struct Timestamp(chrono::DateTime<Local>);
-
-impl Timestamp {
-    pub fn now() -> Self {
-        Self(chrono::Local::now())
-    }
-}
-
-impl Deref for Timestamp {
-    type Target = chrono::DateTime<Local>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for Timestamp {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
 
 pub struct Logger {
     min_level: log::LevelFilter,
@@ -72,7 +47,7 @@ impl log::Log for Logger {
             return;
         }
 
-        let message = self.formatter.format(record, Timestamp::now());
+        let message = self.formatter.format(record);
 
         for t in &self.targets {
             _ = t.write(record.level(), &message);

@@ -2,8 +2,8 @@ use std::ops::Index;
 use std::ops::IndexMut;
 use std::slice;
 
-use num::Float;
-use num::Num;
+use num_traits::Float;
+use num_traits::Num;
 
 use crate::Vector;
 use crate::Vector3;

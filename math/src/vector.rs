@@ -15,9 +15,9 @@ use std::slice::Iter;
 use std::slice::IterMut;
 use std::usize;
 
-use num::Float;
-use num::Num;
-use num::Signed;
+use num_traits::Float;
+use num_traits::Num;
+use num_traits::Signed;
 use utils::impl_deref_to_generic;
 
 use crate::point::Point2;
@@ -238,13 +238,13 @@ impl<const N: usize, T: Num + Copy> Vector<N, T> {
 /// Partial Ord Impl
 
 impl<const N: usize, T: Num + Copy + PartialOrd> Vector<N, T> {
-    pub fn clamp(&self, min: T, max: T) -> Self {
-        Self(self.0.map(|x| num::clamp(x, min, max)))
-    }
+    //pub fn clamp(&self, min: T, max: T) -> Self {
+    //    Self(self.0.map(|x| num::clamp(x, min, max)))
+    //}
 
-    pub fn clamp_mut(&mut self, min: T, max: T) {
-        self.0 = self.0.map(|x| num::clamp(x, min, max))
-    }
+    //pub fn clamp_mut(&mut self, min: T, max: T) {
+    //    self.0 = self.0.map(|x| num::clamp(x, min, max))
+    //}
 
     pub fn min(&self, other: &Self) -> Self {
         Self(array::from_fn(|i| {

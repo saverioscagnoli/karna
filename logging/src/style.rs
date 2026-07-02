@@ -2,16 +2,14 @@ use std::fmt;
 
 use log::kv;
 
-use crate::Timestamp;
-
 pub trait Formatter: Send + Sync {
-    fn format(&self, record: &log::Record, timestamp: Timestamp) -> String;
+    fn format(&self, record: &log::Record) -> String;
 }
 
 pub struct DefaultFormatter;
 
 impl Formatter for DefaultFormatter {
-    fn format(&self, record: &log::Record, _: Timestamp) -> String {
+    fn format(&self, record: &log::Record) -> String {
         let color = match record.level() {
             log::Level::Trace => Color::Cyan,
             log::Level::Debug => Color::Blue,
