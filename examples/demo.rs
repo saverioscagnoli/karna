@@ -1,78 +1,91 @@
-use std::u32;
-
 use karna::App;
 use karna::ContextRef;
 use karna::ContextRefMut;
 use karna::Scene;
 use karna::WindowBuilder;
-use karna::input::Keycode;
-use sokol::gfx as sg;
-use sokol::glue as sglue;
+use karna::logging;
+use karna::math::Vector2;
+use karna::render::Color;
+use karna::render::Draw;
+use log::LevelFilter;
+use log::error;
+use sokol::app::Keycode;
 
-struct ClearApp {
-    pass_action: sg::PassAction,
-    elapsed: f32,
+struct S {
+    pos: Vector2<f32>,
+    prev_pos: Vector2<f32>,
+    vel: Vector2<f32>,
 }
 
-impl Scene for ClearApp {
+impl Scene for S {
     fn load(&mut self, ctx: ContextRefMut) {
-        ctx.time.set_target_fps(200);
-        self.pass_action.colors[0] = sg::ColorAttachmentAction {
-            load_action: sg::LoadAction::Clear,
-            clear_value: sg::Color {
-                r: 1.0,
-                g: 0.0,
-                b: 0.0,
-                a: 1.0,
-            },
-            ..Default::default()
-        };
-        let backend = sg::query_backend();
-
-        println!(
-            "Using backend: {:?}, window: {}x{}",
-            backend,
-            ctx.window.width(),
-            ctx.window.height()
-        );
+        ctx.time.set_target_fps(120);
     }
 
     fn fixed_update(&mut self, ctx: ContextRefMut) {
-        println!("fps {}", ctx.time.fps())
-    }
+        const VEL: f32 = 250.0;
 
-    fn update(&mut self, ctx: ContextRefMut) {
-        self.elapsed += ctx.time.delta();
+        // snapshot before mutating this tick
+        self.prev_pos = self.pos;
 
-        let g = self.pass_action.colors[0].clear_value.g + 0.01;
-        self.pass_action.colors[0].clear_value.g = if g > 1.0 { 0.0 } else { g };
+        if ctx.input.key_held(&Keycode::W) {
+            self.vel.y = -VEL;
+        }
+        if ctx.input.key_held(&Keycode::A) {
+            self.vel.x = -VEL;
+        }
+        if ctx.input.key_held(&Keycode::S) {
+            self.vel.y = VEL;
+        }
+        if ctx.input.key_held(&Keycode::D) {
+            self.vel.x = VEL;
+        }
 
-        // Example of mutating the window at runtime.
-        if self.elapsed > 2.0 {
-            self.elapsed = 0.0;
-            ctx.window.set_title("still clearing...");
+        self.pos += self.vel * ctx.time.fixed_delta();
+        self.vel *= 0.9;
+
+        if self.vel.length_sq() < 0.01 {
+            self.vel.set([0.0, 0.0]);
         }
     }
 
-    fn draw(&mut self, _ctx: ContextRef) {
-        sg::begin_pass(&sg::Pass {
-            action: self.pass_action,
-            swapchain: sglue::swapchain(),
-            ..Default::default()
-        });
-        sg::end_pass();
-        sg::commit();
+    fn update(&mut self, ctx: ContextRefMut) {}
+
+    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+        draw.set_color(Color::Cyan);
+
+        for i in 0..10 {
+            for j in 0..10 {
+                draw.point(40.0 + i as f32 * 10.0, 100.0 + j as f32 * 10.0);
+            }
+        }
+
+        let alpha = ctx.time.alpha();
+        let render_pos = self.prev_pos.lerp(&self.pos, alpha);
+
+        draw.set_color(Color::Red);
+        draw.rect(render_pos.x, render_pos.y, 50.0, 50.0);
+        draw.rect(-0.5, -0.5, 1.0, 1.0);
     }
 }
 
-pub fn main() {
+fn main() {
+    logging::init(
+        logging::Config::default()
+            .with_min_level(log::LevelFilter::Debug)
+            .with_module_filter("sctk", LevelFilter::Error)
+            .with_module_filter("naga", log::LevelFilter::Error)
+            .with_module_filter("wgpu", log::LevelFilter::Error),
+    )
+    .expect("Failed to init logging");
+
     App::builder()
-        .with_window(WindowBuilder::new().with_title("clear.rs"))
         .with_scene(
             "initial".to_string(),
-            ClearApp {
-                pass_action: sg::PassAction::new(),
-                elapsed: 0.0,
+            S {
+                pos: Vector2::new(10.0, 10.0),
+                prev_pos: Vector2::new(10.0, 10.0),
+                vel: Vector2::zero(),
             },
         )
         .build()

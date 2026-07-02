@@ -1,3 +1,4 @@
+use renderer::Draw;
 use utils::FastHashMap;
 
 use crate::context::ContextRef;
@@ -12,7 +13,7 @@ pub trait Scene {
         let _ = ctx;
     }
 
-    fn draw(&mut self, ctx: ContextRef);
+    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw);
 
     fn cleanup(&mut self, ctx: ContextRefMut) {
         let _ = ctx;

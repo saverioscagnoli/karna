@@ -2,7 +2,7 @@ use sokol::app as sapp;
 
 pub struct Window {
     title: String,
-    size: math::Size<u32>,
+    pub(crate) size: math::Size<u32>,
 }
 
 impl Window {

@@ -64,7 +64,6 @@ impl Default for WindowBuilder {
     }
 }
 
-/// Entry point: `App::builder().with_window(...).with_scene(...).run()`
 pub struct AppBuilder {
     window: WindowBuilder,
     scenes: Scenes,
@@ -155,7 +154,10 @@ impl App {
 
             if let Some(scene) = state.scenes.get_mut("initial") {
                 scene.update(state.ctx.as_mut());
-                scene.draw(state.ctx.as_ref());
+
+                let (ctx, mut draw) = state.ctx.split();
+
+                scene.draw(ctx, &mut draw);
             }
 
             state.ctx.input.flush();
@@ -177,6 +179,11 @@ impl App {
             let event = unsafe { &*event };
 
             match event._type {
+                sapp::EventType::Resized => {
+                    let new_size = math::Size::new(sapp::width() as u32, sapp::height() as u32);
+                    state.ctx.window.size = new_size;
+                    state.ctx.render.resize(new_size);
+                }
                 sapp::EventType::KeyDown => {
                     let k = event.key_code;
 
@@ -192,6 +199,35 @@ impl App {
 
                     state.ctx.input.held_keys.remove(&k);
                     state.ctx.input.released_keys.insert(k);
+                }
+
+                sapp::EventType::MouseMove => {
+                    state.ctx.input.mouse_position.x = event.mouse_x;
+                    state.ctx.input.mouse_position.y = event.mouse_y;
+                    state.ctx.input.mouse_delta.x = event.mouse_dx;
+                    state.ctx.input.mouse_delta.y = event.mouse_dy;
+                }
+
+                sapp::EventType::MouseDown => {
+                    state
+                        .ctx
+                        .input
+                        .pressed_mouse_buttons
+                        .insert(event.mouse_button);
+
+                    state
+                        .ctx
+                        .input
+                        .held_mouse_buttons
+                        .insert(event.mouse_button);
+                }
+
+                sapp::EventType::MouseUp => {
+                    state
+                        .ctx
+                        .input
+                        .held_mouse_buttons
+                        .remove(&event.mouse_button);
                 }
                 _ => {}
             }

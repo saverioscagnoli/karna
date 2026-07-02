@@ -1,3 +1,6 @@
+use renderer::Draw;
+use renderer::Renderer;
+
 use crate::input::Input;
 use crate::time::Time;
 use crate::window::Window;
@@ -6,14 +9,17 @@ pub struct Context {
     pub window: Window,
     pub time: Time,
     pub input: Input,
+    pub render: Renderer,
 }
 
 impl Context {
     pub(crate) fn new(window: Window) -> Self {
+        let view = window.size();
         Self {
             window,
             time: Time::new(),
             input: Input::new(),
+            render: Renderer::new(view),
         }
     }
 
@@ -25,12 +31,14 @@ impl Context {
         }
     }
 
-    pub(crate) fn as_ref<'a>(&'a self) -> ContextRef<'a> {
-        ContextRef {
+    pub(crate) fn split<'a>(&'a mut self) -> (ContextRef<'a>, Draw<'a>) {
+        let ctx = ContextRef {
             window: &self.window,
             time: &self.time,
             input: &self.input,
-        }
+        };
+
+        (ctx, Draw::_new(&mut self.render))
     }
 }
 

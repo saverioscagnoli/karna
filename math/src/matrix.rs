@@ -343,3 +343,9 @@ impl<T: Float> Matrix4<T> {
         m
     }
 }
+
+impl Matrix4<f32> {
+    pub fn as_flat_array(&self) -> [f32; 16] {
+        unsafe { std::mem::transmute::<[[f32; 4]; 4], [f32; 16]>(self.0) }
+    }
+}
