@@ -1,124 +1,41 @@
+mod context;
+pub mod input;
+mod scene;
+mod time;
+mod window;
+
 use std::ffi;
 use std::ffi::CString;
 
 use sokol::app as sapp;
 use sokol::gfx as sg;
 use sokol::glue as sglue;
+use utils::FastHashMap;
+
+use crate::context::Context;
+pub use crate::context::ContextRef;
+pub use crate::context::ContextRefMut;
+pub use crate::scene::Scene;
+pub use crate::scene::Scenes;
+pub use crate::window::Window;
 
 /// Live handle to the OS window. Cached fields are refreshed once per
 /// frame from sokol_app; setters call straight through to sokol_app so
 /// changes (e.g. title) take effect immediately.
-///
-/// NOTE: verify the exact `sapp::` function names/signatures against the
-/// version of the `sokol` crate you're using — sokol_app's C API is
-/// `sapp_set_window_title`, `sapp_request_quit`, `sapp_toggle_fullscreen`,
-/// `sapp_is_fullscreen`, etc, and the Rust bindings should mirror these in
-/// snake_case, but exact naming can drift between crate versions.
-pub struct Window {
-    title: String,
-    width: i32,
-    height: i32,
-}
-
-impl Window {
-    fn new(title: &str, width: i32, height: i32) -> Self {
-        Self {
-            title: title.to_string(),
-            width,
-            height,
-        }
-    }
-
-    /// Pull current values from sokol_app. Called once per frame since the
-    /// window can be resized by the OS/user at any time.
-    fn sync(&mut self) {
-        self.width = sapp::width();
-        self.height = sapp::height();
-    }
-
-    pub fn title(&self) -> &str {
-        &self.title
-    }
-
-    /// Change the window title at runtime.
-    pub fn set_title(&mut self, title: &str) {
-        self.title = title.to_string();
-        sapp::set_window_title(title);
-    }
-
-    pub fn width(&self) -> i32 {
-        self.width
-    }
-
-    pub fn height(&self) -> i32 {
-        self.height
-    }
-
-    pub fn aspect(&self) -> f32 {
-        self.width as f32 / self.height as f32
-    }
-
-    pub fn is_fullscreen(&self) -> bool {
-        sapp::is_fullscreen()
-    }
-
-    pub fn toggle_fullscreen(&self) {
-        sapp::toggle_fullscreen();
-    }
-
-    pub fn request_quit(&self) {
-        sapp::request_quit();
-    }
-}
 
 /// Per-frame handle passed into every Scene callback. Add whatever else
 /// you need here (input state, elapsed time, asset caches, etc.).
-pub struct Context {
-    pub window: Window,
-}
-
-impl Context {
-    fn new(window: Window) -> Self {
-        Self { window }
-    }
-
-    fn sync(&mut self) {
-        self.window.sync();
-    }
-}
-
-/// Implement this for your game/demo. Mirrors love2d's load/update/draw.
-pub trait Scene {
-    fn load(&mut self, ctx: &mut Context) {
-        let _ = ctx;
-    }
-    fn update(&mut self, ctx: &mut Context, dt: f32) {
-        let _ = (ctx, dt);
-    }
-    fn draw(&mut self, ctx: &mut Context) {
-        let _ = ctx;
-    }
-    fn cleanup(&mut self, ctx: &mut Context) {
-        let _ = ctx;
-    }
-}
+// Context
 
 /// Fluent config for the initial window/app parameters.
 pub struct WindowBuilder {
     title: String,
-    width: i32,
-    height: i32,
-    sample_count: i32,
+    size: math::Size<u32>,
 }
 
 impl WindowBuilder {
     pub fn new() -> Self {
-        Self {
-            title: "app".to_string(),
-            width: 800,
-            height: 600,
-            sample_count: 4,
-        }
+        Self::default()
     }
 
     pub fn with_title(mut self, title: &str) -> Self {
@@ -126,28 +43,31 @@ impl WindowBuilder {
         self
     }
 
-    pub fn with_size(mut self, width: i32, height: i32) -> Self {
-        self.width = width;
-        self.height = height;
+    pub fn with_size<S: Into<math::Size<u32>>>(mut self, size: S) -> Self {
+        let size: math::Size<u32> = size.into();
+
+        self.size = size;
         self
     }
 
-    pub fn with_sample_count(mut self, sample_count: i32) -> Self {
-        self.sample_count = sample_count;
-        self
+    pub fn build(self) -> Window {
+        Window::new(self.title, self.size)
     }
 }
 
 impl Default for WindowBuilder {
     fn default() -> Self {
-        Self::new()
+        Self {
+            title: "incredible window".to_owned(),
+            size: math::Size::new(1280, 720),
+        }
     }
 }
 
 /// Entry point: `App::builder().with_window(...).with_scene(...).run()`
 pub struct AppBuilder {
     window: WindowBuilder,
-    scene: Option<Box<dyn Scene>>,
+    scenes: Scenes,
 }
 
 impl AppBuilder {
@@ -156,53 +76,56 @@ impl AppBuilder {
         self
     }
 
-    pub fn with_scene<S: Scene + 'static>(mut self, scene: S) -> Self {
-        self.scene = Some(Box::new(scene));
+    pub fn with_scene<S: Scene + 'static>(mut self, label: String, scene: S) -> Self {
+        self.scenes.insert(label, Box::new(scene));
         self
     }
 
-    pub fn run(self) {
-        let scene = self
-            .scene
-            .expect("AppBuilder::run called without a scene (use .with_scene(...))");
+    pub fn build(self) -> App {
         App {
-            window: self.window,
-            scene,
+            scenes: self.scenes,
+            queued_window: self.window,
         }
-        .run();
     }
 }
 
 pub struct App {
-    window: WindowBuilder,
-    scene: Box<dyn Scene>,
+    queued_window: WindowBuilder,
+    scenes: Scenes,
 }
 
 /// Everything the C callbacks need, boxed once and passed through as
 /// sokol_app's void* user_data.
+
 struct AppState {
-    scene: Box<dyn Scene>,
+    scenes: Scenes,
     ctx: Context,
 }
 
 impl App {
     pub fn builder() -> AppBuilder {
         AppBuilder {
+            scenes: FastHashMap::default(),
             window: WindowBuilder::new(),
-            scene: None,
         }
     }
 
-    fn run(self) {
-        let window = Window::new(&self.window.title, self.window.width, self.window.height);
+    pub fn run(self) {
+        let window = Window::new(self.queued_window.title, self.queued_window.size);
+
         let state = AppState {
-            scene: self.scene,
             ctx: Context::new(window),
+            scenes: self.scenes,
         };
+
+        let title = state.ctx.window.title().to_string();
+        let win_size = state.ctx.window.size();
+
         let user_data = Box::into_raw(Box::new(state)) as *mut ffi::c_void;
 
         extern "C" fn init_cb(user_data: *mut ffi::c_void) {
             let state = unsafe { &mut *(user_data as *mut AppState) };
+
             sg::setup(&sg::Desc {
                 environment: sglue::environment(),
                 logger: sg::Logger {
@@ -211,33 +134,80 @@ impl App {
                 },
                 ..Default::default()
             });
-            state.ctx.sync();
-            state.scene.load(&mut state.ctx);
+
+            state
+                .scenes
+                .get_mut("initial")
+                .unwrap()
+                .load(state.ctx.as_mut());
         }
 
         extern "C" fn frame_cb(user_data: *mut ffi::c_void) {
             let state = unsafe { &mut *(user_data as *mut AppState) };
-            state.ctx.sync();
-            let dt = sapp::frame_duration() as f32;
-            state.scene.update(&mut state.ctx, dt);
-            state.scene.draw(&mut state.ctx);
+
+            while let Some(tick_start) = state.ctx.time.next_tick() {
+                if let Some(scene) = state.scenes.get_mut("initial") {
+                    scene.fixed_update(state.ctx.as_mut());
+                }
+
+                state.ctx.time.do_tick(tick_start);
+            }
+
+            if let Some(scene) = state.scenes.get_mut("initial") {
+                scene.update(state.ctx.as_mut());
+                scene.draw(state.ctx.as_ref());
+            }
+
+            state.ctx.input.flush();
+            state.ctx.time.wait_for_next_frame();
         }
 
         extern "C" fn cleanup_cb(user_data: *mut ffi::c_void) {
-            let mut state = unsafe { Box::from_raw(user_data as *mut AppState) };
-            state.scene.cleanup(&mut state.ctx);
+            let state = unsafe { &mut *(user_data as *mut AppState) };
+
+            for scene in state.scenes.values_mut() {
+                scene.cleanup(state.ctx.as_mut());
+            }
+
             sg::shutdown();
         }
+
+        extern "C" fn event_cb(event: *const sapp::Event, user_data: *mut ffi::c_void) {
+            let state = unsafe { &mut *(user_data as *mut AppState) };
+            let event = unsafe { &*event };
+
+            match event._type {
+                sapp::EventType::KeyDown => {
+                    let k = event.key_code;
+
+                    if !event.key_repeat {
+                        state.ctx.input.pressed_keys.insert(k);
+                    }
+
+                    state.ctx.input.held_keys.insert(k);
+                }
+
+                sapp::EventType::KeyUp => {
+                    let k = event.key_code;
+
+                    state.ctx.input.held_keys.remove(&k);
+                    state.ctx.input.released_keys.insert(k);
+                }
+                _ => {}
+            }
+        }
+
+        let title = CString::new(title).unwrap();
 
         sapp::run(&sapp::Desc {
             init_userdata_cb: Some(init_cb),
             frame_userdata_cb: Some(frame_cb),
             cleanup_userdata_cb: Some(cleanup_cb),
+            event_userdata_cb: Some(event_cb),
             user_data,
-            window_title: CString::new(self.window.title).unwrap().as_ptr(),
-            width: self.window.width,
-            height: self.window.height,
-            sample_count: self.window.sample_count,
+            window_title: title.as_ptr(),
+            width: win_size.width as i32,
+            height: win_size.height as i32,
             logger: sapp::Logger {
                 func: Some(sokol::log::slog_func),
                 ..Default::default()
@@ -246,13 +216,8 @@ impl App {
                 sokol_default: true,
                 ..Default::default()
             },
+            swap_interval: 0,
             ..Default::default()
         });
     }
 }
-
-// ---------------------------------------------------------------------
-// Example usage
-// ---------------------------------------------------------------------
-
-pub fn run() {}
