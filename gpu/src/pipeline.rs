@@ -1,5 +1,4 @@
 use logging::debug;
-use logging::info;
 use utils::FastHashMap;
 
 use crate::GpuState;
@@ -39,7 +38,7 @@ fn build_pipeline(
                 module: shader,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[desc.vertex_layout.clone()],
+                buffers: &[Some(desc.vertex_layout.clone())],
             },
             fragment: Some(wgpu::FragmentState {
                 module: shader,

@@ -37,6 +37,18 @@ impl<'r> Draw<'r> {
         self.point(pos.x, pos.y);
     }
 
+    pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
+        let layer = self.renderer.active_layer_mut();
+        layer.immediate.push_line(x1, y1, x2, y2, self.color);
+    }
+
+    pub fn line_v<P: Into<Vector2<f32>>, Q: Into<Vector2<f32>>>(&mut self, pos1: P, pos2: Q) {
+        let pos1: Vector2<f32> = pos1.into();
+        let pos2: Vector2<f32> = pos2.into();
+
+        self.line(pos1.x, pos1.y, pos2.x, pos2.y);
+    }
+
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
         let layer = self.renderer.active_layer_mut();
         layer.immediate.push_quad(x, y, w, h, self.color);

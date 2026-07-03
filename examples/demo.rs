@@ -9,7 +9,6 @@ use karna::math::Vector2;
 use karna::render::Color;
 use karna::render::Draw;
 use log::LevelFilter;
-use log::error;
 
 struct S {
     pos: Vector2<f32>,
@@ -18,13 +17,7 @@ struct S {
 }
 
 impl Scene for S {
-    fn load(&mut self, ctx: ContextRefMut) {
-        ctx.time.set_target_fps(120);
-
-        if let Some(m) = ctx.monitors.current() {
-            error!("monitor {} - {} hz", m.name(), m.refresh_rate());
-        }
-    }
+    fn load(&mut self, ctx: ContextRefMut) {}
 
     fn fixed_update(&mut self, ctx: ContextRefMut) {
         const VEL: f32 = 250.0;
@@ -69,6 +62,9 @@ impl Scene for S {
 
         draw.set_color(Color::Red);
         draw.rect(render_pos.x, render_pos.y, 50.0, 50.0);
+
+        draw.set_color(Color::Magenta);
+        draw.line_v([10.0, 50.0], [124.0, 478.0]);
     }
 }
 

@@ -61,6 +61,7 @@ impl Renderer {
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
+            color_space: wgpu::SurfaceColorSpace::Auto,
         };
 
         (surface, config)
@@ -245,6 +246,6 @@ impl Renderer {
         }
 
         gpu.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
+        gpu.queue.present(output);
     }
 }

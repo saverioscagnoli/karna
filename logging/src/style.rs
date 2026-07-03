@@ -2,25 +2,23 @@ use std::fmt;
 
 use log::kv;
 
-use crate::Timestamp;
-
 pub trait Formatter: Send + Sync {
-    fn format(&self, record: &log::Record, timestamp: Timestamp) -> String;
+    fn format(&self, record: &log::Record) -> String;
 }
 
 pub struct DefaultFormatter;
 
 impl Formatter for DefaultFormatter {
-    fn format(&self, record: &log::Record, _: Timestamp) -> String {
-        let color = match record.level() {
-            log::Level::Trace => Color::Cyan,
-            log::Level::Debug => Color::Blue,
-            log::Level::Info => Color::Green,
-            log::Level::Warn => Color::Yellow,
-            log::Level::Error => Color::Red,
+    fn format(&self, record: &log::Record) -> String {
+        let (name, color) = match record.level() {
+            log::Level::Trace => ("TRCE", Color::Cyan),
+            log::Level::Debug => ("DEBG", Color::Blue),
+            log::Level::Info => ("INFO", Color::Green),
+            log::Level::Warn => ("WARN", Color::Yellow),
+            log::Level::Error => ("ERRO", Color::Red),
         };
 
-        let level = format!("[{}]", record.level()).color(color);
+        let level = format!("[{}]", name).color(color);
         let target = format!("[{}]", record.target()).color(Color::BrightBlack);
 
         // collect key-value pairs

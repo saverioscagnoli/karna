@@ -5,7 +5,6 @@ mod shaders;
 use std::sync::OnceLock;
 
 use logging::debug;
-use wgpu::naga::back;
 
 pub use crate::buffer::Buffer;
 pub use crate::pipeline::PipelineCache;
@@ -65,6 +64,7 @@ impl GpuState {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: None,
                 force_fallback_adapter: false,
+                ..Default::default()
             })
             .await
             .expect("Failed to request adapter");

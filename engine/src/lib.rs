@@ -107,6 +107,7 @@ impl App {
 
         ctrlc::set_handler(move || {
             _ = proxy.send_event(UserEvent::Shutdown);
+            info!("Shutdown requested");
         })
         .expect("Failed to set Ctrl+C handler");
 
@@ -214,7 +215,7 @@ impl ApplicationHandler<UserEvent> for App {
 
                 let monitors = Monitors::collect(event_loop);
 
-                info!("queried {} monitor(s)", monitors.len());
+                info!("Monitor(s) detected: {}", monitors.len());
 
                 if let Err(e) = window.sender.send(AppEvent::QueryMonitors(monitors)) {
                     warn!(e:err;"Dropped event '{:?}'", event);
@@ -223,7 +224,7 @@ impl ApplicationHandler<UserEvent> for App {
 
             event => {
                 let Some(window) = self.windows.get(&window_id) else {
-                    debug!("Event received on a non existing window");
+                    warn!("Event received on a non existing window (expected during shutdown)");
                     return;
                 };
 

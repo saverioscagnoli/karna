@@ -12,6 +12,7 @@ use crate::vertex;
 
 pub struct ImmediateRenderer {
     pub(crate) point_batcher: Batcher<Vertex>,
+    pub(crate) line_batcher: Batcher<Vertex>,
     pub(crate) triangle_batcher: Batcher<Vertex>,
 }
 
@@ -19,6 +20,7 @@ impl ImmediateRenderer {
     pub(crate) fn new() -> Self {
         Self {
             point_batcher: Batcher::new(),
+            line_batcher: Batcher::new(),
             triangle_batcher: Batcher::new(),
         }
     }
@@ -31,6 +33,20 @@ impl ImmediateRenderer {
             .push(vertex!([x, y, 0.0], color, [0.0, 0.0]));
 
         self.point_batcher.indices.push(base);
+    }
+
+    pub fn push_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, color: Vector4<f32>) {
+        let base = self.line_batcher.vertex_count();
+
+        self.line_batcher
+            .vertices
+            .push(vertex!([x1, y1, 0.0], color, [0.0, 0.0]));
+        self.line_batcher
+            .vertices
+            .push(vertex!([x2, y2, 0.0], color, [1.0, 1.0]));
+
+        self.line_batcher.indices.push(base);
+        self.line_batcher.indices.push(base + 1);
     }
 
     pub fn push_quad(&mut self, x: f32, y: f32, w: f32, h: f32, color: Vector4<f32>) {
@@ -64,6 +80,15 @@ impl ImmediateRenderer {
 
         self.point_batcher
             .present(rp, pipelines.get_pipeline(&desc));
+
+        let desc = gpu::PipelineDesc {
+            shader: "immediate-2d",
+            vertex_layout: Vertex::desc(),
+            blend: wgpu::BlendState::ALPHA_BLENDING,
+            topology: wgpu::PrimitiveTopology::LineList,
+        };
+
+        self.line_batcher.present(rp, pipelines.get_pipeline(&desc));
 
         let desc = gpu::PipelineDesc {
             shader: "immediate-2d",
