@@ -12,13 +12,13 @@ impl<V> Batcher<V> {
         let vertex_buffer = gpu::Buffer::new_with_capacity(
             "immediate vertex buffer",
             wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            1024,
+            10000,
         );
 
         let index_buffer = gpu::Buffer::new_with_capacity(
             "immediate index buffer",
             wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-            1024,
+            10000,
         );
 
         Self {

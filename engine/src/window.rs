@@ -29,6 +29,10 @@ impl Window {
         self.inner.inner_size().height
     }
 
+    pub fn scale_factor(&self) -> f64 {
+        self.inner.scale_factor()
+    }
+
     pub(crate) fn request_redraw(&self) {
         self.inner.request_redraw();
     }

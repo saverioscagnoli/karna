@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["engine", "gpu","logging", "math", "renderer", "utils"]
+members = ["assets","engine", "gpu","logging", "math", "renderer", "utils"]
 
 [workspace.dependencies]
 parking_lot = "0.12.5"
@@ -15,6 +15,7 @@ math = {path = "math" }
 logging = { path = "logging" }
 gpu = { path = "gpu" }
 renderer = { path = "renderer" }
+assets = { path = "assets" }
 
 
 [dependencies]
@@ -22,6 +23,8 @@ logging.workspace = true
 engine = { path = "engine" }
 math.workspace = true
 renderer.workspace = true
+assets.workspace = true
+utils.workspace = true
 
 [dev-dependencies]
 log = "0.4.33"

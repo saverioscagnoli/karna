@@ -79,6 +79,7 @@ impl Vertex {
 
 #[macro_export]
 macro_rules! vertex {
+    // position, color as [r,g,b,a], uv as [u,v]
     (
         [$px:expr, $py:expr, $pz:expr],
         [$cr:expr, $cg:expr, $cb:expr, $ca:expr],
@@ -91,6 +92,20 @@ macro_rules! vertex {
         )
     };
 
+    // position, color as [r,g,b,a], uv as Vector2 expr
+    (
+        [$px:expr, $py:expr, $pz:expr],
+        [$cr:expr, $cg:expr, $cb:expr, $ca:expr],
+        $uv:expr
+    ) => {
+        Vertex::new(
+            Vector3::new($px as f32, $py as f32, $pz as f32),
+            Vector4::new($cr as f32, $cg as f32, $cb as f32, $ca as f32),
+            $uv,
+        )
+    };
+
+    // position, color as expr (e.g. existing Vector4), uv as [u,v]
     (
         [$px:expr, $py:expr, $pz:expr],
         $color:expr,
@@ -100,6 +115,19 @@ macro_rules! vertex {
             Vector3::new($px as f32, $py as f32, $pz as f32),
             $color,
             Vector2::new($u as f32, $v as f32),
+        )
+    };
+
+    // position, color as expr, uv as Vector2 expr
+    (
+        [$px:expr, $py:expr, $pz:expr],
+        $color:expr,
+        $uv:expr
+    ) => {
+        Vertex::new(
+            Vector3::new($px as f32, $py as f32, $pz as f32),
+            $color,
+            $uv,
         )
     };
 }

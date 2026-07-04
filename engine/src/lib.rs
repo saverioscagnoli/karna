@@ -12,8 +12,8 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
 
+use assets::AssetServer;
 use gpu::GpuState;
-use logging::debug;
 use logging::error;
 use logging::info;
 use logging::warn;
@@ -139,15 +139,28 @@ impl App {
         // On Windows, the surface must be created on the winit thread,
         // hence why the renderer creation is split.
         // If we were to create the renderer in the thread::spawn it would crash
-        let (surface, config) = Renderer::create_surface(winit_window.clone());
+        let (surface, config) = Renderer::_create_surface(winit_window.clone());
 
         let thread_handle = thread::spawn(move || {
             let window = Window::new(winit_window);
-            let renderer = Renderer::from_surface(surface, config);
+            let assets = AssetServer::_new();
+
+            info!("Asset server initialization complete");
+
+            let renderer = Renderer::_from_surface(surface, config, assets._guard());
 
             info!("Renderer initialization complete");
 
-            WindowState::new(rx, window, renderer, scenes, active_scenes, monitors).start_loop();
+            WindowState::new(
+                rx,
+                window,
+                assets,
+                renderer,
+                scenes,
+                active_scenes,
+                monitors,
+            )
+            .start_loop();
         });
 
         let window_handle = WindowHandle {

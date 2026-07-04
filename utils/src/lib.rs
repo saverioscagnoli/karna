@@ -1,7 +1,9 @@
+mod byte_size;
 mod index_map;
 mod macros;
 mod mem;
 mod sleep;
+mod slot_map;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -9,9 +11,11 @@ use std::hash::BuildHasher;
 use std::hash::BuildHasherDefault;
 use std::hash::Hasher;
 
+pub use crate::byte_size::*;
 pub use crate::index_map::*;
 pub use crate::mem::*;
 pub use crate::sleep::*;
+pub use crate::slot_map::*;
 
 pub struct IdentityHasher(u64);
 

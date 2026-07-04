@@ -1,13 +1,21 @@
+use std::fmt;
+
 use num::Float;
 use num::Num;
 use winit::dpi::PhysicalSize;
 
 use crate::Vector2;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Size<T: Num + Copy> {
     pub width: T,
     pub height: T,
+}
+
+impl<T: fmt::Display + Num + Copy> fmt::Debug for Size<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}x{}", self.width, self.height)
+    }
 }
 
 impl<T: Num + Copy> Size<T> {

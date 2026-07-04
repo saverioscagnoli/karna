@@ -4,6 +4,7 @@ mod immediate;
 mod layer;
 mod vertex;
 
+use assets::AssetServerGuard;
 use gpu::GpuState;
 use gpu::PipelineCache;
 use math::Size;
@@ -20,6 +21,7 @@ pub use crate::vertex::Vertex;
 pub struct Renderer {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
+    cached_size: math::Size<u32>,
     is_surface_configured: bool,
     pipeline_cache: PipelineCache,
     camera_bgl: wgpu::BindGroupLayout,
@@ -35,7 +37,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn create_surface<S: Into<wgpu::SurfaceTarget<'static>>>(
+    pub fn _create_surface<S: Into<wgpu::SurfaceTarget<'static>>>(
         surface: S,
     ) -> (wgpu::Surface<'static>, wgpu::SurfaceConfiguration) {
         let gpu = GpuState::get();
@@ -69,6 +71,7 @@ impl Renderer {
 
     fn init_pipelines(
         camera_bgl: &wgpu::BindGroupLayout,
+        atlas_bgl: &wgpu::BindGroupLayout,
         format: wgpu::TextureFormat,
     ) -> PipelineCache {
         let mut cache = PipelineCache::new();
@@ -80,7 +83,7 @@ impl Renderer {
                 blend: wgpu::BlendState::ALPHA_BLENDING,
                 topology: wgpu::PrimitiveTopology::PointList,
             },
-            &[&camera_bgl],
+            &[camera_bgl, atlas_bgl],
             format,
         );
 
@@ -91,7 +94,7 @@ impl Renderer {
                 blend: wgpu::BlendState::ALPHA_BLENDING,
                 topology: wgpu::PrimitiveTopology::LineList,
             },
-            &[&camera_bgl],
+            &[camera_bgl, atlas_bgl],
             format,
         );
 
@@ -102,16 +105,17 @@ impl Renderer {
                 blend: wgpu::BlendState::ALPHA_BLENDING,
                 topology: wgpu::PrimitiveTopology::TriangleList,
             },
-            &[&camera_bgl],
+            &[&camera_bgl, atlas_bgl],
             format,
         );
 
         cache
     }
 
-    pub fn from_surface(
+    pub fn _from_surface<'a>(
         surface: wgpu::Surface<'static>,
         config: wgpu::SurfaceConfiguration,
+        assets: AssetServerGuard<'a>,
     ) -> Self {
         let camera_bgl = Camera::create_bind_group_layout();
 
@@ -131,11 +135,12 @@ impl Renderer {
         let debug_camera = Camera::new(Projection::standard_2d(size), &camera_bgl);
         layers.push(RenderLayer::new(debug_camera));
 
-        let pipeline_cache = Self::init_pipelines(&camera_bgl, config.format);
+        let pipeline_cache = Self::init_pipelines(&camera_bgl, &assets.atlas_bgl(), config.format);
 
         Self {
             surface,
             config,
+            cached_size: size,
             is_surface_configured: false,
             pipeline_cache,
             camera_bgl,
@@ -173,16 +178,22 @@ impl Renderer {
         &mut self.layers[self.active_layer.0]
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
+    pub fn size(&self) -> &math::Size<u32> {
+        &self.cached_size
+    }
+
+    pub fn _resize(&mut self, width: u32, height: u32) {
         let gpu = GpuState::get();
 
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&gpu.device, &self.config);
+        self.cached_size.width = width;
+        self.cached_size.height = height;
         self.is_surface_configured = true;
     }
 
-    pub fn present(&mut self) {
+    pub fn _present<'a>(&'a mut self, assets: &AssetServerGuard<'a>) {
         if !self.is_surface_configured {
             return;
         }
@@ -237,6 +248,8 @@ impl Renderer {
 
             for layer in &mut self.layers {
                 rp.set_bind_group(0, &layer.camera.bg, &[]);
+                rp.set_bind_group(1, assets.atlas_bg(), &[]);
+
                 layer.present(
                     Size::new(self.config.width, self.config.height),
                     &mut rp,

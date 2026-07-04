@@ -1,3 +1,5 @@
+pub use assets;
+pub use assets::Image;
 pub use engine::App;
 pub use engine::AppBuilder;
 pub use engine::ContextRef;
@@ -9,3 +11,4 @@ pub use engine::input;
 pub use logging;
 pub use math;
 pub use renderer as render;
+pub use utils::Handle;

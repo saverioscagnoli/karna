@@ -401,6 +401,10 @@ impl<T: Num + Copy> Vector4<T> {
         Self([x, y, z, w])
     }
 
+    pub fn xy(&self) -> Vector2<T> {
+        Vector([self.x, self.y])
+    }
+
     pub fn xyz(&self) -> Vector3<T> {
         Vector([self.x, self.y, self.z])
     }

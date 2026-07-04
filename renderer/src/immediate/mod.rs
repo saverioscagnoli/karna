@@ -1,6 +1,7 @@
 pub mod batcher;
 pub mod handle;
 
+use assets::AssetServerGuard;
 use gpu::PipelineCache;
 use math::Vector2;
 use math::Vector3;
@@ -25,49 +26,91 @@ impl ImmediateRenderer {
         }
     }
 
-    pub fn push_point(&mut self, x: f32, y: f32, color: Vector4<f32>) {
-        let base = self.point_batcher.vertex_count();
+    #[inline]
+    fn push<V: Copy>(batcher: &mut Batcher<V>, vertices: &[V], pattern: &[u32]) {
+        let base = batcher.vertex_count();
 
-        self.point_batcher
-            .vertices
-            .push(vertex!([x, y, 0.0], color, [0.0, 0.0]));
-
-        self.point_batcher.indices.push(base);
+        batcher.vertices.extend_from_slice(vertices);
+        batcher.indices.extend(pattern.iter().map(|i| base + i));
     }
 
-    pub fn push_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, color: Vector4<f32>) {
-        let base = self.line_batcher.vertex_count();
+    pub fn push_point<'a>(
+        &mut self,
+        x: f32,
+        y: f32,
+        color: Vector4<f32>,
+        assets: &AssetServerGuard<'a>,
+    ) {
+        let white = assets.white_handle();
+        let uv = assets.get_image(white).uv.xy();
+        let v = vertex!([x, y, 0.0], color, uv);
 
-        self.line_batcher
-            .vertices
-            .push(vertex!([x1, y1, 0.0], color, [0.0, 0.0]));
-        self.line_batcher
-            .vertices
-            .push(vertex!([x2, y2, 0.0], color, [1.0, 1.0]));
-
-        self.line_batcher.indices.push(base);
-        self.line_batcher.indices.push(base + 1);
+        Self::push(&mut self.point_batcher, &[v], &[0]);
     }
 
-    pub fn push_quad(&mut self, x: f32, y: f32, w: f32, h: f32, color: Vector4<f32>) {
-        let base = self.triangle_batcher.vertex_count();
-
-        let vertices: &[Vertex] = &[
-            vertex!([x, y, 0.0], color, [0.0, 0.0]),
-            vertex!([x + w, y, 0.0], color, [1.0, 0.0]),
-            vertex!([x, y + h, 0.0], color, [0.0, 1.0]),
-            vertex!([x + w, y + h, 0.0], color, [1.0, 1.0]),
+    pub fn push_line<'a>(
+        &mut self,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        color: Vector4<f32>,
+        assets: &AssetServerGuard<'a>,
+    ) {
+        let white = assets.white_handle();
+        let uv = assets.get_image(white).uv.xy();
+        let v = [
+            vertex!([x1, y1, 0.0], color, uv),
+            vertex!([x2, y2, 0.0], color, uv),
         ];
 
-        self.triangle_batcher.vertices.extend_from_slice(vertices);
-        self.triangle_batcher.indices.extend_from_slice(&[
-            base,
-            base + 1,
-            base + 2,
-            base + 2,
-            base + 1,
-            base + 3,
-        ]);
+        Self::push(&mut self.line_batcher, &v, &[0, 1]);
+    }
+
+    pub fn push_untextured_quad<'a>(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        color: Vector4<f32>,
+        assets: &AssetServerGuard<'a>,
+    ) {
+        let white = assets.white_handle();
+        let uv = assets.get_image(white).uv;
+        let uv_min = uv.xy();
+        let uv_max = Vector2::new(uv.x + uv.z, uv.y + uv.w);
+
+        let v = [
+            vertex!([x, y, 0.0], color, [uv_min.x, uv_min.y]),
+            vertex!([x + w, y, 0.0], color, [uv_max.x, uv_min.y]),
+            vertex!([x, y + h, 0.0], color, [uv_min.x, uv_max.y]),
+            vertex!([x + w, y + h, 0.0], color, [uv_max.x, uv_max.y]),
+        ];
+
+        Self::push(&mut self.triangle_batcher, &v, &[0, 1, 2, 2, 1, 3]);
+    }
+
+    pub fn push_textured_quad<'a>(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        color: math::Vector4<f32>,
+        uv: math::Vector4<f32>,
+    ) {
+        let uv_min = uv.xy();
+        let uv_max = Vector2::new(uv.x + uv.z, uv.y + uv.w); // (u0+uw, v0+vh)
+
+        let v = [
+            vertex!([x, y, 0.0], color, [uv_min.x, uv_min.y]), // top-left
+            vertex!([x + w, y, 0.0], color, [uv_max.x, uv_min.y]), // top-right
+            vertex!([x, y + h, 0.0], color, [uv_min.x, uv_max.y]), // bottom-left
+            vertex!([x + w, y + h, 0.0], color, [uv_max.x, uv_max.y]), // bottom-right
+        ];
+
+        Self::push(&mut self.triangle_batcher, &v, &[0, 1, 2, 2, 1, 3]);
     }
 
     pub fn present<'a>(&'a mut self, rp: &mut wgpu::RenderPass<'a>, pipelines: &PipelineCache) {

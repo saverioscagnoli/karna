@@ -1,5 +1,6 @@
 use std::sync::mpsc::Receiver;
 
+use assets::AssetServer;
 use logging::info;
 use renderer::Renderer;
 use winit::event::DeviceEvent;
@@ -24,13 +25,14 @@ impl WindowState {
     pub fn new(
         events: Receiver<AppEvent>,
         window: Window,
+        assets: AssetServer,
         renderer: Renderer,
         scenes: Scenes,
         active_scenes: Vec<String>,
         monitors: Vec<Monitor>,
     ) -> Self {
         let mut state = Self {
-            context: WindowContext::new(window, renderer, monitors),
+            context: WindowContext::new(window, assets, renderer, monitors),
             events,
             scenes,
             active_scenes: Vec::new(),
@@ -61,7 +63,7 @@ impl WindowState {
 
                     AppEvent::WindowEvent(WindowEvent::Resized(size)) => {
                         info!("Setting window size to {}x{}", size.width, size.height);
-                        self.context.renderer.resize(size.width, size.height);
+                        self.context.renderer._resize(size.width, size.height);
                     }
 
                     AppEvent::QueryMonitors(monitors) => {
@@ -151,7 +153,9 @@ impl WindowState {
                 }
             }
 
-            self.context.renderer.present();
+            self.context
+                .renderer
+                ._present(&self.context.assets._guard());
 
             let to_activate: Vec<_> = self.context.scenes.pending_activate.drain(..).collect();
             let to_deactivate: Vec<_> = self.context.scenes.pending_deactivate.drain(..).collect();
