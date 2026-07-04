@@ -3,7 +3,6 @@ mod image;
 
 use std::sync::Arc;
 
-use logging::error;
 use logging::info;
 use parking_lot::RwLock;
 use parking_lot::RwLockReadGuard;

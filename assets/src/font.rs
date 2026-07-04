@@ -1,6 +1,5 @@
 use ab_glyph::Font as AbGlyphFont;
 use ab_glyph::ScaleFont;
-use logging::debug;
 use utils::FastHashMap;
 use utils::Handle;
 use utils::SlotMap;
