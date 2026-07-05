@@ -37,7 +37,7 @@ pub struct Renderer {
     pub ui: LayerId,
     pub debug: LayerId,
 
-    imgui_renderer: ImguiRenderer,
+    pub(crate) imgui_renderer: ImguiRenderer,
 }
 
 impl Renderer {

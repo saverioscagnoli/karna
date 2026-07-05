@@ -176,6 +176,8 @@ impl<'r> Draw<'r> {
 
     pub fn imgui<F: FnOnce(&imgui::Ui)>(&mut self, f: F) {
         let ui = self.imgui.new_frame();
+        self.renderer.imgui_renderer.frame_created = true;
+
         f(ui);
     }
 }

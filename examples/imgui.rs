@@ -78,16 +78,6 @@ impl Scene for S {
         draw.set_color(Color::White);
         draw.rect(render_pos.x, render_pos.y, 50.0, 50.0);
 
-        draw.set_color(Color::Magenta);
-        draw.line_v([10.0, 50.0], [124.0, 478.0]);
-
-        draw.set_color(Color::White);
-        draw.debug_text(
-            format!("fps {}\ndt {:.6}s", ctx.time.fps(), ctx.time.delta()),
-            10.0,
-            10.0,
-        );
-
         draw.imgui(|ui| {
             self.fps_history.remove(0);
             self.fps_history.push(ctx.time.fps() as f32);

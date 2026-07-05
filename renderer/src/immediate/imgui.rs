@@ -22,6 +22,7 @@ pub struct ImguiRenderer {
     index_buffer: gpu::Buffer<u16>,
     ranges: Vec<ImguiListRange>,
     camera: Camera,
+    pub frame_created: bool,
 }
 
 impl ImguiRenderer {
@@ -73,10 +74,15 @@ impl ImguiRenderer {
             index_buffer,
             ranges: Vec::new(),
             camera,
+            frame_created: false,
         }
     }
 
     pub fn prepare(&mut self, ctx: &mut imgui::Context, size: math::Size<u32>) {
+        if !self.frame_created {
+            return;
+        }
+
         let draw_data = ctx.render();
 
         let fb_w = draw_data.display_size[0] * draw_data.framebuffer_scale[0];
@@ -130,6 +136,7 @@ impl ImguiRenderer {
         self.index_buffer.write(0, &indices);
         self.camera.update(size);
         self.ranges = ranges;
+        self.frame_created = false;
     }
 
     pub fn present<'a>(
