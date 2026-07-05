@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use std::mem;
 use std::ops::RangeBounds;
 
+use logging::debug;
 use wgpu::util::DeviceExt;
 
 use crate::GpuState;
@@ -94,37 +95,43 @@ impl<T> Buffer<T> {
             mapped_at_creation: false,
         });
 
+        debug!(
+            "Resized gpu buffer '{}' from {} to {}",
+            self.label, self.capacity, new_capacity
+        );
+
         self.capacity = new_capacity;
         self.len = self.len.min(new_capacity);
     }
 
     /// Write data to the buffer at a specific offset
-    pub fn write(&self, offset: u64, data: &[T]) {
+    pub fn write(&mut self, offset: u64, data: &[T]) {
+        if data.len() > self.capacity {
+            self.resize(data.len());
+        }
+
         let gpu = GpuState::get();
 
         gpu.queue
             .write_buffer(&self.inner, offset, utils::as_u8_slice(data));
+
+        self.len = data.len();
     }
 
     /// Write a single element at a specific byte offset
-    pub fn write_at(&self, byte_offset: u64, data: &[T]) {
+    pub fn write_at(&mut self, byte_offset: u64, data: &[T]) {
         self.write(byte_offset, data);
     }
 
     /// Write data starting from element index
-    pub fn write_from_index(&self, index: usize, data: &[T]) {
+    pub fn write_from_index(&mut self, index: usize, data: &[T]) {
         let byte_offset = (index * mem::size_of::<T>()) as u64;
         self.write(byte_offset, data);
     }
 
     /// Replace all buffer contents
     pub fn write_all(&mut self, data: &[T]) {
-        if data.len() > self.capacity {
-            self.resize(data.len());
-        }
-
         self.write(0, data);
-        self.len = data.len();
     }
 
     /// Get a slice of the buffer

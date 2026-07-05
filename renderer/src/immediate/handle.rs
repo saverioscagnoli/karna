@@ -14,15 +14,21 @@ pub struct Draw<'r> {
     color: Vector4<f32>,
     renderer: &'r mut Renderer,
     assets: AssetServerGuard<'r>,
+    imgui: &'r mut imgui::Context,
 }
 
 impl<'r> Draw<'r> {
     #[doc(hidden)]
-    pub fn _new(r: &'r mut Renderer, assets: AssetServerGuard<'r>) -> Self {
+    pub fn _new(
+        r: &'r mut Renderer,
+        assets: AssetServerGuard<'r>,
+        imgui: &'r mut imgui::Context,
+    ) -> Self {
         Self {
             color: Color::White.into(),
             renderer: r,
             assets,
+            imgui,
         }
     }
 
@@ -32,6 +38,14 @@ impl<'r> Draw<'r> {
 
     pub fn set_color<C: Into<Vector4<f32>>>(&mut self, color: C) {
         self.color = color.into();
+    }
+
+    pub fn clear_color(&self) -> Color {
+        self.renderer.clear_color.into()
+    }
+
+    pub fn set_clear_color<C: Into<Vector4<f32>>>(&mut self, color: C) {
+        self.renderer.clear_color = color.into()
     }
 
     pub fn point(&mut self, x: f32, y: f32) {
@@ -158,5 +172,10 @@ impl<'r> Draw<'r> {
         let pos: math::Vector2<f32> = pos.into();
 
         self.debug_text(text, pos.x, pos.y);
+    }
+
+    pub fn imgui<F: FnOnce(&imgui::Ui)>(&mut self, f: F) {
+        let ui = self.imgui.new_frame();
+        f(ui);
     }
 }

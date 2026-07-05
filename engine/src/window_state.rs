@@ -4,7 +4,6 @@ use assets::AssetServer;
 use logging::info;
 use renderer::Renderer;
 use winit::event::DeviceEvent;
-use winit::event::MouseButton;
 use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent;
 use winit::keyboard::PhysicalKey;
@@ -31,9 +30,10 @@ impl WindowState {
         scenes: Scenes,
         active_scenes: Vec<String>,
         monitors: Vec<Monitor>,
+        imgui: imgui::Context,
     ) -> Self {
         let mut state = Self {
-            context: WindowContext::new(window, assets, renderer, monitors),
+            context: WindowContext::new(window, assets, renderer, monitors, imgui),
             events,
             scenes,
             active_scenes: Vec::new(),
@@ -107,12 +107,16 @@ impl WindowState {
                             }
                         }
 
-                        WindowEvent::MouseWheel { delta, .. } => {
-                            self.context.input.wheel_delta = match delta {
-                                MouseScrollDelta::LineDelta(_x, y) => y,
-                                MouseScrollDelta::PixelDelta(pos) => pos.y as f32,
+                        WindowEvent::MouseWheel { delta, .. } => match delta {
+                            MouseScrollDelta::LineDelta(x, y) => {
+                                self.context.input.wheel_delta.set([x, y])
                             }
-                        }
+                            MouseScrollDelta::PixelDelta(pos) => self
+                                .context
+                                .input
+                                .wheel_delta
+                                .set([pos.x as f32, pos.y as f32]),
+                        },
 
                         _ => {}
                     },
@@ -129,6 +133,8 @@ impl WindowState {
                     },
                 }
             }
+
+            self.context.update_imgui();
 
             for label in &self.active_scenes {
                 if let Some(scene) = self.scenes.get_mut(label) {
@@ -154,40 +160,9 @@ impl WindowState {
                 }
             }
 
-            let m = self.context.input.mouse_position();
-            let io = self.context.renderer.imgui().io_mut();
-
-            io.delta_time = self.context.time.delta();
-            io.display_size = [
-                self.context.window.width() as f32,
-                self.context.window.height() as f32,
-            ];
-            io.mouse_pos = [m.x, m.y];
-
-            io.mouse_down = [
-                self.context.input.mouse_held(&MouseButton::Left),
-                self.context.input.mouse_held(&MouseButton::Right),
-                self.context.input.mouse_held(&MouseButton::Middle),
-                false,
-                false,
-            ];
-
-            let ui = self.context.renderer.imgui().new_frame();
-
-            ui.window("Debug")
-                .size([300.0, 200.0], imgui::Condition::FirstUseEver)
-                .build(|| {
-                    ui.text("Hello from imgui!");
-                    if ui.button("Click me") {
-                        println!("clicked");
-                    }
-                });
-
-            ui.show_demo_window(&mut true);
-
             self.context
                 .renderer
-                ._present(&self.context.assets._guard());
+                ._present(&self.context.assets._guard(), &mut self.context.imgui);
 
             let to_activate: Vec<_> = self.context.scenes.pending_activate.drain(..).collect();
             let to_deactivate: Vec<_> = self.context.scenes.pending_deactivate.drain(..).collect();
@@ -207,6 +182,7 @@ impl WindowState {
                 self.active_scenes.retain(|s| s != &label);
             }
 
+            self.context.input.flush();
             self.context.window.request_redraw();
             self.context.time.wait_for_next_frame();
         }

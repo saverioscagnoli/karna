@@ -12,7 +12,7 @@ pub struct Input {
     // Mouse
     pub(crate) mouse_position: Vector2<f32>,
     pub(crate) mouse_delta: Vector2<f32>,
-    pub(crate) wheel_delta: f32,
+    pub(crate) wheel_delta: Vector2<f32>,
     pub(crate) held_mouse_buttons: FastHashSet<MouseButton>,
     pub(crate) pressed_mouse_buttons: FastHashSet<MouseButton>,
 }
@@ -25,7 +25,7 @@ impl Input {
             released_keys: FastHashSet::default(),
             mouse_position: Vector2::zero(),
             mouse_delta: Vector2::zero(),
-            wheel_delta: 0.0,
+            wheel_delta: Vector2::zero(),
             held_mouse_buttons: FastHashSet::default(),
             pressed_mouse_buttons: FastHashSet::default(),
         }
@@ -56,8 +56,8 @@ impl Input {
         &self.mouse_delta
     }
 
-    pub fn whele_delta(&self) -> f32 {
-        self.wheel_delta
+    pub fn whele_delta(&self) -> &Vector2<f32> {
+        &self.wheel_delta
     }
 
     /// Returns true if the given mouse button is being held down
@@ -81,6 +81,6 @@ impl Input {
         self.released_keys.clear();
         self.pressed_mouse_buttons.clear();
         self.mouse_delta.set([0.0, 0.0]);
-        self.wheel_delta = 0.0;
+        self.wheel_delta.set([0.0, 0.0]);
     }
 }

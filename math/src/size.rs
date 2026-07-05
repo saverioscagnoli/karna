@@ -92,6 +92,12 @@ impl<T: Num + Copy> Into<Vector2<T>> for Size<T> {
     }
 }
 
+impl<T: Num + Copy> Into<[T; 2]> for Size<T> {
+    fn into(self) -> [T; 2] {
+        [self.width, self.height]
+    }
+}
+
 impl<T: Num + Copy> From<PhysicalSize<T>> for Size<T> {
     fn from(value: PhysicalSize<T>) -> Self {
         Self::new(value.width, value.height)

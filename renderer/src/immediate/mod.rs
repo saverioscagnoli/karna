@@ -1,5 +1,6 @@
 pub mod batcher;
 pub mod handle;
+pub mod imgui;
 
 use assets::AssetServerGuard;
 use gpu::PipelineCache;

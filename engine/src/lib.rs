@@ -135,6 +135,7 @@ impl App {
         // otherwise, in the inital scene loading, the
         // vector will be empty
         let monitors = Monitors::collect(event_loop);
+        let assets = AssetServer::_new();
 
         // On Windows, the surface must be created on the winit thread,
         // hence why the renderer creation is split.
@@ -143,11 +144,13 @@ impl App {
 
         let thread_handle = thread::spawn(move || {
             let window = Window::new(winit_window);
-            let assets = AssetServer::_new();
+            let mut imgui = imgui::Context::create();
+
+            imgui.set_ini_filename(None);
 
             info!("Asset server initialization complete");
 
-            let renderer = Renderer::_from_surface(surface, config, assets._guard());
+            let renderer = Renderer::_from_surface(surface, config, assets._guard(), &mut imgui);
 
             info!("Renderer initialization complete");
 
@@ -159,6 +162,7 @@ impl App {
                 scenes,
                 active_scenes,
                 monitors,
+                imgui,
             )
             .start_loop();
         });
