@@ -82,6 +82,9 @@ impl Scene for S {
         draw.set_color(Color::White);
         draw.image(self.image, render_pos.x, render_pos.y);
 
+        draw.set_color(Color::Cyan);
+        draw.circle(300.0, 300.0, 50.0);
+
         draw.set_color(Color::Magenta);
         draw.line_v([10.0, 50.0], [124.0, 478.0]);
 

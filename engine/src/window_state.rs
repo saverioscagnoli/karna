@@ -1,6 +1,8 @@
 use std::sync::mpsc::Receiver;
 
 use assets::AssetServer;
+use imgui::ActiveImgui;
+use imgui::SharedImgui;
 use logging::info;
 use renderer::Renderer;
 use winit::event::DeviceEvent;
@@ -30,7 +32,7 @@ impl WindowState {
         scenes: Scenes,
         active_scenes: Vec<String>,
         monitors: Vec<Monitor>,
-        imgui: imgui::Context,
+        imgui: SharedImgui,
     ) -> Self {
         let mut state = Self {
             context: WindowContext::new(window, assets, renderer, monitors, imgui),
@@ -160,9 +162,12 @@ impl WindowState {
                 }
             }
 
-            self.context
-                .renderer
-                ._present(&self.context.assets._guard(), &mut self.context.imgui);
+            {
+                let mut imgui = ActiveImgui::new(&self.context.imgui, self.context.window.id());
+                self.context
+                    .renderer
+                    ._present(&self.context.assets._guard(), &mut imgui);
+            }
 
             let to_activate: Vec<_> = self.context.scenes.pending_activate.drain(..).collect();
             let to_deactivate: Vec<_> = self.context.scenes.pending_deactivate.drain(..).collect();

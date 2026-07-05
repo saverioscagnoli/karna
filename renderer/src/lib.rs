@@ -18,6 +18,7 @@ pub use crate::immediate::handle::Draw;
 use crate::immediate::imgui::ImguiRenderer;
 pub use crate::layer::LayerId;
 pub use crate::layer::RenderLayer;
+use crate::vertex::CircleVertex;
 pub use crate::vertex::Vertex;
 
 pub struct Renderer {
@@ -110,6 +111,17 @@ impl Renderer {
                 topology: wgpu::PrimitiveTopology::TriangleList,
             },
             &[&camera_bgl, atlas_bgl],
+            format,
+        );
+
+        cache.create_pipeline(
+            gpu::PipelineDesc {
+                shader: "immediate-2d-circles",
+                vertex_layout: CircleVertex::desc(),
+                blend: wgpu::BlendState::ALPHA_BLENDING,
+                topology: wgpu::PrimitiveTopology::TriangleList,
+            },
+            &[camera_bgl, atlas_bgl],
             format,
         );
 

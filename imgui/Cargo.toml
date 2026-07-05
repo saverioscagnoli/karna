@@ -1,0 +1,10 @@
+[package]
+name = "imgui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+imgui = "0.12.0"
+utils.workspace = true
+parking_lot.workspace = true
+winit.workspace = true

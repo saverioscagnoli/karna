@@ -2,6 +2,7 @@ use assets::AssetServerGuard;
 use assets::Font;
 use assets::Image;
 use glyph_brush_layout::GlyphPositioner;
+use imgui::ActiveImgui;
 use math::Size;
 use math::Vector2;
 use math::Vector4;
@@ -14,16 +15,12 @@ pub struct Draw<'r> {
     color: Vector4<f32>,
     renderer: &'r mut Renderer,
     assets: AssetServerGuard<'r>,
-    imgui: &'r mut imgui::Context,
+    imgui: ActiveImgui<'r>,
 }
 
 impl<'r> Draw<'r> {
     #[doc(hidden)]
-    pub fn _new(
-        r: &'r mut Renderer,
-        assets: AssetServerGuard<'r>,
-        imgui: &'r mut imgui::Context,
-    ) -> Self {
+    pub fn _new(r: &'r mut Renderer, assets: AssetServerGuard<'r>, imgui: ActiveImgui<'r>) -> Self {
         Self {
             color: Color::White.into(),
             renderer: r,
@@ -172,6 +169,25 @@ impl<'r> Draw<'r> {
         let pos: math::Vector2<f32> = pos.into();
 
         self.debug_text(text, pos.x, pos.y);
+    }
+
+    pub fn circle(&mut self, x: f32, y: f32, r: f32) {
+        let layer = self.renderer.active_layer_mut();
+        layer.immediate.push_cirlce(r, x, y, self.color);
+    }
+
+    pub fn circle_v<P: Into<Vector2<f32>>>(&mut self, pos: P, r: f32) {
+        let pos: Vector2<f32> = pos.into();
+        self.circle(pos.x, pos.y, r);
+    }
+
+    pub fn texture_atlas(&mut self, x: f32, y: f32) {
+        self.image(self.assets.atlas_handle(), x, y);
+    }
+
+    pub fn texture_atlas_v<P: Into<math::Vector2<f32>>>(&mut self, pos: P) {
+        let pos: math::Vector2<f32> = pos.into();
+        self.texture_atlas(pos.x, pos.y);
     }
 
     pub fn imgui<F: FnOnce(&imgui::Ui)>(&mut self, f: F) {

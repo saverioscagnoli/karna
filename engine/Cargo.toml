@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 winit.workspace = true
+parking_lot.workspace = true
 math.workspace = true
 assets.workspace = true
 logging.workspace = true

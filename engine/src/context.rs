@@ -1,5 +1,7 @@
 use assets::AssetServer;
 use assets::AssetServerGuard;
+use imgui::ActiveImgui;
+use imgui::SharedImgui;
 use renderer::Draw;
 use renderer::Renderer;
 use winit::event::MouseButton;
@@ -19,7 +21,7 @@ pub struct WindowContext {
     pub assets: AssetServer,
     pub scenes: SceneManager,
     pub renderer: Renderer,
-    pub imgui: imgui::Context,
+    pub imgui: SharedImgui,
     pub monitors: Monitors,
 }
 
@@ -29,7 +31,7 @@ impl WindowContext {
         assets: AssetServer,
         renderer: Renderer,
         monitors: Vec<Monitor>,
-        imgui: imgui::Context,
+        imgui: SharedImgui,
     ) -> Self {
         // Arc::clone
         let winit_window = window.inner.clone();
@@ -68,13 +70,16 @@ impl WindowContext {
             monitors: &self.monitors,
         };
 
-        let draw = Draw::_new(&mut self.renderer, self.assets._guard(), &mut self.imgui);
+        let imgui = ActiveImgui::new(&self.imgui, self.window.id());
+        let draw = Draw::_new(&mut self.renderer, self.assets._guard(), imgui);
 
         (ctx, draw)
     }
 
     pub fn update_imgui(&mut self) {
-        let io = self.imgui.io_mut();
+        let mut imgui = ActiveImgui::new(&self.imgui, self.window.id());
+        let io = imgui.io_mut();
+
         io.delta_time = self.time.delta();
         io.display_size = self.window.size().as_f32().into();
 

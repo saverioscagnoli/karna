@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["assets","engine", "gpu","logging", "math", "renderer", "utils"]
+members = ["assets","engine", "gpu", "imgui","logging", "math", "renderer", "utils"]
 
 [workspace.dependencies]
 parking_lot = "0.12.5"
@@ -16,7 +16,7 @@ logging = { path = "logging" }
 gpu = { path = "gpu" }
 renderer = { path = "renderer" }
 assets = { path = "assets" }
-imgui = "0.12.0"
+imgui = { path = "imgui" }
 
 
 [dependencies]

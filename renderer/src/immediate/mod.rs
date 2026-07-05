@@ -11,11 +11,13 @@ use math::Vector4;
 use crate::Vertex;
 use crate::immediate::batcher::Batcher;
 use crate::vertex;
+use crate::vertex::CircleVertex;
 
 pub struct ImmediateRenderer {
-    pub(crate) point_batcher: Batcher<Vertex>,
-    pub(crate) line_batcher: Batcher<Vertex>,
-    pub(crate) triangle_batcher: Batcher<Vertex>,
+    pub point_batcher: Batcher<Vertex>,
+    pub line_batcher: Batcher<Vertex>,
+    pub triangle_batcher: Batcher<Vertex>,
+    pub cirlce_batcher: Batcher<CircleVertex>,
 }
 
 impl ImmediateRenderer {
@@ -24,6 +26,7 @@ impl ImmediateRenderer {
             point_batcher: Batcher::new(),
             line_batcher: Batcher::new(),
             triangle_batcher: Batcher::new(),
+            cirlce_batcher: Batcher::new(),
         }
     }
 
@@ -114,6 +117,19 @@ impl ImmediateRenderer {
         Self::push(&mut self.triangle_batcher, &v, &[0, 1, 2, 2, 1, 3]);
     }
 
+    pub fn push_cirlce(&mut self, r: f32, x: f32, y: f32, color: math::Vector4<f32>) {
+        let center = Vector2::new(x, y);
+
+        let v = [
+            CircleVertex::new(Vector3::new(x - r, y - r, 0.0), color, center, r), // top-left
+            CircleVertex::new(Vector3::new(x + r, y - r, 0.0), color, center, r), // top-right
+            CircleVertex::new(Vector3::new(x - r, y + r, 0.0), color, center, r), // bottom-left
+            CircleVertex::new(Vector3::new(x + r, y + r, 0.0), color, center, r), // bottom-right
+        ];
+
+        Self::push(&mut self.cirlce_batcher, &v, &[0, 1, 2, 2, 1, 3]);
+    }
+
     pub fn present<'a>(&'a mut self, rp: &mut wgpu::RenderPass<'a>, pipelines: &PipelineCache) {
         let desc = gpu::PipelineDesc {
             shader: "immediate-2d",
@@ -142,6 +158,16 @@ impl ImmediateRenderer {
         };
 
         self.triangle_batcher
+            .present(rp, pipelines.get_pipeline(&desc));
+
+        let desc = gpu::PipelineDesc {
+            shader: "immediate-2d-circles",
+            vertex_layout: CircleVertex::desc(),
+            blend: wgpu::BlendState::ALPHA_BLENDING,
+            topology: wgpu::PrimitiveTopology::TriangleList,
+        };
+
+        self.cirlce_batcher
             .present(rp, pipelines.get_pipeline(&desc));
     }
 }

@@ -3,17 +3,19 @@ mod context;
 pub mod input;
 mod monitors;
 mod scene;
+mod shared;
 mod time;
 mod window;
 mod window_state;
 
 use std::mem;
+use std::mem::MaybeUninit;
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
 
-use assets::AssetServer;
 use gpu::GpuState;
+use imgui::ActiveImgui;
 use logging::error;
 use logging::info;
 use logging::warn;
@@ -41,6 +43,7 @@ use crate::monitors::Monitors;
 pub use crate::scene::Scene;
 pub use crate::scene::SceneManager;
 use crate::scene::Scenes;
+use crate::shared::SharedResources;
 pub use crate::window::Window;
 use crate::window::WindowHandle;
 use crate::window::WinitWindow;
@@ -59,6 +62,8 @@ enum UserEvent {
 pub struct App {
     enqueued_windows: Vec<WindowBuilder>,
     windows: FastHashMap<WindowId, WindowHandle>,
+
+    shared: MaybeUninit<SharedResources>,
 }
 
 impl App {
@@ -66,13 +71,17 @@ impl App {
         Self {
             windows: FastHashMap::default(),
             enqueued_windows: Vec::new(),
+            shared: MaybeUninit::zeroed(),
         }
     }
 
-    fn init(&self) {
+    fn init(&mut self) {
         gpu::init(|shader_store, d| {
             let immediate_2d_src = include_str!("../../shaders/immediate-2d.wgsl");
+            let immediate_2d_circles_src = include_str!("../../shaders/immediate-2d-circles.wgsl");
+
             shader_store.load("immediate-2d", immediate_2d_src, d);
+            shader_store.load("immediate-2d-circles", immediate_2d_circles_src, d);
 
             info!("Built-in shaders loaded");
         });
@@ -87,6 +96,10 @@ impl App {
             "GPU: {} ({:?}, {}, driver {})",
             info.name, info.device_type, info.backend, info.driver_info
         );
+
+        let shared = SharedResources::new();
+        self.shared.write(shared);
+
         info!("App initialization complete")
     }
 
@@ -135,22 +148,28 @@ impl App {
         // otherwise, in the inital scene loading, the
         // vector will be empty
         let monitors = Monitors::collect(event_loop);
-        let assets = AssetServer::_new();
 
         // On Windows, the surface must be created on the winit thread,
         // hence why the renderer creation is split.
         // If we were to create the renderer in the thread::spawn it would crash
         let (surface, config) = Renderer::_create_surface(winit_window.clone());
+        let shared = unsafe { self.shared.assume_init_read() };
+
+        let shared_for_thread = shared.clone();
+        let SharedResources { assets, imgui } = shared_for_thread;
 
         let thread_handle = thread::spawn(move || {
             let window = Window::new(winit_window);
-            let mut imgui = imgui::Context::create();
 
-            imgui.set_ini_filename(None);
+            imgui.guard().register_window(window_id);
 
             info!("Asset server initialization complete");
 
-            let renderer = Renderer::_from_surface(surface, config, assets._guard(), &mut imgui);
+            let mut active_imgui = ActiveImgui::new(&imgui, window_id);
+            let renderer =
+                Renderer::_from_surface(surface, config, assets._guard(), &mut active_imgui);
+
+            drop(active_imgui);
 
             info!("Renderer initialization complete");
 

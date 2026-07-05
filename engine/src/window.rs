@@ -3,6 +3,7 @@ use std::sync::mpsc::Sender;
 use std::thread::JoinHandle;
 
 use math::Size;
+use winit::window::WindowId;
 
 use crate::AppEvent;
 
@@ -15,6 +16,10 @@ pub struct Window {
 impl Window {
     pub(crate) fn new(inner: Arc<WinitWindow>) -> Self {
         Self { inner }
+    }
+
+    pub(crate) fn id(&self) -> WindowId {
+        self.inner.id()
     }
 
     pub fn size(&self) -> Size<u32> {
