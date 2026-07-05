@@ -27,6 +27,7 @@ impl Scene for S {
 
     fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
         let _ = ctx;
+        draw.set_color(Color::White);
 
         draw.debug_text(
             "Hello world! This is debug text!\nAnd this is a fantastic new line\nThis is a \t tabulation?",
@@ -41,7 +42,6 @@ impl Scene for S {
             200.0,
         );
 
-        draw.set_color(Color::Cyan);
         draw.text(self.jbmono, "Endearing cyan font...", 200.0, 400.0);
     }
 }

@@ -4,6 +4,7 @@ use assets::AssetServer;
 use logging::info;
 use renderer::Renderer;
 use winit::event::DeviceEvent;
+use winit::event::MouseButton;
 use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent;
 use winit::keyboard::PhysicalKey;
@@ -152,6 +153,37 @@ impl WindowState {
                     scene.draw(ctx, &mut draw);
                 }
             }
+
+            let m = self.context.input.mouse_position();
+            let io = self.context.renderer.imgui().io_mut();
+
+            io.delta_time = self.context.time.delta();
+            io.display_size = [
+                self.context.window.width() as f32,
+                self.context.window.height() as f32,
+            ];
+            io.mouse_pos = [m.x, m.y];
+
+            io.mouse_down = [
+                self.context.input.mouse_held(&MouseButton::Left),
+                self.context.input.mouse_held(&MouseButton::Right),
+                self.context.input.mouse_held(&MouseButton::Middle),
+                false,
+                false,
+            ];
+
+            let ui = self.context.renderer.imgui().new_frame();
+
+            ui.window("Debug")
+                .size([300.0, 200.0], imgui::Condition::FirstUseEver)
+                .build(|| {
+                    ui.text("Hello from imgui!");
+                    if ui.button("Click me") {
+                        println!("clicked");
+                    }
+                });
+
+            ui.show_demo_window(&mut true);
 
             self.context
                 .renderer
