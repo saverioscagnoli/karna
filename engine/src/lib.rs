@@ -140,6 +140,7 @@ impl App {
         info!("Creating window  '{}'", winit_window.title());
 
         let (tx, rx) = mpsc::channel::<AppEvent>();
+        let window_for_thread = winit_window.clone();
         let window_id = winit_window.id();
 
         // We must query the monitor before the
@@ -159,7 +160,7 @@ impl App {
         let SharedResources { assets, imgui } = shared_for_thread;
 
         let thread_handle = thread::spawn(move || {
-            let window = Window::new(winit_window);
+            let window = Window::new(window_for_thread);
 
             imgui.guard().register_window(window_id);
 
@@ -189,6 +190,7 @@ impl App {
         let window_handle = WindowHandle {
             sender: tx,
             thread: thread_handle,
+            window: winit_window,
         };
 
         self.windows.insert(window_id, window_handle);
@@ -237,6 +239,11 @@ impl ApplicationHandler<UserEvent> for App {
 
                 _ = window.sender.send(AppEvent::WindowEvent(event));
                 _ = window.thread.join();
+
+                let shared = unsafe { self.shared.assume_init_read() };
+                let mut imgui = shared.imgui.guard();
+
+                imgui.unregister_window(window.window.id());
 
                 if self.windows.is_empty() {
                     info!("All windows were closed. Exiting.");

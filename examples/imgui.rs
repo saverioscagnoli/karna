@@ -111,7 +111,10 @@ impl Scene for S {
                     ui.text(format!("Tick step (fixed dt): {:.4} ms", fixed_dt * 1000.0));
                     ui.text(format!("Ticks per second:    {:.1}", tps));
                     ui.text(format!("Interp alpha:        {:.3}", ctx.time.alpha()));
-                    ui.color_picker4("clear color", &mut self.clear_color)
+
+                    ui.color_picker4_config("clear color", &mut self.clear_color)
+                        .mode(imgui::ColorPickerMode::HueWheel)
+                        .build();
                 });
         });
     }

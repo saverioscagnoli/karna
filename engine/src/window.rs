@@ -46,4 +46,5 @@ impl Window {
 pub struct WindowHandle {
     pub sender: Sender<AppEvent>,
     pub thread: JoinHandle<()>,
+    pub window: Arc<WinitWindow>,
 }

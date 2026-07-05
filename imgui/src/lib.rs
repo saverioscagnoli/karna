@@ -41,8 +41,19 @@ impl ImguiManager {
         // imgui context at a time
         self.suspend_active();
 
-        let ctx = imgui::Context::create();
+        let mut ctx = imgui::Context::create();
+
+        ctx.set_ini_filename(None);
+
         self.slots.insert(id, Slot::Suspended(ctx.suspend()));
+    }
+
+    pub fn unregister_window(&mut self, id: WindowId) {
+        if self.active_window == Some(id) {
+            self.active_window = None;
+        }
+
+        self.slots.remove(&id);
     }
 
     fn activate(&mut self, id: WindowId) {
@@ -51,15 +62,24 @@ impl ImguiManager {
         }
 
         self.suspend_active();
-
         let slot = self.slots.remove(&id).expect("Window not registered");
-        let ctx = match slot {
-            Slot::Suspended(s) => s.activate().expect("Imgui activate failed"),
-            Slot::Active(c) => c,
-        };
 
-        self.slots.insert(id, Slot::Active(ctx));
-        self.active_window = Some(id);
+        match slot {
+            Slot::Suspended(s) => match s.activate() {
+                Ok(ctx) => {
+                    self.slots.insert(id, Slot::Active(ctx));
+                    self.active_window = Some(id);
+                }
+                Err(s) => {
+                    self.slots.insert(id, Slot::Suspended(s));
+                    panic!("Imgui activate failed for {id:?}");
+                }
+            },
+            Slot::Active(ctx) => {
+                self.slots.insert(id, Slot::Active(ctx));
+                self.active_window = Some(id);
+            }
+        }
     }
 
     fn get(&self, id: WindowId) -> &imgui::Context {

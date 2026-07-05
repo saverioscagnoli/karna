@@ -13,6 +13,8 @@ use crate::immediate::batcher::Batcher;
 use crate::vertex;
 use crate::vertex::CircleVertex;
 
+struct RenderState {}
+
 pub struct ImmediateRenderer {
     pub point_batcher: Batcher<Vertex>,
     pub line_batcher: Batcher<Vertex>,
