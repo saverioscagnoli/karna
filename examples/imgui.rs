@@ -117,6 +117,27 @@ impl Scene for S {
     }
 }
 
+struct AtlasScene;
+
+impl Scene for AtlasScene {
+    fn load(&mut self, ctx: ContextRefMut) {
+        ctx.time.set_target_fps(120);
+    }
+
+    fn update(&mut self, ctx: ContextRefMut) {
+        _ = ctx;
+    }
+
+    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+        _ = ctx;
+        draw.texture_atlas(0.0, 0.0);
+        draw.imgui(|ui| {
+            ui.show_demo_window(&mut true);
+            ui.show_about_window(&mut true);
+        });
+    }
+}
+
 fn main() {
     logging::init(
         logging::Config::default()
@@ -142,6 +163,12 @@ fn main() {
                     },
                 )
                 .with_active_scene("initial"),
+        )
+        .with_window(
+            WindowBuilder::new()
+                .with_size((1024, 1024))
+                .with_scene("atlas", AtlasScene)
+                .with_active_scene("atlas"),
         )
         .build()
         .run();

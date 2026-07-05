@@ -1,5 +1,6 @@
 use assets::AssetServer;
 use imgui::SharedImgui;
+use logging::debug;
 
 #[derive(Clone)]
 pub struct SharedResources {
@@ -9,9 +10,12 @@ pub struct SharedResources {
 
 impl SharedResources {
     pub fn new() -> Self {
-        Self {
-            assets: AssetServer::_new(),
-            imgui: SharedImgui::new(),
-        }
+        let assets = AssetServer::_new();
+        debug!("Asset server initialized");
+
+        let imgui = SharedImgui::new();
+        debug!("Imgui context manager initialized");
+
+        Self { assets, imgui }
     }
 }

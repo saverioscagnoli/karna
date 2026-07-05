@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use logging::debug;
 use utils::FastHashMap;
 
 #[derive(Debug)]
@@ -27,6 +28,8 @@ impl ShaderStore {
         });
 
         self.shaders.insert(label.to_owned(), module);
+
+        debug!("Shader '{}' loaded", label);
     }
 
     pub fn get<L: AsRef<str>>(&self, label: L) -> &wgpu::ShaderModule {
