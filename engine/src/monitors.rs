@@ -8,6 +8,7 @@ use winit::monitor::MonitorHandle;
 
 use crate::window::WinitWindow;
 
+#[derive(Debug, Clone)]
 pub struct Monitor {
     handle: MonitorHandle,
 }

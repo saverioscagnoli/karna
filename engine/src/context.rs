@@ -80,26 +80,22 @@ impl WindowContext {
         (ctx, draw)
     }
 
-    pub fn update_imgui(&mut self) {
+    pub fn update_imgui_time(&mut self) {
         let mut imgui = ActiveImgui::new(&self.imgui, self.window.id());
         let io = imgui.io_mut();
 
         io.delta_time = self.time.delta();
     }
 
-    pub fn handle_event(&mut self, event: AppEvent) {
-        let mut imgui = ActiveImgui::new(&self.imgui, self.window.id());
-        let io = imgui.io_mut();
-
+    pub fn handle_event(&mut self, event: &AppEvent) {
         match event {
             AppEvent::WindowEvent(WindowEvent::Resized(size)) => {
                 info!("Setting window size to {}x{}", size.width, size.height);
                 self.renderer._resize(size.width, size.height);
-                io.display_size = size.into();
             }
 
             AppEvent::QueryMonitors(monitors) => {
-                self.monitors.monitors = monitors;
+                self.monitors.monitors = monitors.clone();
             }
 
             AppEvent::WindowEvent(event) => match event {
@@ -113,15 +109,72 @@ impl WindowContext {
                             }
 
                             self.input.held_keys.insert(c);
-
-                            if let Some(text) = key_event.text {
-                                for ch in text.chars() {
-                                    io.add_input_character(ch);
-                                }
-                            }
                         } else {
                             self.input.held_keys.remove(&c);
                             self.input.released_keys.insert(c);
+                        }
+                    }
+
+                    _ => {}
+                },
+
+                WindowEvent::CursorMoved { position, .. } => {
+                    self.input
+                        .mouse_position
+                        .set([position.x as f32, position.y as f32]);
+                }
+
+                WindowEvent::MouseInput { button, state, .. } => {
+                    if state.is_pressed() {
+                        self.input.pressed_mouse_buttons.insert(*button);
+                        self.input.held_mouse_buttons.insert(*button);
+                    } else {
+                        self.input.held_mouse_buttons.remove(button);
+                    }
+                }
+
+                WindowEvent::MouseWheel { delta, .. } => match *delta {
+                    MouseScrollDelta::LineDelta(x, y) => {
+                        self.input.wheel_delta.set([x, y]);
+                    }
+                    MouseScrollDelta::PixelDelta(pos) => {
+                        self.input.wheel_delta.set([pos.x as f32, pos.y as f32]);
+                    }
+                },
+
+                _ => {}
+            },
+
+            AppEvent::DeviceEvent(event) => match event.as_ref() {
+                DeviceEvent::MouseMotion { delta } => {
+                    self.input.mouse_delta.set([delta.0 as f32, delta.1 as f32]);
+                }
+
+                _ => {}
+            },
+        }
+    }
+
+    pub fn handle_event_for_imgui(&mut self, event: &AppEvent) {
+        let mut imgui = ActiveImgui::new(&self.imgui, self.window.id());
+        let io = imgui.io_mut();
+
+        match event {
+            AppEvent::WindowEvent(WindowEvent::Resized(size)) => {
+                io.display_size = [size.width as f32, size.height as f32];
+            }
+
+            AppEvent::WindowEvent(event) => match event {
+                WindowEvent::KeyboardInput {
+                    event: key_event, ..
+                } => match key_event.physical_key {
+                    PhysicalKey::Code(c) => {
+                        if key_event.state.is_pressed()
+                            && let Some(text) = key_event.text.as_deref()
+                        {
+                            for ch in text.chars() {
+                                io.add_input_character(ch);
+                            }
                         }
 
                         if let Some(ik) = imgui::winit_keycode_to_imgui(c) {
@@ -142,36 +195,22 @@ impl WindowContext {
                 }
 
                 WindowEvent::CursorMoved { position, .. } => {
-                    let pos = [position.x as f32, position.y as f32];
-
-                    self.input.mouse_position.set(pos);
-                    io.mouse_pos = pos;
+                    io.mouse_pos = [position.x as f32, position.y as f32];
                 }
 
                 WindowEvent::MouseInput { button, state, .. } => {
-                    if state.is_pressed() {
-                        self.input.pressed_mouse_buttons.insert(button);
-                        self.input.held_mouse_buttons.insert(button);
-                    } else {
-                        self.input.held_mouse_buttons.remove(&button);
-                    }
-
-                    if let Some(mb) = imgui::winit_mousebutton_to_imgui(button) {
+                    if let Some(mb) = imgui::winit_mousebutton_to_imgui(*button) {
                         io.add_mouse_button_event(mb, state.is_pressed());
                     }
                 }
 
-                WindowEvent::MouseWheel { delta, .. } => match delta {
+                WindowEvent::MouseWheel { delta, .. } => match *delta {
                     MouseScrollDelta::LineDelta(x, y) => {
-                        let pos = [x, y];
-
-                        self.input.wheel_delta.set(pos);
-                        io.mouse_wheel = pos[0];
-                        io.mouse_wheel_h = pos[1];
+                        io.mouse_wheel = x;
+                        io.mouse_wheel_h = y;
                     }
                     MouseScrollDelta::PixelDelta(pos) => {
                         let pos = [pos.x as f32, pos.y as f32];
-                        self.input.wheel_delta.set(pos);
 
                         io.mouse_wheel = pos[0];
                         io.mouse_wheel_h = pos[1];
@@ -183,14 +222,13 @@ impl WindowContext {
 
             AppEvent::DeviceEvent(event) => match event.as_ref() {
                 DeviceEvent::MouseMotion { delta } => {
-                    let delta = [delta.0 as f32, delta.1 as f32];
-
-                    io.mouse_delta = delta;
-                    self.input.mouse_delta.set(delta);
+                    io.mouse_delta = [delta.0 as f32, delta.1 as f32];
                 }
 
                 _ => {}
             },
+
+            _ => {}
         }
     }
 }

@@ -61,11 +61,14 @@ impl WindowState {
                         break;
                     }
 
-                    e => self.context.handle_event(e),
+                    e => {
+                        self.context.handle_event(&e);
+                        self.context.handle_event_for_imgui(&e);
+                    }
                 }
             }
 
-            self.context.update_imgui();
+            self.context.update_imgui_time();
 
             for label in &self.active_scenes {
                 if let Some(scene) = self.scenes.get_mut(label) {
