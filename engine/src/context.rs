@@ -206,8 +206,8 @@ impl WindowContext {
 
                 WindowEvent::MouseWheel { delta, .. } => match *delta {
                     MouseScrollDelta::LineDelta(x, y) => {
-                        io.mouse_wheel = x;
-                        io.mouse_wheel_h = y;
+                        io.mouse_wheel = y;
+                        io.mouse_wheel_h = x;
                     }
                     MouseScrollDelta::PixelDelta(pos) => {
                         let pos = [pos.x as f32, pos.y as f32];
