@@ -1,3 +1,5 @@
+mod input;
+
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::sync::Arc;
@@ -8,6 +10,8 @@ use parking_lot::Mutex;
 use parking_lot::MutexGuard;
 use utils::FastHashMap;
 use winit::window::WindowId;
+
+pub use crate::input::*;
 
 enum Slot {
     Active(imgui::Context),

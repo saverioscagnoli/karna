@@ -5,10 +5,7 @@ use imgui::ActiveImgui;
 use imgui::SharedImgui;
 use logging::info;
 use renderer::Renderer;
-use winit::event::DeviceEvent;
-use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent;
-use winit::keyboard::PhysicalKey;
 
 use crate::AppEvent;
 use crate::context::WindowContext;
@@ -64,75 +61,7 @@ impl WindowState {
                         break;
                     }
 
-                    AppEvent::WindowEvent(WindowEvent::Resized(size)) => {
-                        info!("Setting window size to {}x{}", size.width, size.height);
-                        self.context.renderer._resize(size.width, size.height);
-                    }
-
-                    AppEvent::QueryMonitors(monitors) => {
-                        self.context.monitors.monitors = monitors;
-                    }
-
-                    AppEvent::WindowEvent(event) => match event {
-                        WindowEvent::KeyboardInput {
-                            event: key_event, ..
-                        } => match key_event.physical_key {
-                            PhysicalKey::Code(c) => {
-                                if key_event.state.is_pressed() {
-                                    if !key_event.repeat {
-                                        self.context.input.pressed_keys.insert(c);
-                                    }
-
-                                    self.context.input.held_keys.insert(c);
-                                } else {
-                                    self.context.input.held_keys.remove(&c);
-                                    self.context.input.released_keys.insert(c);
-                                }
-                            }
-
-                            _ => {}
-                        },
-
-                        WindowEvent::CursorMoved { position, .. } => {
-                            self.context
-                                .input
-                                .mouse_position
-                                .set([position.x as f32, position.y as f32]);
-                        }
-
-                        WindowEvent::MouseInput { button, state, .. } => {
-                            if state.is_pressed() {
-                                self.context.input.pressed_mouse_buttons.insert(button);
-                                self.context.input.held_mouse_buttons.insert(button);
-                            } else {
-                                self.context.input.held_mouse_buttons.remove(&button);
-                            }
-                        }
-
-                        WindowEvent::MouseWheel { delta, .. } => match delta {
-                            MouseScrollDelta::LineDelta(x, y) => {
-                                self.context.input.wheel_delta.set([x, y])
-                            }
-                            MouseScrollDelta::PixelDelta(pos) => self
-                                .context
-                                .input
-                                .wheel_delta
-                                .set([pos.x as f32, pos.y as f32]),
-                        },
-
-                        _ => {}
-                    },
-
-                    AppEvent::DeviceEvent(event) => match event.as_ref() {
-                        DeviceEvent::MouseMotion { delta } => {
-                            self.context
-                                .input
-                                .mouse_delta
-                                .set([delta.0 as f32, delta.1 as f32]);
-                        }
-
-                        _ => {}
-                    },
+                    e => self.context.handle_event(e),
                 }
             }
 
