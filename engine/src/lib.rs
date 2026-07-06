@@ -9,7 +9,6 @@ mod window;
 mod window_state;
 
 use std::mem;
-use std::mem::MaybeUninit;
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
@@ -21,6 +20,7 @@ use logging::info;
 use logging::warn;
 use renderer::Renderer;
 use utils::FastHashMap;
+use utils::Lazy;
 use winit::application::ApplicationHandler;
 use winit::event::DeviceEvent;
 use winit::event::DeviceId;
@@ -62,8 +62,7 @@ enum UserEvent {
 pub struct App {
     enqueued_windows: Vec<WindowBuilder>,
     windows: FastHashMap<WindowId, WindowHandle>,
-
-    shared: MaybeUninit<SharedResources>,
+    shared: Lazy<SharedResources>,
 }
 
 impl App {
@@ -71,7 +70,7 @@ impl App {
         Self {
             windows: FastHashMap::default(),
             enqueued_windows: Vec::new(),
-            shared: MaybeUninit::zeroed(),
+            shared: Lazy::empty(),
         }
     }
 
@@ -97,8 +96,7 @@ impl App {
             info.name, info.device_type, info.backend, info.driver_info
         );
 
-        let shared = SharedResources::new();
-        self.shared.write(shared);
+        self.shared.set(SharedResources::new());
 
         info!("App initialization complete")
     }
@@ -154,10 +152,9 @@ impl App {
         // hence why the renderer creation is split.
         // If we were to create the renderer in the thread::spawn it would crash
         let (surface, config) = Renderer::_create_surface(winit_window.clone());
-        let shared = unsafe { self.shared.assume_init_read() };
 
-        let shared_for_thread = shared.clone();
-        let SharedResources { assets, imgui } = shared_for_thread;
+        let shared = self.shared.clone();
+        let SharedResources { assets, imgui } = shared;
 
         let thread_handle = thread::spawn(move || {
             let window = Window::new(window_for_thread);
@@ -240,8 +237,7 @@ impl ApplicationHandler<UserEvent> for App {
                 _ = window.sender.send(AppEvent::WindowEvent(event));
                 _ = window.thread.join();
 
-                let shared = unsafe { self.shared.assume_init_read() };
-                let mut imgui = shared.imgui.guard();
+                let mut imgui = self.shared.imgui.guard();
 
                 imgui.unregister_window(window.window.id());
 
@@ -267,7 +263,7 @@ impl ApplicationHandler<UserEvent> for App {
 
             event => {
                 let Some(window) = self.windows.get(&window_id) else {
-                    warn!("Event received on a non existing window (expected during shutdown)");
+                    warn!("Event received on a non existing window (expected when closing one)");
                     return;
                 };
 
@@ -290,15 +286,6 @@ impl ApplicationHandler<UserEvent> for App {
             if let Err(e) = w.sender.send(AppEvent::DeviceEvent(event.clone())) {
                 error!(e:err;  "Failed to broadcast device event");
             }
-        }
-    }
-}
-
-impl Drop for App {
-    fn drop(&mut self) {
-        for (_, window) in self.windows.drain() {
-            let _ = window.sender.send(AppEvent::WindowEvent(CloseRequested));
-            let _ = window.thread.join();
         }
     }
 }

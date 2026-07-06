@@ -1,5 +1,6 @@
 mod byte_size;
 mod index_map;
+mod lazy;
 mod macros;
 mod mem;
 mod sleep;
@@ -13,6 +14,7 @@ use std::hash::Hasher;
 
 pub use crate::byte_size::*;
 pub use crate::index_map::*;
+pub use crate::lazy::*;
 pub use crate::mem::*;
 pub use crate::sleep::*;
 pub use crate::slot_map::*;
