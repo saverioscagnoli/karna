@@ -25,7 +25,7 @@ impl logging::Target for EngineLogs {
 pub fn init_logging() {
     logging::init(
         logging::Config::default()
-            .with_min_level(logging::LevelFilter::Info)
+            .with_min_level(logging::LevelFilter::Debug)
             .with_module_filter("sctk", logging::LevelFilter::Error)
             .with_module_filter("naga", logging::LevelFilter::Error)
             .with_module_filter("wgpu", logging::LevelFilter::Error)

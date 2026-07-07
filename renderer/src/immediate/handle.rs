@@ -48,6 +48,14 @@ impl<'r> Draw<'r> {
         self.renderer.clear_color = color.into()
     }
 
+    pub fn depth(&self) -> f32 {
+        self.renderer.active_layer().immediate.depth()
+    }
+
+    pub fn set_depth(&mut self, d: f32) {
+        self.renderer.active_layer_mut().immediate.set_depth(d);
+    }
+
     pub fn push_state(&mut self) {
         self.renderer.active_layer_mut().immediate.push_state();
     }
