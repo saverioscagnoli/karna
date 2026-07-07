@@ -63,6 +63,14 @@ impl<T> Handle<T> {
             _d: PhantomData,
         }
     }
+
+    pub fn cast<U>(self) -> Handle<U> {
+        Handle {
+            index: self.index,
+            generation: self.generation,
+            _d: std::marker::PhantomData,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

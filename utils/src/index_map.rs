@@ -22,6 +22,10 @@ impl<V> IndexMap<V> {
         }
     }
 
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.map.contains_key(key)
+    }
+
     pub fn insert(&mut self, key: String, value: V) {
         if let Some(&idx) = self.map.get(&key) {
             self.vec[idx].1 = value;

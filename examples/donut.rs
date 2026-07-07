@@ -108,10 +108,6 @@ impl Donut {
 impl Scene for Donut {
     fn load(&mut self, ctx: ContextRefMut) {
         ctx.time.set_target_fps(120);
-
-        self.font = ctx
-            .assets
-            .load_font(include_bytes!("assets/jbmono.ttf"), 24);
     }
 
     fn update(&mut self, ctx: ContextRefMut) {
@@ -160,7 +156,12 @@ fn main() {
                 .with_title("spinning donut")
                 .with_size((1280, 720))
                 .with_resizable(false)
-                .with_scene("donut", Donut::default())
+                .build_scene("donut", |ctx| Donut {
+                    font: ctx
+                        .assets
+                        .load_font(include_bytes!("assets/jbmono.ttf"), 24),
+                    ..Default::default()
+                })
                 .with_active_scene("donut"),
         )
         .build()

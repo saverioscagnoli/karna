@@ -5,6 +5,7 @@ mod logs;
 mod monitors;
 mod scene;
 mod shared;
+mod storage;
 mod time;
 mod window;
 mod window_state;

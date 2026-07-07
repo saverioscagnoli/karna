@@ -40,15 +40,25 @@ impl WindowState {
         };
 
         for label in active_scenes {
-            if let Some(scene) = state.scenes.get_mut(&label) {
-                scene.load(state.context.as_ref_mut());
-                info!("Scene '{}' loaded", label);
-            }
-
-            state.active_scenes.push(label);
+            state.activate_scene(label);
         }
 
         state
+    }
+
+    fn activate_scene(&mut self, label: String) {
+        if self.active_scenes.contains(&label) {
+            return;
+        }
+
+        self.scenes.build(&label, self.context.as_ref_mut());
+
+        if let Some(scene) = self.scenes.get_mut(&label) {
+            scene.load(self.context.as_ref_mut());
+            info!("Scene '{}' loaded", label);
+        }
+
+        self.active_scenes.push(label);
     }
 
     pub fn start_loop(mut self) {
@@ -115,14 +125,7 @@ impl WindowState {
             let to_deactivate: Vec<_> = self.context.scenes.pending_deactivate.drain(..).collect();
 
             for label in to_activate {
-                if !self.active_scenes.contains(&label) {
-                    if let Some(scene) = self.scenes.get_mut(&label) {
-                        scene.load(self.context.as_ref_mut());
-                        info!("Scene '{}' loaded", label);
-                    }
-
-                    self.active_scenes.push(label);
-                }
+                self.activate_scene(label);
             }
 
             for label in to_deactivate {

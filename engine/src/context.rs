@@ -15,6 +15,7 @@ use crate::input::Input;
 use crate::monitors::Monitor;
 use crate::monitors::Monitors;
 use crate::scene::SceneManager;
+use crate::storage::GenericStorage;
 use crate::time::Time;
 use crate::window::Window;
 
@@ -22,6 +23,7 @@ pub struct WindowContext {
     pub window: Window,
     pub time: Time,
     pub input: Input,
+    pub storage: GenericStorage,
     pub assets: AssetServer,
     pub scenes: SceneManager,
     pub renderer: Renderer,
@@ -45,6 +47,7 @@ impl WindowContext {
             window,
             time: Time::new(),
             input: Input::new(),
+            storage: GenericStorage::new(),
             assets,
             scenes: SceneManager::new(),
             renderer,
@@ -59,6 +62,7 @@ impl WindowContext {
             window: &self.window,
             time: &mut self.time,
             input: &mut self.input,
+            storage: &mut self.storage,
             assets: &self.assets,
             scenes: &mut self.scenes,
             render: &mut self.renderer,
@@ -71,6 +75,7 @@ impl WindowContext {
             window: &self.window,
             time: &self.time,
             input: &self.input,
+            storage: &self.storage,
             assets: self.assets._guard(),
             scenes: &self.scenes,
             monitors: &self.monitors,
@@ -239,6 +244,7 @@ pub struct ContextRefMut<'ctx> {
     pub window: &'ctx Window,
     pub time: &'ctx mut Time,
     pub input: &'ctx mut Input,
+    pub storage: &'ctx mut GenericStorage,
     pub assets: &'ctx AssetServer,
     pub scenes: &'ctx mut SceneManager,
     pub render: &'ctx mut Renderer,
@@ -249,6 +255,7 @@ pub struct ContextRef<'ctx> {
     pub window: &'ctx Window,
     pub time: &'ctx Time,
     pub input: &'ctx Input,
+    pub storage: &'ctx GenericStorage,
     pub assets: AssetServerGuard<'ctx>,
     pub scenes: &'ctx SceneManager,
     pub monitors: &'ctx Monitors,

@@ -21,8 +21,6 @@ impl Scene for S {
         if let Some(m) = ctx.monitors.current() {
             ctx.time.set_target_fps(m.refresh_rate());
         }
-
-        ctx.time.set_target_fps(120);
     }
 
     fn update(&mut self, ctx: ContextRefMut) {

@@ -19,16 +19,9 @@ struct S {
 
 impl Scene for S {
     fn load(&mut self, ctx: ContextRefMut) {
-        let image_bytes = include_bytes!("./assets/tetsuo.png");
-        let image = ctx.assets.load_image(image_bytes);
-
-        self.image = image;
-
         if let Some(monitor) = ctx.monitors.current() {
             ctx.time.set_target_fps(monitor.refresh_rate());
         }
-
-        ctx.time.set_target_fps(120);
     }
 
     fn fixed_update(&mut self, ctx: ContextRefMut) {
@@ -127,15 +120,16 @@ fn main() {
         .with_window(
             WindowBuilder::new()
                 .with_size((1280, 720))
-                .with_scene(
-                    "initial",
+                .build_scene("initial", |ctx| {
+                    let image_bytes = include_bytes!("./assets/tetsuo.png");
+
                     S {
                         pos: Vector2::new(10.0, 10.0),
                         prev_pos: Vector2::new(10.0, 10.0),
                         vel: Vector2::zero(),
-                        image: Handle::default(),
-                    },
-                )
+                        image: ctx.assets.load_image(image_bytes),
+                    }
+                })
                 .with_active_scene("initial"),
         )
         .with_window(
