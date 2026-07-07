@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::sync::mpsc::Receiver;
 
 use assets::AssetServer;
@@ -9,8 +10,10 @@ use winit::event::WindowEvent;
 use winit::keyboard::KeyCode;
 
 use crate::AppEvent;
+use crate::Scene;
 use crate::context::WindowContext;
 use crate::monitors::Monitor;
+use crate::scene::SceneCommand;
 use crate::scene::Scenes;
 use crate::window::Window;
 
@@ -40,13 +43,17 @@ impl WindowState {
         };
 
         for label in active_scenes {
-            state.activate_scene(label);
+            state.activate_scene(label, None);
         }
 
         state
     }
 
-    fn activate_scene(&mut self, label: String) {
+    fn register_scene(&mut self, label: String, scene: Box<dyn Scene>) {
+        self.scenes.register(label, Box::new(move |_| scene));
+    }
+
+    fn activate_scene(&mut self, label: String, user_data: Option<Box<dyn Any>>) {
         if self.active_scenes.contains(&label) {
             return;
         }
@@ -55,10 +62,19 @@ impl WindowState {
 
         if let Some(scene) = self.scenes.get_mut(&label) {
             scene.load(self.context.as_ref_mut());
-            info!("Scene '{}' loaded", label);
+
+            info!("Scene '{}' loaded with user data = {:?}", label, user_data);
+
+            if let Some(user_data) = user_data {
+                scene.loaded_with(self.context.as_ref_mut(), user_data);
+            }
         }
 
         self.active_scenes.push(label);
+    }
+
+    fn deactivate_scene(&mut self, label: &str) {
+        self.active_scenes.retain(|s| s != label);
     }
 
     pub fn start_loop(mut self) {
@@ -121,15 +137,18 @@ impl WindowState {
                     ._present(&self.context.assets._guard(), &mut imgui);
             }
 
-            let to_activate: Vec<_> = self.context.scenes.pending_activate.drain(..).collect();
-            let to_deactivate: Vec<_> = self.context.scenes.pending_deactivate.drain(..).collect();
-
-            for label in to_activate {
-                self.activate_scene(label);
-            }
-
-            for label in to_deactivate {
-                self.active_scenes.retain(|s| s != &label);
+            for command in self.context.scenes.drain_collect() {
+                match command {
+                    SceneCommand::Register { label, scene } => {
+                        self.register_scene(label, scene);
+                    }
+                    SceneCommand::Activate { label, user_data } => {
+                        self.activate_scene(label, user_data);
+                    }
+                    SceneCommand::Deactivate { label } => {
+                        self.deactivate_scene(&label);
+                    }
+                }
             }
 
             self.context.input.flush();

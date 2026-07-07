@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use renderer::Draw;
 use utils::IndexMap;
 
@@ -9,6 +11,7 @@ pub type SceneBuilder = Box<dyn FnOnce(ContextRefMut) -> Box<dyn Scene> + Send>;
 #[allow(unused)]
 pub trait Scene: Send {
     fn load(&mut self, ctx: ContextRefMut);
+    fn loaded_with(&mut self, ctx: ContextRefMut, user_data: Box<dyn Any>) {}
     fn update(&mut self, ctx: ContextRefMut);
     fn fixed_update(&mut self, ctx: ContextRefMut) {}
     fn draw(&mut self, ctx: ContextRef, draw: &mut Draw);
@@ -23,8 +26,16 @@ pub struct Scenes {
 }
 
 impl Scenes {
-    pub fn insert_builder(&mut self, label: impl Into<String>, builder: SceneBuilder) {
-        self.builders.insert(label.into(), builder);
+    pub fn insert_builder<L: Into<String>>(&mut self, label: L, builder: SceneBuilder) {
+        let label: String = label.into();
+
+        if !self.builders.contains_key(&label) {
+            self.builders.insert(label.into(), builder);
+        }
+    }
+
+    pub fn register<L: Into<String>>(&mut self, label: L, builder: SceneBuilder) {
+        self.insert_builder(label, builder);
     }
 
     /// Builds the scene if it hasn't been built yet, running its
@@ -49,24 +60,57 @@ impl Scenes {
     }
 }
 
+pub enum SceneCommand {
+    Register {
+        label: String,
+        scene: Box<dyn Scene>,
+    },
+    Activate {
+        label: String,
+        user_data: Option<Box<dyn Any>>,
+    },
+    Deactivate {
+        label: String,
+    },
+}
+
 pub struct SceneManager {
-    pub(crate) pending_activate: Vec<String>,
-    pub(crate) pending_deactivate: Vec<String>,
+    buffer: Vec<SceneCommand>,
 }
 
 impl SceneManager {
     pub(crate) fn new() -> Self {
-        Self {
-            pending_activate: Vec::new(),
-            pending_deactivate: Vec::new(),
-        }
+        Self { buffer: Vec::new() }
+    }
+
+    pub fn register<L: Into<String>>(&mut self, label: L, scene: Box<dyn Scene>) {
+        self.buffer.push(SceneCommand::Register {
+            label: label.into(),
+            scene,
+        })
     }
 
     pub fn activate<L: Into<String>>(&mut self, label: L) {
-        self.pending_activate.push(label.into());
+        self.buffer.push(SceneCommand::Activate {
+            label: label.into(),
+            user_data: None,
+        })
+    }
+
+    pub fn activate_with<L: Into<String>, D: Any>(&mut self, label: L, user_data: D) {
+        self.buffer.push(SceneCommand::Activate {
+            label: label.into(),
+            user_data: Some(Box::new(user_data)),
+        })
     }
 
     pub fn deactivate<L: Into<String>>(&mut self, label: L) {
-        self.pending_deactivate.push(label.into());
+        self.buffer.push(SceneCommand::Deactivate {
+            label: label.into(),
+        })
+    }
+
+    pub(crate) fn drain_collect(&mut self) -> Vec<SceneCommand> {
+        self.buffer.drain(..).collect()
     }
 }
