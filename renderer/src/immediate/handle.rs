@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use assets::AssetServerGuard;
 use assets::Font;
 use assets::Image;
@@ -12,7 +14,6 @@ use crate::Color;
 use crate::Renderer;
 
 pub struct Draw<'r> {
-    color: Vector4<f32>,
     renderer: &'r mut Renderer,
     assets: AssetServerGuard<'r>,
     imgui: ActiveImgui<'r>,
@@ -22,7 +23,6 @@ impl<'r> Draw<'r> {
     #[doc(hidden)]
     pub fn _new(r: &'r mut Renderer, assets: AssetServerGuard<'r>, imgui: ActiveImgui<'r>) -> Self {
         Self {
-            color: Color::White.into(),
             renderer: r,
             assets,
             imgui,
@@ -30,11 +30,14 @@ impl<'r> Draw<'r> {
     }
 
     pub fn color(&self) -> Color {
-        self.color.into()
+        self.renderer.active_layer().immediate.draw_color().into()
     }
 
     pub fn set_color<C: Into<Vector4<f32>>>(&mut self, color: C) {
-        self.color = color.into();
+        self.renderer
+            .active_layer_mut()
+            .immediate
+            .set_draw_color(color.into());
     }
 
     pub fn clear_color(&self) -> Color {
@@ -45,9 +48,45 @@ impl<'r> Draw<'r> {
         self.renderer.clear_color = color.into()
     }
 
+    pub fn push_state(&mut self) {
+        self.renderer.active_layer_mut().immediate.push_state();
+    }
+
+    pub fn pop_state(&mut self) {
+        self.renderer.active_layer_mut().immediate.pop_state();
+    }
+
+    pub fn translate(&mut self, x: f32, y: f32) {
+        self.renderer.active_layer_mut().immediate.translate(x, y);
+    }
+
+    pub fn translate_v<T: Into<Vector2<f32>>>(&mut self, translation: T) {
+        let t: Vector2<f32> = translation.into();
+
+        self.translate(t.x, t.y);
+    }
+
+    pub fn rotate(&mut self, angle_radians: f32) {
+        self.renderer
+            .active_layer_mut()
+            .immediate
+            .rotate(angle_radians);
+    }
+
+    pub fn scale(&mut self, x: f32, y: f32) {
+        self.renderer.active_layer_mut().immediate.scale(x, y);
+    }
+
+    #[inline]
+    pub fn scale_v<S: Into<Vector2<f32>>>(&mut self, scale: S) {
+        let s: Vector2<f32> = scale.into();
+
+        self.scale(s.x, s.y)
+    }
+
     pub fn point(&mut self, x: f32, y: f32) {
         let layer = self.renderer.active_layer_mut();
-        layer.immediate.push_point(x, y, self.color, &self.assets);
+        layer.immediate.push_point(x, y, &self.assets);
     }
 
     pub fn point_v<P: Into<Vector2<f32>>>(&mut self, pos: P) {
@@ -57,9 +96,7 @@ impl<'r> Draw<'r> {
 
     pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
         let layer = self.renderer.active_layer_mut();
-        layer
-            .immediate
-            .push_line(x1, y1, x2, y2, self.color, &self.assets);
+        layer.immediate.push_line(x1, y1, x2, y2, &self.assets);
     }
 
     pub fn line_v<P: Into<Vector2<f32>>, Q: Into<Vector2<f32>>>(&mut self, pos1: P, pos2: Q) {
@@ -73,7 +110,7 @@ impl<'r> Draw<'r> {
         let layer = self.renderer.active_layer_mut();
         layer
             .immediate
-            .push_untextured_quad(x, y, w, h, self.color, &self.assets);
+            .push_untextured_quad(x, y, w, h, &self.assets);
     }
 
     pub fn rect_v<P: Into<Vector2<f32>>, S: Into<Size<f32>>>(&mut self, pos: P, size: S) {
@@ -91,7 +128,6 @@ impl<'r> Draw<'r> {
             y,
             image.size.width as f32,
             image.size.height as f32,
-            self.color,
             image.uv,
         );
     }
@@ -144,7 +180,6 @@ impl<'r> Draw<'r> {
                 draw_y,
                 info.size.width,
                 info.size.height,
-                self.color,
                 info.uv,
             );
         }
@@ -173,7 +208,7 @@ impl<'r> Draw<'r> {
 
     pub fn circle(&mut self, x: f32, y: f32, r: f32) {
         let layer = self.renderer.active_layer_mut();
-        layer.immediate.push_cirlce(r, x, y, self.color);
+        layer.immediate.push_circle(r, x, y);
     }
 
     pub fn circle_v<P: Into<Vector2<f32>>>(&mut self, pos: P, r: f32) {
@@ -195,5 +230,35 @@ impl<'r> Draw<'r> {
         self.renderer.imgui_renderer.frame_created = true;
 
         f(ui);
+    }
+
+    pub fn console(&mut self) {
+        self.push_state();
+
+        let entries: Vec<(logging::Level, Arc<str>)> = {
+            let logs = self.renderer.logs.read();
+            logs.iter()
+                .map(|(level, message)| (*level, message.clone()))
+                .collect()
+        };
+
+        let mut offset_y = 10.0;
+
+        for (level, message) in &entries {
+            let color = match level {
+                logging::Level::Trace => Color::Purple,
+                logging::Level::Debug => Color::Blue,
+                logging::Level::Info => Color::Green,
+                logging::Level::Warn => Color::Yellow,
+                logging::Level::Error => Color::Red,
+            };
+
+            self.set_color(color);
+            self.debug_text(message, 10.0, offset_y);
+
+            offset_y += 20.0;
+        }
+
+        self.pop_state();
     }
 }

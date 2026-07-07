@@ -263,6 +263,17 @@ impl<T: Num + Copy> Matrix4<T> {
 }
 
 impl<T: Float> Matrix4<T> {
+    pub fn from_rotation_z(radians: T) -> Self {
+        let (sin, cos) = radians.sin_cos();
+
+        Self([
+            [cos, sin, T::zero(), T::zero()],
+            [-sin, cos, T::zero(), T::zero()],
+            [T::zero(), T::zero(), T::one(), T::zero()],
+            [T::zero(), T::zero(), T::zero(), T::one()],
+        ])
+    }
+
     pub fn from_translation(v: Vector3<T>) -> Self {
         let mut m = Self::identity();
 

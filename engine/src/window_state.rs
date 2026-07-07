@@ -6,6 +6,7 @@ use imgui::SharedImgui;
 use logging::info;
 use renderer::Renderer;
 use winit::event::WindowEvent;
+use winit::keyboard::KeyCode;
 
 use crate::AppEvent;
 use crate::context::WindowContext;
@@ -86,11 +87,20 @@ impl WindowState {
                 }
             }
 
+            if self.context.input.key_pressed(&KeyCode::BracketRight) {
+                self.context.show_console = !self.context.show_console;
+            }
+
             for label in &self.active_scenes {
+                let show_console = self.context.show_console;
                 let (ctx, mut draw) = self.context.split();
 
                 if let Some(scene) = self.scenes.get_mut(label) {
                     scene.draw(ctx, &mut draw);
+                }
+
+                if show_console {
+                    draw.console();
                 }
             }
 

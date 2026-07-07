@@ -7,6 +7,7 @@ mod vertex;
 use assets::AssetServerGuard;
 use gpu::GpuState;
 use gpu::PipelineCache;
+use logging::SharedLogs;
 use math::Size;
 use math::Vector4;
 
@@ -39,6 +40,7 @@ pub struct Renderer {
     pub debug: LayerId,
 
     pub(crate) imgui_renderer: ImguiRenderer,
+    pub(crate) logs: SharedLogs,
 }
 
 impl Renderer {
@@ -133,6 +135,7 @@ impl Renderer {
         config: wgpu::SurfaceConfiguration,
         assets: AssetServerGuard<'a>,
         imgui: &mut imgui::Context,
+        logs: SharedLogs,
     ) -> Self {
         let camera_bgl = Camera::create_bind_group_layout();
 
@@ -168,6 +171,7 @@ impl Renderer {
             ui,
             debug,
             imgui_renderer,
+            logs,
         }
     }
 

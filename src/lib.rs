@@ -7,6 +7,7 @@ pub use engine::ContextRefMut;
 pub use engine::Scene;
 pub use engine::SceneManager;
 pub use engine::WindowBuilder;
+pub use engine::init_logging;
 pub use engine::input;
 // Re-export imgui
 pub use imgui;

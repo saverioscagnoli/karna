@@ -27,6 +27,7 @@ pub struct WindowContext {
     pub renderer: Renderer,
     pub imgui: SharedImgui,
     pub monitors: Monitors,
+    pub show_console: bool,
 }
 
 impl WindowContext {
@@ -49,6 +50,7 @@ impl WindowContext {
             renderer,
             monitors: Monitors::new(winit_window, monitors),
             imgui,
+            show_console: false,
         }
     }
 

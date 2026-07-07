@@ -74,7 +74,7 @@ impl Target for File {
     }
 }
 
-fn strip_ansi(s: &str) -> String {
+pub fn strip_ansi(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
 

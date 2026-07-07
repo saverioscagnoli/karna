@@ -1865,6 +1865,7 @@ dependencies = [
  "glyph_brush_layout",
  "gpu",
  "imgui 0.1.0",
+ "logging",
  "math",
  "utils",
  "wgpu",

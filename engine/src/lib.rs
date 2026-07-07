@@ -1,6 +1,7 @@
 mod builder;
 mod context;
 pub mod input;
+mod logs;
 mod monitors;
 mod scene;
 mod shared;
@@ -38,6 +39,8 @@ pub use crate::context::ContextRefMut;
 pub use crate::input::Input;
 pub use crate::input::KeyCode;
 pub use crate::input::MouseButton;
+use crate::logs::LOGS;
+pub use crate::logs::init_logging;
 use crate::monitors::Monitor;
 use crate::monitors::Monitors;
 pub use crate::scene::Scene;
@@ -153,6 +156,7 @@ impl App {
         // If we were to create the renderer in the thread::spawn it would crash
         let (surface, config) = Renderer::_create_surface(winit_window.clone());
 
+        let logs = LOGS.clone();
         let shared = self.shared.clone();
         let SharedResources { assets, imgui } = shared;
 
@@ -165,7 +169,7 @@ impl App {
 
             let mut active_imgui = ActiveImgui::new(&imgui, window_id);
             let renderer =
-                Renderer::_from_surface(surface, config, assets._guard(), &mut active_imgui);
+                Renderer::_from_surface(surface, config, assets._guard(), &mut active_imgui, logs);
 
             drop(active_imgui);
 

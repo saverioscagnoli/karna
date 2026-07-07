@@ -6,11 +6,9 @@ use karna::Scene;
 use karna::WindowBuilder;
 use karna::assets::Image;
 use karna::input::KeyCode;
-use karna::logging;
 use karna::math::Vector2;
 use karna::render::Color;
 use karna::render::Draw;
-use log::LevelFilter;
 
 struct S {
     image: Handle<Image>,
@@ -123,14 +121,7 @@ impl Scene for AtlasScene {
 }
 
 fn main() {
-    logging::init(
-        logging::Config::default()
-            .with_min_level(log::LevelFilter::Debug)
-            .with_module_filter("sctk", LevelFilter::Error)
-            .with_module_filter("naga", log::LevelFilter::Error)
-            .with_module_filter("wgpu", log::LevelFilter::Error),
-    )
-    .expect("Failed to init logging");
+    karna::init_logging();
 
     App::builder()
         .with_window(

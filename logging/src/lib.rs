@@ -1,15 +1,18 @@
 mod style;
 mod target;
 
+use std::sync::Arc;
 use std::sync::OnceLock;
 
-use log::LevelFilter;
+pub use log::Level;
+pub use log::LevelFilter;
 pub use log::debug;
 pub use log::error;
 pub use log::info;
 pub use log::log;
 pub use log::trace;
 pub use log::warn;
+use parking_lot::RwLock;
 
 pub use crate::style::Color;
 pub use crate::style::Colorize;
@@ -20,6 +23,9 @@ pub use crate::target::Console;
 pub use crate::target::File;
 pub use crate::target::Output;
 pub use crate::target::Target;
+pub use crate::target::strip_ansi;
+
+pub type SharedLogs = Arc<RwLock<Vec<(Level, Arc<str>)>>>;
 
 pub struct Logger {
     min_level: log::LevelFilter,

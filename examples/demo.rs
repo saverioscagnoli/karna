@@ -1,126 +1,109 @@
+use std::f32;
+
 use karna::App;
 use karna::ContextRef;
 use karna::ContextRefMut;
-use karna::Handle;
 use karna::Scene;
 use karna::WindowBuilder;
-use karna::assets::Image;
 use karna::input::KeyCode;
-use karna::logging;
+use karna::math::Size;
 use karna::math::Vector2;
 use karna::render::Color;
 use karna::render::Draw;
-use log::LevelFilter;
 
 struct S {
-    image: Handle<Image>,
     pos: Vector2<f32>,
-    prev_pos: Vector2<f32>,
     vel: Vector2<f32>,
 }
 
 impl Scene for S {
     fn load(&mut self, ctx: ContextRefMut) {
-        let image_bytes = include_bytes!("./assets/tetsuo.png");
-        let image = ctx.assets.load_image(image_bytes);
-
-        self.image = image;
-
-        if let Some(monitor) = ctx.monitors.current() {
-            ctx.time.set_target_fps(monitor.refresh_rate());
+        if let Some(m) = ctx.monitors.current() {
+            ctx.time.set_target_fps(m.refresh_rate());
         }
 
         ctx.time.set_target_fps(120);
     }
 
-    fn fixed_update(&mut self, ctx: ContextRefMut) {
-        const VEL: f32 = 250.0;
-
-        // snapshot before mutating this tick
-        self.prev_pos = self.pos;
+    fn update(&mut self, ctx: ContextRefMut) {
+        let accel = 5000.0;
+        let dt = ctx.time.delta();
 
         if ctx.input.key_held(&KeyCode::KeyW) {
-            self.vel.y = -VEL;
+            self.vel.y -= accel * dt;
         }
 
         if ctx.input.key_held(&KeyCode::KeyA) {
-            self.vel.x = -VEL;
+            self.vel.x -= accel * dt;
         }
 
         if ctx.input.key_held(&KeyCode::KeyS) {
-            self.vel.y = VEL;
+            self.vel.y += accel * dt;
         }
 
         if ctx.input.key_held(&KeyCode::KeyD) {
-            self.vel.x = VEL;
+            self.vel.x += accel * dt
         }
 
-        self.pos += self.vel * ctx.time.fixed_delta();
-        self.vel *= 0.9;
-
-        if self.vel.length_sq() < 0.01 {
-            self.vel.set([0.0, 0.0]);
-        }
-    }
-
-    fn update(&mut self, ctx: ContextRefMut) {
-        let _ = ctx;
+        self.vel *= 0.85f32.powf(60.0).powf(dt);
+        self.pos += self.vel * dt;
     }
 
     fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
-        draw.set_color(Color::Cyan);
-
-        for i in 0..10 {
-            for j in 0..10 {
-                draw.point(40.0 + i as f32 * 10.0, 100.0 + j as f32 * 10.0);
-            }
-        }
-
-        let alpha = ctx.time.alpha();
-        let render_pos = self.prev_pos.lerp(&self.pos, alpha);
-
         draw.set_color(Color::White);
-        draw.image(self.image, render_pos.x, render_pos.y);
+
+        draw.rect(self.pos.x, self.pos.y, 50.0, 50.0);
 
         draw.set_color(Color::Cyan);
-        draw.circle(300.0, 300.0, 50.0);
+
+        draw.push_state();
+        draw.translate(self.pos.x + 100.0, self.pos.y);
+        draw.rotate(f32::consts::PI / 4.0);
+        draw.rect(0.0, 0.0, 50.0, 50.0);
+        draw.pop_state();
 
         draw.set_color(Color::Magenta);
-        draw.line_v([10.0, 50.0], [124.0, 478.0]);
+
+        draw.push_state();
+        draw.translate(self.pos.x, self.pos.y + 100.0);
+        draw.scale(2.0, 1.0);
+        draw.rect(0.0, 0.0, 50.0, 50.0);
+        draw.pop_state();
+
+        draw.set_color(Color::Orange);
+
+        draw.push_state();
+        draw.translate(200.0, 300.0);
+        draw.circle(0.0, 0.0, 20.0);
+        draw.scale(2.0, 2.0);
+        draw.circle(100.0, 100.0, 20.0);
+        draw.pop_state();
+
+        draw.set_color(Color::Magenta);
+
+        draw.line_v([300.0, 100.0], self.pos + Vector2::new(25.0, 25.0));
 
         draw.set_color(Color::White);
-        draw.debug_text(
-            format!("fps {}\ndt {:.6}s", ctx.time.fps(), ctx.time.delta()),
-            10.0,
-            10.0,
-        );
+        draw.debug_text(&format!("fps: {}", ctx.time.fps()), 10.0, 10.0);
+        draw.debug_text(&format!("dt: {:.6}", ctx.time.delta()), 10.0, 30.0);
     }
 }
 
 fn main() {
-    logging::init(
-        logging::Config::default()
-            .with_min_level(log::LevelFilter::Debug)
-            .with_module_filter("sctk", LevelFilter::Error)
-            .with_module_filter("naga", log::LevelFilter::Error)
-            .with_module_filter("wgpu", log::LevelFilter::Error),
-    )
-    .expect("Failed to init logging");
+    karna::init_logging();
 
     App::builder()
         .with_window(
             WindowBuilder::new()
-                .with_size((1280, 720))
+                .with_size(Size::new(1280, 720))
                 .with_scene(
-                    "initial",
+                    "demo",
                     S {
-                        pos: Vector2::new(10.0, 10.0),
-                        prev_pos: Vector2::new(10.0, 10.0),
+                        pos: Vector2::new(50.0, 50.0),
                         vel: Vector2::zero(),
-                        image: Handle::default(),
                     },
                 )
-                .with_active_scene("initial"),
+                .with_active_scene("demo"),
         )
         .build()
         .run();

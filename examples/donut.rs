@@ -152,6 +152,8 @@ impl Scene for Donut {
 }
 
 fn main() {
+    karna::init_logging();
+
     AppBuilder::new()
         .with_window(
             WindowBuilder::new()
