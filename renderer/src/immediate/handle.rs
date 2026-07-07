@@ -264,7 +264,11 @@ impl<'r> Draw<'r> {
             self.set_color(color);
             self.debug_text(message, 10.0, offset_y);
 
-            offset_y += 20.0;
+            if message.len() > 150 {
+                offset_y += 70.0;
+            } else {
+                offset_y += 20.0;
+            }
         }
 
         self.pop_state();
