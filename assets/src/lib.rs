@@ -1,8 +1,10 @@
 mod font;
 mod image;
+mod mesh;
 
 use std::sync::Arc;
 
+use gpu::Vertex;
 use logging::info;
 use parking_lot::RwLock;
 use parking_lot::RwLockReadGuard;
@@ -15,16 +17,22 @@ pub use crate::font::GlyphInfo;
 use crate::font::GlyphKey;
 pub use crate::image::Image;
 use crate::image::TextureAtlas;
+pub use crate::mesh::Geometry;
+pub use crate::mesh::Material;
+pub use crate::mesh::MaterialDesc;
+use crate::mesh::Meshes;
 
 #[derive(Clone)]
 pub struct AssetServer {
     atlas: Arc<RwLock<TextureAtlas>>,
     fonts_atlas: Arc<RwLock<FontAtlas>>,
+    meshes: Arc<RwLock<Meshes>>,
 }
 
 pub struct AssetServerGuard<'a> {
     atlas: RwLockReadGuard<'a, TextureAtlas>,
     font_atlas: RwLockReadGuard<'a, FontAtlas>,
+    meshes: RwLockReadGuard<'a, Meshes>,
 }
 
 impl AssetServer {
@@ -36,6 +44,7 @@ impl AssetServer {
         Self {
             atlas: Arc::new(RwLock::new(atlas)),
             fonts_atlas: Arc::new(RwLock::new(font_atlas)),
+            meshes: Arc::new(RwLock::new(Meshes::new())),
         }
     }
 
@@ -44,6 +53,7 @@ impl AssetServer {
         AssetServerGuard {
             atlas: self.atlas.read(),
             font_atlas: self.fonts_atlas.read(),
+            meshes: self.meshes.read(),
         }
     }
 
@@ -63,6 +73,16 @@ impl AssetServer {
         info!("Loaded font with size={}", ByteSize::from_bytes(size_bytes));
 
         font_atlas.register_font(&mut atlas, font_vec, size)
+    }
+
+    pub fn create_geometry(&self, vertices: &[Vertex], indices: &[u32]) -> Handle<Geometry> {
+        self.meshes.write().create_geometry(vertices, indices)
+    }
+
+    pub fn create_material(&self, desc: MaterialDesc) -> Handle<Material> {
+        self.meshes
+            .write()
+            .create_material(desc, &self.atlas.read())
     }
 }
 
@@ -110,5 +130,17 @@ impl<'a> AssetServerGuard<'a> {
 
     pub fn debug_font_handle(&self) -> Handle<Font> {
         self.font_atlas.debug_font
+    }
+
+    pub fn get_geometry(&self, geometry: Handle<Geometry>) -> &Geometry {
+        self.meshes.get_geometry(geometry)
+    }
+
+    pub fn get_material(&self, material: Handle<Material>) -> &Material {
+        self.meshes.get_material(material)
+    }
+
+    pub fn material_bgl(&self) -> &wgpu::BindGroupLayout {
+        self.meshes.material_bgl()
     }
 }

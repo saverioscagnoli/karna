@@ -2,6 +2,7 @@ mod buffer;
 mod pipeline;
 mod shaders;
 mod texture;
+mod vertex;
 
 use std::sync::OnceLock;
 
@@ -12,6 +13,7 @@ pub use crate::pipeline::PipelineCache;
 pub use crate::pipeline::PipelineDesc;
 use crate::shaders::ShaderStore;
 pub use crate::texture::Texture;
+pub use crate::vertex::*;
 
 static SINGLETON: OnceLock<GpuState> = OnceLock::new();
 

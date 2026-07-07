@@ -3,7 +3,9 @@ pub mod handle;
 pub mod imgui;
 
 use assets::AssetServerGuard;
+use gpu::CircleVertex;
 use gpu::PipelineCache;
+use gpu::Vertex;
 use logging::warn;
 use math::Matrix4;
 use math::Vector2;
@@ -11,9 +13,7 @@ use math::Vector3;
 use math::Vector4;
 
 use crate::Color;
-use crate::Vertex;
 use crate::immediate::batcher::Batcher;
-use crate::vertex::CircleVertex;
 
 #[derive(Debug, Clone, Copy)]
 struct RenderState {

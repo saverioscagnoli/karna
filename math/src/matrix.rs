@@ -4,6 +4,7 @@ use std::slice;
 
 use num::Float;
 use num::Num;
+use num::zero;
 
 use crate::Vector;
 use crate::Vector3;
@@ -263,6 +264,17 @@ impl<T: Num + Copy> Matrix4<T> {
 }
 
 impl<T: Float> Matrix4<T> {
+    pub fn from_rotation_y(radians: T) -> Self {
+        let (sin, cos) = radians.sin_cos();
+
+        Self([
+            [cos, T::zero(), -sin, T::zero()],
+            [T::zero(), T::one(), T::zero(), T::zero()],
+            [sin, T::zero(), cos, T::zero()],
+            [T::zero(), T::zero(), T::zero(), T::one()],
+        ])
+    }
+
     pub fn from_rotation_z(radians: T) -> Self {
         let (sin, cos) = radians.sin_cos();
 

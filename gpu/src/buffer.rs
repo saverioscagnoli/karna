@@ -107,7 +107,7 @@ impl<T> Buffer<T> {
     /// Write data to the buffer at a specific offset
     pub fn write(&mut self, offset: u64, data: &[T]) {
         if data.len() > self.capacity {
-            self.resize(data.len());
+            self.resize(data.len() * 2);
         }
 
         let gpu = GpuState::get();

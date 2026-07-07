@@ -82,9 +82,11 @@ impl App {
         gpu::init(|shader_store, d| {
             let immediate_2d_src = include_str!("../../shaders/immediate-2d.wgsl");
             let immediate_2d_circles_src = include_str!("../../shaders/immediate-2d-circles.wgsl");
+            let mesh_3d_src = include_str!("../../shaders/mesh-3d.wgsl");
 
             shader_store.load("immediate-2d", immediate_2d_src, d);
             shader_store.load("immediate-2d-circles", immediate_2d_circles_src, d);
+            shader_store.load("mesh-3d", mesh_3d_src, d);
 
             info!("Built-in shaders loaded");
         });

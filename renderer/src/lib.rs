@@ -2,11 +2,13 @@ mod camera;
 mod color;
 mod immediate;
 mod layer;
-mod vertex;
+mod retained;
 
 use assets::AssetServerGuard;
+use gpu::CircleVertex;
 use gpu::GpuState;
 use gpu::PipelineCache;
+use gpu::Vertex;
 use logging::SharedLogs;
 use math::Size;
 use math::Vector4;
@@ -19,8 +21,9 @@ pub use crate::immediate::handle::Draw;
 use crate::immediate::imgui::ImguiRenderer;
 pub use crate::layer::LayerId;
 pub use crate::layer::RenderLayer;
-use crate::vertex::CircleVertex;
-pub use crate::vertex::Vertex;
+use crate::retained::RetainedRenderer;
+pub use crate::retained::handle::SceneHandle;
+pub use crate::retained::mesh::Mesh;
 
 pub struct Renderer {
     surface: wgpu::Surface<'static>,
@@ -79,6 +82,8 @@ impl Renderer {
     fn init_pipelines(
         camera_bgl: &wgpu::BindGroupLayout,
         atlas_bgl: &wgpu::BindGroupLayout,
+        material_bgl: &wgpu::BindGroupLayout,
+        transform_bgl: &wgpu::BindGroupLayout,
         format: wgpu::TextureFormat,
     ) -> PipelineCache {
         let mut cache = PipelineCache::new();
@@ -127,6 +132,17 @@ impl Renderer {
             format,
         );
 
+        cache.create_pipeline(
+            gpu::PipelineDesc {
+                shader: "mesh-3d",
+                vertex_layout: Vertex::desc(),
+                blend: wgpu::BlendState::ALPHA_BLENDING,
+                topology: wgpu::PrimitiveTopology::TriangleList,
+            },
+            &[camera_bgl, atlas_bgl, material_bgl, transform_bgl],
+            format,
+        );
+
         cache
     }
 
@@ -138,23 +154,33 @@ impl Renderer {
         logs: SharedLogs,
     ) -> Self {
         let camera_bgl = Camera::create_bind_group_layout();
+        let transform_bgl = RetainedRenderer::create_transform_bgl();
 
         let mut layers = Vec::new();
         let size = Size::new(config.width, config.height);
 
         let world = LayerId(layers.len());
-        let world_camera = Camera::new(Projection::standard_2d(size), &camera_bgl);
-        layers.push(RenderLayer::new(world_camera));
+        let world_camera = Camera::new(
+            Projection::standard_3d(size, 75.0, 1.0, 1000.0),
+            &camera_bgl,
+        );
+        layers.push(RenderLayer::new(world_camera, &transform_bgl));
 
         let ui = LayerId(layers.len());
         let ui_camera = Camera::new(Projection::standard_2d(size), &camera_bgl);
-        layers.push(RenderLayer::new(ui_camera));
+        layers.push(RenderLayer::new(ui_camera, &transform_bgl));
 
         let debug = LayerId(layers.len());
         let debug_camera = Camera::new(Projection::standard_2d(size), &camera_bgl);
-        layers.push(RenderLayer::new(debug_camera));
+        layers.push(RenderLayer::new(debug_camera, &transform_bgl));
 
-        let pipeline_cache = Self::init_pipelines(&camera_bgl, assets.atlas_bgl(), config.format);
+        let pipeline_cache = Self::init_pipelines(
+            &camera_bgl,
+            assets.atlas_bgl(),
+            assets.material_bgl(),
+            &transform_bgl,
+            config.format,
+        );
         let imgui_renderer = ImguiRenderer::new(imgui, &assets, size, &camera_bgl);
 
         Self {
@@ -173,15 +199,6 @@ impl Renderer {
             imgui_renderer,
             logs,
         }
-    }
-
-    pub fn add_layer(&mut self, camera_proj: Projection) -> LayerId {
-        let camera = Camera::new(camera_proj, &self.camera_bgl);
-        let id = LayerId(self.layers.len());
-
-        self.layers.push(RenderLayer::new(camera));
-
-        id
     }
 
     pub fn layer(&self, id: &LayerId) -> &RenderLayer {
@@ -279,7 +296,7 @@ impl Renderer {
                 rp.set_bind_group(0, &layer.camera.bg, &[]);
                 rp.set_bind_group(1, assets.atlas_bg(), &[]);
 
-                layer.present(self.cached_size, &mut rp, &self.pipeline_cache);
+                layer.present(self.cached_size, &mut rp, &self.pipeline_cache, assets);
             }
 
             self.imgui_renderer

@@ -5,6 +5,7 @@ use imgui::SharedImgui;
 use logging::info;
 use renderer::Draw;
 use renderer::Renderer;
+use renderer::SceneHandle;
 use winit::event::DeviceEvent;
 use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent;
@@ -65,7 +66,7 @@ impl WindowContext {
             storage: &mut self.storage,
             assets: &self.assets,
             scenes: &mut self.scenes,
-            render: &mut self.renderer,
+            scene: SceneHandle::_new(&mut self.renderer),
             monitors: &self.monitors,
         }
     }
@@ -180,7 +181,9 @@ impl WindowContext {
                             && let Some(text) = key_event.text.as_deref()
                         {
                             for ch in text.chars() {
-                                io.add_input_character(ch);
+                                if !ch.is_whitespace() {
+                                    io.add_input_character(ch);
+                                }
                             }
                         }
 
@@ -247,7 +250,7 @@ pub struct ContextRefMut<'ctx> {
     pub storage: &'ctx mut GenericStorage,
     pub assets: &'ctx AssetServer,
     pub scenes: &'ctx mut SceneManager,
-    pub render: &'ctx mut Renderer,
+    pub scene: SceneHandle<'ctx>,
     pub monitors: &'ctx Monitors,
 }
 
