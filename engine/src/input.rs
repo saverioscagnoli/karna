@@ -36,6 +36,16 @@ impl Input {
         self.held_keys.contains(k)
     }
 
+    pub fn key_axis(&self, keys: [KeyCode; 2]) -> f32 {
+        if self.key_held(&keys[0]) {
+            -1.0
+        } else if self.key_held(&keys[1]) {
+            1.0
+        } else {
+            0.0
+        }
+    }
+
     /// Returns true if the given is pressed, but it
     /// does not persist across frame, so it can be useful
     /// for one-time actions, such as toggling

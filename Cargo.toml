@@ -17,6 +17,7 @@ gpu = { path = "gpu" }
 renderer = { path = "renderer" }
 assets = { path = "assets" }
 imgui = { path = "imgui" }
+rodio = "0.22.2"
 
 
 [dependencies]
@@ -27,7 +28,6 @@ renderer.workspace = true
 assets.workspace = true
 utils.workspace = true
 imgui.workspace = true
-rodio = "0.22.2"
 gpu.workspace = true
 
 [dev-dependencies]

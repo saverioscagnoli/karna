@@ -146,6 +146,7 @@ dependencies = [
  "parking_lot",
  "png",
  "rect_packer",
+ "rodio",
  "utils",
  "wgpu",
 ]
@@ -546,6 +547,7 @@ dependencies = [
  "math",
  "parking_lot",
  "renderer",
+ "rodio",
  "utils",
  "winit",
 ]
@@ -932,7 +934,6 @@ dependencies = [
  "logging",
  "math",
  "renderer",
- "rodio",
  "utils",
 ]
 

@@ -14,3 +14,4 @@ gpu.workspace = true
 renderer.workspace = true
 ctrlc = "3.5.2"
 imgui.workspace = true
+rodio.workspace = true

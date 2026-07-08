@@ -51,6 +51,8 @@ impl Scene for S {
 }
 
 fn main() {
+    karna::init_logging();
+
     App::builder()
         .with_window(
             WindowBuilder::new()

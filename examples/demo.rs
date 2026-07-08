@@ -5,46 +5,45 @@ use karna::ContextMut;
 use karna::ContextRef;
 use karna::Scene;
 use karna::WindowBuilder;
+use karna::assets::Audio;
 use karna::input::KeyCode;
 use karna::math::Size;
 use karna::math::Vector2;
 use karna::render::Color;
 use karna::render::Draw;
+use utils::Handle;
 
 struct S {
     pos: Vector2<f32>,
     vel: Vector2<f32>,
+    mammamia: Handle<Audio>,
 }
 
 impl Scene for S {
-    fn load(&mut self, ctx: ContextMut) {
+    fn load(&mut self, mut ctx: ContextMut) {
         if let Some(m) = ctx.monitors.current() {
             ctx.time.set_target_fps(m.refresh_rate());
         }
+
+        self.mammamia = ctx
+            .assets
+            .load_audio(include_bytes!("assets/luigi-mamma-miaaa.mp3"));
     }
 
     fn update(&mut self, ctx: ContextMut) {
         let accel = 5000.0;
         let dt = ctx.time.delta();
 
-        if ctx.input.key_held(&KeyCode::KeyW) {
-            self.vel.y -= accel * dt;
-        }
-
-        if ctx.input.key_held(&KeyCode::KeyA) {
-            self.vel.x -= accel * dt;
-        }
-
-        if ctx.input.key_held(&KeyCode::KeyS) {
-            self.vel.y += accel * dt;
-        }
-
-        if ctx.input.key_held(&KeyCode::KeyD) {
-            self.vel.x += accel * dt
-        }
+        self.vel.y += ctx.input.key_axis([KeyCode::KeyW, KeyCode::KeyS]) * accel * dt;
+        self.vel.x += ctx.input.key_axis([KeyCode::KeyA, KeyCode::KeyD]) * accel * dt;
 
         self.vel *= 0.85f32.powf(60.0).powf(dt);
         self.pos += self.vel * dt;
+
+        if ctx.input.key_pressed(&KeyCode::Space) {
+            let audio = ctx.assets.get_audio(self.mammamia);
+            ctx.sound.play(audio);
+        }
     }
 
     fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
@@ -99,6 +98,7 @@ fn main() {
                     S {
                         pos: Vector2::new(50.0, 50.0),
                         vel: Vector2::zero(),
+                        mammamia: Handle::default(),
                     },
                 )
                 .with_active_scene("demo"),

@@ -1,3 +1,4 @@
+mod audio;
 mod font;
 mod image;
 mod material;
@@ -14,6 +15,8 @@ use parking_lot::RwLockWriteGuard;
 use utils::ByteSize;
 use utils::Handle;
 
+pub use crate::audio::Audio;
+use crate::audio::AudioRegistry;
 pub use crate::font::Font;
 use crate::font::FontAtlas;
 pub use crate::font::GlyphInfo;
@@ -30,6 +33,7 @@ pub struct AssetServer {
     atlas: Arc<RwLock<TextureAtlas>>,
     fonts_atlas: Arc<RwLock<FontAtlas>>,
     meshes: MeshAssets,
+    audios: AudioRegistry,
 }
 
 mod sealed {
@@ -43,6 +47,7 @@ pub trait AssetAccess: sealed::Sealed {
     type AtlasGuard<'a>: Deref<Target = TextureAtlas>;
     type FontAtlasGuard<'a>: Deref<Target = FontAtlas>;
     type MeshAssetsGuard<'a>: Deref<Target = MeshAssets>;
+    type AudioRegistryGuard<'a>: Deref<Target = AudioRegistry>;
 }
 
 impl sealed::Sealed for ReadOnly {}
@@ -52,18 +57,21 @@ impl AssetAccess for ReadOnly {
     type AtlasGuard<'a> = RwLockReadGuard<'a, TextureAtlas>;
     type FontAtlasGuard<'a> = RwLockReadGuard<'a, FontAtlas>;
     type MeshAssetsGuard<'a> = &'a MeshAssets;
+    type AudioRegistryGuard<'a> = &'a AudioRegistry;
 }
 
 impl AssetAccess for ReadWrite {
     type AtlasGuard<'a> = RwLockWriteGuard<'a, TextureAtlas>;
     type FontAtlasGuard<'a> = RwLockWriteGuard<'a, FontAtlas>;
     type MeshAssetsGuard<'a> = &'a mut MeshAssets;
+    type AudioRegistryGuard<'a> = &'a mut AudioRegistry;
 }
 
 pub struct AssetServerView<'a, A: AssetAccess> {
     atlas: A::AtlasGuard<'a>,
     font_atlas: A::FontAtlasGuard<'a>,
     meshes: A::MeshAssetsGuard<'a>,
+    audios: A::AudioRegistryGuard<'a>,
 }
 
 impl AssetServer {
@@ -76,6 +84,7 @@ impl AssetServer {
             atlas: Arc::new(RwLock::new(atlas)),
             fonts_atlas: Arc::new(RwLock::new(font_atlas)),
             meshes: MeshAssets::new(),
+            audios: AudioRegistry::new(),
         }
     }
 
@@ -85,6 +94,7 @@ impl AssetServer {
             atlas: self.atlas.read(),
             font_atlas: self.fonts_atlas.read(),
             meshes: &self.meshes,
+            audios: &self.audios,
         }
     }
 
@@ -94,6 +104,7 @@ impl AssetServer {
             atlas: self.atlas.write(),
             font_atlas: self.fonts_atlas.write(),
             meshes: &mut self.meshes,
+            audios: &mut self.audios,
         }
     }
 }
@@ -169,6 +180,13 @@ impl<'a, A: AssetAccess> AssetServerView<'a, A> {
             .get(handle)
             .expect("Failed to get material")
     }
+
+    pub fn get_audio(&self, handle: Handle<Audio>) -> &Audio {
+        self.audios
+            .registry
+            .get(handle)
+            .expect("Failed to load audio")
+    }
 }
 
 /// Write only methods
@@ -198,6 +216,10 @@ impl<'a> AssetServerView<'a, ReadWrite> {
         self.meshes
             .materials
             .insert(Material::new(desc, &self.atlas, self.material_bgl()))
+    }
+
+    pub fn load_audio(&mut self, bytes: &[u8]) -> Handle<Audio> {
+        self.audios.load_audio(bytes)
     }
 
     pub fn get_geometry_mut(&mut self, handle: Handle<Geometry>) -> &mut Geometry {
