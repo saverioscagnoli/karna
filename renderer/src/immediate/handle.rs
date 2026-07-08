@@ -225,6 +225,30 @@ impl<'r> Draw<'r> {
         }
     }
 
+    pub fn image_region(
+        &mut self,
+        image_h: Handle<Image>,
+        x: f32,
+        y: f32,
+        src_x: u32,
+        src_y: u32,
+        w: u32,
+        h: u32,
+    ) {
+        self.image_ex(
+            image_h,
+            [x, y],
+            (w as f32, h as f32),
+            SrcRect {
+                x: src_x,
+                y: src_y,
+                w,
+                h,
+            },
+            Flip::NONE,
+        );
+    }
+
     pub fn image_ex<P, S>(
         &mut self,
         image_h: Handle<Image>,
@@ -242,32 +266,28 @@ impl<'r> Draw<'r> {
         let layer = self.renderer.active_layer_mut();
         let image = self.assets.get_image(image_h);
 
-        // Full UV rect (u0, v0, u1, v1) this image occupies in its texture/atlas.
+        // image.uv is (u, v, uv_width, uv_height) — the region this image
+        // occupies on the atlas, in normalized UV space.
         let uv = image.uv;
-        let uv_w = uv.z - uv.x;
-        let uv_h = uv.w - uv.y;
 
         let img_w = image.size.width as f32;
         let img_h = image.size.height as f32;
 
-        // Map the pixel-space src rect into the image's UV rect.
-        let u_left = uv.x + (src.x as f32 / img_w) * uv_w;
-        let v_top = uv.y + (src.y as f32 / img_h) * uv_h;
-        let u_right = uv.x + ((src.x as f32 + src.w as f32) / img_w) * uv_w;
-        let v_bottom = uv.y + ((src.y as f32 + src.h as f32) / img_h) * uv_h;
+        // Nudge sample points a fraction of a texel inward so float rounding
+        // can never land on the neighboring frame's texel, even with Nearest.
+        let eps_u = 0.25 / img_w * uv.z;
+        let eps_v = 0.25 / img_h * uv.w;
 
-        let (u0, u1) = if flip.x {
-            (u_right, u_left)
-        } else {
-            (u_left, u_right)
-        };
-        let (v0, v1) = if flip.y {
-            (v_bottom, v_top)
-        } else {
-            (v_top, v_bottom)
-        };
+        let u = uv.x + (src.x as f32 / img_w) * uv.z + eps_u;
+        let v = uv.y + (src.y as f32 / img_h) * uv.w + eps_v;
+        let uv_w = (src.w as f32 / img_w) * uv.z - 2.0 * eps_u;
+        let uv_h = (src.h as f32 / img_h) * uv.w - 2.0 * eps_v; // Flipping: shift origin to the far edge and use a negative extent,
 
-        let src_uv = Vector4::new(u0, v0, u1, v1);
+        // since push_textured_quad expects (u, v, w, h), not corner coords.
+        let (u, uv_w) = if flip.x { (u + uv_w, -uv_w) } else { (u, uv_w) };
+        let (v, uv_h) = if flip.y { (v + uv_h, -uv_h) } else { (v, uv_h) };
+
+        let src_uv = Vector4::new(u, v, uv_w, uv_h);
 
         layer.immediate.push_textured_quad(
             dst_pos.x,

@@ -23,6 +23,7 @@ pub struct Time {
 
     // FPS calculation
     fps: f32,
+    target_fps: u32,
     fps_sample_size: usize,
     frame_times: VecDeque<Duration>,
     frame_times_sum: Duration,
@@ -46,6 +47,7 @@ impl Time {
             tick_timer: 0.0,
             tick_time: Duration::ZERO,
             fps: 0.0,
+            target_fps: 0,
             fps_sample_size: 100,
             frame_times: VecDeque::new(),
             frame_times_sum: Duration::ZERO,
@@ -85,6 +87,10 @@ impl Time {
         self.fps.round() as u32
     }
 
+    pub fn target_fps(&self) -> u32 {
+        self.target_fps
+    }
+
     pub fn set_target_fps(&mut self, t: u32) {
         if t == 0 {
             warn!("Setting target fps to 0 is not allowed");
@@ -93,6 +99,7 @@ impl Time {
         }
 
         self.frame_step = Duration::from_secs_f32(1.0 / t as f32);
+        self.target_fps = t;
         info!("Target fps set to {}", t);
     }
 

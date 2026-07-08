@@ -5,6 +5,7 @@ mod macros;
 mod mem;
 mod sleep;
 mod slot_map;
+mod timer;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -18,6 +19,7 @@ pub use crate::lazy::*;
 pub use crate::mem::*;
 pub use crate::sleep::*;
 pub use crate::slot_map::*;
+pub use crate::timer::*;
 
 pub struct IdentityHasher(u64);
 

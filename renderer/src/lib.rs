@@ -3,6 +3,7 @@ mod color;
 mod immediate;
 mod layer;
 mod retained;
+mod sprite;
 
 use assets::AssetServerView;
 use assets::ReadOnly;
@@ -13,6 +14,7 @@ use gpu::Vertex;
 use logging::SharedLogs;
 use math::Size;
 use math::Vector4;
+pub use sprite::*;
 
 pub use crate::camera::Camera;
 pub use crate::camera::Projection;
