@@ -113,8 +113,10 @@ impl Time {
         self.tick_time = Instant::now() - tick_start;
     }
 
-    pub(crate) fn wait_for_next_frame(&mut self) {
-        self.sleep_timer.sleep_until(self.next_frame);
+    pub(crate) fn wait_for_next_frame(&mut self, vsync: bool) {
+        if !vsync {
+            self.sleep_timer.sleep_until(self.next_frame);
+        }
 
         let now = Instant::now();
 

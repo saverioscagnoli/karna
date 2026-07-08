@@ -151,7 +151,7 @@ impl<'r> Draw<'r> {
         );
     }
 
-    pub fn image_v<P: Into<math::Vector2<f32>>>(&mut self, pos: P, image_h: Handle<Image>) {
+    pub fn image_v<P: Into<math::Vector2<f32>>>(&mut self, image_h: Handle<Image>, pos: P) {
         let pos: math::Vector2<f32> = pos.into();
         self.image(image_h, pos.x, pos.y);
     }

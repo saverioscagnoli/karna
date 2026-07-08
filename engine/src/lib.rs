@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
 
+use assets::Image;
 use gpu::GpuState;
 use imgui::ActiveImgui;
 use logging::error;
@@ -22,6 +23,7 @@ use logging::info;
 use logging::warn;
 use renderer::Renderer;
 use utils::FastHashMap;
+use utils::Handle;
 use utils::Lazy;
 use winit::application::ApplicationHandler;
 use winit::event::DeviceEvent;
@@ -31,6 +33,9 @@ use winit::event::WindowEvent::CloseRequested;
 use winit::event_loop::ActiveEventLoop;
 use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
+use winit::event_loop::EventLoopProxy;
+use winit::window::CustomCursor;
+use winit::window::Icon;
 use winit::window::WindowId;
 
 pub use crate::builder::AppBuilder;
@@ -59,14 +64,18 @@ pub enum AppEvent {
     QueryMonitors(Vec<Monitor>),
 }
 
+#[derive(Debug)]
 enum UserEvent {
     Shutdown,
+    SetWindowIcon(Arc<WinitWindow>, Handle<Image>),
+    SetCursor(Arc<WinitWindow>, Handle<Image>, math::Vector2<u16>),
 }
 
 pub struct App {
     enqueued_windows: Vec<WindowBuilder>,
     windows: FastHashMap<WindowId, WindowHandle>,
     shared: Lazy<SharedResources>,
+    proxy: Lazy<EventLoopProxy<UserEvent>>,
 }
 
 impl App {
@@ -75,6 +84,7 @@ impl App {
             windows: FastHashMap::default(),
             enqueued_windows: Vec::new(),
             shared: Lazy::empty(),
+            proxy: Lazy::empty(),
         }
     }
 
@@ -122,6 +132,8 @@ impl App {
 
         let proxy = event_loop.create_proxy();
 
+        self.proxy.set(event_loop.create_proxy());
+
         ctrlc::set_handler(move || {
             _ = proxy.send_event(UserEvent::Shutdown);
             info!("Shutdown requested");
@@ -162,9 +174,10 @@ impl App {
         let logs = LOGS.clone();
         let shared = self.shared.clone();
         let SharedResources { assets, imgui } = shared;
+        let proxy = self.proxy.clone();
 
         let thread_handle = thread::spawn(move || {
-            let window = Window::new(window_for_thread);
+            let window = Window::new(window_for_thread, proxy);
 
             imgui.guard().register_window(window_id);
 
@@ -224,6 +237,32 @@ impl ApplicationHandler<UserEvent> for App {
                 }
 
                 event_loop.exit();
+            }
+
+            UserEvent::SetWindowIcon(w, image) => {
+                let assets = self.shared.assets.rguard();
+                let image = assets.get_image(image);
+
+                w.set_window_icon(Some(
+                    Icon::from_rgba(image.data.clone(), image.size.width, image.size.height)
+                        .expect("Failed to set window icon"),
+                ));
+            }
+
+            UserEvent::SetCursor(w, image, hotspot) => {
+                let assets = self.shared.assets.rguard();
+                let image = assets.get_image(image);
+                let source = CustomCursor::from_rgba(
+                    image.data.clone(),
+                    image.size.width as u16,
+                    image.size.height as u16,
+                    hotspot.x,
+                    hotspot.y,
+                )
+                .expect("Failed to set cursor");
+
+                let cursor = event_loop.create_custom_cursor(source);
+                w.set_cursor(cursor);
             }
         }
     }

@@ -97,6 +97,10 @@ impl WindowState {
 
             self.context.update_imgui_time();
 
+            self.context
+                .renderer
+                .set_active_layer(self.context.renderer.world);
+
             for label in &self.active_scenes {
                 if let Some(scene) = self.scenes.get_mut(label) {
                     scene.update(self.context.as_ref_mut());
@@ -153,7 +157,9 @@ impl WindowState {
 
             self.context.input.flush();
             self.context.window.request_redraw();
-            self.context.time.wait_for_next_frame();
+            self.context
+                .time
+                .wait_for_next_frame(self.context.renderer.vsync());
         }
     }
 }

@@ -129,7 +129,7 @@ impl Scene for S {
             1000.0,
         ));
 
-        ctx.time.set_target_fps(120);
+        //    ctx.time.set_target_fps(120);
 
         let (base, indices) = S::build_grid();
         self.offsets = vec![0.0; base.len()];
@@ -278,8 +278,6 @@ impl Scene for S {
                 }
             });
         });
-
-        draw.set_layer(Layer::World);
     }
 }
 

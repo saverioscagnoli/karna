@@ -6,6 +6,7 @@ use utils::ByteSize;
 use utils::Handle;
 use utils::SlotMap;
 
+#[derive(Debug, Clone)]
 pub struct Image {
     pub data: Vec<u8>,
     pub size: math::Size<u32>,

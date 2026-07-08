@@ -3,23 +3,29 @@ use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::thread::JoinHandle;
 
+use assets::Image;
 use math::Size;
+use utils::Handle;
+use winit::event_loop::EventLoopProxy;
 use winit::window::CursorGrabMode;
 use winit::window::WindowId;
 
 use crate::AppEvent;
+use crate::UserEvent;
 
 pub(crate) type WinitWindow = winit::window::Window;
 
 pub struct Window {
     pub(crate) inner: Arc<WinitWindow>,
+    proxy: EventLoopProxy<UserEvent>,
     cursor_captured: Cell<bool>,
 }
 
 impl Window {
-    pub(crate) fn new(inner: Arc<WinitWindow>) -> Self {
+    pub(crate) fn new(inner: Arc<WinitWindow>, proxy: EventLoopProxy<UserEvent>) -> Self {
         Self {
             inner,
+            proxy,
             cursor_captured: Cell::new(false),
         }
     }
@@ -67,6 +73,22 @@ impl Window {
 
     pub fn toggle_cursor_capture(&self) {
         self.capture_cursor(!self.cursor_captured());
+    }
+
+    pub fn set_icon(&self, icon: Handle<Image>) {
+        self.proxy
+            .send_event(UserEvent::SetWindowIcon(self.inner.clone(), icon))
+            .expect("Failed to send user event");
+    }
+
+    pub fn set_custom_cursor(&self, image: Handle<Image>, hotspot_x: u16, hotspot_y: u16) {
+        self.proxy
+            .send_event(UserEvent::SetCursor(
+                self.inner.clone(),
+                image,
+                [hotspot_x, hotspot_y].into(),
+            ))
+            .expect("Failed to send user event");
     }
 
     pub(crate) fn request_redraw(&self) {

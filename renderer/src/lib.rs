@@ -71,7 +71,7 @@ impl Renderer {
             format,
             width: 1,
             height: 1,
-            present_mode: wgpu::PresentMode::Mailbox,
+            present_mode: wgpu::PresentMode::AutoNoVsync,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
@@ -198,6 +198,18 @@ impl Renderer {
             imgui_renderer,
             logs,
         }
+    }
+
+    pub fn set_vsync(&mut self, v: bool) {
+        self.config.present_mode = if v {
+            wgpu::PresentMode::AutoVsync
+        } else {
+            wgpu::PresentMode::AutoNoVsync
+        }
+    }
+
+    pub fn vsync(&mut self) -> bool {
+        self.config.present_mode == wgpu::PresentMode::AutoVsync
     }
 
     pub fn layer(&self, id: &LayerId) -> &RenderLayer {
