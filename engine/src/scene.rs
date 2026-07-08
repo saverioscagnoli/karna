@@ -3,17 +3,17 @@ use std::any::Any;
 use renderer::Draw;
 use utils::IndexMap;
 
+use crate::context::ContextMut;
 use crate::context::ContextRef;
-use crate::context::ContextRefMut;
 
-pub type SceneBuilder = Box<dyn FnOnce(ContextRefMut) -> Box<dyn Scene> + Send>;
+pub type SceneBuilder = Box<dyn FnOnce(ContextMut) -> Box<dyn Scene> + Send>;
 
 #[allow(unused)]
 pub trait Scene: Send {
-    fn load(&mut self, ctx: ContextRefMut);
-    fn loaded_with(&mut self, ctx: ContextRefMut, user_data: Box<dyn Any>) {}
-    fn update(&mut self, ctx: ContextRefMut);
-    fn fixed_update(&mut self, ctx: ContextRefMut) {}
+    fn load(&mut self, ctx: ContextMut);
+    fn loaded_with(&mut self, ctx: ContextMut, user_data: Box<dyn Any>) {}
+    fn update(&mut self, ctx: ContextMut);
+    fn fixed_update(&mut self, ctx: ContextMut) {}
     fn draw(&mut self, ctx: ContextRef, draw: &mut Draw);
 }
 
@@ -41,7 +41,7 @@ impl Scenes {
     /// Builds the scene if it hasn't been built yet, running its
     /// construction closure with the given context.
     /// Returns `true` if a build actually happened.
-    pub fn build(&mut self, label: &str, ctx: ContextRefMut) -> bool {
+    pub fn build(&mut self, label: &str, ctx: ContextMut) -> bool {
         if self.built.get(label).is_some() {
             return false;
         }

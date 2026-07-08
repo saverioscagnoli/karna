@@ -4,7 +4,6 @@ use std::slice;
 
 use num::Float;
 use num::Num;
-use num::zero;
 
 use crate::Vector;
 use crate::Vector3;

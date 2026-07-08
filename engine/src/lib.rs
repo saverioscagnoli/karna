@@ -35,8 +35,8 @@ use winit::window::WindowId;
 
 pub use crate::builder::AppBuilder;
 pub use crate::builder::WindowBuilder;
+pub use crate::context::ContextMut;
 pub use crate::context::ContextRef;
-pub use crate::context::ContextRefMut;
 pub use crate::input::Input;
 pub use crate::input::KeyCode;
 pub use crate::input::MouseButton;
@@ -157,7 +157,7 @@ impl App {
         // On Windows, the surface must be created on the winit thread,
         // hence why the renderer creation is split.
         // If we were to create the renderer in the thread::spawn it would crash
-        let (surface, config) = Renderer::_create_surface(winit_window.clone());
+        let (surface, config) = Renderer::create_surface(winit_window.clone());
 
         let logs = LOGS.clone();
         let shared = self.shared.clone();
@@ -172,7 +172,7 @@ impl App {
 
             let mut active_imgui = ActiveImgui::new(&imgui, window_id);
             let renderer =
-                Renderer::_from_surface(surface, config, assets._guard(), &mut active_imgui, logs);
+                Renderer::from_surface(surface, config, assets.rguard(), &mut active_imgui, logs);
 
             drop(active_imgui);
 

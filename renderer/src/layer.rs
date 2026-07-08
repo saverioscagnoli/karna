@@ -1,10 +1,17 @@
-use assets::AssetServerGuard;
+use assets::AssetServerView;
+use assets::ReadOnly;
 use gpu::PipelineCache;
-use math::Size;
 
 use crate::ImmediateRenderer;
 use crate::camera::Camera;
 use crate::retained::RetainedRenderer;
+
+#[repr(usize)]
+pub enum Layer {
+    World = 0,
+    Ui = 1,
+    Debug = 2,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct LayerId(pub usize);
@@ -27,12 +34,12 @@ impl RenderLayer {
         }
     }
 
-    pub fn present<'a>(
-        &'a mut self,
-        view: Size<u32>,
-        rp: &mut wgpu::RenderPass<'a>,
+    pub fn present<'rp, 'assets>(
+        &mut self,
+        view: math::Size<u32>,
+        rp: &mut wgpu::RenderPass<'rp>,
         pipelines: &PipelineCache,
-        assets: &AssetServerGuard<'a>,
+        assets: &AssetServerView<'assets, ReadOnly>,
     ) {
         self.camera.update(view);
         self.immediate.present(rp, pipelines);

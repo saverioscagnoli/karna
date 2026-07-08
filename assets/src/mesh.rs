@@ -1,11 +1,10 @@
 use gpu::GpuState;
 use gpu::Vertex;
-use utils::Handle;
 use utils::SlotMap;
 
-use crate::Image;
-use crate::image::TextureAtlas;
+use crate::Material;
 
+#[derive(Clone)]
 pub struct Geometry {
     vertex_buffer: gpu::Buffer<Vertex>,
     index_buffer: gpu::Buffer<u32>,
@@ -30,6 +29,22 @@ impl Geometry {
             index_buffer,
             index_count: indices.len() as u32,
         }
+    }
+
+    pub fn update(&mut self, vertices: &[Vertex], indices: &[u32]) {
+        self.vertex_buffer = gpu::Buffer::new_filled(
+            "geometry vertex buffer",
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_SRC,
+            vertices,
+        );
+
+        self.index_buffer = gpu::Buffer::new_filled(
+            "geometry index buffer",
+            wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_SRC,
+            indices,
+        );
+
+        self.index_count = indices.len() as u32;
     }
 
     pub fn vertex_buffer(&self) -> &gpu::Buffer<Vertex> {
@@ -112,108 +127,14 @@ impl Geometry {
     }
 }
 
-pub struct Material {
-    #[doc(hidden)]
-    pub _pipeline_desc: gpu::PipelineDesc,
-
-    uniform_buffer: gpu::Buffer<MaterialUniforms>,
-    uniform_bind_group: wgpu::BindGroup,
+#[derive(Clone)]
+pub struct MeshAssets {
+    pub geometries: SlotMap<Geometry>,
+    pub materials: SlotMap<Material>,
+    pub material_bgl: wgpu::BindGroupLayout,
 }
 
-impl Material {
-    fn new(desc: MaterialDesc, atlas: &TextureAtlas, material_bgl: &wgpu::BindGroupLayout) -> Self {
-        let image = atlas
-            .images
-            .get(desc.base_color_texture.unwrap_or(atlas.white))
-            .expect("invalid base_color_texture handle");
-
-        let uniforms = MaterialUniforms {
-            base_color: desc.base_color.into(),
-            emissive: desc.emissive.into(),
-            uv_rect: image.uv.into(),
-            metallic: desc.metallic,
-            roughness: desc.roughness,
-            _pad: [0.0; 2],
-        };
-
-        let uniform_buffer = gpu::Buffer::new_filled(
-            "material uniforms",
-            wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            &[uniforms],
-        );
-
-        let gpu = gpu::GpuState::get();
-        let uniform_bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("material uniform bind group"),
-            layout: material_bgl,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.wgpu().as_entire_binding(),
-            }],
-        });
-
-        Self {
-            _pipeline_desc: gpu::PipelineDesc {
-                shader: desc.shader,
-                vertex_layout: gpu::Vertex::desc(),
-                blend: desc.blend,
-                topology: desc.topology,
-            },
-            uniform_buffer,
-            uniform_bind_group,
-        }
-    }
-
-    pub fn bind_group(&self) -> &wgpu::BindGroup {
-        &self.uniform_bind_group
-    }
-}
-
-pub struct MaterialDesc {
-    pub shader: &'static str,
-    pub blend: wgpu::BlendState,
-    pub topology: wgpu::PrimitiveTopology,
-
-    pub base_color_texture: Option<Handle<Image>>,
-    pub base_color: math::Vector4<f32>,
-    pub metallic: f32,
-    pub roughness: f32,
-    pub emissive: math::Vector4<f32>,
-}
-
-impl Default for MaterialDesc {
-    fn default() -> Self {
-        Self {
-            shader: "mesh-3d",
-            blend: wgpu::BlendState::ALPHA_BLENDING,
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            base_color_texture: None, // resolved to white_handle() in Material::new if unset — see below
-            base_color: math::Vector4::new(1.0, 1.0, 1.0, 1.0),
-            metallic: 0.0,
-            roughness: 1.0,
-            emissive: math::Vector4::new(0.0, 0.0, 0.0, 0.0),
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct MaterialUniforms {
-    base_color: [f32; 4],
-    emissive: [f32; 4],
-    uv_rect: [f32; 4], // image.uv, so the shader knows where in the atlas to sample
-    metallic: f32,
-    roughness: f32,
-    _pad: [f32; 2],
-}
-
-pub struct Meshes {
-    geometries: SlotMap<Geometry>,
-    materials: SlotMap<Material>,
-    material_bgl: wgpu::BindGroupLayout,
-}
-
-impl Meshes {
+impl MeshAssets {
     pub fn new() -> Self {
         let gpu = GpuState::get();
         let material_bgl = gpu
@@ -237,34 +158,5 @@ impl Meshes {
             materials: SlotMap::new(),
             material_bgl,
         }
-    }
-
-    pub fn create_geometry(&mut self, vertices: &[Vertex], indices: &[u32]) -> Handle<Geometry> {
-        self.geometries.insert(Geometry::new(vertices, indices))
-    }
-
-    pub fn material_bgl(&self) -> &wgpu::BindGroupLayout {
-        &self.material_bgl
-    }
-
-    pub fn create_material(
-        &mut self,
-        desc: MaterialDesc,
-        atlas: &TextureAtlas,
-    ) -> Handle<Material> {
-        let material = Material::new(desc, atlas, &self.material_bgl);
-        self.materials.insert(material)
-    }
-
-    pub fn get_geometry(&self, geometry: Handle<Geometry>) -> &Geometry {
-        self.geometries
-            .get(geometry)
-            .expect("Failed to get geometry")
-    }
-
-    pub fn get_material(&self, material: Handle<Material>) -> &Material {
-        self.materials
-            .get(material)
-            .expect("Failed to get material")
     }
 }

@@ -7,7 +7,7 @@ use wgpu::util::DeviceExt;
 
 use crate::GpuState;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Buffer<T> {
     label: String,
     inner: wgpu::Buffer,

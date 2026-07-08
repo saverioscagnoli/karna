@@ -4,7 +4,8 @@ mod immediate;
 mod layer;
 mod retained;
 
-use assets::AssetServerGuard;
+use assets::AssetServerView;
+use assets::ReadOnly;
 use gpu::CircleVertex;
 use gpu::GpuState;
 use gpu::PipelineCache;
@@ -19,6 +20,7 @@ pub use crate::color::Color;
 pub use crate::immediate::ImmediateRenderer;
 pub use crate::immediate::handle::Draw;
 use crate::immediate::imgui::ImguiRenderer;
+pub use crate::layer::Layer;
 pub use crate::layer::LayerId;
 pub use crate::layer::RenderLayer;
 use crate::retained::RetainedRenderer;
@@ -31,7 +33,6 @@ pub struct Renderer {
     cached_size: math::Size<u32>,
     is_surface_configured: bool,
     pipeline_cache: PipelineCache,
-    camera_bgl: wgpu::BindGroupLayout,
 
     pub(crate) clear_color: Vector4<f32>,
 
@@ -47,7 +48,8 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn _create_surface<S: Into<wgpu::SurfaceTarget<'static>>>(
+    #[doc(hidden)]
+    pub fn create_surface<S: Into<wgpu::SurfaceTarget<'static>>>(
         surface: S,
     ) -> (wgpu::Surface<'static>, wgpu::SurfaceConfiguration) {
         let gpu = GpuState::get();
@@ -146,10 +148,11 @@ impl Renderer {
         cache
     }
 
-    pub fn _from_surface<'a>(
+    #[doc(hidden)]
+    pub fn from_surface<'a>(
         surface: wgpu::Surface<'static>,
         config: wgpu::SurfaceConfiguration,
-        assets: AssetServerGuard<'a>,
+        assets: AssetServerView<'a, ReadOnly>,
         imgui: &mut imgui::Context,
         logs: SharedLogs,
     ) -> Self {
@@ -160,10 +163,7 @@ impl Renderer {
         let size = Size::new(config.width, config.height);
 
         let world = LayerId(layers.len());
-        let world_camera = Camera::new(
-            Projection::standard_3d(size, 75.0, 1.0, 1000.0),
-            &camera_bgl,
-        );
+        let world_camera = Camera::new(Projection::standard_2d(size), &camera_bgl);
         layers.push(RenderLayer::new(world_camera, &transform_bgl));
 
         let ui = LayerId(layers.len());
@@ -189,7 +189,6 @@ impl Renderer {
             cached_size: size,
             is_surface_configured: false,
             pipeline_cache,
-            camera_bgl,
             clear_color: Color::Black.into(),
             layers,
             active_layer: world,
@@ -217,11 +216,16 @@ impl Renderer {
         &mut self.layers[self.active_layer.0]
     }
 
+    pub fn set_active_layer(&mut self, layer: LayerId) {
+        self.active_layer = layer
+    }
+
     pub fn size(&self) -> &math::Size<u32> {
         &self.cached_size
     }
 
-    pub fn _resize(&mut self, width: u32, height: u32) {
+    #[doc(hidden)]
+    pub fn resize(&mut self, width: u32, height: u32) {
         let gpu = GpuState::get();
 
         self.config.width = width;
@@ -232,7 +236,12 @@ impl Renderer {
         self.is_surface_configured = true;
     }
 
-    pub fn _present<'a>(&'a mut self, assets: &AssetServerGuard<'a>, imgui: &mut imgui::Context) {
+    #[doc(hidden)]
+    pub fn present<'a>(
+        &'a mut self,
+        assets: &AssetServerView<'a, ReadOnly>,
+        imgui: &mut imgui::Context,
+    ) {
         if !self.is_surface_configured {
             return;
         }

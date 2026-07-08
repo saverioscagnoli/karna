@@ -1,6 +1,6 @@
 use karna::AppBuilder;
+use karna::ContextMut;
 use karna::ContextRef;
-use karna::ContextRefMut;
 use karna::Handle;
 use karna::Scene;
 use karna::WindowBuilder;
@@ -106,11 +106,11 @@ impl Donut {
 }
 
 impl Scene for Donut {
-    fn load(&mut self, ctx: ContextRefMut) {
+    fn load(&mut self, ctx: ContextMut) {
         ctx.time.set_target_fps(120);
     }
 
-    fn update(&mut self, ctx: ContextRefMut) {
+    fn update(&mut self, ctx: ContextMut) {
         let dt = ctx.time.delta();
 
         self.angle_a += 1.0 * dt;
@@ -156,7 +156,7 @@ fn main() {
                 .with_title("spinning donut")
                 .with_size((1280, 720))
                 .with_resizable(false)
-                .build_scene("donut", |ctx| Donut {
+                .build_scene("donut", |mut ctx| Donut {
                     font: ctx
                         .assets
                         .load_font(include_bytes!("assets/jbmono.ttf"), 24),

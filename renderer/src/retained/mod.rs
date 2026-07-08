@@ -1,5 +1,6 @@
-use assets::AssetServerGuard;
+use assets::AssetServerView;
 use assets::Material;
+use assets::ReadOnly;
 use gpu::GpuState;
 use gpu::PipelineCache;
 use utils::FastHashMap;
@@ -83,27 +84,27 @@ impl RetainedRenderer {
         })
     }
 
-    pub fn add(&mut self, mesh: Mesh) -> Handle<Mesh> {
+    pub fn add_mesh(&mut self, mesh: Mesh) -> Handle<Mesh> {
         self.meshes.insert(mesh)
     }
 
-    pub fn get(&self, mesh: Handle<Mesh>) -> &Mesh {
+    pub fn mesh(&self, mesh: Handle<Mesh>) -> &Mesh {
         self.meshes.get(mesh).expect("Failed to get mesh")
     }
 
-    pub fn get_mut(&mut self, mesh: Handle<Mesh>) -> &mut Mesh {
+    pub fn mesh_mut(&mut self, mesh: Handle<Mesh>) -> &mut Mesh {
         self.meshes.get_mut(mesh).expect("Failed to get mesh")
     }
 
-    pub fn remove(&mut self, mesh: Handle<Mesh>) -> Mesh {
+    pub fn remove_mesh(&mut self, mesh: Handle<Mesh>) -> Mesh {
         self.meshes.remove(mesh).expect("Failed to remove mesh")
     }
 
-    pub fn present<'a>(
-        &'a mut self,
-        rp: &mut wgpu::RenderPass<'a>,
+    pub fn present<'rp, 'assets>(
+        &mut self,
+        rp: &mut wgpu::RenderPass<'rp>,
         pipelines: &PipelineCache,
-        assets: &AssetServerGuard<'a>,
+        assets: &AssetServerView<'assets, ReadOnly>,
     ) {
         // group instances by material for batching
         let mut by_material: FastHashMap<Handle<Material>, Vec<Handle<Mesh>>> =
@@ -147,7 +148,7 @@ impl RetainedRenderer {
         let mut offset_index = 0u32;
         for (material_h, instances) in &by_material {
             let material = assets.get_material(*material_h);
-            rp.set_pipeline(pipelines.get_pipeline(&material._pipeline_desc));
+            rp.set_pipeline(pipelines.get_pipeline(&material.pipeline_desc));
             rp.set_bind_group(2, material.bind_group(), &[]);
 
             for &mesh_h in instances {

@@ -126,7 +126,7 @@ impl WindowState {
                 }
 
                 if show_console {
-                    draw.console();
+                    // draw.console();
                 }
             }
 
@@ -134,7 +134,7 @@ impl WindowState {
                 let mut imgui = ActiveImgui::new(&self.context.imgui, self.context.window.id());
                 self.context
                     .renderer
-                    ._present(&self.context.assets._guard(), &mut imgui);
+                    .present(&self.context.assets.rguard(), &mut imgui);
             }
 
             for command in self.context.scenes.drain_collect() {

@@ -1,5 +1,7 @@
 use assets::AssetServer;
-use assets::AssetServerGuard;
+use assets::AssetServerView;
+use assets::ReadOnly;
+use assets::ReadWrite;
 use imgui::ActiveImgui;
 use imgui::SharedImgui;
 use logging::info;
@@ -33,6 +35,27 @@ pub struct WindowContext {
     pub show_console: bool,
 }
 
+pub struct ContextMut<'ctx> {
+    pub window: &'ctx Window,
+    pub time: &'ctx mut Time,
+    pub input: &'ctx mut Input,
+    pub storage: &'ctx mut GenericStorage,
+    pub assets: AssetServerView<'ctx, ReadWrite>,
+    pub scenes: &'ctx mut SceneManager,
+    pub scene: SceneHandle<'ctx>,
+    pub monitors: &'ctx Monitors,
+}
+
+pub struct ContextRef<'ctx> {
+    pub window: &'ctx Window,
+    pub time: &'ctx Time,
+    pub input: &'ctx Input,
+    pub storage: &'ctx GenericStorage,
+    pub assets: AssetServerView<'ctx, ReadOnly>,
+    pub scenes: &'ctx SceneManager,
+    pub monitors: &'ctx Monitors,
+}
+
 impl WindowContext {
     pub fn new(
         window: Window,
@@ -58,13 +81,13 @@ impl WindowContext {
         }
     }
 
-    pub fn as_ref_mut<'ctx>(&'ctx mut self) -> ContextRefMut<'ctx> {
-        ContextRefMut {
+    pub fn as_ref_mut<'ctx>(&'ctx mut self) -> ContextMut<'ctx> {
+        ContextMut {
             window: &self.window,
             time: &mut self.time,
             input: &mut self.input,
             storage: &mut self.storage,
-            assets: &self.assets,
+            assets: self.assets.wguard(),
             scenes: &mut self.scenes,
             scene: SceneHandle::_new(&mut self.renderer),
             monitors: &self.monitors,
@@ -77,13 +100,13 @@ impl WindowContext {
             time: &self.time,
             input: &self.input,
             storage: &self.storage,
-            assets: self.assets._guard(),
+            assets: self.assets.rguard(),
             scenes: &self.scenes,
             monitors: &self.monitors,
         };
 
         let imgui = ActiveImgui::new(&self.imgui, self.window.id());
-        let draw = Draw::_new(&mut self.renderer, self.assets._guard(), imgui);
+        let draw = Draw::_new(&mut self.renderer, self.assets.rguard(), imgui);
 
         (ctx, draw)
     }
@@ -99,7 +122,7 @@ impl WindowContext {
         match event {
             AppEvent::WindowEvent(WindowEvent::Resized(size)) => {
                 info!("Setting window size to {}x{}", size.width, size.height);
-                self.renderer._resize(size.width, size.height);
+                self.renderer.resize(size.width, size.height);
             }
 
             AppEvent::QueryMonitors(monitors) => {
@@ -241,25 +264,4 @@ impl WindowContext {
             _ => {}
         }
     }
-}
-
-pub struct ContextRefMut<'ctx> {
-    pub window: &'ctx Window,
-    pub time: &'ctx mut Time,
-    pub input: &'ctx mut Input,
-    pub storage: &'ctx mut GenericStorage,
-    pub assets: &'ctx AssetServer,
-    pub scenes: &'ctx mut SceneManager,
-    pub scene: SceneHandle<'ctx>,
-    pub monitors: &'ctx Monitors,
-}
-
-pub struct ContextRef<'ctx> {
-    pub window: &'ctx Window,
-    pub time: &'ctx Time,
-    pub input: &'ctx Input,
-    pub storage: &'ctx GenericStorage,
-    pub assets: AssetServerGuard<'ctx>,
-    pub scenes: &'ctx SceneManager,
-    pub monitors: &'ctx Monitors,
 }

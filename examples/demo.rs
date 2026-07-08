@@ -1,8 +1,8 @@
 use std::f32;
 
 use karna::App;
+use karna::ContextMut;
 use karna::ContextRef;
-use karna::ContextRefMut;
 use karna::Scene;
 use karna::WindowBuilder;
 use karna::input::KeyCode;
@@ -17,13 +17,13 @@ struct S {
 }
 
 impl Scene for S {
-    fn load(&mut self, ctx: ContextRefMut) {
+    fn load(&mut self, ctx: ContextMut) {
         if let Some(m) = ctx.monitors.current() {
             ctx.time.set_target_fps(m.refresh_rate());
         }
     }
 
-    fn update(&mut self, ctx: ContextRefMut) {
+    fn update(&mut self, ctx: ContextMut) {
         let accel = 5000.0;
         let dt = ctx.time.delta();
 

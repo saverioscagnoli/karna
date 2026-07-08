@@ -1,4 +1,5 @@
-use assets::AssetServerGuard;
+use assets::AssetServerView;
+use assets::ReadOnly;
 use gpu::GpuState;
 use gpu::PipelineCache;
 use utils::FastHashMap;
@@ -7,7 +8,7 @@ use crate::Camera;
 use crate::Projection;
 use crate::Vertex;
 
-struct ImguiListRange {
+pub struct ImguiListRange {
     vertex_base: i32,
     index_start: u32,
     index_counts: Vec<u32>,
@@ -15,20 +16,20 @@ struct ImguiListRange {
 }
 
 pub struct ImguiRenderer {
-    font_texture: gpu::Texture,
-    font_texture_id: imgui::TextureId,
-    custom_textures: FastHashMap<imgui::TextureId, wgpu::BindGroup>,
-    vertex_buffer: gpu::Buffer<Vertex>,
-    index_buffer: gpu::Buffer<u16>,
-    ranges: Vec<ImguiListRange>,
-    camera: Camera,
+    pub font_texture: gpu::Texture,
+    pub font_texture_id: imgui::TextureId,
+    pub custom_textures: FastHashMap<imgui::TextureId, wgpu::BindGroup>,
+    pub vertex_buffer: gpu::Buffer<Vertex>,
+    pub index_buffer: gpu::Buffer<u16>,
+    pub ranges: Vec<ImguiListRange>,
+    pub camera: Camera,
     pub frame_created: bool,
 }
 
 impl ImguiRenderer {
     pub fn new<'a>(
         ctx: &mut imgui::Context,
-        assets: &AssetServerGuard<'a>,
+        assets: &AssetServerView<'a, ReadOnly>,
         view: math::Size<u32>,
         camera_bgl: &wgpu::BindGroupLayout,
     ) -> Self {

@@ -1,6 +1,6 @@
 use karna::App;
+use karna::ContextMut;
 use karna::ContextRef;
-use karna::ContextRefMut;
 use karna::Handle;
 use karna::Scene;
 use karna::WindowBuilder;
@@ -18,13 +18,13 @@ struct S {
 }
 
 impl Scene for S {
-    fn load(&mut self, ctx: ContextRefMut) {
+    fn load(&mut self, ctx: ContextMut) {
         if let Some(monitor) = ctx.monitors.current() {
             ctx.time.set_target_fps(monitor.refresh_rate());
         }
     }
 
-    fn fixed_update(&mut self, ctx: ContextRefMut) {
+    fn fixed_update(&mut self, ctx: ContextMut) {
         const VEL: f32 = 250.0;
 
         // snapshot before mutating this tick
@@ -54,7 +54,7 @@ impl Scene for S {
         }
     }
 
-    fn update(&mut self, ctx: ContextRefMut) {
+    fn update(&mut self, ctx: ContextMut) {
         let _ = ctx;
     }
 
@@ -95,11 +95,11 @@ impl Scene for S {
 struct AtlasScene;
 
 impl Scene for AtlasScene {
-    fn load(&mut self, ctx: ContextRefMut) {
+    fn load(&mut self, ctx: ContextMut) {
         ctx.time.set_target_fps(120);
     }
 
-    fn update(&mut self, ctx: ContextRefMut) {
+    fn update(&mut self, ctx: ContextMut) {
         let _ = ctx;
     }
 
@@ -120,7 +120,7 @@ fn main() {
         .with_window(
             WindowBuilder::new()
                 .with_size((1280, 720))
-                .build_scene("initial", |ctx| {
+                .build_scene("initial", |mut ctx| {
                     let image_bytes = include_bytes!("./assets/tetsuo.png");
 
                     S {

@@ -2,7 +2,8 @@ pub mod batcher;
 pub mod handle;
 pub mod imgui;
 
-use assets::AssetServerGuard;
+use assets::AssetServerView;
+use assets::ReadOnly;
 use gpu::CircleVertex;
 use gpu::PipelineCache;
 use gpu::Vertex;
@@ -16,7 +17,7 @@ use crate::Color;
 use crate::immediate::batcher::Batcher;
 
 #[derive(Debug, Clone, Copy)]
-struct RenderState {
+pub struct RenderState {
     draw_color: Vector4<f32>,
     transform: Matrix4<f32>,
     depth: f32,
@@ -33,8 +34,8 @@ impl Default for RenderState {
 }
 
 pub struct ImmediateRenderer {
-    current_state: RenderState,
-    state_stack: Vec<RenderState>,
+    pub current_state: RenderState,
+    pub state_stack: Vec<RenderState>,
     pub point_batcher: Batcher<Vertex>,
     pub line_batcher: Batcher<Vertex>,
     pub triangle_batcher: Batcher<Vertex>,
@@ -42,7 +43,7 @@ pub struct ImmediateRenderer {
 }
 
 impl ImmediateRenderer {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             current_state: RenderState::default(),
             state_stack: Vec::new(),
@@ -128,7 +129,7 @@ impl ImmediateRenderer {
         CircleVertex::new(p, self.current_state.draw_color, Vector2::new(c.x, c.y), r)
     }
 
-    pub fn push_point<'a>(&mut self, x: f32, y: f32, assets: &AssetServerGuard<'a>) {
+    pub fn push_point<'a>(&mut self, x: f32, y: f32, assets: &AssetServerView<'a, ReadOnly>) {
         let white = assets.white_handle();
         let uv = assets.get_image(white).uv.xy();
         let v = self.vertex(x, y, uv);
@@ -142,7 +143,7 @@ impl ImmediateRenderer {
         y1: f32,
         x2: f32,
         y2: f32,
-        assets: &AssetServerGuard<'a>,
+        assets: &AssetServerView<'a, ReadOnly>,
     ) {
         let white = assets.white_handle();
         let uv = assets.get_image(white).uv.xy();
@@ -157,7 +158,7 @@ impl ImmediateRenderer {
         y: f32,
         w: f32,
         h: f32,
-        assets: &AssetServerGuard<'a>,
+        assets: &AssetServerView<'a, ReadOnly>,
     ) {
         let white = assets.white_handle();
         let uv = assets.get_image(white).uv;
@@ -201,7 +202,7 @@ impl ImmediateRenderer {
         Self::push_vertices(&mut self.cirlce_batcher, &v, &[0, 1, 2, 2, 1, 3]);
     }
 
-    pub fn present<'a>(&'a mut self, rp: &mut wgpu::RenderPass<'a>, pipelines: &PipelineCache) {
+    pub fn present<'rp>(&mut self, rp: &mut wgpu::RenderPass<'rp>, pipelines: &PipelineCache) {
         let desc = gpu::PipelineDesc {
             shader: "immediate-2d",
             vertex_layout: Vertex::desc(),

@@ -28,6 +28,7 @@ assets.workspace = true
 utils.workspace = true
 imgui.workspace = true
 rodio = "0.22.2"
+gpu.workspace = true
 
 [dev-dependencies]
 log = "0.4.33"

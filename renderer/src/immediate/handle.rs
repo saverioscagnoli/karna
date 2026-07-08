@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use assets::AssetServerGuard;
+use assets::AssetServerView;
 use assets::Font;
 use assets::Image;
+use assets::ReadOnly;
 use glyph_brush_layout::GlyphPositioner;
 use imgui::ActiveImgui;
 use math::Size;
@@ -11,22 +12,40 @@ use math::Vector4;
 use utils::Handle;
 
 use crate::Color;
+use crate::Layer;
+use crate::LayerId;
 use crate::Renderer;
 
 pub struct Draw<'r> {
     renderer: &'r mut Renderer,
-    assets: AssetServerGuard<'r>,
+    assets: AssetServerView<'r, ReadOnly>,
     imgui: ActiveImgui<'r>,
 }
 
 impl<'r> Draw<'r> {
     #[doc(hidden)]
-    pub fn _new(r: &'r mut Renderer, assets: AssetServerGuard<'r>, imgui: ActiveImgui<'r>) -> Self {
+    pub fn _new(
+        r: &'r mut Renderer,
+        assets: AssetServerView<'r, ReadOnly>,
+        imgui: ActiveImgui<'r>,
+    ) -> Self {
         Self {
             renderer: r,
             assets,
             imgui,
         }
+    }
+
+    pub fn push_state(&mut self) {
+        self.renderer.active_layer_mut().immediate.push_state();
+    }
+
+    pub fn pop_state(&mut self) {
+        self.renderer.active_layer_mut().immediate.pop_state();
+    }
+
+    pub fn set_layer(&mut self, layer: Layer) {
+        self.renderer.active_layer = LayerId(layer as usize)
     }
 
     pub fn color(&self) -> Color {
@@ -54,14 +73,6 @@ impl<'r> Draw<'r> {
 
     pub fn set_depth(&mut self, d: f32) {
         self.renderer.active_layer_mut().immediate.set_depth(d);
-    }
-
-    pub fn push_state(&mut self) {
-        self.renderer.active_layer_mut().immediate.push_state();
-    }
-
-    pub fn pop_state(&mut self) {
-        self.renderer.active_layer_mut().immediate.pop_state();
     }
 
     pub fn translate(&mut self, x: f32, y: f32) {

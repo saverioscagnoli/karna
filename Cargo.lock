@@ -926,6 +926,7 @@ version = "0.1.0"
 dependencies = [
  "assets",
  "engine",
+ "gpu",
  "imgui 0.1.0",
  "log",
  "logging",

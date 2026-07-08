@@ -40,9 +40,9 @@ impl<V> Batcher<V> {
     }
 
     #[inline]
-    pub fn present<'a>(
-        &'a mut self,
-        rp: &mut wgpu::RenderPass<'a>,
+    pub fn present<'rp>(
+        &mut self,
+        rp: &mut wgpu::RenderPass<'rp>,
         pipeline: &wgpu::RenderPipeline,
     ) {
         if self.vertices.is_empty() {

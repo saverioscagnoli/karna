@@ -10,7 +10,7 @@ pub struct SharedResources {
 
 impl SharedResources {
     pub fn new() -> Self {
-        let assets = AssetServer::_new();
+        let assets = AssetServer::new();
         debug!("Asset server initialized");
 
         let imgui = SharedImgui::new();
