@@ -7,6 +7,7 @@ mod vertex;
 use std::sync::OnceLock;
 
 use logging::debug;
+use parking_lot::Mutex;
 
 pub use crate::buffer::Buffer;
 pub use crate::pipeline::PipelineCache;
@@ -32,6 +33,7 @@ pub struct GpuState {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub shaders: ShaderStore,
+    pub submit: Mutex<()>,
 }
 
 impl GpuState {
@@ -95,6 +97,7 @@ impl GpuState {
             device,
             queue,
             shaders: ShaderStore::new(),
+            submit: Mutex::new(()),
         }
     }
 }

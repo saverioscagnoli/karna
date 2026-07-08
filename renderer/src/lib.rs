@@ -240,6 +240,8 @@ impl Renderer {
     pub fn resize(&mut self, width: u32, height: u32) {
         let gpu = GpuState::get();
 
+        let _guard = gpu.submit.lock();
+
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&gpu.device, &self.config);
@@ -261,6 +263,7 @@ impl Renderer {
         self.imgui_renderer.prepare(imgui, self.cached_size);
 
         let gpu = GpuState::get();
+        let _guard = gpu.submit.lock();
 
         let output = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(t) => t,

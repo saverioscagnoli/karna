@@ -3,6 +3,7 @@ mod context;
 pub mod input;
 mod logs;
 mod monitors;
+mod resources;
 mod scene;
 mod shared;
 mod sound;

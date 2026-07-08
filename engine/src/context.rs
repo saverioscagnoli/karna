@@ -17,6 +17,7 @@ use crate::AppEvent;
 use crate::input::Input;
 use crate::monitors::Monitor;
 use crate::monitors::Monitors;
+use crate::resources::Resources;
 use crate::scene::SceneManager;
 use crate::sound::Sound;
 use crate::storage::GenericStorage;
@@ -28,6 +29,7 @@ pub struct WindowContext {
     pub time: Time,
     pub input: Input,
     pub storage: GenericStorage,
+    pub resources: Resources,
     pub sound: Sound,
     pub assets: AssetServer,
     pub scenes: SceneManager,
@@ -42,6 +44,7 @@ pub struct ContextMut<'ctx> {
     pub time: &'ctx mut Time,
     pub input: &'ctx mut Input,
     pub storage: &'ctx mut GenericStorage,
+    pub resources: &'ctx mut Resources,
     pub sound: &'ctx mut Sound,
     pub assets: AssetServerView<'ctx, ReadWrite>,
     pub scenes: &'ctx mut SceneManager,
@@ -54,6 +57,7 @@ pub struct ContextRef<'ctx> {
     pub time: &'ctx Time,
     pub input: &'ctx Input,
     pub storage: &'ctx GenericStorage,
+    pub resources: &'ctx Resources,
     pub sound: &'ctx Sound,
     pub assets: AssetServerView<'ctx, ReadOnly>,
     pub scenes: &'ctx SceneManager,
@@ -76,6 +80,7 @@ impl WindowContext {
             time: Time::new(),
             input: Input::new(),
             storage: GenericStorage::new(),
+            resources: Resources::new(),
             sound: Sound::new(),
             assets,
             scenes: SceneManager::new(),
@@ -92,6 +97,7 @@ impl WindowContext {
             time: &mut self.time,
             input: &mut self.input,
             storage: &mut self.storage,
+            resources: &mut self.resources,
             sound: &mut self.sound,
             assets: self.assets.wguard(),
             scenes: &mut self.scenes,
@@ -106,6 +112,7 @@ impl WindowContext {
             time: &self.time,
             input: &self.input,
             storage: &self.storage,
+            resources: &self.resources,
             sound: &self.sound,
             assets: self.assets.rguard(),
             scenes: &self.scenes,

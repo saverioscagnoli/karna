@@ -130,7 +130,7 @@ impl WindowState {
                 }
 
                 if show_console {
-                    // draw.console();
+                    draw.console();
                 }
             }
 
