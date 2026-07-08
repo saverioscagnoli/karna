@@ -19,6 +19,8 @@ pub use crate::camera::Projection;
 pub use crate::color::Color;
 pub use crate::immediate::ImmediateRenderer;
 pub use crate::immediate::handle::Draw;
+pub use crate::immediate::handle::Flip;
+pub use crate::immediate::handle::SrcRect;
 use crate::immediate::imgui::ImguiRenderer;
 pub use crate::layer::Layer;
 pub use crate::layer::LayerId;

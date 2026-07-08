@@ -22,25 +22,29 @@ impl Resources {
     }
 
     /// Get a shared reference to the stored value of type T, if present.
-    pub fn get<T: 'static>(&self) -> Option<&T> {
+    pub fn get<T: 'static>(&self) -> &T {
         self.items
             .get(&TypeId::of::<T>())
             .and_then(|boxed| boxed.downcast_ref::<T>())
+            .expect("Failed to get resource")
     }
 
     /// Get a mutable reference to the stored value of type T, if present.
-    pub fn get_mut<T: 'static>(&mut self) -> Option<&mut T> {
+    pub fn get_mut<T: 'static>(&mut self) -> &mut T {
         self.items
             .get_mut(&TypeId::of::<T>())
             .and_then(|boxed| boxed.downcast_mut::<T>())
+            .expect("Failed to get resource")
     }
 
     /// Remove and return the stored value of type T, if present.
-    pub fn remove<T: 'static>(&mut self) -> Option<T> {
-        self.items
+    pub fn remove<T: 'static>(&mut self) -> T {
+        *self
+            .items
             .remove(&TypeId::of::<T>())
-            .and_then(|boxed| boxed.downcast::<T>().ok())
-            .map(|boxed| *boxed)
+            .unwrap()
+            .downcast::<T>()
+            .unwrap()
     }
 
     /// Check whether a value of type T is stored.

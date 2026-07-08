@@ -16,6 +16,27 @@ use crate::Layer;
 use crate::LayerId;
 use crate::Renderer;
 
+#[derive(Clone, Copy, Default)]
+pub struct SrcRect {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct Flip {
+    pub x: bool,
+    pub y: bool,
+}
+
+impl Flip {
+    pub const NONE: Flip = Flip { x: false, y: false };
+    pub const X: Flip = Flip { x: true, y: false };
+    pub const Y: Flip = Flip { x: false, y: true };
+    pub const BOTH: Flip = Flip { x: true, y: true };
+}
+
 pub struct Draw<'r> {
     renderer: &'r mut Renderer,
     assets: AssetServerView<'r, ReadOnly>,
@@ -202,6 +223,59 @@ impl<'r> Draw<'r> {
                 info.uv,
             );
         }
+    }
+
+    pub fn image_ex<P, S>(
+        &mut self,
+        image_h: Handle<Image>,
+        dst_pos: P,
+        dst_size: S,
+        src: SrcRect,
+        flip: Flip,
+    ) where
+        P: Into<Vector2<f32>>,
+        S: Into<Size<f32>>,
+    {
+        let dst_pos: Vector2<f32> = dst_pos.into();
+        let dst_size: Size<f32> = dst_size.into();
+
+        let layer = self.renderer.active_layer_mut();
+        let image = self.assets.get_image(image_h);
+
+        // Full UV rect (u0, v0, u1, v1) this image occupies in its texture/atlas.
+        let uv = image.uv;
+        let uv_w = uv.z - uv.x;
+        let uv_h = uv.w - uv.y;
+
+        let img_w = image.size.width as f32;
+        let img_h = image.size.height as f32;
+
+        // Map the pixel-space src rect into the image's UV rect.
+        let u_left = uv.x + (src.x as f32 / img_w) * uv_w;
+        let v_top = uv.y + (src.y as f32 / img_h) * uv_h;
+        let u_right = uv.x + ((src.x as f32 + src.w as f32) / img_w) * uv_w;
+        let v_bottom = uv.y + ((src.y as f32 + src.h as f32) / img_h) * uv_h;
+
+        let (u0, u1) = if flip.x {
+            (u_right, u_left)
+        } else {
+            (u_left, u_right)
+        };
+        let (v0, v1) = if flip.y {
+            (v_bottom, v_top)
+        } else {
+            (v_top, v_bottom)
+        };
+
+        let src_uv = Vector4::new(u0, v0, u1, v1);
+
+        layer.immediate.push_textured_quad(
+            dst_pos.x,
+            dst_pos.y,
+            dst_size.width,
+            dst_size.height,
+            src_uv,
+        );
     }
 
     pub fn text_v<T: AsRef<str>, P: Into<math::Vector2<f32>>>(
