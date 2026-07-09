@@ -4,14 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+parking_lot.workspace = true
+math.workspace = true
+wgpu.workspace = true
 gpu.workspace = true
 utils.workspace = true
-rect_packer = "0.2.1"
-math.workspace = true
-macros.workspace = true
-wgpu.workspace = true
-fontdue.workspace = true
 logging.workspace = true
-globals.workspace = true
-parking_lot.workspace = true
-png.workspace = true
+png = "0.18.1"
+rect_packer = "0.2.1"
+ab_glyph = "0.2.32"
+rodio.workspace = true

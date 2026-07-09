@@ -1,62 +1,48 @@
-use crate::{
-    camera::Camera,
-    immediate::ImmediateRenderer,
-    retained::{RetainedRenderer, TextRenderer},
-};
-use assets::AssetServerGuard;
-use math::Size;
+use assets::AssetServerView;
+use assets::ReadOnly;
+use gpu::PipelineCache;
 
-#[derive(Default)]
-#[derive(Debug, Clone, Copy)]
+use crate::ImmediateRenderer;
+use crate::camera::Camera;
+use crate::retained::RetainedRenderer;
+
+#[repr(usize)]
 pub enum Layer {
-    #[default]
-    World,
-    Ui,
-    Custom(usize),
+    World = 0,
+    Ui = 1,
+    Debug = 2,
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct LayerId(pub usize);
 
 pub struct RenderLayer {
     pub(crate) camera: Camera,
-
-    pub(crate) retained: RetainedRenderer,
     pub(crate) immediate: ImmediateRenderer,
-    pub(crate) text: TextRenderer,
+    pub(crate) retained: RetainedRenderer,
 }
 
 impl RenderLayer {
-    pub(crate) fn new(
-        config: &wgpu::SurfaceConfiguration,
-        assets: &AssetServerGuard<'_>,
-        camera: Camera,
-    ) -> Self {
-        let immediate = ImmediateRenderer::new(config.format, &camera, &assets);
-        let retained = RetainedRenderer::new(config.format, &camera, &assets);
-        let text = TextRenderer::new(config.format, &camera, &assets);
+    pub(crate) fn new(camera: Camera, transform_bgl: &wgpu::BindGroupLayout) -> Self {
+        let immediate = ImmediateRenderer::new();
+        let retained = RetainedRenderer::new(transform_bgl);
 
         Self {
             camera,
-            retained,
             immediate,
-            text,
+            retained,
         }
     }
 
-    #[inline]
-    pub fn queue_resize(&mut self) {
-        self.camera.queue_resize();
-    }
-
-    #[inline]
-    pub fn present<'a>(
-        &'a mut self,
-        view: Size<u32>,
-        render_pass: &mut wgpu::RenderPass<'a>,
-        assets: &AssetServerGuard<'_>,
+    pub fn present<'rp, 'assets>(
+        &mut self,
+        view: math::Size<u32>,
+        rp: &mut wgpu::RenderPass<'rp>,
+        pipelines: &PipelineCache,
+        assets: &AssetServerView<'assets, ReadOnly>,
     ) {
         self.camera.update(view);
-
-        self.immediate.present(render_pass);
-        self.retained.present(render_pass, assets);
-        self.text.present(render_pass, assets);
+        self.immediate.present(rp, pipelines);
+        self.retained.present(rp, pipelines, assets);
     }
 }

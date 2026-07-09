@@ -1,216 +1,238 @@
-mod atlas;
+mod audio;
 mod font;
+mod image;
+mod material;
+mod mesh;
 
-use atlas::TextureAtlas;
-use globals::consts;
+use std::ops::Deref;
+use std::sync::Arc;
+
+use gpu::Vertex;
 use logging::info;
-use macros::Get;
-use math::Size;
-use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
-use std::{io::Cursor, path::Path, sync::Arc};
-use utils::{ByteSize, Handle, Label, SlotMap};
+use parking_lot::RwLock;
+use parking_lot::RwLockReadGuard;
+use parking_lot::RwLockWriteGuard;
+use utils::ByteSize;
+use utils::Handle;
 
-pub use font::*;
-
-#[derive(Debug, Clone)]
-pub struct Image {
-    pub label: Label,
-    pub size: Size<u32>,
-}
+pub use crate::audio::Audio;
+use crate::audio::AudioRegistry;
+pub use crate::font::Font;
+use crate::font::FontAtlas;
+pub use crate::font::GlyphInfo;
+use crate::font::GlyphKey;
+pub use crate::image::Image;
+use crate::image::TextureAtlas;
+pub use crate::material::Material;
+pub use crate::material::MaterialDesc;
+pub use crate::mesh::Geometry;
+use crate::mesh::MeshAssets;
 
 #[derive(Clone)]
-#[derive(Get)]
 pub struct AssetServer {
     atlas: Arc<RwLock<TextureAtlas>>,
-    images: Arc<RwLock<SlotMap<Image>>>,
-    fonts: Arc<RwLock<SlotMap<Font>>>,
+    fonts_atlas: Arc<RwLock<FontAtlas>>,
+    meshes: MeshAssets,
+    audios: AudioRegistry,
+}
 
-    #[get(copied)]
-    debug_font: Handle<Font>,
+mod sealed {
+    pub trait Sealed {}
+}
+
+pub struct ReadOnly;
+pub struct ReadWrite;
+
+pub trait AssetAccess: sealed::Sealed {
+    type AtlasGuard<'a>: Deref<Target = TextureAtlas>;
+    type FontAtlasGuard<'a>: Deref<Target = FontAtlas>;
+    type MeshAssetsGuard<'a>: Deref<Target = MeshAssets>;
+    type AudioRegistryGuard<'a>: Deref<Target = AudioRegistry>;
+}
+
+impl sealed::Sealed for ReadOnly {}
+impl sealed::Sealed for ReadWrite {}
+
+impl AssetAccess for ReadOnly {
+    type AtlasGuard<'a> = RwLockReadGuard<'a, TextureAtlas>;
+    type FontAtlasGuard<'a> = RwLockReadGuard<'a, FontAtlas>;
+    type MeshAssetsGuard<'a> = &'a MeshAssets;
+    type AudioRegistryGuard<'a> = &'a AudioRegistry;
+}
+
+impl AssetAccess for ReadWrite {
+    type AtlasGuard<'a> = RwLockWriteGuard<'a, TextureAtlas>;
+    type FontAtlasGuard<'a> = RwLockWriteGuard<'a, FontAtlas>;
+    type MeshAssetsGuard<'a> = &'a mut MeshAssets;
+    type AudioRegistryGuard<'a> = &'a mut AudioRegistry;
+}
+
+pub struct AssetServerView<'a, A: AssetAccess> {
+    atlas: A::AtlasGuard<'a>,
+    font_atlas: A::FontAtlasGuard<'a>,
+    meshes: A::MeshAssetsGuard<'a>,
+    audios: A::AudioRegistryGuard<'a>,
 }
 
 impl AssetServer {
     #[doc(hidden)]
     pub fn new() -> Self {
-        let atlas = TextureAtlas::new(consts::TEXTURE_ATLAS_BASE_SIZE);
+        let mut atlas = TextureAtlas::new((1024, 1024));
+        let font_atlas = FontAtlas::new(&mut atlas);
 
-        let mut server = Self {
+        Self {
             atlas: Arc::new(RwLock::new(atlas)),
-            images: Arc::new(RwLock::new(SlotMap::new())),
-            fonts: Arc::new(RwLock::new(SlotMap::new())),
-            debug_font: Handle::default(),
-        };
-
-        server.init();
-        server
-    }
-
-    fn init(&mut self) {
-        self.debug_font =
-            self.load_font_bytes(include_bytes!("../defaults/DOS-V.ttf").to_vec(), 16);
-    }
-
-    #[inline]
-    #[doc(hidden)]
-    pub fn guard(&self) -> AssetServerGuard<'_> {
-        AssetServerGuard {
-            atlas: self.atlas.read(),
-            images: self.images.read(),
-            fonts: self.fonts.read(),
-            debug_font: self.debug_font,
+            fonts_atlas: Arc::new(RwLock::new(font_atlas)),
+            meshes: MeshAssets::new(),
+            audios: AudioRegistry::new(),
         }
     }
 
-    pub fn load_image_bytes(&self, bytes: Vec<u8>) -> Handle<Image> {
-        let (rgba, width, height) = Self::decode_png(&bytes);
-
-        let mut images = self.images.write();
-        let mut atlas = self.atlas.write();
-
-        images.insert_with_key(|key| {
-            info!(
-                "Loading image {}x{} ({})",
-                width,
-                height,
-                ByteSize::from_bytes(rgba.len() as u64)
-            );
-            let label = Label::new(&format!("_img_{}", key.index()));
-            let size = atlas.add_rgba(label, &rgba, width, height);
-
-            Image { label, size }
-        })
+    #[doc(hidden)]
+    pub fn rguard<'a>(&'a self) -> AssetServerView<'a, ReadOnly> {
+        AssetServerView {
+            atlas: self.atlas.read(),
+            font_atlas: self.fonts_atlas.read(),
+            meshes: &self.meshes,
+            audios: &self.audios,
+        }
     }
 
-    fn decode_png(bytes: &[u8]) -> (Vec<u8>, u32, u32) {
-        let mut decoder = png::Decoder::new(Cursor::new(bytes));
-        decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::ALPHA);
-
-        let mut reader = decoder.read_info().expect("Failed to read PNG info");
-        let mut buf = vec![0; reader.output_buffer_size().unwrap()];
-        let info = reader.next_frame(&mut buf).expect("Failed to decode PNG");
-        buf.truncate(info.buffer_size());
-
-        (buf, info.width, info.height)
-    }
-
-    pub fn load_image<P: AsRef<Path>>(&self, path: P) -> Handle<Image> {
-        let bytes = std::fs::read(path).expect("Failed to read image file");
-        self.load_image_bytes(bytes)
-    }
-
-    pub fn load_font_bytes(&self, bytes: Vec<u8>, size: u8) -> Handle<Font> {
-        let mut fonts = self.fonts.write();
-        let mut atlas = self.atlas.write();
-
-        fonts.insert_with_key(|key| {
-            info!(
-                "Loading font of size {}",
-                ByteSize::from_bytes(bytes.len() as u64)
-            );
-            let label = Label::new(&format!("_font_{}", key.index()));
-            let mut font = Font::new(label, bytes, size);
-
-            atlas.rasterize_characters(label, &mut font, size as f32);
-            font
-        })
-    }
-
-    pub fn load_font<P: AsRef<Path>>(&self, path: P, size: u8) -> Handle<Font> {
-        let bytes = std::fs::read(path).expect("Failed to read font file");
-        self.load_font_bytes(bytes, size)
-    }
-
-    #[inline]
-    pub fn get_image(&self, handle: Handle<Image>) -> MappedRwLockReadGuard<'_, Image> {
-        let guard = self.images.read();
-
-        RwLockReadGuard::map(guard, |images| images.get(handle).expect("Image not found"))
-    }
-
-    #[inline]
-    pub fn get_font(&self, handle: Handle<Font>) -> MappedRwLockReadGuard<'_, Font> {
-        let guard = self.fonts.read();
-
-        RwLockReadGuard::map(guard, |fonts| fonts.get(handle).expect("Font not found"))
+    #[doc(hidden)]
+    pub fn wguard<'a>(&'a mut self) -> AssetServerView<'a, ReadWrite> {
+        AssetServerView {
+            atlas: self.atlas.write(),
+            font_atlas: self.fonts_atlas.write(),
+            meshes: &mut self.meshes,
+            audios: &mut self.audios,
+        }
     }
 }
 
-#[derive(Get)]
-pub struct AssetServerGuard<'a> {
-    atlas: RwLockReadGuard<'a, TextureAtlas>,
-    images: RwLockReadGuard<'a, SlotMap<Image>>,
-    fonts: RwLockReadGuard<'a, SlotMap<Font>>,
-
-    #[get(copied)]
-    debug_font: Handle<Font>,
-}
-
-impl<'a> AssetServerGuard<'a> {
-    #[inline]
-    pub fn get_image(&self, handle: Handle<Image>) -> &Image {
-        self.images.get(handle).expect("Image not found")
-    }
-
-    #[inline]
-    pub fn get_font(&self, handle: Handle<Font>) -> &Font {
-        self.fonts.get(handle).expect("Font not found")
-    }
-
-    // === Hidden Methods ===
-    //
-    // These methods are hidden since they must be used
-    // in the renderer, but they shouldnt be exposed
-    // to the user
-
-    #[inline]
-    #[doc(hidden)]
-    pub fn get_texture_uv(&self, handle: Handle<Image>) -> (f32, f32, f32, f32, f32, f32) {
-        let image = self.images.get(handle).expect("Invalid image handle");
-        self.get_texture_uv_by_label(&image.label)
-    }
-
-    #[inline]
-    #[doc(hidden)]
-    pub fn get_texture_uv_by_label(&self, label: &Label) -> (f32, f32, f32, f32, f32, f32) {
-        let rect = self
-            .atlas
-            .regions
-            .get(label)
-            .expect("Failed to get atlas region");
-
-        let size = self.atlas.size();
-        let x = rect.x as f32 / size.width as f32;
-        let y = rect.y as f32 / size.height as f32;
-        let width = rect.width as f32 / size.width as f32;
-        let height = rect.height as f32 / size.height as f32;
-
-        (x, y, width, height, rect.width as f32, rect.height as f32)
-    }
-
-    #[inline]
-    #[doc(hidden)]
-    pub fn get_white_uv_coords(&self) -> (f32, f32, f32, f32, f32, f32) {
-        self.get_texture_uv_by_label(&utils::label!("_white"))
-    }
-
-    #[inline]
-    #[doc(hidden)]
-    pub fn get_glyph_uv(&self, handle: Handle<Font>, ch: char) -> (f32, f32, f32, f32, f32, f32) {
-        let font = self.fonts.get(handle).expect("Invalid font handle");
-        let glyph_label = Label::new(&format!("{}_{}", font.label().raw(), ch));
-
-        self.get_texture_uv_by_label(&glyph_label)
-    }
-
-    #[inline]
+/// Read only method are defined here, because they will still need to be
+/// accessible in the writable view
+impl<'a, A: AssetAccess> AssetServerView<'a, A> {
     #[doc(hidden)]
     pub fn atlas_bgl(&self) -> &wgpu::BindGroupLayout {
         &self.atlas.bgl
     }
 
-    #[inline]
     #[doc(hidden)]
     pub fn atlas_bg(&self) -> &wgpu::BindGroup {
-        self.atlas.texture().bind_group()
+        &self.atlas.texture.bind_group
+    }
+
+    #[doc(hidden)]
+    pub fn material_bgl(&self) -> &wgpu::BindGroupLayout {
+        &self.meshes.material_bgl
+    }
+
+    pub fn white_handle(&self) -> Handle<Image> {
+        self.atlas.white
+    }
+
+    pub fn atlas_handle(&self) -> Handle<Image> {
+        self.atlas.handle
+    }
+
+    pub fn atlas_size(&self) -> math::Size<u32> {
+        self.atlas.size
+    }
+
+    pub fn debug_font_handle(&self) -> Handle<Font> {
+        self.font_atlas.debug_font
+    }
+
+    pub fn get_image(&self, handle: Handle<Image>) -> &Image {
+        self.atlas.images.get(handle).expect("Failed to get image")
+    }
+
+    pub fn get_font(&self, handle: Handle<Font>) -> &Font {
+        self.font_atlas
+            .fonts
+            .get(handle)
+            .expect("Failed to get font")
+    }
+
+    pub fn get_glyph(&self, font_handle: Handle<Font>, ch: char, size: u16) -> &GlyphInfo {
+        let key = GlyphKey {
+            font: font_handle,
+            ch,
+            size_px: size,
+        };
+
+        self.font_atlas
+            .glyphs
+            .get(&key)
+            .expect("Failed to get glyph")
+    }
+
+    pub fn get_geometry(&self, handle: Handle<Geometry>) -> &Geometry {
+        self.meshes
+            .geometries
+            .get(handle)
+            .expect("Failed to get geometry")
+    }
+
+    pub fn get_material(&self, handle: Handle<Material>) -> &Material {
+        self.meshes
+            .materials
+            .get(handle)
+            .expect("Failed to get material")
+    }
+
+    pub fn get_audio(&self, handle: Handle<Audio>) -> &Audio {
+        self.audios
+            .registry
+            .get(handle)
+            .expect("Failed to load audio")
+    }
+}
+
+/// Write only methods
+impl<'a> AssetServerView<'a, ReadWrite> {
+    pub fn load_image(&mut self, bytes: &[u8]) -> Handle<Image> {
+        self.atlas.load_image(bytes)
+    }
+
+    pub fn load_font(&mut self, bytes: &[u8], size: u16) -> Handle<Font> {
+        let size_bytes = bytes.len() as u64;
+        let font_vec =
+            ab_glyph::FontVec::try_from_vec(bytes.to_vec()).expect("Failed to read font");
+
+        info!("Loaded font with size={}", ByteSize::from_bytes(size_bytes));
+
+        self.font_atlas
+            .register_font(&mut self.atlas, font_vec, size)
+    }
+
+    pub fn load_geometry(&mut self, vertices: &[Vertex], indices: &[u32]) -> Handle<Geometry> {
+        self.meshes
+            .geometries
+            .insert(Geometry::new(vertices, indices))
+    }
+
+    pub fn load_material(&mut self, desc: MaterialDesc) -> Handle<Material> {
+        self.meshes
+            .materials
+            .insert(Material::new(desc, &self.atlas, self.material_bgl()))
+    }
+
+    pub fn load_audio(&mut self, bytes: &[u8]) -> Handle<Audio> {
+        self.audios.load_audio(bytes)
+    }
+
+    pub fn get_geometry_mut(&mut self, handle: Handle<Geometry>) -> &mut Geometry {
+        self.meshes
+            .geometries
+            .get_mut(handle)
+            .expect("Failed to get geometry")
+    }
+
+    pub fn get_material_mut(&mut self, handle: Handle<Material>) -> &mut Material {
+        self.meshes
+            .materials
+            .get_mut(handle)
+            .expect("Failed to get material")
     }
 }

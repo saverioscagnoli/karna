@@ -1,63 +1,59 @@
-use crate::{App, scene::Scene};
-use macros::With;
 use math::Size;
-use utils::{FastHashMap, Label, label};
+use winit::dpi::PhysicalSize;
 use winit::window::WindowAttributes;
 
-#[derive(Default)]
-#[derive(With)]
-pub struct WindowBuilder {
-    pub(crate) attributes: WindowAttributes,
+use crate::App;
+use crate::context::ContextMut;
+use crate::scene::Scene;
+use crate::scene::Scenes;
 
-    #[with(into)]
-    /// Used for debugging purposes,
-    /// such as distinguish logs between windows
-    pub(crate) label: String,
-    pub(crate) scenes: FastHashMap<Label, Box<dyn Scene>>,
+#[derive(Default)]
+pub struct WindowBuilder {
+    pub(crate) attrs: WindowAttributes,
+    pub(crate) scenes: Scenes,
+    pub(crate) initial_active: Vec<String>,
 }
 
 impl WindowBuilder {
-    /// Creates a new `WindowBuilder`
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Sets the window title before creation
     pub fn with_title<T: Into<String>>(mut self, title: T) -> Self {
-        self.attributes = self.attributes.with_title(title);
+        let title: String = title.into();
+        self.attrs = self.attrs.with_title(title);
         self
     }
 
-    /// Sets the size of the window before creation
     pub fn with_size<S: Into<Size<u32>>>(mut self, size: S) -> Self {
         let size: Size<u32> = size.into();
-
-        self.attributes = self.attributes.with_inner_size(size);
+        let size = PhysicalSize::new(size.width, size.height);
+        self.attrs = self.attrs.with_inner_size(size);
         self
     }
 
-    /// Sets whether the window should be resizable before creation.
-    ///
-    /// NOTE: on tiling window managers, setting this to `true`
-    /// will spawn the window as floating, overriding the tiling rules
-    pub fn with_resizable(mut self, resizable: bool) -> Self {
-        self.attributes = self.attributes.with_resizable(resizable);
+    pub fn with_resizable(mut self, r: bool) -> Self {
+        self.attrs = self.attrs.with_resizable(r);
         self
     }
 
-    /// Adds a scene to the window
-    ///
-    /// NOTE: To add an intial scene when the window spawns,
-    /// use `with_initial_scene`, which is mandatory to do
-    /// for each window
-    pub fn with_scene<S: Scene + 'static>(mut self, label: Label, scene: S) -> Self {
-        self.scenes.insert(label, Box::new(scene));
+    pub fn with_scene<S: Scene + 'static>(self, label: impl Into<String>, scene: S) -> Self {
+        self.build_scene(label, move |_ctx| scene)
+    }
+
+    pub fn build_scene<S, F, L: Into<String>>(mut self, label: L, f: F) -> Self
+    where
+        S: Scene + 'static,
+        F: FnOnce(ContextMut) -> S + Send + 'static,
+    {
+        self.scenes
+            .insert_builder(label.into(), Box::new(move |ctx| Box::new(f(ctx))));
+
         self
     }
 
-    /// Sets the initial scene of the window
-    pub fn with_initial_scene<S: Scene + 'static>(mut self, scene: S) -> Self {
-        self.scenes.insert(label!("initial"), Box::new(scene));
+    pub fn with_active_scene(mut self, label: &str) -> Self {
+        self.initial_active.push(label.to_owned());
         self
     }
 }
@@ -72,31 +68,18 @@ impl AppBuilder {
         Self::default()
     }
 
-    /// Creates a new window
-    pub fn with_window(mut self, window: WindowBuilder) -> Self {
-        self.windows.push(window);
+    pub fn with_window(mut self, b: WindowBuilder) -> Self {
+        self.windows.push(b);
         self
     }
 
-    /// Creates a new app
     pub fn build(self) -> App {
         let mut app = App::new();
 
-        for (i, mut builder) in self.windows.into_iter().enumerate() {
-            assert!(
-                builder.scenes.contains_key(&label!("initial")),
-                "WindowBuilder must have an initial scene. Use with_initial_scene() or with_scene(label!(\"initial\"), scene)"
-            );
-
-            builder.label = if builder.label.is_empty() {
-                format!("window {}", i + 1)
-            } else {
-                builder.label
-            };
-
-            app.add_window_builder(builder);
+        for (_, b) in self.windows.into_iter().enumerate() {
+            app.request_window(b);
         }
 
-        app
+        return app;
     }
 }

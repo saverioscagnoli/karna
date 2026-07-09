@@ -1,37 +1,31 @@
-use globals::{consts, profiling};
-use gpu::core::{GpuBuffer, GpuBufferBuilder};
-
 #[derive(Debug)]
 pub struct Batcher<V> {
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,
-    vertex_buffer: GpuBuffer<V>,
-    index_buffer: GpuBuffer<u32>,
-    pipeline: wgpu::RenderPipeline,
+
+    vertex_buffer: gpu::Buffer<V>,
+    index_buffer: gpu::Buffer<u32>,
 }
 
 impl<V> Batcher<V> {
-    pub fn new(pipeline: wgpu::RenderPipeline) -> Self {
-        let vertex_buffer = GpuBufferBuilder::new()
-            .label("Immediate Vertex Buffer")
-            .capacity(consts::IMMEDIATE_VERTEX_BASE_CAPACITY)
-            .vertex()
-            .copy_dst()
-            .build();
+    pub fn new() -> Self {
+        let vertex_buffer = gpu::Buffer::new_with_capacity(
+            "immediate vertex buffer",
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            10000,
+        );
 
-        let index_buffer = GpuBufferBuilder::new()
-            .label("Immediate Vertex Buffer")
-            .capacity(consts::IMMEDIATE_INDEX_BASE_CAPACITY)
-            .index()
-            .copy_dst()
-            .build();
+        let index_buffer = gpu::Buffer::new_with_capacity(
+            "immediate index buffer",
+            wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            10000,
+        );
 
         Self {
-            vertices: Vec::with_capacity(consts::IMMEDIATE_VERTEX_BASE_CAPACITY),
-            indices: Vec::with_capacity(consts::IMMEDIATE_INDEX_BASE_CAPACITY),
+            vertices: Vec::with_capacity(1024),
+            indices: Vec::with_capacity(1024),
             vertex_buffer,
             index_buffer,
-            pipeline,
         }
     }
 
@@ -41,21 +35,29 @@ impl<V> Batcher<V> {
         self.indices.clear();
     }
 
+    pub fn vertex_count(&self) -> u32 {
+        self.vertices.len() as u32
+    }
+
     #[inline]
-    pub fn present<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>) {
+    pub fn present<'rp>(
+        &mut self,
+        rp: &mut wgpu::RenderPass<'rp>,
+        pipeline: &wgpu::RenderPipeline,
+    ) {
         if self.vertices.is_empty() {
             return;
         }
 
-        let vertex_count = self.vertices.len() as u32;
-        let index_count = self.indices.len() as u32;
+        let vertex_count = self.vertices.len();
+        let index_count = self.indices.len();
 
-        if vertex_count > self.vertex_buffer.capacity() as u32 {
+        if vertex_count > self.vertex_buffer.capacity() {
             let new_capacity = self.vertex_buffer.capacity() * 2;
             self.vertex_buffer.resize(new_capacity);
         }
 
-        if index_count > self.index_buffer.capacity() as u32 {
+        if index_count > self.index_buffer.capacity() {
             let new_capacity = self.index_buffer.capacity() * 2;
             self.index_buffer.resize(new_capacity);
         }
@@ -63,14 +65,12 @@ impl<V> Batcher<V> {
         self.vertex_buffer.write(0, &self.vertices);
         self.index_buffer.write(0, &self.indices);
 
-        render_pass.set_pipeline(&self.pipeline);
-        profiling::record_pipeline_switches(1);
+        rp.set_pipeline(pipeline);
 
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice_all());
-        render_pass.set_index_buffer(self.index_buffer.slice_all(), wgpu::IndexFormat::Uint32);
+        rp.set_vertex_buffer(0, self.vertex_buffer.slice_all());
+        rp.set_index_buffer(self.index_buffer.slice_all(), wgpu::IndexFormat::Uint32);
 
-        render_pass.draw_indexed(0..index_count, 0, 0..1);
-        profiling::record_draw_call(vertex_count, index_count);
+        rp.draw_indexed(0..index_count as u32, 0, 0..1);
 
         self.clear();
     }

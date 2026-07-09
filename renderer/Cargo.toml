@@ -4,13 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-wgpu.workspace = true
-winit.workspace = true
-macros.workspace = true
-math.workspace = true
-gpu.workspace = true
-utils.workspace = true
 assets.workspace = true
-fontdue.workspace = true
-globals.workspace = true
+wgpu.workspace = true
+gpu.workspace = true
 logging.workspace = true
+math.workspace = true
+utils.workspace = true
+glyph_brush_layout = "0.2.4"
+imgui.workspace = true

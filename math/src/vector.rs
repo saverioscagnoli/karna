@@ -1,677 +1,439 @@
-use crate::point::{Point2, Point3, Point4};
-use std::f32;
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use std::{
-    array::IntoIter,
-    ops::{Index, IndexMut},
-    slice::{Iter, IterMut},
-};
-use utils::impl_deref_to;
+use std::array;
+use std::array::IntoIter;
+use std::ops::Add;
+use std::ops::AddAssign;
+use std::ops::Div;
+use std::ops::DivAssign;
+use std::ops::Index;
+use std::ops::IndexMut;
+use std::ops::Mul;
+use std::ops::MulAssign;
+use std::ops::Neg;
+use std::ops::Sub;
+use std::ops::SubAssign;
+use std::slice::Iter;
+use std::slice::IterMut;
+use std::usize;
 
-#[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Vector<const N: usize>([f32; N]);
+use num::Float;
+use num::Num;
+use num::Signed;
+use utils::impl_deref_to_generic;
 
-impl<const N: usize> Default for Vector<N> {
+use crate::point::Point2;
+use crate::point::Point3;
+use crate::point::Point4;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Vector<const N: usize, T: Num + Copy>([T; N]);
+
+pub type Vector2<T> = Vector<2, T>;
+pub type Vector3<T> = Vector<3, T>;
+pub type Vector4<T> = Vector<4, T>;
+
+impl<const N: usize, T: Num + Copy> Default for Vector<N, T> {
     fn default() -> Self {
-        Self::splat(0.0)
+        Self::zero()
     }
 }
 
-impl<const N: usize> Index<usize> for Vector<N> {
-    type Output = f32;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
-    }
-}
-
-impl<const N: usize> IndexMut<usize> for Vector<N> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.0[index]
-    }
-}
-
-impl<const N: usize> From<[f32; N]> for Vector<N> {
-    fn from(value: [f32; N]) -> Self {
-        Self(value)
-    }
-}
-
-impl<const N: usize> From<Vector<N>> for [f32; N] {
-    fn from(value: Vector<N>) -> Self {
-        let mut result = [0.0; N];
-
-        for i in 0..N {
-            result[i] = value[i]
+macro_rules! impl_bin_op {
+    ($trait:ident, $method:ident) => {
+        impl<const N: usize, T: Num + Copy> $trait for Vector<N, T> {
+            type Output = Self;
+            fn $method(self, rhs: Self) -> Self {
+                let mut result = [T::zero(); N];
+                for i in 0..N {
+                    result[i] = self.0[i].$method(rhs.0[i]);
+                }
+                Self(result)
+            }
         }
+    };
+}
 
-        result
+macro_rules! impl_bin_op_variants {
+    ($trait:ident, $method:ident) => {
+        // &owned op &owned
+        impl<const N: usize, T: Num + Copy> $trait for &Vector<N, T> {
+            type Output = Vector<N, T>;
+            fn $method(self, rhs: Self) -> Vector<N, T> {
+                let mut result = [T::zero(); N];
+                for i in 0..N {
+                    result[i] = self.0[i].$method(rhs.0[i]);
+                }
+                Vector(result)
+            }
+        }
+        // &owned op owned
+        impl<const N: usize, T: Num + Copy> $trait<Vector<N, T>> for &Vector<N, T> {
+            type Output = Vector<N, T>;
+            fn $method(self, rhs: Vector<N, T>) -> Vector<N, T> {
+                let mut result = [T::zero(); N];
+                for i in 0..N {
+                    result[i] = self.0[i].$method(rhs.0[i]);
+                }
+                Vector(result)
+            }
+        }
+        // owned op &owned
+        impl<const N: usize, T: Num + Copy> $trait<&Vector<N, T>> for Vector<N, T> {
+            type Output = Vector<N, T>;
+            fn $method(self, rhs: &Vector<N, T>) -> Vector<N, T> {
+                let mut result = [T::zero(); N];
+                for i in 0..N {
+                    result[i] = self.0[i].$method(rhs.0[i]);
+                }
+                Vector(result)
+            }
+        }
+    };
+}
+
+macro_rules! impl_assign_op {
+    ($trait:ident, $method:ident, $bin_method:ident) => {
+        impl<const N: usize, T: Num + Copy> $trait for Vector<N, T> {
+            fn $method(&mut self, rhs: Self) {
+                for i in 0..N {
+                    self.0[i] = self.0[i].$bin_method(rhs.0[i]);
+                }
+            }
+        }
+    };
+}
+
+macro_rules! impl_scalar_op {
+    ($trait:ident, $method:ident) => {
+        impl<const N: usize, T: Num + Copy> $trait<T> for Vector<N, T> {
+            type Output = Self;
+            fn $method(self, rhs: T) -> Self {
+                let mut result = [T::zero(); N];
+                for i in 0..N {
+                    result[i] = self.0[i].$method(rhs);
+                }
+                Self(result)
+            }
+        }
+    };
+}
+
+macro_rules! impl_scalar_assign_op {
+    ($trait:ident, $method:ident, $bin_method:ident) => {
+        impl<const N: usize, T: Num + Copy> $trait<T> for Vector<N, T> {
+            fn $method(&mut self, rhs: T) {
+                for i in 0..N {
+                    self.0[i] = self.0[i].$bin_method(rhs);
+                }
+            }
+        }
+    };
+}
+
+impl_bin_op!(Add, add);
+impl_bin_op!(Sub, sub);
+impl_bin_op!(Mul, mul);
+impl_bin_op!(Div, div);
+
+impl_bin_op_variants!(Add, add);
+impl_bin_op_variants!(Sub, sub);
+impl_bin_op_variants!(Mul, mul);
+impl_bin_op_variants!(Div, div);
+
+impl_assign_op!(AddAssign, add_assign, add);
+impl_assign_op!(SubAssign, sub_assign, sub);
+impl_assign_op!(MulAssign, mul_assign, mul);
+impl_assign_op!(DivAssign, div_assign, div);
+
+impl_scalar_op!(Add, add);
+impl_scalar_op!(Sub, sub);
+impl_scalar_op!(Mul, mul);
+impl_scalar_op!(Div, div);
+
+impl_scalar_assign_op!(AddAssign, add_assign, add);
+impl_scalar_assign_op!(SubAssign, sub_assign, sub);
+impl_scalar_assign_op!(MulAssign, mul_assign, mul);
+impl_scalar_assign_op!(DivAssign, div_assign, div);
+
+impl<const N: usize, T: Num + Copy> Index<usize> for Vector<N, T> {
+    type Output = T;
+
+    fn index(&self, i: usize) -> &Self::Output {
+        &self.0[i]
     }
 }
 
-impl<const N: usize> Vector<N> {
+impl<const N: usize, T: Num + Copy> IndexMut<usize> for Vector<N, T> {
+    fn index_mut(&mut self, i: usize) -> &mut Self::Output {
+        &mut self.0[i]
+    }
+}
+
+impl<const N: usize, T: Num + Copy> IntoIterator for Vector<N, T> {
+    type Item = T;
+    type IntoIter = IntoIter<T, N>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<const N: usize, T: Num + Copy> Vector<N, T> {
     #[inline]
-    pub fn iter(&self) -> Iter<'_, f32> {
+    pub fn iter(&self) -> Iter<'_, T> {
         self.0.iter()
     }
 
     #[inline]
-    pub fn inter_mut(&mut self) -> IterMut<'_, f32> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
         self.0.iter_mut()
     }
+}
 
-    #[inline]
-    pub fn into_iter(self) -> IntoIter<f32, N> {
-        self.0.into_iter()
+impl<const N: usize, T: Num + Copy> Vector<N, T> {
+    pub fn zero() -> Self {
+        Self([T::zero(); N])
     }
 
-    #[inline]
-    pub fn from_array(arr: [f32; N]) -> Self {
-        Self(arr)
+    pub fn one() -> Self {
+        Self([T::one(); N])
     }
 
-    pub fn splat(n: f32) -> Self {
-        Self([n; N])
+    pub fn from_slice(v: &[T]) -> Self {
+        Self(array::from_fn(|i| v[i]))
     }
 
-    #[inline]
-    pub fn zeros() -> Self {
-        Self::default()
+    pub fn as_array(&self) -> [T; N] {
+        self.0
     }
 
-    #[inline]
-    pub fn ones() -> Self {
-        Self::splat(1.0)
+    pub fn as_ptr(&self) -> *const T {
+        self.0.as_ptr()
     }
 
-    #[inline]
-    pub fn dot(&self, rhs: &Self) -> f32 {
-        self.iter().zip(rhs.iter()).map(|(a, b)| a * b).sum()
+    pub fn splat(v: T) -> Self {
+        Self([v; N])
     }
 
-    #[inline]
-    pub fn length_squared(&self) -> f32 {
+    pub fn set(&mut self, v: [T; N]) {
+        self.0 = v;
+    }
+
+    pub fn dot(&self, other: &Self) -> T {
+        self.iter()
+            .zip(other.iter())
+            .map(|(a, b)| *a * *b)
+            .fold(T::zero(), |acc, x| acc + x)
+    }
+
+    pub fn length_sq(&self) -> T {
         self.dot(self)
     }
 
-    #[inline]
-    pub fn length(&self) -> f32 {
-        self.length_squared().sqrt()
+    pub fn distance_sq(&self, other: &Self) -> T {
+        (*self - *other).length_sq()
+    }
+}
+
+/// Partial Ord Impl
+
+impl<const N: usize, T: Num + Copy + PartialOrd> Vector<N, T> {
+    pub fn clamp(&self, min: T, max: T) -> Self {
+        Self(self.0.map(|x| num::clamp(x, min, max)))
     }
 
-    #[inline]
-    pub fn normalize(&mut self) {
-        *self = *self / self.length()
+    pub fn clamp_mut(&mut self, min: T, max: T) {
+        self.0 = self.0.map(|x| num::clamp(x, min, max))
     }
 
-    #[inline]
-    pub fn normalized(&self) -> Self {
-        *self / self.length()
+    pub fn min(&self, other: &Self) -> Self {
+        Self(array::from_fn(|i| {
+            if self[i] < other[i] {
+                self[i]
+            } else {
+                other[i]
+            }
+        }))
     }
 
-    #[inline]
-    /// Angle between two vectors in radians (0 to PI)
-    pub fn angle_to(&self, rhs: &Self) -> f32 {
-        let dot = self.dot(rhs);
-        let len = (self.length() * rhs.length()).max(f32::EPSILON);
-
-        (dot / len).clamp(-1.0, 1.0).acos()
+    pub fn max(&self, other: &Self) -> Self {
+        Self(array::from_fn(|i| {
+            if self[i] > other[i] {
+                self[i]
+            } else {
+                other[i]
+            }
+        }))
     }
+}
 
-    #[inline]
-    /// Reflect across a normal
-    pub fn reflected(&self, normal: &Self) -> Self {
-        *self - *normal * 2.0 * self.dot(normal)
-    }
+/// Signed impl
 
-    #[inline]
-    /// Project onto another vector
-    pub fn projected_onto(&self, rhs: &Self) -> Self {
-        *rhs * (self.dot(rhs) / rhs.length_squared())
-    }
-
-    #[inline]
-    /// Reject from another vector (perpendicular component)
-    pub fn rejected_from(&self, rhs: &Self) -> Self {
-        *self - self.projected_onto(rhs)
-    }
-
-    #[inline]
-    /// Component-wise min
-    pub fn min(&self, rhs: &Self) -> Self {
-        let mut result = Self::zeros();
-
-        for i in 0..N {
-            result[i] = self[i].min(rhs[i])
-        }
-
-        result
-    }
-
-    #[inline]
-    /// Component-wise max
-    pub fn max(&self, rhs: &Self) -> Self {
-        let mut result = Self::zeros();
-
-        for i in 0..N {
-            result[i] = self[i].max(rhs[i])
-        }
-
-        result
-    }
-
-    #[inline]
-    /// Component-wise abs
+impl<const N: usize, T: Num + Copy + Signed> Vector<N, T> {
     pub fn abs(&self) -> Self {
-        let mut result = Self::zeros();
-
-        for i in 0..N {
-            result[i] = self[i].abs()
-        }
-
-        result
+        Self(array::from_fn(|i| self[i].abs()))
     }
 
-    #[inline]
-    /// Component-wise floor
-    pub fn floor(&self) -> Self {
-        let mut result = Self::zeros();
-
-        for i in 0..N {
-            result[i] = self[i].floor()
-        }
-
-        result
+    pub fn reflect(&self, normal: &Self) -> Self {
+        // r = v - 2(v·n)n
+        let dot = self.dot(normal);
+        let two = T::one() + T::one();
+        Self(std::array::from_fn(|i| self[i] - two * dot * normal[i]))
     }
 
-    #[inline]
-    /// Component-wise ceil
-    pub fn ceil(&self) -> Self {
-        let mut result = Self::zeros();
-
-        for i in 0..N {
-            result[i] = self[i].ceil()
-        }
-
-        result
-    }
-
-    #[inline]
-    /// Component-wise round
-    pub fn round(&self) -> Self {
-        let mut result = Self::zeros();
-
-        for i in 0..N {
-            result[i] = self[i].round()
-        }
-
-        result
-    }
-
-    #[inline]
-    /// Clamp components between min and max
-    pub fn clamp(&self, min: &Self, max: &Self) -> Self {
-        let mut result = Self::zeros();
-
-        for i in 0..N {
-            result[i] = self[i].clamp(min[i], max[i])
-        }
-
-        result
+    pub fn project(&self, onto: &Self) -> Self {
+        // proj = (v·onto / onto·onto) * onto
+        let scalar = self.dot(onto);
+        let onto_sq = onto.dot(onto);
+        Self(std::array::from_fn(|i| scalar * onto[i] / onto_sq))
     }
 }
 
-macro_rules! impl_vector_op {
-    // Base: Vector-Vector ops (all 4 ref combinations)
-    ($trait:ident, $method:ident, $op:tt) => {
-        impl<const N: usize> $trait for Vector<N> {
-            type Output = Vector<N>;
-            fn $method(self, rhs: Self) -> Self::Output {
-                let mut r = [0.0; N];
-                for i in 0..N { r[i] = self.0[i] $op rhs.0[i]; }
-                Vector(r)
-            }
+/// Float impl
+
+impl<const N: usize, T: Float> Vector<N, T> {
+    pub fn length(&self) -> T {
+        self.length_sq().sqrt()
+    }
+
+    pub fn normalize(&self) -> Self {
+        let l = self.length();
+
+        if l == T::zero() {
+            return Self::zero();
         }
 
-        impl<const N: usize> $trait<&Vector<N>> for Vector<N> {
-            type Output = Vector<N>;
-            fn $method(self, rhs: &Vector<N>) -> Self::Output {
-                let mut r = [0.0; N];
-                for i in 0..N { r[i] = self.0[i] $op rhs.0[i]; }
-                Vector(r)
-            }
+        return *self / l;
+    }
+
+    pub fn normalize_mut(&mut self) {
+        let l = self.length();
+
+        if l == T::zero() {
+            return;
         }
 
-        impl<const N: usize> $trait<Vector<N>> for &Vector<N> {
-            type Output = Vector<N>;
-            fn $method(self, rhs: Vector<N>) -> Self::Output {
-                let mut r = [0.0; N];
-                for i in 0..N { r[i] = self.0[i] $op rhs.0[i]; }
-                Vector(r)
-            }
-        }
+        *self = *self / l
+    }
 
-        impl<const N: usize> $trait for &Vector<N> {
-            type Output = Vector<N>;
-            fn $method(self, rhs: Self) -> Self::Output {
-                let mut r = [0.0; N];
-                for i in 0..N { r[i] = self.0[i] $op rhs.0[i]; }
-                Vector(r)
-            }
-        }
-    };
+    pub fn distance(&self, other: &Self) -> T {
+        self.distance_sq(other).sqrt()
+    }
 
-    // With scalar (non-commutative): Vector op f32
-    ($trait:ident, $method:ident, $op:tt, scalar) => {
-        impl_vector_op!($trait, $method, $op);
+    pub fn lerp(&self, other: &Self, t: T) -> Self {
+        // result = self + t * (other - self)
+        Self(array::from_fn(|i| self[i] + t * (other[i] - self[i])))
+    }
 
-        impl<const N: usize> $trait<f32> for Vector<N> {
-            type Output = Vector<N>;
-            fn $method(self, s: f32) -> Self::Output {
-                let mut r = [0.0; N];
-                for i in 0..N { r[i] = self.0[i] $op s; }
-                Vector(r)
-            }
-        }
-
-        impl<const N: usize> $trait<f32> for &Vector<N> {
-            type Output = Vector<N>;
-            fn $method(self, s: f32) -> Self::Output {
-                let mut r = [0.0; N];
-                for i in 0..N { r[i] = self.0[i] $op s; }
-                Vector(r)
-            }
-        }
-    };
-
-    // Commutative scalar: Vector op f32 AND f32 op Vector
-    ($trait:ident, $method:ident, $op:tt, scalar_commutative) => {
-        impl_vector_op!($trait, $method, $op, scalar);
-
-        impl<const N: usize> $trait<Vector<N>> for f32 {
-            type Output = Vector<N>;
-            fn $method(self, v: Vector<N>) -> Self::Output {
-                let mut r = [0.0; N];
-                for i in 0..N { r[i] = self $op v.0[i]; }
-                Vector(r)
-            }
-        }
-
-        impl<const N: usize> $trait<&Vector<N>> for f32 {
-            type Output = Vector<N>;
-            fn $method(self, v: &Vector<N>) -> Self::Output {
-                let mut r = [0.0; N];
-                for i in 0..N { r[i] = self $op v.0[i]; }
-                Vector(r)
-            }
-        }
-    };
-}
-
-macro_rules! impl_op_assign {
-    // Vector op= Vector
-    (vector: $trait:ident, $method:ident, $op:tt) => {
-        impl<const N: usize> $trait for Vector<N> {
-            fn $method(&mut self, rhs: Self) {
-                for i in 0..N { self.0[i] $op rhs.0[i]; }
-            }
-        }
-
-        impl<const N: usize> $trait<&Vector<N>> for Vector<N> {
-            fn $method(&mut self, rhs: &Vector<N>) {
-                for i in 0..N { self.0[i] $op rhs.0[i]; }
-            }
-        }
-    };
-
-    // Vector op= scalar
-    (scalar: $trait:ident, $method:ident, $op:tt) => {
-        impl<const N: usize> $trait<f32> for Vector<N> {
-            fn $method(&mut self, s: f32) {
-                for i in 0..N { self.0[i] $op s; }
-            }
-        }
-    };
-
-    // Both vector and scalar
-    (both: $trait:ident, $method:ident, $op:tt) => {
-        impl_op_assign!(vector: $trait, $method, $op);
-        impl_op_assign!(scalar: $trait, $method, $op);
-    };
-}
-
-impl_vector_op!(Add, add, +, scalar_commutative);
-impl_vector_op!(Sub, sub, -, scalar);
-impl_vector_op!(Mul, mul, *, scalar_commutative);
-impl_vector_op!(Div, div, /, scalar);
-
-impl_op_assign!(both: AddAssign, add_assign, +=);
-impl_op_assign!(both: SubAssign, sub_assign, -=);
-impl_op_assign!(both: MulAssign, mul_assign, *=);
-impl_op_assign!(both: DivAssign, div_assign, /=);
-
-impl<const N: usize> Neg for Vector<N> {
-    type Output = Vector<N>;
-
-    fn neg(mut self) -> Self::Output {
-        for i in 0..N {
-            self[i] = -self[i]
-        }
-
-        self
+    pub fn project_normalized(&self, onto: &Self) -> Self {
+        let scalar = self.dot(onto);
+        Self(array::from_fn(|i| scalar * onto[i]))
     }
 }
 
-pub type Vector2 = Vector<2>;
-pub type Vector3 = Vector<3>;
-pub type Vector4 = Vector<4>;
+impl_deref_to_generic!(Vector2<T> => Point2<T> where T: Num + Copy);
 
-impl_deref_to!(Vector2 => Point2);
-impl_deref_to!(Vector3 => Point3);
-impl_deref_to!(Vector4 => Point4);
-
-impl Vector2 {
-    #[inline]
-    pub fn new(x: f32, y: f32) -> Self {
+impl<T: Num + Copy> Vector2<T> {
+    pub fn new(x: T, y: T) -> Self {
         Self([x, y])
     }
+}
 
-    #[inline]
-    pub fn x() -> Self {
-        Self([1.0, 0.0])
+/// Vector2 where T can be negative
+impl<T: Num + Copy + Neg<Output = T>> Vector2<T> {
+    pub fn perp(&self) -> Self {
+        Self::new(-self.y, self.x)
     }
 
-    #[inline]
-    pub fn y() -> Self {
-        Self([0.0, 1.0])
-    }
-
-    #[inline]
-    pub fn with_x(mut self, x: f32) -> Self {
-        self[0] = x;
-        self
-    }
-
-    #[inline]
-    pub fn with_y(mut self, y: f32) -> Self {
-        self[1] = y;
-        self
-    }
-
-    #[inline]
-    /// Creates a counter-clockwise 90 deg perpendicular vector
-    pub fn perp_ccw(&self) -> Self {
-        Self([-self.y, self.x])
-    }
-
-    #[inline]
-    /// Creates a clockwise 90 deg perpendicular vector
-    pub fn perp_cw(&self) -> Self {
-        Self([self.x, -self.y])
-    }
-
-    #[inline]
-    /// 2D cross product — returns the z-component of the 3D cross
-    /// Useful for determining winding order / signed area
-    pub fn cross(&self, rhs: &Self) -> f32 {
-        self.x * rhs.y - self.y * rhs.x
-    }
-
-    #[inline]
-    // Angle in radians from positive X axis (-PI to PI)
-    pub fn angle(&self) -> f32 {
-        self.y.atan2(self.x)
-    }
-
-    #[inline]
-    /// Signed angle to another vector (-PI to PI)
-    pub fn signed_angle_to(&self, rhs: &Self) -> f32 {
-        self.cross(rhs).atan2(self.dot(rhs))
-    }
-
-    #[inline]
-    /// Creates an unit vector from angle (radians)
-    pub fn from_angle(rad: f32) -> Self {
-        Self([rad.cos(), rad.sin()])
-    }
-
-    #[inline]
-    /// Rotates by angle (radians)
-    pub fn rotated(&self, rad: f32) -> Self {
-        let (sin, cos) = rad.sin_cos();
-
-        Self([self.x * cos - self.y * sin, self.x * sin - self.y * cos])
-    }
-
-    #[inline]
-    /// Extend to Vector3
-    pub fn extend(&self, z: f32) -> Vector3 {
-        Vector([self.x, self.y, z])
+    pub fn perp_dot(&self, other: &Self) -> T {
+        self.x * other.y - self.y * other.x
     }
 }
 
-impl From<Vector3> for Vector2 {
-    fn from(value: Vector3) -> Self {
-        value.truncate()
+/// Vector2 where T is float
+impl<T: Float> Vector2<T> {
+    pub fn angle(&self) -> T {
+        T::atan2(self.y, self.x)
+    }
+
+    pub fn rotate(&self, angle: T) -> Self {
+        let (sin, cos) = angle.sin_cos();
+        Self::new(self.x * cos - self.y * sin, self.x * sin + self.y * cos)
+    }
+
+    pub fn from_angle(angle: T) -> Self {
+        let (sin, cos) = angle.sin_cos();
+        Self::new(cos, sin)
     }
 }
 
-impl From<Vector4> for Vector2 {
-    fn from(value: Vector4) -> Self {
-        value.truncate2()
-    }
-}
+impl_deref_to_generic!(Vector3<T> => Point3<T> where T: Num + Copy);
 
-impl Vector3 {
-    #[inline]
-    pub fn new(x: f32, y: f32, z: f32) -> Self {
+impl<T: Num + Copy> Vector3<T> {
+    pub fn new(x: T, y: T, z: T) -> Self {
         Self([x, y, z])
     }
 
-    #[inline]
-    pub fn x() -> Self {
-        Self([1.0, 0.0, 0.0])
+    pub fn xy(&self) -> Vector2<T> {
+        Vector2::new(self.x, self.y)
     }
 
-    #[inline]
-    pub fn y() -> Self {
-        Self([0.0, 1.0, 0.0])
-    }
-
-    #[inline]
-    pub fn z() -> Self {
-        Self([0.0, 0.0, 1.0])
-    }
-
-    #[inline]
-    pub fn with_x(mut self, x: f32) -> Self {
-        self.x = x;
-        self
-    }
-
-    #[inline]
-    pub fn with_y(mut self, y: f32) -> Self {
-        self.y = y;
-        self
-    }
-
-    #[inline]
-    pub fn with_z(mut self, z: f32) -> Self {
-        self.z = z;
-        self
-    }
-
-    #[inline]
-    /// Cross product
-    pub fn cross(&self, rhs: &Self) -> Self {
-        Self([
-            self.y * rhs.z - self.z * rhs.y,
-            self.z * rhs.x - self.x * rhs.z,
-            self.x * rhs.y - self.y * rhs.x,
-        ])
-    }
-
-    #[inline]
-    /// Triple scalar product: self · (a × b)
-    pub fn triple_scalar(&self, a: &Self, b: &Self) -> f32 {
-        self.dot(&a.cross(b))
-    }
-
-    #[inline]
-    /// Extend to Vector4
-    pub fn extend(&self, w: f32) -> Vector4 {
-        Vector([self.x, self.y, self.z, w])
-    }
-
-    #[inline]
-    /// Truncate to Vector2
-    pub fn truncate(&self) -> Vector2 {
-        Vector([self.x, self.y])
-    }
-
-    /// Swizzle
-    #[inline]
-    pub fn xy(&self) -> Vector2 {
-        Vector([self.x, self.y])
-    }
-
-    #[inline]
-    pub fn xz(&self) -> Vector2 {
-        Vector([self.x, self.z])
-    }
-
-    #[inline]
-    pub fn yz(&self) -> Vector2 {
-        Vector([self.y, self.z])
+    pub fn cross(&self, other: &Self) -> Self {
+        Self::new(
+            self.y * other.z - self.z * other.y,
+            self.z * other.x - self.x * other.z,
+            self.x * other.y - self.y * other.x,
+        )
     }
 }
 
-impl From<Vector2> for Vector3 {
-    fn from(value: Vector2) -> Self {
-        Vector([value.x, value.y, 0.0])
+impl<T: Float> Vector3<T> {
+    pub fn angle_between(&self, other: &Self) -> T {
+        let cos = self.dot(other) / (self.length() * other.length());
+        cos.acos()
     }
 }
 
-impl From<Vector4> for Vector3 {
-    fn from(value: Vector4) -> Self {
-        value.truncate()
-    }
-}
+impl_deref_to_generic!(Vector4<T> => Point4<T> where T: Num + Copy);
 
-impl Vector4 {
-    #[inline]
-    pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+impl<T: Num + Copy> Vector4<T> {
+    pub fn new(x: T, y: T, z: T, w: T) -> Self {
         Self([x, y, z, w])
     }
 
-    #[inline]
-    pub fn x() -> Self {
-        Self([1.0, 0.0, 0.0, 0.0])
-    }
-
-    #[inline]
-    pub fn y() -> Self {
-        Self([0.0, 1.0, 0.0, 0.0])
-    }
-
-    #[inline]
-    pub fn z() -> Self {
-        Self([0.0, 0.0, 1.0, 0.0])
-    }
-
-    #[inline]
-    pub fn w() -> Self {
-        Self([0.0, 0.0, 0.0, 1.0])
-    }
-
-    #[inline]
-    pub fn with_x(mut self, x: f32) -> Self {
-        self.x = x;
-        self
-    }
-
-    #[inline]
-    pub fn with_y(mut self, y: f32) -> Self {
-        self.y = y;
-        self
-    }
-
-    #[inline]
-    pub fn with_z(mut self, z: f32) -> Self {
-        self.z = z;
-        self
-    }
-
-    #[inline]
-    pub fn with_w(mut self, w: f32) -> Self {
-        self.w = w;
-        self
-    }
-
-    #[inline]
-    pub fn truncate2(&self) -> Vector2 {
+    pub fn xy(&self) -> Vector2<T> {
         Vector([self.x, self.y])
     }
 
-    #[inline]
-    pub fn truncate(&self) -> Vector3 {
+    pub fn xyz(&self) -> Vector3<T> {
         Vector([self.x, self.y, self.z])
     }
+}
 
-    #[inline]
-    pub fn perspective_divide(&self) -> Vector3 {
+/// Vector4 where T is a float
+impl<T: Float> Vector4<T> {
+    pub fn perspective_divide(&self) -> Vector3<T> {
         let w = self.w;
-        Vector([self.x / w, self.y / w, self.z / w])
+        Vector3::new(self.x / w, self.y / w, self.z / w)
     }
+}
 
-    #[inline]
-    pub fn from_point(p: Vector3) -> Self {
-        Self([p.x, p.y, p.z, 1.0])
+// Helpers
+
+impl<const N: usize, T: Num + Copy> From<[T; N]> for Vector<N, T> {
+    fn from(arr: [T; N]) -> Self {
+        let mut result = Self::default();
+
+        for i in 0..N {
+            result[i] = arr[i]
+        }
+
+        result
     }
+}
 
-    #[inline]
-    pub fn from_direction(d: Vector3) -> Self {
-        Self([d.x, d.y, d.z, 0.0])
-    }
-
-    #[inline]
-    pub fn is_point(&self) -> bool {
-        self.w.abs() > f32::EPSILON
-    }
-
-    #[inline]
-    pub fn is_direction(&self) -> bool {
-        self.w.abs() <= f32::EPSILON
-    }
-
-    #[inline]
-    pub fn xyz(&self) -> Vector3 {
-        self.truncate()
-    }
-
-    #[inline]
-    pub fn xy(&self) -> Vector2 {
-        Vector([self.x, self.y])
-    }
-
-    #[inline]
-    pub fn xz(&self) -> Vector2 {
-        Vector([self.x, self.z])
-    }
-
-    #[inline]
-    pub fn yz(&self) -> Vector2 {
-        Vector([self.y, self.z])
-    }
-
-    #[inline]
-    pub fn xw(&self) -> Vector2 {
-        Vector([self.x, self.w])
-    }
-
-    #[inline]
-    pub fn zw(&self) -> Vector2 {
-        Vector([self.z, self.w])
+impl<const N: usize, T: Num + Copy> Into<[T; N]> for Vector<N, T> {
+    fn into(self) -> [T; N] {
+        self.0
     }
 }

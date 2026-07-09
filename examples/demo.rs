@@ -1,49 +1,107 @@
-use karna::{
-    AppBuilder, Context, Draw, RenderContext, Scene, WindowBuilder,
-    assets::{Font, Image},
-    input::KeyCode,
-    math::Vector2,
-    render::Color,
-    utils::Handle,
-};
-use renderer::{Geometry, Material, Mesh, Projection, TextureKind, Transform3d};
+use std::f32;
 
-#[derive(Default)]
-struct Demo {
-    cat: Handle<Mesh>,
+use karna::App;
+use karna::ContextMut;
+use karna::ContextRef;
+use karna::Scene;
+use karna::WindowBuilder;
+use karna::assets::Audio;
+use karna::input::KeyCode;
+use karna::math::Size;
+use karna::math::Vector2;
+use karna::render::Color;
+use karna::render::Draw;
+use utils::Handle;
+
+struct S {
+    pos: Vector2<f32>,
+    vel: Vector2<f32>,
+    mammamia: Handle<Audio>,
 }
 
-impl Scene for Demo {
-    fn load(&mut self, ctx: &mut Context) {
-        let handle = ctx
+impl Scene for S {
+    fn load(&mut self, mut ctx: ContextMut) {
+        if let Some(m) = ctx.monitors.current() {
+            ctx.time.set_target_fps(m.refresh_rate());
+        }
+
+        self.mammamia = ctx
             .assets
-            .load_image_bytes(include_bytes!("assets/cat.png").to_vec());
-
-        let meta = ctx.assets.get_image(handle);
-
-        let mesh = Mesh::new(
-            Geometry::rect(meta.size.to_f32()),
-            Material::new_texture(TextureKind::Full(handle)),
-            Transform3d::default().with_position([400.0, 300.0, 0.0]),
-        );
-
-        ctx.scene.add_mesh(mesh);
+            .load_audio(include_bytes!("assets/luigi-mamma-miaaa.mp3"));
     }
 
-    fn update(&mut self, ctx: &mut Context) {}
+    fn update(&mut self, ctx: ContextMut) {
+        let accel = 5000.0;
+        let dt = ctx.time.delta();
 
-    fn render(&mut self, ctx: &RenderContext, draw: &mut Draw) {}
+        self.vel.y += ctx.input.key_axis([KeyCode::KeyW, KeyCode::KeyS]) * accel * dt;
+        self.vel.x += ctx.input.key_axis([KeyCode::KeyA, KeyCode::KeyD]) * accel * dt;
+
+        self.vel *= 0.85f32.powf(60.0).powf(dt);
+        self.pos += self.vel * dt;
+
+        if ctx.input.key_pressed(&KeyCode::Space) {
+            let audio = ctx.assets.get_audio(self.mammamia);
+            ctx.sound.play(audio);
+        }
+    }
+
+    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+        draw.set_color(Color::White);
+
+        draw.rect(self.pos.x, self.pos.y, 50.0, 50.0);
+
+        draw.set_color(Color::Cyan);
+
+        draw.push_state();
+        draw.translate(self.pos.x + 100.0, self.pos.y);
+        draw.rotate(f32::consts::PI / 4.0);
+        draw.rect(0.0, 0.0, 50.0, 50.0);
+        draw.pop_state();
+
+        draw.set_color(Color::Magenta);
+
+        draw.push_state();
+        draw.translate(self.pos.x, self.pos.y + 100.0);
+        draw.scale(2.0, 1.0);
+        draw.rect(0.0, 0.0, 50.0, 50.0);
+        draw.pop_state();
+
+        draw.set_color(Color::Orange);
+
+        draw.push_state();
+        draw.translate(200.0, 300.0);
+        draw.circle(0.0, 0.0, 20.0);
+        draw.scale(2.0, 2.0);
+        draw.circle(100.0, 100.0, 20.0);
+        draw.pop_state();
+
+        draw.set_color(Color::Magenta);
+
+        draw.line_v([300.0, 100.0], self.pos + Vector2::new(25.0, 25.0));
+
+        draw.set_color(Color::White);
+        draw.debug_text(&format!("fps: {}", ctx.time.fps()), 10.0, 10.0);
+        draw.debug_text(&format!("dt: {:.6}", ctx.time.delta()), 10.0, 30.0);
+    }
 }
 
 fn main() {
-    AppBuilder::new()
+    karna::init_logging();
+
+    App::builder()
         .with_window(
             WindowBuilder::new()
-                .with_title("demo window")
-                .with_label("main")
-                .with_resizable(false)
-                .with_size((800, 600))
-                .with_initial_scene(Demo::default()),
+                .with_size(Size::new(1280, 720))
+                .with_scene(
+                    "demo",
+                    S {
+                        pos: Vector2::new(50.0, 50.0),
+                        vel: Vector2::zero(),
+                        mammamia: Handle::default(),
+                    },
+                )
+                .with_active_scene("demo"),
         )
         .build()
         .run();

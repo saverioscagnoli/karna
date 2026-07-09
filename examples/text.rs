@@ -1,103 +1,142 @@
-use karna::{
-    AppBuilder, Context, Draw, RenderContext, Scene, WindowBuilder,
-    assets::Font,
-    input::KeyCode,
-    render::{Color, Text, Transform3d},
-    utils::Handle,
-};
+use karna::App;
+use karna::ContextMut;
+use karna::ContextRef;
+use karna::Handle;
+use karna::Scene;
+use karna::WindowBuilder;
+use karna::assets::Image;
+use karna::input::KeyCode;
+use karna::math::Vector2;
+use karna::render::Color;
+use karna::render::Draw;
 
-#[derive(Default)]
-struct TextDemo {
-    font: Handle<Font>,
-    text1: Handle<Text>,
-    text2: Handle<Text>,
-    color_timer: f32,
-    logs_toggle: bool,
+struct S {
+    image: Handle<Image>,
+    pos: Vector2<f32>,
+    prev_pos: Vector2<f32>,
+    vel: Vector2<f32>,
 }
 
-impl Scene for TextDemo {
-    fn load(&mut self, ctx: &mut Context) {
-        self.font = ctx
-            .assets
-            .load_font_bytes(include_bytes!("assets/jmono.ttf").to_vec(), 16);
-
-        let mut text = Text::new(self.font).with_content("Hello world!");
-
-        text.set_transform(Transform3d::default().with_position([100.0, 100.0, 0.0]));
-        text.set_color(Color::Cyan);
-
-        self.text1 = ctx.scene.add_text(text);
-
-        let mut text =
-            Text::new(ctx.assets.debug_font()).with_content("Retained text with debug font");
-
-        text.set_position([300.0, 300.0, 0.0]);
-
-        self.text2 = ctx.scene.add_text(text);
-    }
-
-    fn update(&mut self, ctx: &mut Context) {
-        self.color_timer += ctx.time.delta();
-
-        if let Some(font) = ctx.scene.get_text_mut(self.text1) {
-            *font.rotation_z_mut() += 1.0 * ctx.time.delta();
-        }
-
-        if ctx.input.key_pressed(&KeyCode::KeyL) {
-            self.logs_toggle = !self.logs_toggle;
+impl Scene for S {
+    fn load(&mut self, ctx: ContextMut) {
+        if let Some(monitor) = ctx.monitors.current() {
+            ctx.time.set_target_fps(monitor.refresh_rate());
         }
     }
 
-    fn render(&mut self, _ctx: &RenderContext, draw: &mut Draw) {
-        let r = self.color_timer.sin() * 127.0 + 128.0;
-        let g = (self.color_timer + 2.0).sin() * 127.0 + 128.0;
-        let b = (self.color_timer + 4.0).sin() * 127.0 + 128.0;
+    fn fixed_update(&mut self, ctx: ContextMut) {
+        const VEL: f32 = 250.0;
 
-        draw.set_color(Color::rgb(r / 255.0, g / 255.0, b / 255.0));
+        // snapshot before mutating this tick
+        self.prev_pos = self.pos;
 
-        draw.text(
-            self.font,
-            "This is JetBrains Mono Text, but in immediate mode!\n(Rebuilds every frame, Should be used only for rapid-changing text)",
+        if ctx.input.key_held(&KeyCode::KeyW) {
+            self.vel.y = -VEL;
+        }
+
+        if ctx.input.key_held(&KeyCode::KeyA) {
+            self.vel.x = -VEL;
+        }
+
+        if ctx.input.key_held(&KeyCode::KeyS) {
+            self.vel.y = VEL;
+        }
+
+        if ctx.input.key_held(&KeyCode::KeyD) {
+            self.vel.x = VEL;
+        }
+
+        self.pos += self.vel * ctx.time.fixed_delta();
+        self.vel *= 0.9;
+
+        if self.vel.length_sq() < 0.01 {
+            self.vel.set([0.0, 0.0]);
+        }
+    }
+
+    fn update(&mut self, ctx: ContextMut) {
+        let _ = ctx;
+    }
+
+    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+        draw.set_color(Color::Cyan);
+
+        for i in 0..10 {
+            for j in 0..10 {
+                draw.point(40.0 + i as f32 * 10.0, 100.0 + j as f32 * 10.0);
+            }
+        }
+
+        let alpha = ctx.time.alpha();
+        let render_pos = self.prev_pos.lerp(&self.pos, alpha);
+
+        draw.set_color(Color::White);
+        draw.image(self.image, render_pos.x, render_pos.y);
+
+        draw.set_color(Color::Cyan);
+        draw.circle(300.0, 300.0, 50.0);
+
+        draw.set_color(Color::Magenta);
+        draw.line_v([10.0, 50.0], [124.0, 478.0]);
+
+        draw.set_color(Color::White);
+        draw.debug_text(
+            format!("fps {}\ndt {:.6}s", ctx.time.fps(), ctx.time.delta()),
             10.0,
             10.0,
         );
 
-        draw.debug_text("Press 'L' to toggle logs!", 10.0, 60.0);
-
-        if self.logs_toggle {
-            draw.debug_logs(10.0, 80.0);
-        }
+        draw.imgui(|ui| {
+            ui.show_metrics_window(&mut true);
+        });
     }
 }
 
-struct AtlasDebug;
+struct AtlasScene;
 
-impl Scene for AtlasDebug {
-    fn load(&mut self, _ctx: &mut Context) {}
+impl Scene for AtlasScene {
+    fn load(&mut self, ctx: ContextMut) {
+        ctx.time.set_target_fps(120);
+    }
 
-    fn update(&mut self, _ctx: &mut Context) {}
+    fn update(&mut self, ctx: ContextMut) {
+        let _ = ctx;
+    }
 
-    fn render(&mut self, _ctx: &RenderContext, draw: &mut Draw) {
-        draw.debug_atlas(0.0, 0.0);
+    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+        let _ = ctx;
+
+        draw.texture_atlas(0.0, 0.0);
+        draw.imgui(|ui| {
+            ui.show_demo_window(&mut true);
+        });
     }
 }
 
 fn main() {
-    AppBuilder::new()
+    karna::init_logging();
+
+    App::builder()
         .with_window(
             WindowBuilder::new()
-                .with_label("main")
-                .with_title("Text demo")
-                .with_resizable(false)
-                .with_initial_scene(TextDemo::default()),
+                .with_size((1280, 720))
+                .build_scene("initial", |mut ctx| {
+                    let image_bytes = include_bytes!("./assets/tetsuo.png");
+
+                    S {
+                        pos: Vector2::new(10.0, 10.0),
+                        prev_pos: Vector2::new(10.0, 10.0),
+                        vel: Vector2::zero(),
+                        image: ctx.assets.load_image(image_bytes),
+                    }
+                })
+                .with_active_scene("initial"),
         )
         .with_window(
             WindowBuilder::new()
-                .with_label("atlas debug")
-                .with_title("Atlas")
-                .with_resizable(false)
                 .with_size((1024, 1024))
-                .with_initial_scene(AtlasDebug),
+                .with_scene("atlas", AtlasScene)
+                .with_active_scene("atlas"),
         )
         .build()
         .run();

@@ -1,422 +1,245 @@
-mod batcher;
-mod handle;
+pub mod batcher;
+pub mod handle;
+pub mod imgui;
 
-use std::borrow::Borrow;
+use assets::AssetServerView;
+use assets::ReadOnly;
+use gpu::CircleVertex;
+use gpu::PipelineCache;
+use gpu::Vertex;
+use logging::warn;
+use math::Matrix4;
+use math::Vector2;
+use math::Vector3;
+use math::Vector4;
 
-use crate::{
-    Camera,
-    color::Color,
-    immediate::batcher::Batcher,
-    immediate_circle_shader, immediate_shader,
-    traits::LayoutDescriptor,
-    vertex::{CircleVertex, Vertex},
-};
-use assets::{AssetServerGuard, Font, Image};
-use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
-use macros::{Get, Set};
-use math::{Vector2, Vector3, Vector4};
-use utils::{FastHashMap, Handle, label};
+use crate::Color;
+use crate::immediate::batcher::Batcher;
 
-pub use handle::*;
+#[derive(Debug, Clone, Copy)]
+pub struct RenderState {
+    draw_color: Vector4<f32>,
+    transform: Matrix4<f32>,
+    depth: f32,
+}
 
-#[derive(Get, Set)]
+impl Default for RenderState {
+    fn default() -> Self {
+        Self {
+            draw_color: Color::White.into(),
+            transform: Matrix4::identity(),
+            depth: 0.0,
+        }
+    }
+}
+
 pub struct ImmediateRenderer {
-    point_batcher: Batcher<Vertex>,
-    linelist_batcher: Batcher<Vertex>,
-    linestrip_batcher: Batcher<Vertex>,
-    triangle_batcher: Batcher<Vertex>,
-    circle_batcher: Batcher<CircleVertex>,
-
-    pub(crate) draw_color: Color,
-    text_layout: Layout,
-    char_cache: FastHashMap<u32, FastHashMap<char, (Vec<Vertex>, Vec<u32>)>>,
+    pub current_state: RenderState,
+    pub state_stack: Vec<RenderState>,
+    pub point_batcher: Batcher<Vertex>,
+    pub line_batcher: Batcher<Vertex>,
+    pub triangle_batcher: Batcher<Vertex>,
+    pub cirlce_batcher: Batcher<CircleVertex>,
 }
 
 impl ImmediateRenderer {
-    pub(crate) fn new(
-        surface_format: wgpu::TextureFormat,
-        camera: &Camera,
-        assets: &AssetServerGuard<'_>,
-    ) -> Self {
-        let point_pipeline = immediate_shader()
-            .pipeline_builder()
-            .label("Immediate Pixel pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::PointList)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[camera.bgl(), assets.atlas_bgl()],
-                &[Vertex::desc()],
-            );
-
-        let linelist_pipeline = immediate_shader()
-            .pipeline_builder()
-            .label("Immediate Pixel pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::LineList)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[camera.bgl(), assets.atlas_bgl()],
-                &[Vertex::desc()],
-            );
-
-        let linestrip_pipeline = immediate_shader()
-            .pipeline_builder()
-            .label("Immediate Pixel pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::LineStrip)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[camera.bgl(), assets.atlas_bgl()],
-                &[Vertex::desc()],
-            );
-
-        let triangle_pipeline = immediate_shader()
-            .pipeline_builder()
-            .label("Immediate Triangle pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::TriangleList)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[camera.bgl(), assets.atlas_bgl()],
-                &[Vertex::desc()],
-            );
-
-        let circle_pipeline = immediate_circle_shader()
-            .pipeline_builder()
-            .label("Immediate Circle pipeline")
-            .vertex_entry("vs_main")
-            .fragment_entry("fs_main")
-            .topology(wgpu::PrimitiveTopology::TriangleList)
-            .blend_state(Some(wgpu::BlendState::ALPHA_BLENDING))
-            .build(
-                surface_format,
-                &[camera.bgl(), assets.atlas_bgl()],
-                &[CircleVertex::desc()],
-            );
-
-        let point_batcher = Batcher::new(point_pipeline);
-        let linelist_batcher = Batcher::new(linelist_pipeline);
-        let linestrip_batcher = Batcher::new(linestrip_pipeline);
-        let triangle_batcher = Batcher::new(triangle_pipeline);
-
-        let circle_batcher = Batcher::new(circle_pipeline);
-
+    pub fn new() -> Self {
         Self {
-            draw_color: Color::White,
-            point_batcher,
-            linelist_batcher,
-            linestrip_batcher,
-            triangle_batcher,
-            circle_batcher,
-            text_layout: Layout::new(CoordinateSystem::PositiveYDown),
-            char_cache: FastHashMap::default(),
+            current_state: RenderState::default(),
+            state_stack: Vec::new(),
+            point_batcher: Batcher::new(),
+            line_batcher: Batcher::new(),
+            triangle_batcher: Batcher::new(),
+            cirlce_batcher: Batcher::new(),
         }
     }
 
     #[inline]
-    pub fn draw_point(&mut self, pos: Vector2) {
-        let color: Vector4 = self.draw_color.into();
-        let base = self.point_batcher.vertices.len() as u32;
+    fn push_vertices<V: Copy>(batcher: &mut Batcher<V>, vertices: &[V], pattern: &[u32]) {
+        let base = batcher.vertex_count();
 
-        self.point_batcher
-            .vertices
-            .push(Vertex::new(pos.extend(0.0), color, Vector2::zeros()));
-
-        self.point_batcher.indices.push(base);
+        batcher.vertices.extend_from_slice(vertices);
+        batcher.indices.extend(pattern.iter().map(|i| base + i));
     }
 
-    #[inline]
-    pub fn draw_line(&mut self, p1: Vector2, p2: Vector2) {
-        let color: Vector4 = self.draw_color.into();
-        let base = self.linelist_batcher.vertices.len() as u32;
-
-        self.linelist_batcher.vertices.extend_from_slice(&[
-            Vertex::new(p1.extend(0.0), color, Vector2::zeros()),
-            Vertex::new(p2.extend(0.0), color, Vector2::zeros()),
-        ]);
-
-        self.linelist_batcher
-            .indices
-            .extend_from_slice(&[base, base + 1]);
+    pub fn push_state(&mut self) {
+        self.state_stack.push(self.current_state);
     }
 
-    #[inline]
-    pub fn draw_lines<I>(&mut self, points: I)
-    where
-        I: IntoIterator,
-        I::Item: Borrow<(Vector2, Vector2)>,
-    {
-        let color: Vector4 = self.draw_color.into();
-        let base = self.linestrip_batcher.vertices.len() as u32;
-
-        let mut vertex_count = 0;
-
-        for item in points {
-            let (p1, p2) = *item.borrow();
-
-            self.linestrip_batcher.vertices.extend_from_slice(&[
-                Vertex::new(p1.extend(0.0), color, Vector2::zeros()),
-                Vertex::new(p2.extend(0.0), color, Vector2::zeros()),
-            ]);
-
-            vertex_count += 2;
+    pub fn pop_state(&mut self) {
+        if let Some(state) = self.state_stack.pop() {
+            self.current_state = state;
+        } else {
+            warn!("Immediate renderer: popped a render state without pushing first");
         }
-
-        self.linestrip_batcher
-            .indices
-            .extend(base..base + vertex_count);
     }
 
-    #[inline]
-    pub fn fill_rect(&mut self, pos: Vector2, w: f32, h: f32, assets: &AssetServerGuard<'_>) {
-        let color: Vector4 = self.draw_color.into();
-
-        // Get white pixel UV coords for solid color rendering
-        let (uv_x, uv_y, uv_w, uv_h, _, _) = assets.get_white_uv_coords();
-        let uv_center: Vector2 = [uv_x + uv_w * 0.5, uv_y + uv_h * 0.5].into();
-
-        let base = self.triangle_batcher.vertices.len() as u32;
-
-        self.triangle_batcher.vertices.extend_from_slice(&[
-            Vertex::new(pos.extend(0.0), color, uv_center),
-            Vertex::new(Vector3::new(pos.x + w, pos.y, 0.0), color, uv_center),
-            Vertex::new(Vector3::new(pos.x + w, pos.y + h, 0.0), color, uv_center),
-            Vertex::new(Vector3::new(pos.x, pos.y + h, 0.0), color, uv_center),
-        ]);
-
-        self.triangle_batcher.indices.extend_from_slice(&[
-            base,
-            base + 1,
-            base + 2,
-            base,
-            base + 2,
-            base + 3,
-        ]);
+    pub fn draw_color(&self) -> Vector4<f32> {
+        self.current_state.draw_color
     }
 
-    #[inline]
-    pub fn fill_circle(&mut self, center: Vector2, radius: f32) {
-        let color: Vector4 = self.draw_color.into();
-        let base = self.circle_batcher.vertices.len() as u32;
-
-        self.circle_batcher.vertices.extend_from_slice(&[
-            CircleVertex::new((center - radius).extend(0.0), color, center, radius),
-            CircleVertex::new(
-                Vector3::new(center.x + radius, center.y - radius, 0.0),
-                color,
-                center,
-                radius,
-            ),
-            CircleVertex::new((center + radius).extend(0.0), color, center, radius),
-            CircleVertex::new(
-                Vector3::new(center.x - radius, center.y + radius, 0.0),
-                color,
-                center,
-                radius,
-            ),
-        ]);
-
-        self.circle_batcher.indices.extend_from_slice(&[
-            base,
-            base + 1,
-            base + 2,
-            base,
-            base + 2,
-            base + 3,
-        ]);
+    pub fn set_draw_color(&mut self, c: Vector4<f32>) {
+        self.current_state.draw_color = c;
     }
 
-    #[inline]
-    pub fn draw_image(
+    pub fn depth(&self) -> f32 {
+        self.current_state.depth
+    }
+
+    pub fn set_depth(&mut self, d: f32) {
+        self.current_state.depth = d;
+    }
+
+    pub fn translate(&mut self, x: f32, y: f32) {
+        self.current_state.transform = self
+            .current_state
+            .transform
+            .matmul(&Matrix4::from_translation(Vector3::new(x, y, 0.0)))
+    }
+
+    pub fn rotate(&mut self, angle_rad: f32) {
+        self.current_state.transform = self
+            .current_state
+            .transform
+            .matmul(&Matrix4::from_rotation_z(angle_rad))
+    }
+
+    pub fn scale(&mut self, x: f32, y: f32) {
+        self.current_state.transform = self
+            .current_state
+            .transform
+            .matmul(&Matrix4::from_scale(Vector3::new(x, y, 0.0)))
+    }
+
+    pub fn tp(&self, x: f32, y: f32) -> Vector3<f32> {
+        let pos = Vector4::new(x, y, 0.0, 1.0);
+        let t = self.current_state.transform.mul_vec(&pos);
+
+        Vector3::new(t.x, t.y, self.current_state.depth)
+    }
+
+    fn vertex(&self, x: f32, y: f32, uv: Vector2<f32>) -> Vertex {
+        let p = self.tp(x, y);
+        Vertex::new(p, self.current_state.draw_color, uv)
+    }
+
+    fn circle_vertex(&self, x: f32, y: f32, center: Vector2<f32>, r: f32) -> CircleVertex {
+        let p = self.tp(x, y);
+        let c = self.tp(center.x, center.y);
+        CircleVertex::new(p, self.current_state.draw_color, Vector2::new(c.x, c.y), r)
+    }
+
+    pub fn push_point<'a>(&mut self, x: f32, y: f32, assets: &AssetServerView<'a, ReadOnly>) {
+        let white = assets.white_handle();
+        let uv = assets.get_image(white).uv.xy();
+        let v = self.vertex(x, y, uv);
+
+        Self::push_vertices(&mut self.point_batcher, &[v], &[0]);
+    }
+
+    pub fn push_line<'a>(
         &mut self,
-        image: Handle<Image>,
-        pos: Vector2,
-        assets: &AssetServerGuard<'_>,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        assets: &AssetServerView<'a, ReadOnly>,
     ) {
-        let color: Vector4 = Color::White.into();
+        let white = assets.white_handle();
+        let uv = assets.get_image(white).uv.xy();
+        let v = [self.vertex(x1, y1, uv), self.vertex(x2, y2, uv)];
 
-        let (uv_x, uv_y, uv_w, uv_h, w, h) = assets.get_texture_uv(image);
-
-        let uv_top_left: Vector2 = [uv_x, uv_y].into();
-        let uv_top_right: Vector2 = [uv_x + uv_w, uv_y].into();
-        let uv_bottom_right: Vector2 = [uv_x + uv_w, uv_y + uv_h].into();
-        let uv_bottom_left: Vector2 = [uv_x, uv_y + uv_h].into();
-
-        let base = self.triangle_batcher.vertices.len() as u32;
-
-        self.triangle_batcher.vertices.extend_from_slice(&[
-            Vertex::new(pos.extend(0.0), color, uv_top_left),
-            Vertex::new(Vector3::new(pos.x + w, pos.y, 0.0), color, uv_top_right),
-            Vertex::new(
-                Vector3::new(pos.x + w, pos.y + h, 0.0),
-                color,
-                uv_bottom_right,
-            ),
-            Vertex::new(Vector3::new(pos.x, pos.y + h, 0.0), color, uv_bottom_left),
-        ]);
-
-        self.triangle_batcher.indices.extend_from_slice(&[
-            base,
-            base + 1,
-            base + 2,
-            base,
-            base + 2,
-            base + 3,
-        ]);
+        Self::push_vertices(&mut self.line_batcher, &v, &[0, 1]);
     }
 
-    #[inline]
-    pub fn draw_atlas(&mut self, pos: Vector2, assets: &AssetServerGuard<'_>) {
-        let color: Vector4 = Color::White.into();
-
-        let (uv_x, uv_y, uv_w, uv_h, w, h) = assets.get_texture_uv_by_label(&label!("_atlas"));
-
-        let uv_top_left: Vector2 = [uv_x, uv_y].into();
-        let uv_top_right: Vector2 = [uv_x + uv_w, uv_y].into();
-        let uv_bottom_right: Vector2 = [uv_x + uv_w, uv_y + uv_h].into();
-        let uv_bottom_left: Vector2 = [uv_x, uv_y + uv_h].into();
-
-        let base = self.triangle_batcher.vertices.len() as u32;
-
-        self.triangle_batcher.vertices.extend_from_slice(&[
-            Vertex::new(pos.extend(0.0), color, uv_top_left),
-            Vertex::new(Vector3::new(pos.x + w, pos.y, 0.0), color, uv_top_right),
-            Vertex::new(
-                Vector3::new(pos.x + w, pos.y + h, 0.0),
-                color,
-                uv_bottom_right,
-            ),
-            Vertex::new(Vector3::new(pos.x, pos.y + h, 0.0), color, uv_bottom_left),
-        ]);
-
-        self.triangle_batcher.indices.extend_from_slice(&[
-            base,
-            base + 1,
-            base + 2,
-            base,
-            base + 2,
-            base + 3,
-        ]);
-    }
-
-    #[inline]
-    pub fn draw_text(
+    pub fn push_untextured_quad<'a>(
         &mut self,
-        handle: Handle<Font>,
-        text: &str,
         x: f32,
         y: f32,
-        assets: &AssetServerGuard<'_>,
+        w: f32,
+        h: f32,
+        assets: &AssetServerView<'a, ReadOnly>,
     ) {
-        let color: Vector4 = self.draw_color.into();
-        let font = assets.get_font(handle);
+        let white = assets.white_handle();
+        let uv = assets.get_image(white).uv;
+        let uv_min = uv.xy();
+        let uv_max = Vector2::new(uv.x + uv.z, uv.y + uv.w);
 
-        self.text_layout.clear();
-        self.text_layout.append(
-            &[font.inner()],
-            &TextStyle::new(text, font.size() as f32, 0),
-        );
+        let v = [
+            self.vertex(x, y, uv_min),
+            self.vertex(x + w, y, Vector2::new(uv_max.x, uv_min.y)),
+            self.vertex(x, y + h, Vector2::new(uv_min.x, uv_max.y)),
+            self.vertex(x + w, y + h, uv_max),
+        ];
 
-        let glyphs = self.text_layout.glyphs();
-        let cache = self
-            .char_cache
-            .entry(handle.index())
-            .or_insert_with(FastHashMap::default);
-
-        for glyph in glyphs {
-            if glyph.width == 0 || glyph.height == 0 {
-                continue;
-            }
-
-            let ch = glyph.parent;
-
-            if let Some((cached_verts, cached_indices)) = cache.get(&ch) {
-                let base_vertex = self.triangle_batcher.vertices.len() as u32;
-
-                for mut vertex in cached_verts.iter().copied() {
-                    vertex.position[0] += x + glyph.x;
-                    vertex.position[1] += y + glyph.y;
-                    vertex.color = color;
-
-                    self.triangle_batcher.vertices.push(vertex);
-                }
-
-                for index in cached_indices {
-                    self.triangle_batcher.indices.push(*index + base_vertex);
-                }
-            } else {
-                // Create new geometry and cache it
-                let (uv_x, uv_y, uv_w, uv_h, _, _) = assets.get_glyph_uv(handle, ch);
-
-                let screen_x = x + glyph.x;
-                let screen_y = y + glyph.y;
-                let w = glyph.width as f32;
-                let h = glyph.height as f32;
-
-                let base = self.triangle_batcher.vertices.len() as u32;
-
-                let uv_top_left: Vector2 = [uv_x, uv_y].into();
-                let uv_top_right: Vector2 = [uv_x + uv_w, uv_y].into();
-                let uv_bottom_right: Vector2 = [uv_x + uv_w, uv_y + uv_h].into();
-                let uv_bottom_left: Vector2 = [uv_x, uv_y + uv_h].into();
-
-                self.triangle_batcher.vertices.extend_from_slice(&[
-                    Vertex::new(Vector3::new(screen_x, screen_y, 0.0), color, uv_top_left),
-                    Vertex::new(
-                        Vector3::new(screen_x + w, screen_y, 0.0),
-                        color,
-                        uv_top_right,
-                    ),
-                    Vertex::new(
-                        Vector3::new(screen_x + w, screen_y + h, 0.0),
-                        color,
-                        uv_bottom_right,
-                    ),
-                    Vertex::new(
-                        Vector3::new(screen_x, screen_y + h, 0.0),
-                        color,
-                        uv_bottom_left,
-                    ),
-                ]);
-
-                self.triangle_batcher.indices.extend_from_slice(&[
-                    base,
-                    base + 1,
-                    base + 2,
-                    base,
-                    base + 2,
-                    base + 3,
-                ]);
-
-                // Cache relative to (0, 0) for reuse
-                let cached_color = Color::White.into();
-                let cached_vertices = vec![
-                    Vertex::new(Vector3::new(0.0, 0.0, 0.0), cached_color, uv_top_left),
-                    Vertex::new(Vector3::new(w, 0.0, 0.0), cached_color, uv_top_right),
-                    Vertex::new(Vector3::new(w, h, 0.0), cached_color, uv_bottom_right),
-                    Vertex::new(Vector3::new(0.0, h, 0.0), cached_color, uv_bottom_left),
-                ];
-
-                cache.insert(ch, (cached_vertices, vec![0, 1, 2, 0, 2, 3]));
-            }
-        }
+        Self::push_vertices(&mut self.triangle_batcher, &v, &[0, 1, 2, 2, 1, 3]);
     }
 
-    #[inline]
-    pub fn present<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>) {
-        self.point_batcher.present(render_pass);
-        self.linelist_batcher.present(render_pass);
-        self.linestrip_batcher.present(render_pass);
-        self.triangle_batcher.present(render_pass);
-        self.circle_batcher.present(render_pass);
+    pub fn push_textured_quad(&mut self, x: f32, y: f32, w: f32, h: f32, uv: math::Vector4<f32>) {
+        let uv_min = uv.xy();
+        let uv_max = Vector2::new(uv.x + uv.z, uv.y + uv.w);
+
+        let v = [
+            self.vertex(x, y, uv_min),                               // top-left
+            self.vertex(x + w, y, Vector2::new(uv_max.x, uv_min.y)), // top-right
+            self.vertex(x, y + h, Vector2::new(uv_min.x, uv_max.y)), // bottom-left
+            self.vertex(x + w, y + h, uv_max),                       // bottom-right
+        ];
+
+        Self::push_vertices(&mut self.triangle_batcher, &v, &[0, 1, 2, 2, 1, 3]);
+    }
+
+    pub fn push_circle(&mut self, r: f32, x: f32, y: f32) {
+        let center = Vector2::new(x, y);
+
+        let v = [
+            self.circle_vertex(x - r, y - r, center, r), // top-left
+            self.circle_vertex(x + r, y - r, center, r), // top-right
+            self.circle_vertex(x - r, y + r, center, r), // bottom-left
+            self.circle_vertex(x + r, y + r, center, r), // bottom-right
+        ];
+
+        Self::push_vertices(&mut self.cirlce_batcher, &v, &[0, 1, 2, 2, 1, 3]);
+    }
+
+    pub fn present<'rp>(&mut self, rp: &mut wgpu::RenderPass<'rp>, pipelines: &PipelineCache) {
+        let desc = gpu::PipelineDesc {
+            shader: "immediate-2d",
+            vertex_layout: Vertex::desc(),
+            blend: wgpu::BlendState::ALPHA_BLENDING,
+            topology: wgpu::PrimitiveTopology::PointList,
+        };
+
+        self.point_batcher
+            .present(rp, pipelines.get_pipeline(&desc));
+
+        let desc = gpu::PipelineDesc {
+            shader: "immediate-2d",
+            vertex_layout: Vertex::desc(),
+            blend: wgpu::BlendState::ALPHA_BLENDING,
+            topology: wgpu::PrimitiveTopology::LineList,
+        };
+
+        self.line_batcher.present(rp, pipelines.get_pipeline(&desc));
+
+        let desc = gpu::PipelineDesc {
+            shader: "immediate-2d",
+            vertex_layout: Vertex::desc(),
+            blend: wgpu::BlendState::ALPHA_BLENDING,
+            topology: wgpu::PrimitiveTopology::TriangleList,
+        };
+
+        self.triangle_batcher
+            .present(rp, pipelines.get_pipeline(&desc));
+
+        let desc = gpu::PipelineDesc {
+            shader: "immediate-2d-circles",
+            vertex_layout: CircleVertex::desc(),
+            blend: wgpu::BlendState::ALPHA_BLENDING,
+            topology: wgpu::PrimitiveTopology::TriangleList,
+        };
+
+        self.cirlce_batcher
+            .present(rp, pipelines.get_pipeline(&desc));
     }
 }

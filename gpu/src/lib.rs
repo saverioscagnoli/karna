@@ -1,78 +1,91 @@
-pub mod core;
+mod buffer;
+mod pipeline;
+mod shaders;
 mod texture;
+mod vertex;
 
-use macros::Get;
 use std::sync::OnceLock;
 
-// Re-exports
-pub use texture::Texture;
+use logging::debug;
+use parking_lot::Mutex;
 
-static STATE: OnceLock<GpuState> = OnceLock::new();
+pub use crate::buffer::Buffer;
+pub use crate::pipeline::PipelineCache;
+pub use crate::pipeline::PipelineDesc;
+use crate::shaders::ShaderStore;
+pub use crate::texture::Texture;
+pub use crate::vertex::*;
 
-pub fn init() {
-    STATE
-        .set(pollster::block_on(GpuState::new()))
-        .expect("Failed to initialize gpu");
-}
+static SINGLETON: OnceLock<GpuState> = OnceLock::new();
 
-#[inline]
-pub fn get() -> &'static GpuState {
-    STATE.get().expect("Failed to get gpu")
-}
-
-#[inline]
-pub fn adapter() -> &'static wgpu::Adapter {
-    &get().adapter
-}
-
-#[inline]
-pub fn device() -> &'static wgpu::Device {
-    &get().device
-}
-
-#[inline]
-pub fn queue() -> &'static wgpu::Queue {
-    &get().queue
+pub fn init(f: impl FnOnce(&mut ShaderStore, &wgpu::Device)) {
+    SINGLETON.get_or_init(|| {
+        let mut state = pollster::block_on(GpuState::new());
+        f(&mut state.shaders, &state.device);
+        state
+    });
 }
 
 #[derive(Debug)]
-#[derive(Get)]
 pub struct GpuState {
-    #[get]
-    instance: wgpu::Instance,
-
-    #[get]
-    adapter: wgpu::Adapter,
-
-    #[get]
-    device: wgpu::Device,
-
-    #[get]
-    queue: wgpu::Queue,
+    pub instance: wgpu::Instance,
+    pub adapter: wgpu::Adapter,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    pub shaders: ShaderStore,
+    pub submit: Mutex<()>,
 }
 
 impl GpuState {
+    pub fn get() -> &'static Self {
+        SINGLETON.get_or_init(|| pollster::block_on(Self::new()))
+    }
+
     async fn new() -> Self {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let backend_options = wgpu::BackendOptions::default();
+
+        debug!(
+            "Creating instance with backend options {:?}",
+            backend_options
+        );
+
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
-            ..Default::default()
+            backend_options,
+            display: None,
+            flags: wgpu::InstanceFlags::default(),
+            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
         });
+
+        // Will be parsed from a configuration file maybe?
+        let power_preference = wgpu::PowerPreference::HighPerformance;
+
+        debug!(
+            "Requesting adapter with power preference {:?}",
+            power_preference
+        );
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: None,
                 force_fallback_adapter: false,
+                ..Default::default()
             })
             .await
             .expect("Failed to request adapter");
 
+        // Will be parsed from a configuration file maybe?
+        let required_limits = wgpu::Limits::default();
+        let required_features = wgpu::Features::default();
+
+        debug!("Requesting device features={:?}", required_features);
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
-                required_limits: wgpu::Limits::defaults(),
                 label: Some("device"),
-                required_features: wgpu::Features::default()
-                    .union(wgpu::Features::POLYGON_MODE_LINE),
+                required_limits,
+                required_features,
                 ..Default::default()
             })
             .await
@@ -83,6 +96,8 @@ impl GpuState {
             adapter,
             device,
             queue,
+            shaders: ShaderStore::new(),
+            submit: Mutex::new(()),
         }
     }
 }

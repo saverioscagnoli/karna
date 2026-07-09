@@ -1,16 +1,18 @@
-use karna::{
-    AppBuilder, Draw, RenderContext, Scene, WindowBuilder,
-    assets::Font,
-    input::KeyCode,
-    render::Color,
-    utils::{Handle, Timer},
-};
+use karna::AppBuilder;
+use karna::ContextMut;
+use karna::ContextRef;
+use karna::Handle;
+use karna::Scene;
+use karna::WindowBuilder;
+use karna::assets::Font;
+use karna::input::KeyCode;
+use karna::render::Color;
+use karna::render::Draw;
 
 #[derive(Default)]
 struct Donut {
     font: Handle<Font>,
     font_toggle: bool,
-    debug_timer: Timer,
     angle_a: f32,
     angle_b: f32,
     color_timer: f32,
@@ -104,30 +106,23 @@ impl Donut {
 }
 
 impl Scene for Donut {
-    fn load(&mut self, ctx: &mut karna::Context) {
-        ctx.time.set_target_fps(175);
-        ctx.scene.set_clear_color(Color::Black);
-
-        self.font = ctx
-            .assets
-            .load_font_bytes(include_bytes!("assets/jmono.ttf").to_vec(), 18);
+    fn load(&mut self, ctx: ContextMut) {
+        ctx.time.set_target_fps(120);
     }
 
-    fn update(&mut self, ctx: &mut karna::Context) {
+    fn update(&mut self, ctx: ContextMut) {
         let dt = ctx.time.delta();
 
         self.angle_a += 1.0 * dt;
         self.angle_b += 0.5 * dt;
         self.color_timer += 2.0 * dt;
 
-        self.debug_timer.tick(dt);
-
         if ctx.input.key_pressed(&KeyCode::Space) {
             self.font_toggle = !self.font_toggle;
         }
     }
 
-    fn render(&mut self, ctx: &RenderContext, draw: &mut Draw) {
+    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
         let frame_content = self.generate_frame();
         let rainbow_color = self.get_rainbow_color();
         let win_size = ctx.window.size();
@@ -143,28 +138,31 @@ impl Scene for Donut {
         let y = (win_size.height as f32 - text_height) / 2.0;
 
         draw.set_color(Color::White);
-        draw.debug_text(format!("FPS: {}", ctx.time.fps()), 10.0, 10.0);
-        draw.debug_text(format!("DT: {:.6}", ctx.time.delta()), 10.0, 30.0);
+        draw.debug_text(&format!("FPS: {}", ctx.time.fps()), 10.0, 10.0);
+        draw.debug_text(&format!("DT: {:.6}", ctx.time.delta()), 10.0, 30.0);
 
         draw.set_color(rainbow_color);
 
-        if self.font_toggle {
-            draw.text(ctx.assets.debug_font(), frame_content, x, y);
-        } else {
-            draw.text(self.font, frame_content, x, y);
-        }
+        draw.text(self.font, &frame_content, x + 100.0, y + 100.0);
     }
 }
 
 fn main() {
+    karna::init_logging();
+
     AppBuilder::new()
         .with_window(
             WindowBuilder::new()
-                .with_label("main")
                 .with_title("spinning donut")
                 .with_size((1280, 720))
                 .with_resizable(false)
-                .with_initial_scene(Donut::default()),
+                .build_scene("donut", |mut ctx| Donut {
+                    font: ctx
+                        .assets
+                        .load_font(include_bytes!("assets/jbmono.ttf"), 24),
+                    ..Default::default()
+                })
+                .with_active_scene("donut"),
         )
         .build()
         .run();
