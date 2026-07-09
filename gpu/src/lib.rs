@@ -1,6 +1,7 @@
 mod buffer;
 mod pipeline;
 mod shaders;
+mod surface;
 mod texture;
 mod vertex;
 
@@ -13,6 +14,7 @@ pub use crate::buffer::Buffer;
 pub use crate::pipeline::PipelineCache;
 pub use crate::pipeline::PipelineDesc;
 use crate::shaders::ShaderStore;
+pub use crate::surface::WindowSurface;
 pub use crate::texture::Texture;
 pub use crate::vertex::*;
 
@@ -39,6 +41,10 @@ pub struct GpuState {
 impl GpuState {
     pub fn get() -> &'static Self {
         SINGLETON.get_or_init(|| pollster::block_on(Self::new()))
+    }
+
+    pub fn create() -> Self {
+        pollster::block_on(Self::new())
     }
 
     async fn new() -> Self {
