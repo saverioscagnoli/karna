@@ -16,6 +16,7 @@ use logging::info;
 use logging::warn;
 use renderer::FramePacket;
 use renderer::Renderer;
+use triple_buffer::triple_buffer;
 use utils::FastHashMap;
 use utils::Lazy;
 use winit::application::ApplicationHandler;
@@ -83,7 +84,7 @@ impl App {
         let gpu = GpuState::get();
 
         // Initialize channels
-        let (packet_tx, packet_rx) = crossbeam_channel::bounded::<FramePacket>(1);
+        let (packet_tx, packet_rx) = triple_buffer(&FramePacket::default());
         let (event_tx, event_rx) = crossbeam_channel::unbounded::<WindowEvent>();
 
         let window_id = window.id();
@@ -146,18 +147,6 @@ impl ApplicationHandler<UserEvent> for App {
         }
     }
 
-    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
-        match event {
-            UserEvent::Present(id, packet) => {
-                let Some(window) = self.windows.get_mut(&id) else {
-                    return;
-                };
-
-                self.renderer.present(id, &mut window.surface, packet);
-            }
-        }
-    }
-
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -187,6 +176,13 @@ impl ApplicationHandler<UserEvent> for App {
                     event_loop.exit();
                     return;
                 }
+            }
+
+            WindowEvent::RedrawRequested => {
+                let packet = window.packet_rx.read();
+
+                self.renderer
+                    .present(window_id, &mut window.surface, packet.clone());
             }
 
             WindowEvent::Resized(size) => {

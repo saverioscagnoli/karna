@@ -5,6 +5,7 @@ use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
 use logging::error;
 use renderer::FramePacket;
+use triple_buffer::Input;
 use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent;
 use winit::event_loop::EventLoopProxy;
@@ -27,7 +28,7 @@ pub struct WindowState {
     proxy: EventLoopProxy<UserEvent>,
     packet: FramePacket,
     event_rx: Receiver<WindowEvent>,
-    packet_tx: Sender<FramePacket>,
+    packet_tx: Input<FramePacket>,
 }
 
 impl WindowState {
@@ -37,7 +38,7 @@ impl WindowState {
         active_scenes: Vec<String>,
         proxy: EventLoopProxy<UserEvent>,
         event_rx: Receiver<WindowEvent>,
-        packet_tx: Sender<FramePacket>,
+        packet_tx: Input<FramePacket>,
     ) -> Self {
         let mut state = Self {
             should_exit: false,
@@ -222,9 +223,7 @@ impl WindowState {
         packet.ui.camera = self.context.ui_camera.data();
         packet.debug.camera = self.context.debug_camera.data();
 
-        self.proxy
-            .send_event(UserEvent::Present(self.context.window.id(), packet))
-            .unwrap();
+        self.packet_tx.write(packet);
     }
 
     fn flush(&mut self) {}
@@ -235,6 +234,7 @@ impl WindowState {
             self.frame();
             self.drain_scene_commands();
 
+            self.context.window.request_redraw();
             self.context.time.wait_for_next_frame(false);
 
             self.flush();

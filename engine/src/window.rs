@@ -102,10 +102,10 @@
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
-use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
 use gpu::WindowSurface;
 use renderer::FramePacket;
+use triple_buffer::Output;
 use winit::event::WindowEvent;
 use winit::window::WindowId;
 
@@ -114,8 +114,8 @@ pub type WinitWindow = winit::window::Window;
 pub struct WindowHandle {
     pub thread: JoinHandle<()>,
     pub surface: WindowSurface,
-    pub event_tx: Sender<WindowEvent>,    // To loop thread
-    pub packet_rx: Receiver<FramePacket>, // From loop thread
+    pub event_tx: Sender<WindowEvent>, // To loop thread
+    pub packet_rx: Output<FramePacket>,
 }
 
 pub struct Window {
