@@ -3,6 +3,7 @@ use winit::dpi::PhysicalSize;
 use winit::window::WindowAttributes;
 
 use crate::App;
+use crate::SceneHandle;
 use crate::context::ContextMut;
 use crate::scene::Scene;
 use crate::scene::Scenes;
@@ -38,16 +39,16 @@ impl WindowBuilder {
     }
 
     pub fn with_scene<S: Scene + 'static>(self, label: impl Into<String>, scene: S) -> Self {
-        self.build_scene(label, move |_ctx| scene)
+        self.build_scene(label, move |_ctx, _scene| scene)
     }
 
     pub fn build_scene<S, F, L: Into<String>>(mut self, label: L, f: F) -> Self
     where
         S: Scene + 'static,
-        F: FnOnce(ContextMut) -> S + Send + 'static,
+        F: FnOnce(ContextMut, &mut SceneHandle) -> S + Send + 'static,
     {
         self.scenes
-            .insert_builder(label.into(), Box::new(move |ctx| Box::new(f(ctx))));
+            .insert_builder(label.into(), Box::new(move |ctx, s| Box::new(f(ctx, s))));
 
         self
     }

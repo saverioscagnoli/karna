@@ -105,7 +105,6 @@ use std::thread::JoinHandle;
 use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
 use gpu::WindowSurface;
-use renderer::DrawCommand;
 use renderer::FramePacket;
 use winit::event::WindowEvent;
 use winit::window::WindowId;

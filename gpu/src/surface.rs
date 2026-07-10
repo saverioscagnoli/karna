@@ -26,12 +26,20 @@ impl WindowSurface {
             .copied()
             .unwrap_or(capabilities.formats[0]);
 
+        let present_mode = if capabilities
+            .present_modes
+            .contains(&wgpu::PresentMode::Mailbox)
+        {
+            wgpu::PresentMode::Mailbox
+        } else {
+            wgpu::PresentMode::Fifo
+        };
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
             width: size.width,
             height: size.height,
-            // Default to no vsync, may change later
             present_mode: wgpu::PresentMode::AutoNoVsync,
             alpha_mode: capabilities.alpha_modes[0],
             view_formats: vec![],
@@ -52,7 +60,7 @@ impl WindowSurface {
         self.inner.configure(&gpu.device, &self.config);
     }
 
-    pub fn acquire(&mut self, gpu: &GpuState) -> wgpu::CurrentSurfaceTexture {
+    pub fn acquire(&mut self) -> wgpu::CurrentSurfaceTexture {
         self.inner.get_current_texture()
     }
 }

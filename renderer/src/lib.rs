@@ -10,13 +10,32 @@ use gpu::Vertex;
 use logging::warn;
 use utils::FastHashMap;
 
+pub use crate::camera::Camera;
 use crate::camera::CameraData;
+pub use crate::camera::Projection;
+pub use crate::color::Color;
 
 #[derive(Debug, Clone, Copy)]
 pub enum DrawCommand {
-    ImmediatePoint { x: f32, y: f32 },
-    ImmediateLine { x1: f32, y1: f32, x2: f32, y2: f32 },
-    ImmediateRect { x: f32, y: f32, w: f32, h: f32 },
+    ImmediatePoint {
+        x: f32,
+        y: f32,
+        color: math::Vector4<f32>,
+    },
+    ImmediateLine {
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        color: math::Vector4<f32>,
+    },
+    ImmediateRect {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        color: math::Vector4<f32>,
+    },
 }
 
 #[repr(usize)]
@@ -38,6 +57,7 @@ pub struct LayerPacket {
 #[derive(Debug, Clone)]
 pub struct FramePacket {
     pub viewport: math::Size<u32>,
+    pub clear_color: math::Vector4<f32>,
     pub world: LayerPacket,
     pub ui: LayerPacket,
     pub debug: LayerPacket,
@@ -173,7 +193,7 @@ impl<W: Hash + Eq> Renderer<W> {
             .entry(w)
             .or_insert_with(|| WindowRenderData::new(gpu, &self.layouts));
 
-        let output = match surface.acquire(gpu) {
+        let output = match surface.acquire() {
             wgpu::CurrentSurfaceTexture::Success(t) => t,
             wgpu::CurrentSurfaceTexture::Suboptimal(t) => {
                 surface.resize(gpu, packet.viewport);
@@ -207,7 +227,18 @@ impl<W: Hash + Eq> Renderer<W> {
                 label: Some("command encoder"),
             });
 
-        for &layer in &Layer::ALL {
+        for (i, &layer) in Layer::ALL.iter().enumerate() {
+            let load_op = if i == 0 {
+                wgpu::LoadOp::Clear(wgpu::Color {
+                    r: packet.clear_color.x as f64,
+                    g: packet.clear_color.y as f64,
+                    b: packet.clear_color.z as f64,
+                    a: packet.clear_color.w as f64,
+                })
+            } else {
+                wgpu::LoadOp::Load
+            };
+
             let layer_gpu = &mut data.layers[layer as usize];
             let layer_packet = match layer {
                 Layer::World => &packet.world,
@@ -217,6 +248,13 @@ impl<W: Hash + Eq> Renderer<W> {
 
             layer_gpu.camera_buffer.write(0, &[layer_packet.camera]);
 
+            let mut verts = Vec::new();
+            let mut indices = Vec::new();
+            immediate::tessellate(&layer_packet.commands, &mut verts, &mut indices);
+
+            layer_gpu.vertex_buffer.write(0, &verts);
+            layer_gpu.index_buffer.write(0, &indices);
+
             {
                 let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("render pass"),
@@ -224,7 +262,7 @@ impl<W: Hash + Eq> Renderer<W> {
                         view: &view,
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                            load: load_op,
                             store: wgpu::StoreOp::Store,
                         },
                         depth_slice: None,
@@ -245,6 +283,12 @@ impl<W: Hash + Eq> Renderer<W> {
 
                 rp.set_bind_group(0, &layer_gpu.camera_bg, &[]);
                 rp.set_pipeline(pipeline);
+                rp.set_vertex_buffer(0, layer_gpu.vertex_buffer.slice_all());
+                rp.set_index_buffer(
+                    layer_gpu.index_buffer.slice_all(),
+                    wgpu::IndexFormat::Uint32,
+                );
+                rp.draw_indexed(0..indices.len() as u32, 0, 0..1);
             }
         }
 

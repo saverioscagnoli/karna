@@ -81,7 +81,7 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub(crate) fn new(proj: Projection) -> Self {
+    pub fn new(proj: Projection) -> Self {
         Self {
             projection: proj,
             position: Vector3::new(0.0, 0.0, -5.0),
@@ -114,7 +114,7 @@ impl Camera {
         }
     }
 
-    pub(crate) fn to_data(&self) -> CameraData {
+    pub fn data(&self) -> CameraData {
         CameraData {
             view_projection: self.view_matrix().matmul(&self.projection.matrix()),
         }

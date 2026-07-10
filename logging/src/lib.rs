@@ -111,6 +111,16 @@ impl Config {
         self
     }
 
+    pub fn hide_wgpu(self, v: bool) -> Self {
+        if v {
+            self.with_module_filter("sctk", LevelFilter::Error)
+                .with_module_filter("naga", LevelFilter::Error)
+                .with_module_filter("wgpu", LevelFilter::Error)
+        } else {
+            self
+        }
+    }
+
     fn build_logger(self) -> Logger {
         Logger {
             min_level: self.min_level,

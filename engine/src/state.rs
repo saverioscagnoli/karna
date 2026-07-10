@@ -5,9 +5,13 @@ use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
 use logging::error;
 use renderer::FramePacket;
+use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent;
+use winit::event_loop::EventLoopProxy;
+use winit::keyboard::PhysicalKey;
 
 use crate::Scene;
+use crate::UserEvent;
 use crate::context::WindowContext;
 use crate::scene::SceneCommand;
 use crate::scene::Scenes;
@@ -20,6 +24,7 @@ pub struct WindowState {
     scenes: Scenes,
     active_scenes: Vec<String>,
 
+    proxy: EventLoopProxy<UserEvent>,
     packet: FramePacket,
     event_rx: Receiver<WindowEvent>,
     packet_tx: Sender<FramePacket>,
@@ -30,6 +35,7 @@ impl WindowState {
         window: Window,
         scenes: Scenes,
         active_scenes: Vec<String>,
+        proxy: EventLoopProxy<UserEvent>,
         event_rx: Receiver<WindowEvent>,
         packet_tx: Sender<FramePacket>,
     ) -> Self {
@@ -39,6 +45,7 @@ impl WindowState {
             scenes,
             active_scenes: Vec::new(),
             packet: FramePacket::default(),
+            proxy,
             event_rx,
             packet_tx,
         };
@@ -54,7 +61,7 @@ impl WindowState {
     where
         L: Into<String>,
     {
-        self.scenes.register(label, Box::new(move |_| scene));
+        self.scenes.register(label, Box::new(move |_, _| scene));
     }
 
     fn activate_scene<L>(&mut self, label: L, user_data: Option<Box<dyn Any>>)
@@ -67,13 +74,16 @@ impl WindowState {
             return;
         }
 
-        self.scenes.build(&label, self.context.as_mut());
+        let (ctx, mut s) = self.context.split_mut(&mut self.packet);
+        self.scenes.build(&label, ctx, &mut s);
 
         if let Some(scene) = self.scenes.get_mut(&label) {
-            scene.load(self.context.as_mut());
+            let (ctx, mut s) = self.context.split_mut(&mut self.packet);
+            scene.load(ctx, &mut s);
 
             if let Some(user_data) = user_data {
-                scene.loaded_with(self.context.as_mut(), user_data);
+                let (ctx, mut s) = self.context.split_mut(&mut self.packet);
+                scene.loaded_with(ctx, &mut s, user_data);
             }
         }
 
@@ -121,6 +131,52 @@ impl WindowState {
                 WindowEvent::CloseRequested => {
                     self.should_exit = true;
                 }
+                WindowEvent::KeyboardInput {
+                    event: key_event, ..
+                } => match key_event.physical_key {
+                    PhysicalKey::Code(c) => {
+                        if key_event.state.is_pressed() {
+                            if !key_event.repeat {
+                                self.context.input.pressed_keys.insert(c);
+                            }
+
+                            self.context.input.held_keys.insert(c);
+                        } else {
+                            self.context.input.held_keys.remove(&c);
+                            self.context.input.released_keys.insert(c);
+                        }
+                    }
+
+                    _ => {}
+                },
+
+                WindowEvent::CursorMoved { position, .. } => {
+                    self.context
+                        .input
+                        .mouse_position
+                        .set([position.x as f32, position.y as f32]);
+                }
+
+                WindowEvent::MouseInput { button, state, .. } => {
+                    if state.is_pressed() {
+                        self.context.input.pressed_mouse_buttons.insert(button);
+                        self.context.input.held_mouse_buttons.insert(button);
+                    } else {
+                        self.context.input.held_mouse_buttons.remove(&button);
+                    }
+                }
+
+                WindowEvent::MouseWheel { delta, .. } => match delta {
+                    MouseScrollDelta::LineDelta(x, y) => {
+                        self.context.input.wheel_delta.set([x, y]);
+                    }
+                    MouseScrollDelta::PixelDelta(pos) => {
+                        self.context
+                            .input
+                            .wheel_delta
+                            .set([pos.x as f32, pos.y as f32]);
+                    }
+                },
 
                 _ => {}
             }
@@ -140,23 +196,35 @@ impl WindowState {
     }
 
     fn frame(&mut self) {
+        let mut packet = mem::take(&mut self.packet);
+
         while let Some(tick_start) = self.context.time.next_tick() {
-            self.for_each_active_mut(|s, ctx| s.fixed_update(ctx.as_mut()));
+            self.for_each_active_mut(|scene, ctx| {
+                let (ctx, mut s) = ctx.split_mut(&mut packet);
+                scene.fixed_update(ctx, &mut s);
+            });
+
             self.context.time.do_tick(tick_start);
         }
 
-        self.for_each_active_mut(|s, ctx| s.update(ctx.as_mut()));
-
-        let mut packet = mem::take(&mut self.packet);
+        self.for_each_active_mut(|scene, ctx| {
+            let (ctx, mut s) = ctx.split_mut(&mut packet);
+            scene.update(ctx, &mut s);
+        });
 
         self.for_each_active(|s, ctx| {
             let (ctx, mut draw) = ctx.split(&mut packet);
             s.draw(ctx, &mut draw);
         });
 
-        if let Err(e) = self.packet_tx.try_send(packet) {
-            error!("Failed to send frame packet: {}", e);
-        }
+        packet.viewport = self.context.window.size();
+        packet.world.camera = self.context.world_camera.data();
+        packet.ui.camera = self.context.ui_camera.data();
+        packet.debug.camera = self.context.debug_camera.data();
+
+        self.proxy
+            .send_event(UserEvent::Present(self.context.window.id(), packet))
+            .unwrap();
     }
 
     fn flush(&mut self) {}
@@ -168,7 +236,6 @@ impl WindowState {
             self.drain_scene_commands();
 
             self.context.time.wait_for_next_frame(false);
-            self.context.window.request_redraw();
 
             self.flush();
         }

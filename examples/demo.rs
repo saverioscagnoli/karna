@@ -1,32 +1,100 @@
+use engine::SceneHandle;
+use engine::input::Keycode;
 use karna::App;
 use karna::ContextMut;
 use karna::ContextRef;
 use karna::Scene;
 use karna::WindowBuilder;
+use karna::render::Color;
 use karna::render::Draw;
+use math::Vector2;
 
-struct S;
+struct S {
+    prev_pos: Vector2<f32>,
+    vel: Vector2<f32>,
+    pos: Vector2<f32>,
+}
 
 impl Scene for S {
-    fn load(&mut self, ctx: ContextMut) {}
+    fn load(&mut self, ctx: ContextMut, _scene: &mut SceneHandle) {
+        ctx.time.set_target_fps(120);
+    }
 
-    fn update(&mut self, ctx: ContextMut) {
-        println!("dt {}", ctx.time.delta());
+    fn update(&mut self, _ctx: ContextMut, _scene: &mut SceneHandle) {}
+
+    fn fixed_update(&mut self, ctx: ContextMut, _scene: &mut SceneHandle) {
+        let accel = 5000.0;
+        let dt = ctx.time.fixed_delta();
+
+        self.prev_pos = self.pos;
+
+        self.vel.y += ctx.input.key_axis([Keycode::KeyW, Keycode::KeyS]) * accel * dt;
+        self.vel.x += ctx.input.key_axis([Keycode::KeyA, Keycode::KeyD]) * accel * dt;
+
+        self.vel *= 0.85f32.powf(60.0).powf(dt);
+        self.pos += self.vel * dt;
+        println!("fps {}", ctx.time.fps());
     }
 
     fn draw(&self, ctx: ContextRef, draw: &mut Draw) {
-        draw.rect(10.0, 10.0, 50.0, 50.0);
+        let render_pos = self.prev_pos.lerp(&self.pos, ctx.time.alpha());
+
+        draw.set_color(Color::Red);
+        draw.rect(render_pos.x, render_pos.y, 50.0, 50.0);
+    }
+}
+
+struct A {
+    t: f32,
+}
+
+impl Scene for A {
+    fn load(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {}
+
+    fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
+        self.t += ctx.time.delta();
+    }
+
+    fn draw(&self, ctx: ContextRef, draw: &mut Draw) {
+        let r = (self.t.sin() * 0.5) + 0.5;
+        let g = (self.t.cos() * 0.5) + 0.5;
+        let b = (self.t.tan() * 0.5) + 0.5;
+
+        draw.set_clear_color(Color::rgb(r, g, b));
     }
 }
 
 fn main() {
+    karna::logging::init(
+        karna::logging::Config {
+            min_level: karna::logging::LevelFilter::Debug,
+            ..Default::default()
+        }
+        .hide_wgpu(true),
+    )
+    .expect("Failed to init logging");
+
     App::builder()
         .with_window(
             WindowBuilder::new()
                 .with_title("demo")
                 .with_size((1280, 720))
-                .with_scene("demo", S)
+                .with_scene(
+                    "demo",
+                    S {
+                        prev_pos: Vector2::zero(),
+                        vel: Vector2::zero(),
+                        pos: Vector2::zero(),
+                    },
+                )
                 .with_active_scene("demo"),
+        )
+        .with_window(
+            WindowBuilder::new()
+                .with_title("demo2")
+                .with_size((800, 600))
+                .with_scene("demo-2", A { t: 0.0 })
+                .with_active_scene("demo-2"),
         )
         .build()
         .run();

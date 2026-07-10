@@ -58,6 +58,14 @@ impl GpuState {
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
         });
 
+        debug!(
+            "adapters {:?}",
+            instance
+                .enumerate_adapters(wgpu::Backends::all())
+                .await
+                .to_vec()
+        );
+
         // Will be parsed from a configuration file maybe?
         let power_preference = wgpu::PowerPreference::HighPerformance;
 

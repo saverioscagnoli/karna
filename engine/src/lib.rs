@@ -1,5 +1,6 @@
 mod builder;
 mod context;
+pub mod input;
 mod scene;
 mod state;
 mod time;
@@ -16,11 +17,13 @@ use logging::warn;
 use renderer::FramePacket;
 use renderer::Renderer;
 use utils::FastHashMap;
+use utils::Lazy;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
+use winit::event_loop::EventLoopProxy;
 use winit::window::WindowId;
 
 pub use crate::builder::AppBuilder;
@@ -28,6 +31,7 @@ pub use crate::builder::WindowBuilder;
 pub use crate::context::ContextMut;
 pub use crate::context::ContextRef;
 pub use crate::context::Draw;
+pub use crate::context::SceneHandle;
 pub use crate::scene::Scene;
 pub use crate::scene::SceneBuilder;
 pub use crate::scene::SceneManager;
@@ -37,10 +41,16 @@ pub use crate::time::Time;
 pub use crate::window::Window;
 use crate::window::WindowHandle;
 
+#[derive(Debug)]
+pub enum UserEvent {
+    Present(WindowId, FramePacket),
+}
+
 pub struct App {
     enqueued_windows: Vec<WindowBuilder>,
     windows: FastHashMap<WindowId, WindowHandle>,
     renderer: Renderer<WindowId>,
+    proxy: Lazy<EventLoopProxy<UserEvent>>,
 }
 
 /// Private or crate-private implementations
@@ -55,6 +65,7 @@ impl App {
             enqueued_windows: Vec::new(),
             windows: FastHashMap::default(),
             renderer: Renderer::new(),
+            proxy: Lazy::empty(),
         }
     }
 
@@ -72,14 +83,15 @@ impl App {
         let gpu = GpuState::get();
 
         // Initialize channels
-        let (packet_tx, packet_rx) = crossbeam_channel::unbounded::<FramePacket>();
+        let (packet_tx, packet_rx) = crossbeam_channel::bounded::<FramePacket>(1);
         let (event_tx, event_rx) = crossbeam_channel::unbounded::<WindowEvent>();
 
         let window_id = window.id();
         let surface = WindowSurface::create(gpu, window.winit_handle(), window.size());
+        let proxy = self.proxy.clone();
 
         let thread = thread::spawn(move || {
-            let state = WindowState::new(window, scenes, active_scenes, event_rx, packet_tx);
+            let state = WindowState::new(window, scenes, active_scenes, proxy, event_rx, packet_tx);
 
             state.start();
         });
@@ -102,7 +114,11 @@ impl App {
     }
 
     pub fn run(mut self) {
-        let event_loop = EventLoop::new().expect("Failed to build event loop");
+        let event_loop = EventLoop::with_user_event()
+            .build()
+            .expect("Failed to build event loop");
+
+        self.proxy.set(event_loop.create_proxy());
 
         event_loop.set_control_flow(ControlFlow::Wait);
         event_loop.run_app(&mut self).expect("Failed to run app")
@@ -110,7 +126,7 @@ impl App {
 }
 
 /// Winit implementation
-impl ApplicationHandler for App {
+impl ApplicationHandler<UserEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         for b in mem::take(&mut self.enqueued_windows) {
             let title = b.attrs.title.clone();
@@ -126,6 +142,18 @@ impl ApplicationHandler for App {
                 }
 
                 Err(e) => error!("Failed to spawn window '{}': {}", title, e),
+            }
+        }
+    }
+
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
+        match event {
+            UserEvent::Present(id, packet) => {
+                let Some(window) = self.windows.get_mut(&id) else {
+                    return;
+                };
+
+                self.renderer.present(id, &mut window.surface, packet);
             }
         }
     }
@@ -165,13 +193,6 @@ impl ApplicationHandler for App {
                 let gpu = GpuState::get();
                 let size: math::Size<u32> = size.into();
                 window.surface.resize(gpu, size);
-            }
-
-            WindowEvent::RedrawRequested => {
-                if let Ok(packet) = window.packet_rx.try_recv() {
-                    self.renderer
-                        .present(window_id, &mut window.surface, packet);
-                }
             }
 
             event => {
