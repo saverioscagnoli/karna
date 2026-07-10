@@ -1,10 +1,10 @@
 use std::any::Any;
 
-use renderer::Draw;
 use utils::IndexMap;
 
 use crate::context::ContextMut;
 use crate::context::ContextRef;
+use crate::context::Draw;
 
 pub type SceneBuilder = Box<dyn FnOnce(ContextMut) -> Box<dyn Scene> + Send>;
 
@@ -14,7 +14,7 @@ pub trait Scene: Send {
     fn loaded_with(&mut self, ctx: ContextMut, user_data: Box<dyn Any>) {}
     fn update(&mut self, ctx: ContextMut);
     fn fixed_update(&mut self, ctx: ContextMut) {}
-    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw);
+    fn draw(&self, ctx: ContextRef, draw: &mut Draw);
 }
 
 /// Holds the not-yet-constructed scene builders and the scenes that
@@ -53,6 +53,10 @@ impl Scenes {
         } else {
             false
         }
+    }
+
+    pub fn get(&self, label: &str) -> Option<&Box<dyn Scene>> {
+        self.built.get(label)
     }
 
     pub fn get_mut(&mut self, label: &str) -> Option<&mut Box<dyn Scene>> {

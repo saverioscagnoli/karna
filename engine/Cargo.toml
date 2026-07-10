@@ -15,4 +15,4 @@ renderer.workspace = true
 ctrlc = "3.5.2"
 imgui.workspace = true
 rodio.workspace = true
-crossbeam-channel = "0.5.16"
+crossbeam-channel.workspace = true

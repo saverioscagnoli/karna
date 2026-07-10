@@ -1875,6 +1875,7 @@ name = "renderer"
 version = "0.1.0"
 dependencies = [
  "assets",
+ "crossbeam-channel",
  "glyph_brush_layout",
  "gpu",
  "imgui 0.1.0",

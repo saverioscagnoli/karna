@@ -105,6 +105,8 @@ use std::thread::JoinHandle;
 use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
 use gpu::WindowSurface;
+use renderer::DrawCommand;
+use renderer::FramePacket;
 use winit::event::WindowEvent;
 use winit::window::WindowId;
 
@@ -113,8 +115,8 @@ pub type WinitWindow = winit::window::Window;
 pub struct WindowHandle {
     pub thread: JoinHandle<()>,
     pub surface: WindowSurface,
-    pub event_tx: Sender<WindowEvent>, // To loop thread
-    pub draw_rx: Receiver<()>,         // From loop thread
+    pub event_tx: Sender<WindowEvent>,    // To loop thread
+    pub packet_rx: Receiver<FramePacket>, // From loop thread
 }
 
 pub struct Window {
@@ -134,6 +136,10 @@ impl Window {
 
     pub(crate) fn id(&self) -> WindowId {
         self.inner.id()
+    }
+
+    pub(crate) fn request_redraw(&self) {
+        self.inner.request_redraw();
     }
 
     pub fn title(&self) -> String {

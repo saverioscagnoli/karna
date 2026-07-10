@@ -13,6 +13,7 @@ pub use math;
 pub use utils::Handle;
 
 pub mod render {
+    pub use engine::Draw;
     pub use gpu::CircleVertex;
     pub use gpu::Vertex;
     pub use renderer::*;

@@ -348,11 +348,15 @@ mod window;
 use std::mem;
 use std::thread;
 
+use crossbeam_channel::Sender;
 use gpu::GpuState;
 use gpu::WindowSurface;
 use logging::error;
 use logging::info;
 use logging::warn;
+use renderer::DrawCommand;
+use renderer::FramePacket;
+use renderer::Renderer;
 use utils::FastHashMap;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -365,9 +369,11 @@ pub use crate::builder::AppBuilder;
 pub use crate::builder::WindowBuilder;
 pub use crate::context::ContextMut;
 pub use crate::context::ContextRef;
+pub use crate::context::Draw;
 pub use crate::scene::Scene;
 pub use crate::scene::SceneBuilder;
 pub use crate::scene::SceneManager;
+use crate::scene::Scenes;
 use crate::state::WindowState;
 pub use crate::time::Time;
 pub use crate::window::Window;
@@ -377,6 +383,7 @@ pub struct App {
     gpu: GpuState,
     enqueued_windows: Vec<WindowBuilder>,
     windows: FastHashMap<WindowId, WindowHandle>,
+    renderer: Renderer,
 }
 
 /// Private or crate-private implementations
@@ -388,6 +395,7 @@ impl App {
             gpu,
             enqueued_windows: Vec::new(),
             windows: FastHashMap::default(),
+            renderer: Renderer::new(),
         }
     }
 
@@ -395,16 +403,22 @@ impl App {
         self.enqueued_windows.push(b);
     }
 
-    fn window_thread(&mut self, event_loop: &ActiveEventLoop, window: Window) {
+    fn window_thread(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window: Window,
+        scenes: Scenes,
+        active_scenes: Vec<String>,
+    ) {
         // Initialize channels
-        let (draw_tx, draw_rx) = crossbeam_channel::unbounded::<()>();
+        let (packet_tx, packet_rx) = crossbeam_channel::unbounded::<FramePacket>();
         let (event_tx, event_rx) = crossbeam_channel::unbounded::<WindowEvent>();
 
         let window_id = window.id();
         let surface = WindowSurface::create(&self.gpu, window.winit_handle(), window.size());
 
         let thread = thread::spawn(move || {
-            let state = WindowState::new(window, event_rx, draw_tx);
+            let state = WindowState::new(window, scenes, active_scenes, event_rx, packet_tx);
 
             state.start();
         });
@@ -413,7 +427,7 @@ impl App {
             thread,
             surface,
             event_tx,
-            draw_rx,
+            packet_rx,
         };
 
         self.windows.insert(window_id, handle);
@@ -447,7 +461,7 @@ impl ApplicationHandler for App {
 
                     info!("Created window '{}' {:?}", window.title(), window.size());
 
-                    self.window_thread(event_loop, window);
+                    self.window_thread(event_loop, window, b.scenes, b.initial_active);
                 }
 
                 Err(e) => error!("Failed to spawn window '{}': {}", title, e),
@@ -483,6 +497,12 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(size) => {
                 let size: math::Size<u32> = size.into();
                 window.surface.resize(&self.gpu, size);
+            }
+
+            WindowEvent::RedrawRequested => {
+                if let Ok(packet) = window.packet_rx.try_recv() {
+                    self.renderer.present(&self.gpu, &window.surface, packet);
+                }
             }
 
             event => {
