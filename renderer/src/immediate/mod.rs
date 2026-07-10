@@ -46,7 +46,6 @@
 
 use gpu::Vertex;
 
-use crate::Color;
 use crate::DrawCommand;
 
 pub fn tessellate(commands: &[DrawCommand], verts: &mut Vec<Vertex>, indices: &mut Vec<u32>) {

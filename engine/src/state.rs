@@ -1,15 +1,21 @@
 use std::any::Any;
 use std::mem;
+use std::sync::Arc;
+use std::time::Instant;
 
 use crossbeam_channel::Receiver;
-use crossbeam_channel::Sender;
-use logging::error;
+use gpu::GpuState;
+use gpu::WindowSurface;
+use logging::info;
+use parking_lot::Mutex;
 use renderer::FramePacket;
+use renderer::Renderer;
 use triple_buffer::Input;
 use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent;
 use winit::event_loop::EventLoopProxy;
 use winit::keyboard::PhysicalKey;
+use winit::window::WindowId;
 
 use crate::Scene;
 use crate::UserEvent;
@@ -21,6 +27,8 @@ use crate::window::Window;
 pub struct WindowState {
     should_exit: bool,
     context: WindowContext,
+    renderer: Renderer,
+    surface: WindowSurface,
 
     scenes: Scenes,
     active_scenes: Vec<String>,
@@ -28,27 +36,28 @@ pub struct WindowState {
     proxy: EventLoopProxy<UserEvent>,
     packet: FramePacket,
     event_rx: Receiver<WindowEvent>,
-    packet_tx: Input<FramePacket>,
 }
 
 impl WindowState {
     pub fn new(
         window: Window,
+        renderer: Renderer,
+        surface: WindowSurface,
         scenes: Scenes,
         active_scenes: Vec<String>,
         proxy: EventLoopProxy<UserEvent>,
         event_rx: Receiver<WindowEvent>,
-        packet_tx: Input<FramePacket>,
     ) -> Self {
         let mut state = Self {
             should_exit: false,
             context: WindowContext::new(window),
+            renderer,
+            surface,
             scenes,
             active_scenes: Vec::new(),
             packet: FramePacket::default(),
             proxy,
             event_rx,
-            packet_tx,
         };
 
         for label in active_scenes {
@@ -126,61 +135,70 @@ impl WindowState {
         }
     }
 
-    fn drain_events(&mut self) {
-        for event in self.event_rx.try_iter() {
-            match event {
-                WindowEvent::CloseRequested => {
-                    self.should_exit = true;
-                }
-                WindowEvent::KeyboardInput {
-                    event: key_event, ..
-                } => match key_event.physical_key {
-                    PhysicalKey::Code(c) => {
-                        if key_event.state.is_pressed() {
-                            if !key_event.repeat {
-                                self.context.input.pressed_keys.insert(c);
-                            }
+    fn handle_event(&mut self, event: WindowEvent) {
+        match event {
+            WindowEvent::CloseRequested => self.should_exit = true,
 
-                            self.context.input.held_keys.insert(c);
-                        } else {
-                            self.context.input.held_keys.remove(&c);
-                            self.context.input.released_keys.insert(c);
+            WindowEvent::Resized(size) => {
+                let gpu = GpuState::get();
+                let size: math::Size<u32> = size.into();
+
+                self.surface.resize(gpu, size);
+            }
+
+            WindowEvent::KeyboardInput {
+                event: key_event, ..
+            } => match key_event.physical_key {
+                PhysicalKey::Code(c) => {
+                    if key_event.state.is_pressed() {
+                        if !key_event.repeat {
+                            self.context.input.pressed_keys.insert(c);
                         }
-                    }
 
-                    _ => {}
-                },
-
-                WindowEvent::CursorMoved { position, .. } => {
-                    self.context
-                        .input
-                        .mouse_position
-                        .set([position.x as f32, position.y as f32]);
-                }
-
-                WindowEvent::MouseInput { button, state, .. } => {
-                    if state.is_pressed() {
-                        self.context.input.pressed_mouse_buttons.insert(button);
-                        self.context.input.held_mouse_buttons.insert(button);
+                        self.context.input.held_keys.insert(c);
                     } else {
-                        self.context.input.held_mouse_buttons.remove(&button);
+                        self.context.input.held_keys.remove(&c);
+                        self.context.input.released_keys.insert(c);
                     }
                 }
-
-                WindowEvent::MouseWheel { delta, .. } => match delta {
-                    MouseScrollDelta::LineDelta(x, y) => {
-                        self.context.input.wheel_delta.set([x, y]);
-                    }
-                    MouseScrollDelta::PixelDelta(pos) => {
-                        self.context
-                            .input
-                            .wheel_delta
-                            .set([pos.x as f32, pos.y as f32]);
-                    }
-                },
 
                 _ => {}
+            },
+
+            WindowEvent::CursorMoved { position, .. } => {
+                self.context
+                    .input
+                    .mouse_position
+                    .set([position.x as f32, position.y as f32]);
             }
+
+            WindowEvent::MouseInput { button, state, .. } => {
+                if state.is_pressed() {
+                    self.context.input.pressed_mouse_buttons.insert(button);
+                    self.context.input.held_mouse_buttons.insert(button);
+                } else {
+                    self.context.input.held_mouse_buttons.remove(&button);
+                }
+            }
+
+            WindowEvent::MouseWheel { delta, .. } => match delta {
+                MouseScrollDelta::LineDelta(x, y) => {
+                    self.context.input.wheel_delta.set([x, y]);
+                }
+                MouseScrollDelta::PixelDelta(pos) => {
+                    self.context
+                        .input
+                        .wheel_delta
+                        .set([pos.x as f32, pos.y as f32]);
+                }
+            },
+            _ => {}
+        }
+    }
+
+    fn drain_events(&mut self) {
+        while let Ok(event) = self.event_rx.try_recv() {
+            self.handle_event(event);
         }
     }
 
@@ -196,7 +214,7 @@ impl WindowState {
         }
     }
 
-    fn frame(&mut self) {
+    fn frame(&mut self) -> FramePacket {
         let mut packet = mem::take(&mut self.packet);
 
         while let Some(tick_start) = self.context.time.next_tick() {
@@ -223,7 +241,7 @@ impl WindowState {
         packet.ui.camera = self.context.ui_camera.data();
         packet.debug.camera = self.context.debug_camera.data();
 
-        self.packet_tx.write(packet);
+        packet
     }
 
     fn flush(&mut self) {}
@@ -231,12 +249,19 @@ impl WindowState {
     pub fn start(mut self) {
         while !self.should_exit {
             self.drain_events();
-            self.frame();
+
+            if self.should_exit {
+                break;
+            }
+
+            self.context.time.update();
+
+            let packet = self.frame();
+
+            self.renderer.present(&mut self.surface, packet);
+            self.context.time.wait_for_next_frame();
+
             self.drain_scene_commands();
-
-            self.context.window.request_redraw();
-            self.context.time.wait_for_next_frame(false);
-
             self.flush();
         }
     }

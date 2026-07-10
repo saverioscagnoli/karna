@@ -1,4 +1,7 @@
+use std::sync::Arc;
+
 use logging::debug;
+use parking_lot::RwLock;
 use utils::FastHashMap;
 
 use crate::GpuState;
@@ -68,51 +71,65 @@ fn build_pipeline(
         })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PipelineKey {
+    shader: &'static str,
+    vertex_stride: u64,
+    vertex_step_mode: wgpu::VertexStepMode,
+    vertex_attributes: Vec<wgpu::VertexAttribute>,
+    blend: wgpu::BlendState,
+    topology: wgpu::PrimitiveTopology,
+    format: wgpu::TextureFormat,
+}
+
+impl PipelineKey {
+    pub fn new(desc: &PipelineDesc, format: wgpu::TextureFormat) -> Self {
+        Self {
+            shader: desc.shader,
+            vertex_stride: desc.vertex_layout.array_stride,
+            vertex_step_mode: desc.vertex_layout.step_mode,
+            vertex_attributes: desc.vertex_layout.attributes.to_vec(),
+            blend: desc.blend,
+            topology: desc.topology,
+            format,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct PipelineCache {
-    pipelines: FastHashMap<PipelineDesc, wgpu::RenderPipeline>,
+    pipelines: RwLock<FastHashMap<PipelineKey, Arc<wgpu::RenderPipeline>>>,
 }
 
 impl PipelineCache {
     pub fn new() -> Self {
         Self {
-            pipelines: FastHashMap::default(),
+            pipelines: RwLock::new(FastHashMap::default()),
         }
-    }
-
-    pub fn create_pipeline(
-        &mut self,
-        desc: PipelineDesc,
-        bgls: &[&wgpu::BindGroupLayout],
-        surface_format: wgpu::TextureFormat,
-    ) {
-        let gpu = GpuState::get();
-        let pipeline = build_pipeline(gpu, &desc, bgls, surface_format);
-
-        debug!(
-            "Creating pipeline from shader '{}' topology = {:?}",
-            desc.shader, desc.topology
-        );
-
-        self.pipelines.insert(desc, pipeline);
-    }
-
-    pub fn get_pipeline(&self, desc: &PipelineDesc) -> &wgpu::RenderPipeline {
-        self.pipelines.get(desc).expect("Failed to get pipeline")
     }
 
     pub fn get_or_create(
-        &mut self,
+        &self,
         desc: PipelineDesc,
         format: wgpu::TextureFormat,
-        bgls: &[&wgpu::BindGroupLayout],
-    ) -> &wgpu::RenderPipeline {
-        if !self.pipelines.contains_key(&desc) {
-            let gpu = GpuState::get();
-            let pipeline = build_pipeline(gpu, &desc, bgls, format);
-            self.pipelines.insert(desc.clone(), pipeline);
+        layouts: &[&wgpu::BindGroupLayout],
+    ) -> Arc<wgpu::RenderPipeline> {
+        let key = PipelineKey::new(&desc, format);
+
+        if let Some(p) = self.pipelines.read().get(&key) {
+            return p.clone();
         }
 
-        self.pipelines.get(&desc).expect("just inserted")
+        let gpu = GpuState::get();
+        let pipeline = Arc::new(build_pipeline(gpu, &desc, layouts, format));
+
+        let mut map = self.pipelines.write();
+        match map.get(&key) {
+            Some(p) => p.clone(),
+            None => {
+                map.insert(key, pipeline.clone());
+                pipeline
+            }
+        }
     }
 }

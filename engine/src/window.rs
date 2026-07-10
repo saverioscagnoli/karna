@@ -113,9 +113,7 @@ pub type WinitWindow = winit::window::Window;
 
 pub struct WindowHandle {
     pub thread: JoinHandle<()>,
-    pub surface: WindowSurface,
     pub event_tx: Sender<WindowEvent>, // To loop thread
-    pub packet_rx: Output<FramePacket>,
 }
 
 pub struct Window {

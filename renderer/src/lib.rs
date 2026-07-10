@@ -2,8 +2,10 @@ mod camera;
 mod color;
 mod immediate;
 
+use std::alloc::Layout;
 use std::array;
 use std::hash::Hash;
+use std::sync::Arc;
 
 use gpu::GpuState;
 use gpu::Vertex;
@@ -145,18 +147,6 @@ pub struct Layouts {
 }
 
 impl Layouts {
-    fn as_array(&self) -> [&wgpu::BindGroupLayout; 1] {
-        [&self.camera]
-    }
-}
-
-pub struct Renderer<W: Hash + Eq> {
-    pipelines: gpu::PipelineCache,
-    layouts: Layouts,
-    windows: FastHashMap<W, WindowRenderData>,
-}
-
-impl<W: Hash + Eq> Renderer<W> {
     pub fn new() -> Self {
         let gpu = GpuState::get();
         let camera_layout = gpu
@@ -175,23 +165,35 @@ impl<W: Hash + Eq> Renderer<W> {
                 }],
             });
 
-        let layouts = Layouts {
-            camera: camera_layout,
-        };
-
         Self {
-            pipelines: gpu::PipelineCache::new(),
+            camera: camera_layout,
+        }
+    }
+}
+
+impl Layouts {
+    fn as_array(&self) -> [&wgpu::BindGroupLayout; 1] {
+        [&self.camera]
+    }
+}
+
+pub struct Renderer {
+    pipelines: Arc<gpu::PipelineCache>,
+    layouts: Arc<Layouts>,
+    data: WindowRenderData,
+}
+
+impl Renderer {
+    pub fn new(pipelines: Arc<gpu::PipelineCache>, layouts: Arc<Layouts>) -> Self {
+        Self {
+            pipelines,
+            data: WindowRenderData::new(GpuState::get(), &layouts),
             layouts,
-            windows: FastHashMap::default(),
         }
     }
 
-    pub fn present(&mut self, w: W, surface: &mut gpu::WindowSurface, packet: FramePacket) {
+    pub fn present(&mut self, surface: &mut gpu::WindowSurface, packet: FramePacket) {
         let gpu = GpuState::get();
-        let data = self
-            .windows
-            .entry(w)
-            .or_insert_with(|| WindowRenderData::new(gpu, &self.layouts));
 
         let output = match surface.acquire() {
             wgpu::CurrentSurfaceTexture::Success(t) => t,
@@ -239,7 +241,7 @@ impl<W: Hash + Eq> Renderer<W> {
                 wgpu::LoadOp::Load
             };
 
-            let layer_gpu = &mut data.layers[layer as usize];
+            let layer_gpu = &mut self.data.layers[layer as usize];
             let layer_packet = match layer {
                 Layer::World => &packet.world,
                 Layer::Ui => &packet.ui,
@@ -282,7 +284,7 @@ impl<W: Hash + Eq> Renderer<W> {
                 );
 
                 rp.set_bind_group(0, &layer_gpu.camera_bg, &[]);
-                rp.set_pipeline(pipeline);
+                rp.set_pipeline(&pipeline);
                 rp.set_vertex_buffer(0, layer_gpu.vertex_buffer.slice_all());
                 rp.set_index_buffer(
                     layer_gpu.index_buffer.slice_all(),

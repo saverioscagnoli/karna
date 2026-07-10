@@ -11,6 +11,7 @@ pub struct Time {
     next_frame: Instant,
     last_frame: Instant,
     delta_time: f32,
+    smoothed_delta_time: f32,
     sleep_timer: SleepTimer,
 
     // Ticks (fixed updates)
@@ -39,6 +40,7 @@ impl Time {
             next_frame: now + frame_step,
             last_frame: now,
             delta_time: frame_step.as_secs_f32(),
+            smoothed_delta_time: frame_step.as_secs_f32(),
             sleep_timer: SleepTimer::new(),
             tps: 0,
             tick_step: 1.0 / 60.0,
@@ -56,6 +58,10 @@ impl Time {
 
     pub fn delta(&self) -> f32 {
         self.delta_time
+    }
+
+    pub fn smoothed_delta(&self) -> f32 {
+        self.smoothed_delta_time
     }
 
     pub fn fixed_delta(&self) -> f32 {
@@ -120,11 +126,7 @@ impl Time {
         self.tick_time = Instant::now() - tick_start;
     }
 
-    pub(crate) fn wait_for_next_frame(&mut self, vsync: bool) {
-        if !vsync {
-            self.sleep_timer.sleep_until(self.next_frame);
-        }
-
+    pub(crate) fn update(&mut self) {
         let now = Instant::now();
 
         self.next_frame += self.frame_step;
@@ -134,8 +136,13 @@ impl Time {
         }
 
         let dt = now.duration_since(self.last_frame);
+
         self.delta_time = dt.as_secs_f32().min(0.1);
         self.last_frame = now;
+
+        const SMOOTHING: f32 = 0.1; // lower = smoother but slower to react
+        self.smoothed_delta_time =
+            self.smoothed_delta_time * (1.0 - SMOOTHING) + self.delta_time * SMOOTHING;
 
         self.frame_times.push_back(dt);
         self.frame_times_sum += dt;
@@ -162,5 +169,9 @@ impl Time {
             self.tick_count = 0;
             self.tick_timer = 0.0;
         }
+    }
+
+    pub(crate) fn wait_for_next_frame(&mut self) {
+        self.sleep_timer.sleep_until(self.next_frame);
     }
 }

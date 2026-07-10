@@ -7,6 +7,7 @@ mod time;
 mod window;
 
 use std::mem;
+use std::sync::Arc;
 use std::thread;
 
 use gpu::GpuState;
@@ -14,9 +15,10 @@ use gpu::WindowSurface;
 use logging::error;
 use logging::info;
 use logging::warn;
+use parking_lot::Mutex;
 use renderer::FramePacket;
+use renderer::Layouts;
 use renderer::Renderer;
-use triple_buffer::triple_buffer;
 use utils::FastHashMap;
 use utils::Lazy;
 use winit::application::ApplicationHandler;
@@ -50,8 +52,9 @@ pub enum UserEvent {
 pub struct App {
     enqueued_windows: Vec<WindowBuilder>,
     windows: FastHashMap<WindowId, WindowHandle>,
-    renderer: Renderer<WindowId>,
     proxy: Lazy<EventLoopProxy<UserEvent>>,
+    pipelines: Arc<gpu::PipelineCache>,
+    layouts: Arc<Layouts>,
 }
 
 /// Private or crate-private implementations
@@ -65,8 +68,9 @@ impl App {
         Self {
             enqueued_windows: Vec::new(),
             windows: FastHashMap::default(),
-            renderer: Renderer::new(),
             proxy: Lazy::empty(),
+            pipelines: Arc::new(gpu::PipelineCache::new()),
+            layouts: Arc::new(Layouts::new()),
         }
     }
 
@@ -84,25 +88,31 @@ impl App {
         let gpu = GpuState::get();
 
         // Initialize channels
-        let (packet_tx, packet_rx) = triple_buffer(&FramePacket::default());
         let (event_tx, event_rx) = crossbeam_channel::unbounded::<WindowEvent>();
 
         let window_id = window.id();
         let surface = WindowSurface::create(gpu, window.winit_handle(), window.size());
+
+        let pipelines = self.pipelines.clone();
+        let layouts = self.layouts.clone();
         let proxy = self.proxy.clone();
 
         let thread = thread::spawn(move || {
-            let state = WindowState::new(window, scenes, active_scenes, proxy, event_rx, packet_tx);
+            let renderer = Renderer::new(pipelines, layouts);
+            let state = WindowState::new(
+                window,
+                renderer,
+                surface,
+                scenes,
+                active_scenes,
+                proxy,
+                event_rx,
+            );
 
             state.start();
         });
 
-        let handle = WindowHandle {
-            thread,
-            surface,
-            event_tx,
-            packet_rx,
-        };
+        let handle = WindowHandle { thread, event_tx };
 
         self.windows.insert(window_id, handle);
     }
@@ -176,19 +186,6 @@ impl ApplicationHandler<UserEvent> for App {
                     event_loop.exit();
                     return;
                 }
-            }
-
-            WindowEvent::RedrawRequested => {
-                let packet = window.packet_rx.read();
-
-                self.renderer
-                    .present(window_id, &mut window.surface, packet.clone());
-            }
-
-            WindowEvent::Resized(size) => {
-                let gpu = GpuState::get();
-                let size: math::Size<u32> = size.into();
-                window.surface.resize(gpu, size);
             }
 
             event => {

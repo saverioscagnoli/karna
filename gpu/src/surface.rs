@@ -32,7 +32,7 @@ impl WindowSurface {
         {
             wgpu::PresentMode::Mailbox
         } else {
-            wgpu::PresentMode::Fifo
+            wgpu::PresentMode::AutoNoVsync
         };
 
         let config = wgpu::SurfaceConfiguration {
@@ -40,10 +40,10 @@ impl WindowSurface {
             format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::AutoNoVsync,
+            present_mode,
             alpha_mode: capabilities.alpha_modes[0],
             view_formats: vec![],
-            desired_maximum_frame_latency: 2,
+            desired_maximum_frame_latency: 3,
             color_space: wgpu::SurfaceColorSpace::Auto,
         };
 
