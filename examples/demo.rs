@@ -117,13 +117,13 @@ fn main() {
                 )
                 .with_active_scene("demo"),
         )
-        //  .with_window(
-        //      WindowBuilder::new()
-        //          .with_title("demo2")
-        //          .with_size((800, 600))
-        //          .with_scene("demo-2", A { t: 0.0 })
-        //          .with_active_scene("demo-2"),
-        //  )
+        .with_window(
+            WindowBuilder::new()
+                .with_title("demo2")
+                .with_size((800, 600))
+                .with_scene("demo-2", A { t: 0.0 })
+                .with_active_scene("demo-2"),
+        )
         .build()
         .run();
 }
