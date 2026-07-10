@@ -1,21 +1,15 @@
 use std::any::Any;
 use std::mem;
-use std::sync::Arc;
-use std::time::Instant;
 
 use crossbeam_channel::Receiver;
 use gpu::GpuState;
 use gpu::WindowSurface;
-use logging::info;
-use parking_lot::Mutex;
 use renderer::FramePacket;
 use renderer::Renderer;
-use triple_buffer::Input;
 use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent;
 use winit::event_loop::EventLoopProxy;
 use winit::keyboard::PhysicalKey;
-use winit::window::WindowId;
 
 use crate::Scene;
 use crate::UserEvent;

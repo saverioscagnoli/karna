@@ -13,6 +13,7 @@ struct S {
     prev_pos: Vector2<f32>,
     vel: Vector2<f32>,
     pos: Vector2<f32>,
+    r: f32,
 }
 
 impl Scene for S {
@@ -54,13 +55,19 @@ impl Scene for S {
         }
 
         self.pos += self.vel * dt;
-        println!("fps {} dt {}", ctx.time.fps(), ctx.time.delta());
+        self.r += dt;
     }
 
     fn draw(&self, ctx: ContextRef, draw: &mut Draw) {
         let render_pos = self.prev_pos.lerp(&self.pos, ctx.time.alpha());
+
         draw.set_color(Color::Red);
-        draw.rect(render_pos.x, render_pos.y, 50.0, 50.0);
+
+        draw.push_state();
+        draw.translate(render_pos.x, render_pos.y);
+        draw.rotate(self.r);
+        draw.rect(-25.0, -25.0, 50.0, 50.0);
+        draw.pop_state();
     }
 }
 
@@ -105,17 +112,18 @@ fn main() {
                         prev_pos: Vector2::zero(),
                         vel: Vector2::zero(),
                         pos: Vector2::zero(),
+                        r: 0.0,
                     },
                 )
                 .with_active_scene("demo"),
         )
-        //.with_window(
-        //    WindowBuilder::new()
-        //        .with_title("demo2")
-        //        .with_size((800, 600))
-        //        .with_scene("demo-2", A { t: 0.0 })
-        //        .with_active_scene("demo-2"),
-        //)
+        //  .with_window(
+        //      WindowBuilder::new()
+        //          .with_title("demo2")
+        //          .with_size((800, 600))
+        //          .with_scene("demo-2", A { t: 0.0 })
+        //          .with_active_scene("demo-2"),
+        //  )
         .build()
         .run();
 }

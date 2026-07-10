@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use logging::debug;
 use parking_lot::RwLock;
 use utils::FastHashMap;
 

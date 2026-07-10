@@ -8,7 +8,6 @@ mod vertex;
 use std::sync::OnceLock;
 
 use logging::debug;
-use parking_lot::Mutex;
 
 pub use crate::buffer::Buffer;
 pub use crate::pipeline::PipelineCache;

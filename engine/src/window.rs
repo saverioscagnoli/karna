@@ -103,9 +103,6 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 
 use crossbeam_channel::Sender;
-use gpu::WindowSurface;
-use renderer::FramePacket;
-use triple_buffer::Output;
 use winit::event::WindowEvent;
 use winit::window::WindowId;
 

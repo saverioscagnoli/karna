@@ -2,47 +2,50 @@ mod camera;
 mod color;
 mod immediate;
 
-use std::alloc::Layout;
 use std::array;
-use std::hash::Hash;
 use std::sync::Arc;
 
 use gpu::GpuState;
 use gpu::Vertex;
 use logging::warn;
-use utils::FastHashMap;
 
 pub use crate::camera::Camera;
 use crate::camera::CameraData;
 pub use crate::camera::Projection;
 pub use crate::color::Color;
+use crate::immediate::ImmediateRenderer;
+pub use crate::immediate::RenderState;
 
 #[derive(Debug, Clone, Copy)]
 pub enum DrawCommand {
+    PushState,
+    PopState,
     ImmediatePoint {
         x: f32,
         y: f32,
-        color: math::Vector4<f32>,
+        state: RenderState,
     },
     ImmediateLine {
         x1: f32,
         y1: f32,
         x2: f32,
         y2: f32,
-        color: math::Vector4<f32>,
+        state: RenderState,
     },
     ImmediateRect {
         x: f32,
         y: f32,
         w: f32,
         h: f32,
-        color: math::Vector4<f32>,
+        state: RenderState,
     },
 }
 
 #[repr(usize)]
+#[derive(Default)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Layer {
+    #[default]
     World = 0,
     Ui = 1,
     Debug = 2,
@@ -88,8 +91,7 @@ impl Layer {
 pub struct LayerGpu {
     camera_buffer: gpu::Buffer<CameraData>,
     camera_bg: wgpu::BindGroup,
-    vertex_buffer: gpu::Buffer<Vertex>,
-    index_buffer: gpu::Buffer<u32>,
+    immediate: ImmediateRenderer,
 }
 
 impl LayerGpu {
@@ -109,23 +111,10 @@ impl LayerGpu {
             }],
         });
 
-        let vertex_buffer = gpu::Buffer::new_with_capacity(
-            "layer vertex buffer",
-            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            1024,
-        );
-
-        let index_buffer = gpu::Buffer::new_with_capacity(
-            "layer index buffer",
-            wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-            1024,
-        );
-
         Self {
             camera_buffer,
             camera_bg,
-            vertex_buffer,
-            index_buffer,
+            immediate: ImmediateRenderer::new(),
         }
     }
 }
@@ -172,7 +161,7 @@ impl Layouts {
 }
 
 impl Layouts {
-    fn as_array(&self) -> [&wgpu::BindGroupLayout; 1] {
+    const fn as_array(&self) -> [&wgpu::BindGroupLayout; 1] {
         [&self.camera]
     }
 }
@@ -250,15 +239,8 @@ impl Renderer {
 
             layer_gpu.camera_buffer.write(0, &[layer_packet.camera]);
 
-            let mut verts = Vec::new();
-            let mut indices = Vec::new();
-            immediate::tessellate(&layer_packet.commands, &mut verts, &mut indices);
-
-            layer_gpu.vertex_buffer.write(0, &verts);
-            layer_gpu.index_buffer.write(0, &indices);
-
             {
-                let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("render pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                         view: &view,
@@ -272,25 +254,15 @@ impl Renderer {
                     ..Default::default()
                 });
 
-                let pipeline = self.pipelines.get_or_create(
-                    gpu::PipelineDesc {
-                        shader: "immediate-2d",
-                        vertex_layout: Vertex::desc(),
-                        blend: wgpu::BlendState::ALPHA_BLENDING,
-                        topology: wgpu::PrimitiveTopology::TriangleList,
-                    },
-                    output.texture.format(),
-                    &self.layouts.as_array(),
-                );
+                pass.set_bind_group(0, &layer_gpu.camera_bg, &[]);
 
-                rp.set_bind_group(0, &layer_gpu.camera_bg, &[]);
-                rp.set_pipeline(&pipeline);
-                rp.set_vertex_buffer(0, layer_gpu.vertex_buffer.slice_all());
-                rp.set_index_buffer(
-                    layer_gpu.index_buffer.slice_all(),
-                    wgpu::IndexFormat::Uint32,
+                layer_gpu.immediate.present(
+                    &layer_packet.commands,
+                    &mut pass,
+                    &self.pipelines,
+                    &self.layouts,
+                    output.texture.format(),
                 );
-                rp.draw_indexed(0..indices.len() as u32, 0, 0..1);
             }
         }
 

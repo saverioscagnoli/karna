@@ -2,6 +2,7 @@ use math::Matrix4;
 use math::Size;
 use math::Vector3;
 
+#[allow(unused)]
 #[derive(Default)]
 #[derive(Debug, Clone, Copy)]
 pub struct CameraData {

@@ -1,9 +1,11 @@
+use logging::warn;
 use renderer::Camera;
 use renderer::Color;
 use renderer::DrawCommand;
 use renderer::FramePacket;
 use renderer::Layer;
 use renderer::Projection;
+use renderer::RenderState;
 
 use crate::SceneManager;
 use crate::Time;
@@ -99,7 +101,8 @@ impl WindowContext {
 
 pub struct Draw<'a> {
     packet: &'a mut FramePacket,
-    color: math::Vector4<f32>,
+    state_stack: Vec<RenderState>,
+    current_state: RenderState,
     active_layer: Layer,
 }
 
@@ -107,13 +110,26 @@ impl<'a> Draw<'a> {
     pub(crate) fn new(packet: &'a mut FramePacket) -> Self {
         Self {
             packet,
-            color: Color::White.into(),
+            state_stack: Vec::new(),
+            current_state: RenderState::default(),
             active_layer: Layer::World,
         }
     }
 
     fn expose_active(&mut self) -> &mut Vec<DrawCommand> {
         self.packet.expose(self.active_layer)
+    }
+
+    pub fn push_state(&mut self) {
+        self.state_stack.push(self.current_state);
+    }
+
+    pub fn pop_state(&mut self) {
+        if let Some(state) = self.state_stack.pop() {
+            self.current_state = state;
+        } else {
+            warn!("Immediate renderer: popped a render state without pushing first");
+        }
     }
 
     pub fn clear_color(&self) -> Color {
@@ -128,40 +144,71 @@ impl<'a> Draw<'a> {
     }
 
     pub fn color(&self) -> Color {
-        self.color.into()
+        self.current_state.draw_color.into()
     }
 
     pub fn set_color<C>(&mut self, color: C)
     where
         C: Into<math::Vector4<f32>>,
     {
-        self.color = color.into();
+        self.current_state.draw_color = color.into();
+    }
+
+    pub fn depth(&self) -> f32 {
+        self.current_state.depth
+    }
+
+    pub fn set_depth(&mut self, d: f32) {
+        self.current_state.depth = d;
+    }
+
+    pub fn translate(&mut self, x: f32, y: f32) {
+        self.current_state.transform =
+            self.current_state
+                .transform
+                .matmul(&math::Matrix4::from_translation(math::Vector3::new(
+                    x, y, 0.0,
+                )))
+    }
+
+    pub fn rotate(&mut self, angle_rad: f32) {
+        self.current_state.transform = self
+            .current_state
+            .transform
+            .matmul(&math::Matrix4::from_rotation_z(angle_rad))
+    }
+
+    pub fn scale(&mut self, x: f32, y: f32) {
+        self.current_state.transform = self
+            .current_state
+            .transform
+            .matmul(&math::Matrix4::from_scale(math::Vector3::new(x, y, 0.0)))
     }
 
     pub fn point(&mut self, x: f32, y: f32) {
-        let color = self.color;
+        let state = self.current_state;
 
         self.expose_active()
-            .push(DrawCommand::ImmediatePoint { x, y, color });
+            .push(DrawCommand::ImmediatePoint { x, y, state });
     }
 
     pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
-        let color = self.color;
+        let state = self.current_state;
 
         self.expose_active().push(DrawCommand::ImmediateLine {
             x1,
             y1,
             x2,
             y2,
-            color,
+            state,
         });
     }
 
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
-        let color = self.color;
+        let state = self.current_state;
 
         self.expose_active()
-            .push(DrawCommand::ImmediateRect { x, y, w, h, color });
+            .push(DrawCommand::ImmediateRect { x, y, w, h, state });
     }
 }
 
@@ -174,16 +221,6 @@ pub struct SceneHandle<'a> {
 }
 
 impl<'a> SceneHandle<'a> {
-    fn new(ctx: &'a mut WindowContext, packet: &'a mut FramePacket) -> Self {
-        Self {
-            active_layer: Layer::World,
-            packet,
-            world_camera: &mut ctx.world_camera,
-            ui_camera: &mut ctx.ui_camera,
-            debug_camera: &mut ctx.debug_camera,
-        }
-    }
-
     pub fn clear_color(&self) -> Color {
         self.packet.clear_color.into()
     }

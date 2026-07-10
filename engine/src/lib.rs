@@ -15,7 +15,6 @@ use gpu::WindowSurface;
 use logging::error;
 use logging::info;
 use logging::warn;
-use parking_lot::Mutex;
 use renderer::FramePacket;
 use renderer::Layouts;
 use renderer::Renderer;
@@ -62,7 +61,12 @@ impl App {
     fn new() -> Self {
         gpu::init(|shaders, d| {
             let src = include_str!("../../shaders/immediate-2d.wgsl");
+            let src1 = include_str!("../../shaders/immediate-2d-circles.wgsl");
+            let src2 = include_str!("../../shaders/mesh-3d.wgsl");
+
             shaders.load("immediate-2d", src, d);
+            shaders.load("immediate-2d-circles", src1, d);
+            shaders.load("mesh-3d", src2, d);
         });
 
         Self {
@@ -80,7 +84,7 @@ impl App {
 
     fn window_thread(
         &mut self,
-        event_loop: &ActiveEventLoop,
+        _event_loop: &ActiveEventLoop,
         window: Window,
         scenes: Scenes,
         active_scenes: Vec<String>,
