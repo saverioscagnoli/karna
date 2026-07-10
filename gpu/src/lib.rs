@@ -35,16 +35,11 @@ pub struct GpuState {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub shaders: ShaderStore,
-    pub submit: Mutex<()>,
 }
 
 impl GpuState {
     pub fn get() -> &'static Self {
         SINGLETON.get_or_init(|| pollster::block_on(Self::new()))
-    }
-
-    pub fn create() -> Self {
-        pollster::block_on(Self::new())
     }
 
     async fn new() -> Self {
@@ -103,7 +98,6 @@ impl GpuState {
             device,
             queue,
             shaders: ShaderStore::new(),
-            submit: Mutex::new(()),
         }
     }
 }

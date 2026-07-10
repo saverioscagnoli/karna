@@ -51,4 +51,8 @@ impl WindowSurface {
 
         self.inner.configure(&gpu.device, &self.config);
     }
+
+    pub fn acquire(&mut self, gpu: &GpuState) -> wgpu::CurrentSurfaceTexture {
+        self.inner.get_current_texture()
+    }
 }

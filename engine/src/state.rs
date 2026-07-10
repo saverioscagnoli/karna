@@ -1,13 +1,12 @@
 use std::any::Any;
+use std::mem;
 
 use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
 use logging::error;
-use renderer::DrawCommand;
 use renderer::FramePacket;
 use winit::event::WindowEvent;
 
-use crate::Draw;
 use crate::Scene;
 use crate::context::WindowContext;
 use crate::scene::SceneCommand;
@@ -21,10 +20,7 @@ pub struct WindowState {
     scenes: Scenes,
     active_scenes: Vec<String>,
 
-    // Immediate renderer handle
-    draw: Draw,
     packet: FramePacket,
-
     event_rx: Receiver<WindowEvent>,
     packet_tx: Sender<FramePacket>,
 }
@@ -42,7 +38,6 @@ impl WindowState {
             context: WindowContext::new(window),
             scenes,
             active_scenes: Vec::new(),
-            draw: Draw::new(),
             packet: FramePacket::default(),
             event_rx,
             packet_tx,
@@ -104,11 +99,10 @@ impl WindowState {
 
     fn for_each_active<F>(&mut self, mut f: F)
     where
-        F: FnMut(&Box<dyn Scene>, &WindowContext, &mut Draw),
+        F: FnMut(&Box<dyn Scene>, &WindowContext),
     {
         let WindowState {
             context,
-            draw,
             scenes,
             active_scenes,
             ..
@@ -116,7 +110,7 @@ impl WindowState {
 
         for label in active_scenes.iter() {
             if let Some(scene) = scenes.get(label) {
-                f(scene, context, draw);
+                f(scene, context);
             }
         }
     }
@@ -153,12 +147,12 @@ impl WindowState {
 
         self.for_each_active_mut(|s, ctx| s.update(ctx.as_mut()));
 
-        self.for_each_active(|s, ctx, draw| {
-            let ctx = ctx.as_ref();
-            s.draw(ctx, draw);
-        });
+        let mut packet = mem::take(&mut self.packet);
 
-        let packet = self.draw.take_packet();
+        self.for_each_active(|s, ctx| {
+            let (ctx, mut draw) = ctx.split(&mut packet);
+            s.draw(ctx, &mut draw);
+        });
 
         if let Err(e) = self.packet_tx.try_send(packet) {
             error!("Failed to send frame packet: {}", e);

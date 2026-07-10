@@ -1,7 +1,12 @@
-use gpu::GpuState;
 use math::Matrix4;
 use math::Size;
 use math::Vector3;
+
+#[derive(Default)]
+#[derive(Debug, Clone, Copy)]
+pub struct CameraData {
+    view_projection: math::Matrix4<f32>,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum Projection {
@@ -69,10 +74,6 @@ impl Projection {
 }
 
 pub struct Camera {
-    uniform_buffer: gpu::Buffer<Matrix4<f32>>,
-
-    pub(crate) bg: wgpu::BindGroup,
-
     pub projection: Projection,
     pub position: Vector3<f32>,
     pub target: Vector3<f32>,
@@ -80,49 +81,8 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub(crate) fn create_bind_group_layout() -> wgpu::BindGroupLayout {
-        let gpu = GpuState::get();
-
-        gpu.device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("camera projection buffer bind group layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            })
-    }
-
-    pub(crate) fn new(proj: Projection, bgl: &wgpu::BindGroupLayout) -> Self {
-        let gpu = GpuState::get();
-        let uniform_buffer = gpu::Buffer::new_with_capacity(
-            "camera uniform buffer",
-            wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            1,
-        );
-
-        let bg = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("camera projection buffer bind group"),
-            layout: &bgl,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: uniform_buffer.wgpu(),
-                    offset: 0,
-                    size: None,
-                }),
-            }],
-        });
-
+    pub(crate) fn new(proj: Projection) -> Self {
         Self {
-            uniform_buffer,
-            bg,
             projection: proj,
             position: Vector3::new(0.0, 0.0, -5.0),
             target: Vector3::new(0.0, 0.0, 1.0),
@@ -152,9 +112,11 @@ impl Camera {
                 *aspect_ratio = view.as_f32().aspect_ratio();
             }
         }
+    }
 
-        let vp = self.projection.matrix().matmul(&self.view_matrix());
-
-        self.uniform_buffer.write(0, &[vp]);
+    pub(crate) fn to_data(&self) -> CameraData {
+        CameraData {
+            view_projection: self.view_matrix().matmul(&self.projection.matrix()),
+        }
     }
 }

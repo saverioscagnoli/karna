@@ -2,7 +2,6 @@ use logging::debug;
 use utils::FastHashMap;
 
 use crate::GpuState;
-use crate::shaders::ShaderStore;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PipelineDesc {
@@ -13,13 +12,12 @@ pub struct PipelineDesc {
 }
 
 fn build_pipeline(
+    gpu: &GpuState,
     desc: &PipelineDesc,
-    shaders: &ShaderStore,
     bgl: &[&wgpu::BindGroupLayout],
     surface_format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {
-    let gpu = GpuState::get();
-    let shader = shaders.get(&desc.shader);
+    let shader = gpu.shaders.get(&desc.shader);
 
     // pipeline layout — empty for now, add bind group layouts later (camera uniform, textures)
     let pipeline_layout = gpu
@@ -89,7 +87,7 @@ impl PipelineCache {
         surface_format: wgpu::TextureFormat,
     ) {
         let gpu = GpuState::get();
-        let pipeline = build_pipeline(&desc, &gpu.shaders, bgls, surface_format);
+        let pipeline = build_pipeline(gpu, &desc, bgls, surface_format);
 
         debug!(
             "Creating pipeline from shader '{}' topology = {:?}",
@@ -101,5 +99,20 @@ impl PipelineCache {
 
     pub fn get_pipeline(&self, desc: &PipelineDesc) -> &wgpu::RenderPipeline {
         self.pipelines.get(desc).expect("Failed to get pipeline")
+    }
+
+    pub fn get_or_create(
+        &mut self,
+        desc: PipelineDesc,
+        format: wgpu::TextureFormat,
+        bgls: &[&wgpu::BindGroupLayout],
+    ) -> &wgpu::RenderPipeline {
+        if !self.pipelines.contains_key(&desc) {
+            let gpu = GpuState::get();
+            let pipeline = build_pipeline(gpu, &desc, bgls, format);
+            self.pipelines.insert(desc.clone(), pipeline);
+        }
+
+        self.pipelines.get(&desc).expect("just inserted")
     }
 }

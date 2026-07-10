@@ -6,6 +6,7 @@ use winit::dpi::PhysicalSize;
 
 use crate::Vector2;
 
+#[derive(Default)]
 #[derive(Clone, Copy)]
 pub struct Size<T: Num + Copy> {
     pub width: T,

@@ -1,6 +1,3 @@
-use std::mem;
-
-use imgui::Key::D;
 use renderer::DrawCommand;
 use renderer::FramePacket;
 use renderer::Layer;
@@ -53,40 +50,43 @@ impl WindowContext {
             scenes: &self.scenes,
         }
     }
+
+    pub fn split<'a>(&'a self, packet: &'a mut FramePacket) -> (ContextRef<'a>, Draw<'a>) {
+        (self.as_ref(), Draw::new(packet))
+    }
 }
 
-pub struct Draw {
-    packet: FramePacket,
+pub struct Draw<'a> {
+    packet: &'a mut FramePacket,
     active_layer: Layer,
 }
 
-impl Draw {
-    pub(crate) fn new() -> Self {
+impl<'a> Draw<'a> {
+    pub(crate) fn new(packet: &'a mut FramePacket) -> Self {
         Self {
-            packet: FramePacket::default(),
+            packet,
             active_layer: Layer::World,
         }
     }
 
+    fn expose_active(&mut self) -> &mut Vec<DrawCommand> {
+        self.packet.expose(self.active_layer)
+    }
+
     pub fn point(&mut self, x: f32, y: f32) {
-        self.packet
-            .expose(self.active_layer)
+        self.expose_active()
             .push(DrawCommand::ImmediatePoint { x, y });
     }
 
     pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
-        self.packet
-            .expose(self.active_layer)
+        self.expose_active()
             .push(DrawCommand::ImmediateLine { x1, y1, x2, y2 });
     }
 
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
-        self.packet
-            .expose(self.active_layer)
+        self.expose_active()
             .push(DrawCommand::ImmediateRect { x, y, w, h });
     }
-
-    pub(crate) fn take_packet(&mut self) -> FramePacket {
-        mem::take(&mut self.packet)
-    }
 }
+
+pub struct SceneHandle<'a> {}
