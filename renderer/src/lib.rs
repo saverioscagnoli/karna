@@ -14,32 +14,6 @@ use crate::camera::CameraData;
 pub use crate::camera::Projection;
 pub use crate::color::Color;
 use crate::immediate::ImmediateRenderer;
-pub use crate::immediate::RenderState;
-
-#[derive(Debug, Clone, Copy)]
-pub enum DrawCommand {
-    PushState,
-    PopState,
-    ImmediatePoint {
-        x: f32,
-        y: f32,
-        state: RenderState,
-    },
-    ImmediateLine {
-        x1: f32,
-        y1: f32,
-        x2: f32,
-        y2: f32,
-        state: RenderState,
-    },
-    ImmediateRect {
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        state: RenderState,
-    },
-}
 
 #[repr(usize)]
 #[derive(Default)]
@@ -53,9 +27,33 @@ pub enum Layer {
 
 #[derive(Default)]
 #[derive(Debug, Clone)]
+pub struct Shape<V: Copy> {
+    vertices: Vec<V>,
+    indices: Vec<u32>,
+}
+
+impl<V: Copy> Shape<V> {
+    pub fn is_empty(&self) -> bool {
+        self.indices.is_empty()
+    }
+
+    pub fn push(&mut self, vertices: &[V], pattern: &[u32]) {
+        let base = self.vertices.len() as u32;
+        self.vertices.extend_from_slice(vertices);
+        self.indices.extend(pattern.iter().map(|i| base + i));
+    }
+
+    pub fn clear(&mut self) {
+        self.vertices.clear();
+        self.indices.clear();
+    }
+}
+
+#[derive(Default)]
+#[derive(Debug, Clone)]
 pub struct LayerPacket {
     pub camera: CameraData,
-    pub commands: Vec<DrawCommand>,
+    pub triangles: Shape<Vertex>,
 }
 
 #[derive(Default)]
@@ -69,18 +67,12 @@ pub struct FramePacket {
 }
 
 impl FramePacket {
-    pub fn expose<'a>(&'a mut self, layer: Layer) -> &'a mut Vec<DrawCommand> {
+    pub fn layer_mut(&mut self, layer: Layer) -> &mut LayerPacket {
         match layer {
-            Layer::World => &mut self.world.commands,
-            Layer::Ui => &mut self.ui.commands,
-            Layer::Debug => &mut self.debug.commands,
+            Layer::World => &mut self.world,
+            Layer::Ui => &mut self.ui,
+            Layer::Debug => &mut self.debug,
         }
-    }
-
-    pub fn clear(&mut self) {
-        self.world.commands.clear();
-        self.ui.commands.clear();
-        self.debug.commands.clear();
     }
 }
 
@@ -257,7 +249,7 @@ impl Renderer {
                 pass.set_bind_group(0, &layer_gpu.camera_bg, &[]);
 
                 layer_gpu.immediate.present(
-                    &layer_packet.commands,
+                    &layer_packet.triangles,
                     &mut pass,
                     &self.pipelines,
                     &self.layouts,

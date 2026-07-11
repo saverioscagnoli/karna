@@ -122,6 +122,12 @@ impl S {
 
 impl Scene for S {
     fn load(&mut self, mut ctx: ContextMut) {
+
+
+        if let Some(m) = ctx.monitors.current() {
+                    ctx.time.set_target_fps(m.refresh_rate());
+                }
+
         ctx.scene.set_camera_projection(Projection::standard_3d(
             ctx.window.size(),
             75.0,
