@@ -12,6 +12,7 @@ use std::thread;
 
 use gpu::GpuState;
 use gpu::WindowSurface;
+use logging::debug;
 use logging::error;
 use logging::info;
 use logging::warn;
@@ -67,7 +68,20 @@ impl App {
             shaders.load("immediate-2d", src, d);
             shaders.load("immediate-2d-circles", src1, d);
             shaders.load("mesh-3d", src2, d);
+
+            debug!("Built-in shaders loaded.");
         });
+
+        let gpu = GpuState::get();
+
+        debug!("Gpu initialization complete.");
+
+        let info = gpu.device.adapter_info();
+
+        info!(
+            "GPU: {} ({:?}, {}, driver {})",
+            info.name, info.device_type, info.backend, info.driver_info
+        );
 
         Self {
             enqueued_windows: Vec::new(),
@@ -100,6 +114,7 @@ impl App {
         let pipelines = self.pipelines.clone();
         let layouts = self.layouts.clone();
         let proxy = self.proxy.clone();
+        let window_arc = window.clone();
 
         let thread = thread::spawn(move || {
             let renderer = Renderer::new(pipelines, layouts);
@@ -116,7 +131,11 @@ impl App {
             state.start();
         });
 
-        let handle = WindowHandle { thread, event_tx };
+        let handle = WindowHandle {
+            thread,
+            event_tx,
+            window: window_arc,
+        };
 
         self.windows.insert(window_id, handle);
     }
@@ -195,6 +214,16 @@ impl ApplicationHandler<UserEvent> for App {
             event => {
                 if let Err(e) = window.event_tx.send(event) {
                     error!("Failed to send window event: {}", e);
+
+                    let window = self.windows.remove(&window_id).unwrap();
+
+                    _ = window.thread.join();
+
+                    if self.windows.is_empty() {
+                        info!("All windows were closed. Exiting.");
+                        event_loop.exit();
+                        return;
+                    }
                 }
             }
         }

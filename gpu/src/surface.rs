@@ -43,9 +43,11 @@ impl WindowSurface {
             present_mode,
             alpha_mode: capabilities.alpha_modes[0],
             view_formats: vec![],
-            desired_maximum_frame_latency: 3,
+            desired_maximum_frame_latency: 2,
             color_space: wgpu::SurfaceColorSpace::Auto,
         };
+
+        surface.configure(&gpu.device, &config);
 
         Self {
             inner: surface,
@@ -54,9 +56,14 @@ impl WindowSurface {
     }
 
     pub fn resize(&mut self, gpu: &GpuState, size: math::Size<u32>) {
+        if size.width == 0 || size.height == 0 {
+            return;
+        }
+        if self.config.width == size.width && self.config.height == size.height {
+            return; // already this size — don't reconfigure
+        }
         self.config.width = size.width;
         self.config.height = size.height;
-
         self.inner.configure(&gpu.device, &self.config);
     }
 

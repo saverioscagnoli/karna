@@ -51,6 +51,10 @@ impl<T: Num + Copy> Size<T> {
     {
         self.width >= other.width && self.height >= other.height
     }
+
+    pub fn is_zero(&self) -> bool {
+        self.width == T::zero() && self.height == T::zero()
+    }
 }
 
 impl<T: Float> Size<T> {

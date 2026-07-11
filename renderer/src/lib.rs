@@ -53,7 +53,17 @@ impl<V: Copy> Shape<V> {
 #[derive(Debug, Clone)]
 pub struct LayerPacket {
     pub camera: CameraData,
+    pub points: Shape<Vertex>,
+    pub lines: Shape<Vertex>,
     pub triangles: Shape<Vertex>,
+}
+
+impl LayerPacket {
+    pub fn clear(&mut self) {
+        self.points.clear();
+        self.lines.clear();
+        self.triangles.clear();
+    }
 }
 
 #[derive(Default)]
@@ -73,6 +83,12 @@ impl FramePacket {
             Layer::Ui => &mut self.ui,
             Layer::Debug => &mut self.debug,
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.world.clear();
+        self.ui.clear();
+        self.debug.clear();
     }
 }
 
@@ -173,15 +189,12 @@ impl Renderer {
         }
     }
 
-    pub fn present(&mut self, surface: &mut gpu::WindowSurface, packet: FramePacket) {
+    pub fn present(&mut self, surface: &mut gpu::WindowSurface, packet: &FramePacket) {
         let gpu = GpuState::get();
 
         let output = match surface.acquire() {
             wgpu::CurrentSurfaceTexture::Success(t) => t,
-            wgpu::CurrentSurfaceTexture::Suboptimal(t) => {
-                surface.resize(gpu, packet.viewport);
-                t
-            }
+            wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
             wgpu::CurrentSurfaceTexture::Outdated => {
                 surface.resize(gpu, packet.viewport);
                 warn!("Received an outdated texture, skipping this frame");
@@ -249,6 +262,8 @@ impl Renderer {
                 pass.set_bind_group(0, &layer_gpu.camera_bg, &[]);
 
                 layer_gpu.immediate.present(
+                    &layer_packet.points,
+                    &layer_packet.lines,
                     &layer_packet.triangles,
                     &mut pass,
                     &self.pipelines,

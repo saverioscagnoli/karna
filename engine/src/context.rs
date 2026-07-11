@@ -205,6 +205,46 @@ impl<'a> Draw<'a> {
 
     // ---- primitives ----
 
+    pub fn point(&mut self, x: f32, y: f32) {
+        let uv = math::Vector2::zero();
+        let v = [self.vertex(x, y, uv)];
+
+        self.packet
+            .layer_mut(self.active_layer)
+            .points
+            .push(&v, &[0]);
+    }
+
+    pub fn point_v<P>(&mut self, pos: P)
+    where
+        P: Into<math::Vector2<f32>>,
+    {
+        let pos: math::Vector2<f32> = pos.into();
+
+        self.point(pos.x, pos.y);
+    }
+
+    pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
+        let uv = math::Vector2::zero();
+        let v = [self.vertex(x1, y1, uv), self.vertex(x2, y2, uv)];
+
+        self.packet
+            .layer_mut(self.active_layer)
+            .lines
+            .push(&v, &[0, 1]);
+    }
+
+    pub fn line_v<P, Q>(&mut self, p: P, q: Q)
+    where
+        P: Into<math::Vector2<f32>>,
+        Q: Into<math::Vector2<f32>>,
+    {
+        let p: math::Vector2<f32> = p.into();
+        let q: math::Vector2<f32> = q.into();
+
+        self.line(p.x, p.y, q.x, q.y);
+    }
+
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
         let uv = math::Vector2::zero();
 
@@ -221,35 +261,15 @@ impl<'a> Draw<'a> {
             .push(&v, &[0, 1, 2, 2, 1, 3]);
     }
 
-    pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
-        // Tessellate as a thin quad so it goes through the triangle path.
-        let width = 1.0;
-        let (dx, dy) = (x2 - x1, y2 - y1);
-        let len = (dx * dx + dy * dy).sqrt();
+    pub fn rect_v<P, S>(&mut self, pos: P, size: S)
+    where
+        P: Into<math::Vector2<f32>>,
+        S: Into<math::Size<f32>>,
+    {
+        let pos: math::Vector2<f32> = pos.into();
+        let size: math::Size<f32> = size.into();
 
-        if len <= f32::EPSILON {
-            return;
-        }
-
-        let (nx, ny) = (-dy / len * width * 0.5, dx / len * width * 0.5);
-        let uv = math::Vector2::zero();
-
-        let v = [
-            self.vertex(x1 + nx, y1 + ny, uv),
-            self.vertex(x1 - nx, y1 - ny, uv),
-            self.vertex(x2 + nx, y2 + ny, uv),
-            self.vertex(x2 - nx, y2 - ny, uv),
-        ];
-
-        self.packet
-            .layer_mut(self.active_layer)
-            .triangles
-            .push(&v, &[0, 1, 2, 2, 1, 3]);
-    }
-
-    pub fn point(&mut self, x: f32, y: f32) {
-        let size = 1.0;
-        self.rect(x - size * 0.5, y - size * 0.5, size, size);
+        self.rect(pos.x, pos.y, size.width, size.height);
     }
 }
 
@@ -271,5 +291,9 @@ impl<'a> SceneHandle<'a> {
         C: Into<math::Vector4<f32>>,
     {
         self.packet.clear_color = color.into();
+    }
+
+    pub fn set_layer(&mut self, layer: Layer) {
+        self.active_layer = layer;
     }
 }

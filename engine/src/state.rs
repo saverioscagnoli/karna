@@ -4,6 +4,7 @@ use std::mem;
 use crossbeam_channel::Receiver;
 use gpu::GpuState;
 use gpu::WindowSurface;
+use logging::debug;
 use renderer::FramePacket;
 use renderer::Renderer;
 use winit::event::MouseScrollDelta;
@@ -23,6 +24,7 @@ pub struct WindowState {
     context: WindowContext,
     renderer: Renderer,
     surface: WindowSurface,
+    pending_resize: Option<math::Size<u32>>,
 
     scenes: Scenes,
     active_scenes: Vec<String>,
@@ -47,6 +49,7 @@ impl WindowState {
             context: WindowContext::new(window),
             renderer,
             surface,
+            pending_resize: None,
             scenes,
             active_scenes: Vec::new(),
             packet: FramePacket::default(),
@@ -134,10 +137,7 @@ impl WindowState {
             WindowEvent::CloseRequested => self.should_exit = true,
 
             WindowEvent::Resized(size) => {
-                let gpu = GpuState::get();
-                let size: math::Size<u32> = size.into();
-
-                self.surface.resize(gpu, size);
+                self.pending_resize = Some(size.into());
             }
 
             WindowEvent::KeyboardInput {
@@ -208,7 +208,7 @@ impl WindowState {
         }
     }
 
-    fn frame(&mut self) -> FramePacket {
+    fn frame(&mut self) {
         let mut packet = mem::take(&mut self.packet);
 
         while let Some(tick_start) = self.context.time.next_tick() {
@@ -230,15 +230,17 @@ impl WindowState {
             s.draw(ctx, &mut draw);
         });
 
-        packet.viewport = self.context.window.size();
-        packet.world.camera = self.context.world_camera.data();
-        packet.ui.camera = self.context.ui_camera.data();
-        packet.debug.camera = self.context.debug_camera.data();
+        self.packet = packet;
 
-        packet
+        self.packet.viewport = self.context.window.size();
+        self.packet.world.camera = self.context.world_camera.data();
+        self.packet.ui.camera = self.context.ui_camera.data();
+        self.packet.debug.camera = self.context.debug_camera.data();
     }
 
-    fn flush(&mut self) {}
+    fn flush(&mut self) {
+        self.packet.clear();
+    }
 
     pub fn start(mut self) {
         while !self.should_exit {
@@ -248,11 +250,19 @@ impl WindowState {
                 break;
             }
 
+            if let Some(size) = self.pending_resize.take() {
+                self.surface.resize(GpuState::get(), size);
+                self.context.world_camera.update(size);
+                self.context.ui_camera.update(size);
+                self.context.debug_camera.update(size);
+                debug!("Resized window to {:?}", size);
+            }
+
             self.context.time.update();
 
-            let packet = self.frame();
+            self.frame();
 
-            self.renderer.present(&mut self.surface, packet);
+            self.renderer.present(&mut self.surface, &self.packet);
             self.context.time.wait_for_next_frame();
 
             self.drain_scene_commands();

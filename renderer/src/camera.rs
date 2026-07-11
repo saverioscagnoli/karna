@@ -102,7 +102,7 @@ impl Camera {
         }
     }
 
-    pub(crate) fn update(&mut self, view: Size<u32>) {
+    pub fn update(&mut self, view: Size<u32>) {
         match &mut self.projection {
             Projection::Orthographic { right, bottom, .. } => {
                 *right = view.width as f32;
