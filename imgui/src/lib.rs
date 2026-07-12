@@ -200,6 +200,13 @@ impl ImguiPacket {
         self.display_size = dd.display_size;
         self.fb_scale = dd.framebuffer_scale;
 
+        // With no imgui windows drawn, CmdLists.Data is null and
+        // draw_lists() would build a slice from a null pointer (a
+        // debug-assert panic on wasm).
+        if dd.total_vtx_count == 0 {
+            return;
+        }
+
         let (ox, oy, ew, eh) = (font_uv.x, font_uv.y, font_uv.z, font_uv.w);
 
         for list in dd.draw_lists() {
