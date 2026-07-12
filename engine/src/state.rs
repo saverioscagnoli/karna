@@ -360,43 +360,54 @@ impl WindowState {
         self.drain_scene_commands();
     }
 
-    pub fn start(mut self) {
+    /// Runs a single frame: drains queued events, applies resizes, updates
+    /// scenes, renders and presents. Returns `false` once the window wants
+    /// to close.
+    ///
+    /// Native drives this from a dedicated per-window thread ([`Self::start`]);
+    /// the web drives it from `RedrawRequested`, once per animation frame.
+    pub(crate) fn frame_once(&mut self) -> bool {
         let shared_imgui = self.context.imgui.clone();
         let window_id = self.context.window.id();
 
-        while !self.should_exit {
-            let mut imgui = shared_imgui.active(window_id);
-            let mut io = imgui.io_mut();
+        let mut imgui = shared_imgui.active(window_id);
+        let mut io = imgui.io_mut();
 
-            self.drain_events(&mut io);
+        self.drain_events(&mut io);
 
-            if self.should_exit {
-                break;
-            }
-
-            if let Some(size) = self.pending_resize.take() {
-                self.surface.resize(GpuState::get(), size);
-                self.surface_size = size;
-                self.context.world_camera.update(size);
-                self.context.ui_camera.update(size);
-                self.context.debug_camera.update(size);
-
-                debug!("Resized window to {:?}", size);
-            }
-
-            self.context.time.update();
-            io.delta_time = self.context.time.delta();
-
-            self.frame(imgui.new_frame());
-
-            self.packet.imgui.record(imgui.render(), self.imgui_font_uv);
-
-            drop(imgui);
-
-            self.renderer.present(&mut self.surface, &self.packet);
-            self.context.time.wait_for_next_frame();
-
-            self.flush();
+        if self.should_exit {
+            return false;
         }
+
+        if let Some(size) = self.pending_resize.take() {
+            self.surface.resize(GpuState::get(), size);
+            self.surface_size = size;
+            self.context.world_camera.update(size);
+            self.context.ui_camera.update(size);
+            self.context.debug_camera.update(size);
+
+            debug!("Resized window to {:?}", size);
+        }
+
+        self.context.time.update();
+        io.delta_time = self.context.time.delta();
+
+        self.frame(imgui.new_frame());
+
+        self.packet.imgui.record(imgui.render(), self.imgui_font_uv);
+
+        drop(imgui);
+
+        self.renderer.present(&mut self.surface, &self.packet);
+        self.context.time.wait_for_next_frame();
+
+        self.flush();
+
+        !self.should_exit
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn start(mut self) {
+        while self.frame_once() {}
     }
 }

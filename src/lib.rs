@@ -12,6 +12,7 @@ pub use engine::input;
 pub use imgui;
 pub use logging;
 pub use math;
+pub use utils;
 pub use utils::Handle;
 
 pub mod render {

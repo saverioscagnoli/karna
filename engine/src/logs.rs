@@ -23,13 +23,16 @@ impl logging::Target for EngineLogs {
 }
 
 pub fn init_logging() {
-    logging::init(
-        logging::Config::default()
-            .with_min_level(logging::LevelFilter::Debug)
-            .with_module_filter("sctk", logging::LevelFilter::Error)
-            .with_module_filter("naga", logging::LevelFilter::Error)
-            .with_module_filter("wgpu", logging::LevelFilter::Error)
-            .with_target(Box::new(EngineLogs)),
-    )
-    .expect("Failed to init logging");
+    let config = logging::Config::default()
+        .with_min_level(logging::LevelFilter::Debug)
+        .with_module_filter("sctk", logging::LevelFilter::Error)
+        .with_module_filter("naga", logging::LevelFilter::Error)
+        .with_module_filter("wgpu", logging::LevelFilter::Error)
+        .with_target(Box::new(EngineLogs));
+
+    // stdout/stderr go nowhere in the browser; mirror to the dev console.
+    #[cfg(target_arch = "wasm32")]
+    let config = config.with_target(Box::new(logging::WebConsole));
+
+    logging::init(config).expect("Failed to init logging");
 }

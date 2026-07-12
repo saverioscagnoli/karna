@@ -4,9 +4,18 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-pollster = "0.4.0"
 math.workspace = true
 wgpu.workspace = true
 utils.workspace = true
 parking_lot.workspace = true
 logging.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+pollster = "0.4.0"
+wgpu = { workspace = true, features = ["vulkan"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# fragile-send-sync-non-atomic-wasm: wgpu's JS-backed handles are not
+# Send/Sync on the web; this opts them in, which is sound as long as wasm
+# threads (atomics) stay off — the whole engine is single-threaded there.
+wgpu = { workspace = true, features = ["webgpu", "fragile-send-sync-non-atomic-wasm"] }

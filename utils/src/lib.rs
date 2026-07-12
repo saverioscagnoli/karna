@@ -3,6 +3,8 @@ mod index_map;
 mod lazy;
 mod macros;
 mod mem;
+// Blocking sleep is meaningless on the web; frame pacing is rAF-driven there.
+#[cfg(not(target_arch = "wasm32"))]
 mod sleep;
 mod slot_map;
 mod timer;
@@ -17,6 +19,7 @@ pub use crate::byte_size::*;
 pub use crate::index_map::*;
 pub use crate::lazy::*;
 pub use crate::mem::*;
+#[cfg(not(target_arch = "wasm32"))]
 pub use crate::sleep::*;
 pub use crate::slot_map::*;
 pub use crate::timer::*;

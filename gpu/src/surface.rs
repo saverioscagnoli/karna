@@ -38,8 +38,12 @@ impl WindowSurface {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
-            width: size.width,
-            height: size.height,
+            // A zero-sized surface is invalid to configure. The web reports
+            // the canvas size asynchronously (0x0 until the ResizeObserver
+            // fires) and native windows can spawn minimized; start at 1x1
+            // and let the first Resized event reconfigure.
+            width: size.width.max(1),
+            height: size.height.max(1),
             present_mode,
             alpha_mode: capabilities.alpha_modes[0],
             view_formats: vec![],

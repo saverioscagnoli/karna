@@ -4,11 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["assets","engine", "gpu", "imgui","logging", "math", "renderer", "utils"]
+members = ["assets","engine", "gpu", "imgui","logging", "math", "renderer", "utils", "web"]
 
 [workspace.dependencies]
 parking_lot = "0.12.5"
-wgpu = { version = "30.0.0", default-features = false, features = ["wgsl", "vulkan"] }
+# Backend features are added per-target by the `gpu` crate (vulkan on
+# native, webgpu on wasm); everything else only needs the wgsl frontend.
+wgpu = { version = "30.0.0", default-features = false, features = ["wgsl"] }
 utils = { path = "utils" }
 winit = "0.30.13"
 math = {path = "math" }
@@ -17,7 +19,9 @@ gpu = { path = "gpu" }
 renderer = { path = "renderer" }
 assets = { path = "assets" }
 imgui = { path = "imgui" }
-rodio = "0.22.2"
+# Decode-only (pure-Rust symphonia) so it builds on wasm; the engine
+# adds the cpal-backed "playback" feature on native targets.
+rodio = { version = "0.22.2", default-features = false, features = ["flac", "mp3", "mp4", "vorbis", "wav", "dither"] }
 crossbeam-channel = "0.5.16"
 
 [dependencies]

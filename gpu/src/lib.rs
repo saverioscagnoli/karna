@@ -8,23 +8,38 @@ mod vertex;
 use std::sync::OnceLock;
 
 use logging::debug;
+pub use wgpu;
 
 pub use crate::buffer::Buffer;
 pub use crate::pipeline::PipelineCache;
 pub use crate::pipeline::PipelineDesc;
-use crate::shaders::ShaderStore;
+pub use crate::shaders::ShaderStore;
 pub use crate::surface::WindowSurface;
 pub use crate::texture::Texture;
 pub use crate::vertex::*;
 
 static SINGLETON: OnceLock<GpuState> = OnceLock::new();
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn init(f: impl FnOnce(&mut ShaderStore, &wgpu::Device)) {
     SINGLETON.get_or_init(|| {
         let mut state = pollster::block_on(GpuState::new());
         f(&mut state.shaders, &state.device);
         state
     });
+}
+
+/// Async variant of [`init`] — the only option on the web, where the
+/// adapter/device requests must actually be awaited instead of blocked on.
+pub async fn init_async(f: impl FnOnce(&mut ShaderStore, &wgpu::Device)) {
+    if SINGLETON.get().is_some() {
+        return;
+    }
+
+    let mut state = GpuState::new().await;
+    f(&mut state.shaders, &state.device);
+
+    _ = SINGLETON.set(state);
 }
 
 #[derive(Debug)]
@@ -37,8 +52,18 @@ pub struct GpuState {
 }
 
 impl GpuState {
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn get() -> &'static Self {
         SINGLETON.get_or_init(|| pollster::block_on(Self::new()))
+    }
+
+    /// On the web the singleton cannot be created lazily (that would require
+    /// blocking), so it must have been set by awaiting [`init_async`] first.
+    #[cfg(target_arch = "wasm32")]
+    pub fn get() -> &'static Self {
+        SINGLETON
+            .get()
+            .expect("GpuState::get() called before gpu::init_async() completed")
     }
 
     async fn new() -> Self {

@@ -1,26 +1,34 @@
 use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
 use std::thread::JoinHandle;
 
 use assets::Image;
 use crossbeam_channel::Sender;
 use logging::error;
 use utils::Handle;
-use winit::event::WindowEvent;
 use winit::event_loop::EventLoopProxy;
 use winit::window::WindowId;
 
 use crate::AppEvent;
 use crate::UserEvent;
 
-pub type WinitWindow = winit::window::Window;
-
 pub struct WindowHandle {
+    /// Native: the thread running this window's render/update loop.
+    #[cfg(not(target_arch = "wasm32"))]
     pub thread: JoinHandle<()>,
+
+    /// Web: no threads — the state lives here and is stepped from
+    /// `RedrawRequested`.
+    #[cfg(target_arch = "wasm32")]
+    pub state: crate::state::WindowState,
+
     pub event_tx: Sender<AppEvent>, // To loop thread
 
     #[allow(unused)]
     pub window: Window,
 }
+
+pub type WinitWindow = winit::window::Window;
 
 #[derive(Clone)]
 pub struct Window {
