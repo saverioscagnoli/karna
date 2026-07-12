@@ -7,6 +7,7 @@ use karna::Scene;
 use karna::SceneHandle;
 use karna::WindowBuilder;
 use karna::assets::Audio;
+use karna::assets::Image;
 use karna::input::Keycode;
 use karna::math::Size;
 use karna::math::Vector2;
@@ -17,11 +18,19 @@ use utils::Handle;
 struct S {
     pos: Vector2<f32>,
     vel: Vector2<f32>,
+    image: Handle<Image>,
     mammamia: Handle<Audio>,
 }
 
 impl Scene for S {
-    fn load(&mut self, mut ctx: ContextMut, scene: &mut SceneHandle) {}
+    fn load(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
+        ctx.assets.write_scope(|a| {
+            self.image = a.load_image(include_bytes!("assets/pcb.png"));
+            self.mammamia = a.load_audio(include_bytes!("assets/mm.mp3"));
+        });
+
+        ctx.time.set_target_fps(120);
+    }
 
     fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
         let accel = 5000.0;
@@ -32,6 +41,10 @@ impl Scene for S {
 
         self.vel *= 0.85f32.powf(60.0).powf(dt);
         self.pos += self.vel * dt;
+
+        if ctx.input.key_pressed(Keycode::Space) {
+            ctx.mixer.play(self.mammamia);
+        }
     }
 
     fn draw(&self, ctx: ContextRef, draw: &mut Draw) {
@@ -66,6 +79,15 @@ impl Scene for S {
                 draw.point(i as f32 * 10.0 + 200.0, j as f32 * 10.0 + 200.0);
             }
         }
+
+        draw.image(self.image, 800.0, 300.0);
+
+        draw.set_color(Color::White);
+        draw.debug_text(
+            &format!("dt {:.6}\nfps {}", ctx.time.delta(), ctx.time.fps()),
+            10.0,
+            10.0,
+        );
     }
 }
 
@@ -89,6 +111,7 @@ fn main() {
                         pos: Vector2::new(50.0, 50.0),
                         vel: Vector2::zero(),
                         mammamia: Handle::default(),
+                        image: Handle::default(),
                     },
                 )
                 .with_active_scene("demo"),

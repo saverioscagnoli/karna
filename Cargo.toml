@@ -20,7 +20,6 @@ imgui = { path = "imgui" }
 rodio = "0.22.2"
 crossbeam-channel = "0.5.16"
 
-
 [dependencies]
 logging.workspace = true
 engine = { path = "engine" }

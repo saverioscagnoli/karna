@@ -5,6 +5,7 @@ use std::time::Instant;
 use logging::info;
 use logging::warn;
 use utils::SleepTimer;
+use utils::profile;
 
 pub struct Time {
     frame_step: Duration,
@@ -124,6 +125,7 @@ impl Time {
         self.tick_acc -= self.tick_step;
         self.tick_count += 1;
         self.tick_time = Instant::now() - tick_start;
+        profile::record("tick", self.tick_time);
     }
 
     pub(crate) fn update(&mut self) {
@@ -169,6 +171,10 @@ impl Time {
             self.tick_count = 0;
             self.tick_timer = 0.0;
         }
+
+        profile::record("frame", dt);
+        profile::gauge("fps", self.fps);
+        profile::gauge("tps", self.tps);
     }
 
     pub(crate) fn wait_for_next_frame(&mut self) {

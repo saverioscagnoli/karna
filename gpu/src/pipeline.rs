@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use logging::debug;
 use parking_lot::RwLock;
 use utils::FastHashMap;
 
@@ -121,6 +122,8 @@ impl PipelineCache {
 
         let gpu = GpuState::get();
         let pipeline = Arc::new(build_pipeline(gpu, &desc, layouts, format));
+
+        debug!("Creating render pipeline topology = {:?}", desc.topology);
 
         let mut map = self.pipelines.write();
         match map.get(&key) {

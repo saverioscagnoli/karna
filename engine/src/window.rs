@@ -10,6 +10,8 @@ pub type WinitWindow = winit::window::Window;
 pub struct WindowHandle {
     pub thread: JoinHandle<()>,
     pub event_tx: Sender<WindowEvent>, // To loop thread
+
+    #[allow(unused)]
     pub window: Window,
 }
 
@@ -31,10 +33,6 @@ impl Window {
 
     pub(crate) fn id(&self) -> WindowId {
         self.inner.id()
-    }
-
-    pub(crate) fn request_redraw(&self) {
-        self.inner.request_redraw();
     }
 
     pub fn title(&self) -> String {

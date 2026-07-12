@@ -7,13 +7,13 @@ use utils::SlotMap;
 use crate::image::TextureAtlas;
 
 pub struct Font {
-    pub inner: ab_glyph::FontVec,
+    inner: ab_glyph::FontVec,
     size: u16,
 }
 
 impl Font {
     #[doc(hidden)]
-    pub fn _inner(&self) -> &ab_glyph::FontVec {
+    pub fn inner(&self) -> &ab_glyph::FontVec {
         &self.inner
     }
 
@@ -102,8 +102,8 @@ impl FontAtlas {
         let handle = atlas.load_raw(rgba, size, true);
         let uv = atlas.images.get(handle).unwrap().uv;
 
-        let scaled = font._inner().as_scaled(ab_glyph::PxScale::from(size_px));
-        let advance = scaled.h_advance(font._inner().glyph_id(ch));
+        let scaled = font.inner().as_scaled(ab_glyph::PxScale::from(size_px));
+        let advance = scaled.h_advance(font.inner().glyph_id(ch));
 
         let info = GlyphInfo {
             uv,
@@ -124,7 +124,7 @@ fn rasterize_glyph(
     size_px: f32,
 ) -> Option<(Vec<u8>, math::Size<u32>, ab_glyph::Rect)> {
     let scale = ab_glyph::PxScale::from(size_px);
-    let scaled_font = font._inner().as_scaled(scale);
+    let scaled_font = font.inner().as_scaled(scale);
 
     let glyph_id = scaled_font.glyph_id(ch);
     let glyph = glyph_id.with_scale(scale);

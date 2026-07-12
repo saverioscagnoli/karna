@@ -551,6 +551,7 @@ dependencies = [
  "assets",
  "crossbeam-channel",
  "ctrlc",
+ "glyph_brush_layout",
  "gpu",
  "imgui 0.1.0",
  "logging",
@@ -1876,7 +1877,6 @@ version = "0.1.0"
 dependencies = [
  "assets",
  "crossbeam-channel",
- "glyph_brush_layout",
  "gpu",
  "imgui 0.1.0",
  "logging",
@@ -2520,6 +2520,7 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 name = "utils"
 version = "0.1.0"
 dependencies = [
+ "parking_lot",
  "rustc-hash 2.1.2",
 ]
 

@@ -1,13 +1,16 @@
+use imgui::sys::ImGuiSelectableFlags_DontClosePopups;
 use karna::AppBuilder;
 use karna::ContextMut;
 use karna::ContextRef;
 use karna::Handle;
 use karna::Scene;
+use karna::SceneHandle;
 use karna::WindowBuilder;
 use karna::assets::Font;
-use karna::input::KeyCode;
+use karna::input::Keycode;
 use karna::render::Color;
 use karna::render::Draw;
+use utils::profile;
 
 #[derive(Default)]
 struct Donut {
@@ -106,23 +109,23 @@ impl Donut {
 }
 
 impl Scene for Donut {
-    fn load(&mut self, ctx: ContextMut) {
+    fn load(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
         ctx.time.set_target_fps(120);
     }
 
-    fn update(&mut self, ctx: ContextMut) {
+    fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
         let dt = ctx.time.delta();
 
         self.angle_a += 1.0 * dt;
         self.angle_b += 0.5 * dt;
         self.color_timer += 2.0 * dt;
 
-        if ctx.input.key_pressed(&KeyCode::Space) {
+        if ctx.input.key_pressed(Keycode::Space) {
             self.font_toggle = !self.font_toggle;
         }
     }
 
-    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+    fn draw(&self, ctx: ContextRef, draw: &mut Draw) {
         let frame_content = self.generate_frame();
         let rainbow_color = self.get_rainbow_color();
         let win_size = ctx.window.size();
@@ -138,8 +141,21 @@ impl Scene for Donut {
         let y = (win_size.height as f32 - text_height) / 2.0;
 
         draw.set_color(Color::White);
-        draw.debug_text(&format!("FPS: {}", ctx.time.fps()), 10.0, 10.0);
-        draw.debug_text(&format!("DT: {:.6}", ctx.time.delta()), 10.0, 30.0);
+        draw.debug_text(&format!("fps: {}", ctx.time.fps()), 10.0, 10.0);
+        draw.debug_text(&format!("dt: {:.6}", ctx.time.delta()), 10.0, 30.0);
+        draw.debug_text(
+            &format!("asset reads: {}", profile::get("asset_reads").unwrap().last),
+            10.0,
+            50.0,
+        );
+        draw.debug_text(
+            &format!(
+                "asset writes: {}",
+                profile::get("asset_writes").unwrap().last
+            ),
+            10.0,
+            70.0,
+        );
 
         draw.set_color(rainbow_color);
 
@@ -148,19 +164,28 @@ impl Scene for Donut {
 }
 
 fn main() {
-    karna::init_logging();
+    karna::logging::init(
+        karna::logging::Config {
+            min_level: karna::logging::LevelFilter::Debug,
+            ..Default::default()
+        }
+        .hide_wgpu(true),
+    )
+    .expect("Failed to init logging");
 
     AppBuilder::new()
         .with_window(
             WindowBuilder::new()
                 .with_title("spinning donut")
                 .with_size((1280, 720))
-                .with_resizable(false)
-                .build_scene("donut", |mut ctx| Donut {
-                    font: ctx
-                        .assets
-                        .load_font(include_bytes!("assets/jbmono.ttf"), 24),
-                    ..Default::default()
+                .build_scene("donut", |ctx, _s| {
+                    let mut d = Donut::default();
+
+                    ctx.assets.write_scope(|a| {
+                        d.font = a.load_font(include_bytes!("assets/jbmono.ttf"), 24);
+                    });
+
+                    d
                 })
                 .with_active_scene("donut"),
         )

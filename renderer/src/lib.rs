@@ -5,6 +5,7 @@ mod immediate;
 use std::array;
 use std::sync::Arc;
 
+use assets::AssetsReader;
 use gpu::GpuState;
 use gpu::Vertex;
 use logging::warn;
@@ -140,11 +141,12 @@ impl WindowRenderData {
 }
 
 pub struct Layouts {
+    pub texture_atlas: wgpu::BindGroupLayout,
     pub camera: wgpu::BindGroupLayout,
 }
 
 impl Layouts {
-    pub fn new() -> Self {
+    pub fn new(a: &wgpu::BindGroupLayout) -> Self {
         let gpu = GpuState::get();
         let camera_layout = gpu
             .device
@@ -163,14 +165,15 @@ impl Layouts {
             });
 
         Self {
+            texture_atlas: a.clone(),
             camera: camera_layout,
         }
     }
 }
 
 impl Layouts {
-    const fn as_array(&self) -> [&wgpu::BindGroupLayout; 1] {
-        [&self.camera]
+    const fn as_array(&self) -> [&wgpu::BindGroupLayout; 2] {
+        [&self.camera, &self.texture_atlas]
     }
 }
 
@@ -178,14 +181,20 @@ pub struct Renderer {
     pipelines: Arc<gpu::PipelineCache>,
     layouts: Arc<Layouts>,
     data: WindowRenderData,
+    assets: AssetsReader,
 }
 
 impl Renderer {
-    pub fn new(pipelines: Arc<gpu::PipelineCache>, layouts: Arc<Layouts>) -> Self {
+    pub fn new(
+        pipelines: Arc<gpu::PipelineCache>,
+        layouts: Arc<Layouts>,
+        assets: AssetsReader,
+    ) -> Self {
         Self {
             pipelines,
             data: WindowRenderData::new(GpuState::get(), &layouts),
             layouts,
+            assets,
         }
     }
 
@@ -259,7 +268,10 @@ impl Renderer {
                     ..Default::default()
                 });
 
+                let assets = self.assets.read();
+
                 pass.set_bind_group(0, &layer_gpu.camera_bg, &[]);
+                pass.set_bind_group(1, assets.atlas_bg(), &[]);
 
                 layer_gpu.immediate.present(
                     &layer_packet.points,
@@ -269,6 +281,7 @@ impl Renderer {
                     &self.pipelines,
                     &self.layouts,
                     output.texture.format(),
+                    assets,
                 );
             }
         }

@@ -13,6 +13,7 @@ pub use imgui;
 pub use logging;
 pub use math;
 pub use utils::Handle;
+pub use utils::profile;
 
 pub mod render {
     pub use engine::Draw;

@@ -1,3 +1,8 @@
+use assets::AssetServer;
+use assets::AssetsRead;
+use assets::Font;
+use assets::Image;
+use glyph_brush_layout::GlyphPositioner;
 use gpu::Vertex;
 use logging::warn;
 use renderer::Camera;
@@ -5,17 +10,21 @@ use renderer::Color;
 use renderer::FramePacket;
 use renderer::Layer;
 use renderer::Projection;
+use utils::Handle;
 
 use crate::SceneManager;
 use crate::Time;
 use crate::Window;
 use crate::input::Input;
+use crate::mixer::Mixer;
 
 pub struct WindowContext {
     pub window: Window,
     pub time: Time,
     pub input: Input,
     pub scenes: SceneManager,
+    pub mixer: Mixer,
+    pub assets: AssetServer,
 
     pub world_camera: Camera,
     pub ui_camera: Camera,
@@ -23,7 +32,7 @@ pub struct WindowContext {
 }
 
 impl WindowContext {
-    pub fn new(window: Window) -> Self {
+    pub fn new(window: Window, assets: AssetServer) -> Self {
         let view = window.size();
 
         Self {
@@ -31,6 +40,8 @@ impl WindowContext {
             time: Time::new(),
             input: Input::new(),
             scenes: SceneManager::new(),
+            mixer: Mixer::new(assets.reader()),
+            assets,
             world_camera: Camera::new(Projection::standard_2d(view)),
             ui_camera: Camera::new(Projection::standard_2d(view)),
             debug_camera: Camera::new(Projection::standard_2d(view)),
@@ -43,6 +54,8 @@ pub struct ContextMut<'a> {
     pub time: &'a mut Time,
     pub input: &'a mut Input,
     pub scenes: &'a mut SceneManager,
+    pub mixer: &'a Mixer,        // Cannot be mutated, no sense making it &mut
+    pub assets: &'a AssetServer, // Uses interior mutability, no sense making it &mut
 }
 
 pub struct ContextRef<'a> {
@@ -50,6 +63,8 @@ pub struct ContextRef<'a> {
     pub time: &'a Time,
     pub input: &'a Input,
     pub scenes: &'a SceneManager,
+    pub mixer: &'a Mixer,
+    pub assets: AssetsRead<'a>,
 }
 
 impl WindowContext {
@@ -59,6 +74,8 @@ impl WindowContext {
             time: &self.time,
             input: &self.input,
             scenes: &self.scenes,
+            mixer: &self.mixer,
+            assets: self.assets.read(),
         }
     }
 
@@ -71,6 +88,8 @@ impl WindowContext {
             time,
             input,
             scenes,
+            mixer,
+            assets,
             world_camera,
             ui_camera,
             debug_camera,
@@ -82,6 +101,8 @@ impl WindowContext {
                 time,
                 input,
                 scenes,
+                mixer,
+                assets,
             },
             SceneHandle {
                 active_layer: Layer::World,
@@ -94,7 +115,7 @@ impl WindowContext {
     }
 
     pub fn split<'a>(&'a self, packet: &'a mut FramePacket) -> (ContextRef<'a>, Draw<'a>) {
-        (self.as_ref(), Draw::new(packet))
+        (self.as_ref(), Draw::new(packet, self.assets.read()))
     }
 }
 
@@ -120,15 +141,21 @@ pub struct Draw<'a> {
     state_stack: Vec<DrawState>,
     current_state: DrawState,
     active_layer: Layer,
+    assets: AssetsRead<'a>,
+    white_uv: math::Vector2<f32>,
 }
 
 impl<'a> Draw<'a> {
-    pub(crate) fn new(packet: &'a mut FramePacket) -> Self {
+    pub(crate) fn new(packet: &'a mut FramePacket, assets: AssetsRead<'a>) -> Self {
+        let white_uv = assets.get_image(assets.white_handle()).uv.xy();
+
         Self {
             packet,
             state_stack: Vec::new(),
             current_state: DrawState::default(),
             active_layer: Layer::World,
+            assets,
+            white_uv,
         }
     }
 
@@ -206,8 +233,7 @@ impl<'a> Draw<'a> {
     // ---- primitives ----
 
     pub fn point(&mut self, x: f32, y: f32) {
-        let uv = math::Vector2::zero();
-        let v = [self.vertex(x, y, uv)];
+        let v = [self.vertex(x, y, self.white_uv)];
 
         self.packet
             .layer_mut(self.active_layer)
@@ -225,8 +251,10 @@ impl<'a> Draw<'a> {
     }
 
     pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
-        let uv = math::Vector2::zero();
-        let v = [self.vertex(x1, y1, uv), self.vertex(x2, y2, uv)];
+        let v = [
+            self.vertex(x1, y1, self.white_uv),
+            self.vertex(x2, y2, self.white_uv),
+        ];
 
         self.packet
             .layer_mut(self.active_layer)
@@ -246,13 +274,11 @@ impl<'a> Draw<'a> {
     }
 
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
-        let uv = math::Vector2::zero();
-
         let v = [
-            self.vertex(x, y, uv),
-            self.vertex(x + w, y, uv),
-            self.vertex(x, y + h, uv),
-            self.vertex(x + w, y + h, uv),
+            self.vertex(x, y, self.white_uv),
+            self.vertex(x + w, y, self.white_uv),
+            self.vertex(x, y + h, self.white_uv),
+            self.vertex(x + w, y + h, self.white_uv),
         ];
 
         self.packet
@@ -270,6 +296,107 @@ impl<'a> Draw<'a> {
         let size: math::Size<f32> = size.into();
 
         self.rect(pos.x, pos.y, size.width, size.height);
+    }
+
+    pub fn image(&mut self, image: Handle<Image>, x: f32, y: f32) {
+        let image = self.assets.get_image(image);
+        let size = image.size.as_f32();
+        let uv = image.uv;
+        let uv_min = uv.xy();
+        let uv_max = math::Vector2::new(uv.x + uv.z, uv.y + uv.w);
+
+        let v = [
+            self.vertex(x, y, uv_min),
+            self.vertex(x + size.width, y, math::Vector2::new(uv_max.x, uv_min.y)),
+            self.vertex(x, y + size.height, math::Vector2::new(uv_min.x, uv_max.y)),
+            self.vertex(x + size.width, y + size.height, uv_max),
+        ];
+
+        self.packet
+            .layer_mut(self.active_layer)
+            .triangles
+            .push(&v, &[0, 1, 2, 2, 1, 3])
+    }
+
+    pub fn image_v<P>(&mut self, image: Handle<Image>, pos: P)
+    where
+        P: Into<math::Vector2<f32>>,
+    {
+        let pos: math::Vector2<f32> = pos.into();
+
+        self.image(image, pos.x, pos.y);
+    }
+
+    pub fn text<T>(&mut self, font: Handle<Font>, text: T, x: f32, y: f32)
+    where
+        T: AsRef<str>,
+    {
+        let text = text.as_ref();
+        let view = self.packet.viewport.as_f32();
+        let font_asset = self.assets.get_font(font);
+
+        let geometry = glyph_brush_layout::SectionGeometry {
+            screen_position: (x, y),
+            bounds: (view.width, view.height),
+        };
+
+        let sections = &[glyph_brush_layout::SectionText {
+            text,
+            scale: glyph_brush_layout::ab_glyph::PxScale::from(font_asset.size() as f32),
+            font_id: glyph_brush_layout::FontId(0),
+        }];
+
+        let fonts = [font_asset.inner()];
+        let glyphs = glyph_brush_layout::Layout::default_wrap()
+            .calculate_glyphs(&fonts, &geometry, sections);
+
+        for sg in &glyphs {
+            let ch = text[sg.byte_index..]
+                .chars()
+                .next()
+                .expect("Invalid byte index");
+            if ch.is_whitespace() {
+                continue; // whitespace has no cached glyph/quad, position already accounts for its advance
+            }
+
+            let info = self.assets.get_glyph(font, ch, font_asset.size());
+
+            let draw_x = sg.glyph.position.x + info.bearing.x;
+            let draw_y = sg.glyph.position.y + info.bearing.y;
+
+            let uv = info.uv; // Vector4: xy = origin, zw = extent
+            let uv_min = uv.xy();
+            let uv_max = math::Vector2::new(uv.x + uv.z, uv.y + uv.w);
+
+            let v = [
+                self.vertex(draw_x, draw_y, uv_min),
+                self.vertex(
+                    draw_x + info.size.width,
+                    draw_y,
+                    math::Vector2::new(uv_max.x, uv_min.y),
+                ),
+                self.vertex(
+                    draw_x,
+                    draw_y + info.size.height,
+                    math::Vector2::new(uv_min.x, uv_max.y),
+                ),
+                self.vertex(draw_x + info.size.width, draw_y + info.size.height, uv_max),
+            ];
+
+            self.packet
+                .layer_mut(self.active_layer)
+                .triangles
+                .push(&v, &[0, 1, 2, 2, 1, 3]);
+        }
+    }
+
+    pub fn debug_text<T>(&mut self, text: T, x: f32, y: f32)
+    where
+        T: AsRef<str>,
+    {
+        let debug_font = self.assets.debug_font_handle();
+
+        self.text(debug_font, text, x, y);
     }
 }
 
@@ -295,5 +422,21 @@ impl<'a> SceneHandle<'a> {
 
     pub fn set_layer(&mut self, layer: Layer) {
         self.active_layer = layer;
+    }
+
+    pub fn camera(&self) -> &Camera {
+        match self.active_layer {
+            Layer::World => &self.world_camera,
+            Layer::Ui => &self.ui_camera,
+            Layer::Debug => &self.debug_camera,
+        }
+    }
+
+    pub fn camera_mut(&mut self) -> &mut Camera {
+        match self.active_layer {
+            Layer::World => &mut self.world_camera,
+            Layer::Ui => &mut self.ui_camera,
+            Layer::Debug => &mut self.debug_camera,
+        }
     }
 }

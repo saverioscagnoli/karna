@@ -1,12 +1,14 @@
 use std::any::Any;
 use std::mem;
 
+use assets::AssetServer;
 use crossbeam_channel::Receiver;
 use gpu::GpuState;
 use gpu::WindowSurface;
 use logging::debug;
 use renderer::FramePacket;
 use renderer::Renderer;
+use utils::profile;
 use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent;
 use winit::event_loop::EventLoopProxy;
@@ -41,12 +43,13 @@ impl WindowState {
         surface: WindowSurface,
         scenes: Scenes,
         active_scenes: Vec<String>,
+        assets: AssetServer,
         proxy: EventLoopProxy<UserEvent>,
         event_rx: Receiver<WindowEvent>,
     ) -> Self {
         let mut state = Self {
             should_exit: false,
-            context: WindowContext::new(window),
+            context: WindowContext::new(window, assets),
             renderer,
             surface,
             pending_resize: None,
@@ -211,24 +214,36 @@ impl WindowState {
     fn frame(&mut self) {
         let mut packet = mem::take(&mut self.packet);
 
-        while let Some(tick_start) = self.context.time.next_tick() {
-            self.for_each_active_mut(|scene, ctx| {
-                let (ctx, mut s) = ctx.split_mut(&mut packet);
-                scene.fixed_update(ctx, &mut s);
-            });
+        {
+            let _p = profile::scope("fixed_update");
 
-            self.context.time.do_tick(tick_start);
+            while let Some(tick_start) = self.context.time.next_tick() {
+                self.for_each_active_mut(|scene, ctx| {
+                    let (ctx, mut s) = ctx.split_mut(&mut packet);
+                    scene.fixed_update(ctx, &mut s);
+                });
+
+                self.context.time.do_tick(tick_start);
+            }
         }
 
-        self.for_each_active_mut(|scene, ctx| {
-            let (ctx, mut s) = ctx.split_mut(&mut packet);
-            scene.update(ctx, &mut s);
-        });
+        {
+            let _p = profile::scope("update");
 
-        self.for_each_active(|s, ctx| {
-            let (ctx, mut draw) = ctx.split(&mut packet);
-            s.draw(ctx, &mut draw);
-        });
+            self.for_each_active_mut(|scene, ctx| {
+                let (ctx, mut s) = ctx.split_mut(&mut packet);
+                scene.update(ctx, &mut s);
+            });
+        }
+
+        {
+            let _p = profile::scope("draw");
+
+            self.for_each_active(|s, ctx| {
+                let (ctx, mut draw) = ctx.split(&mut packet);
+                s.draw(ctx, &mut draw);
+            });
+        }
 
         self.packet = packet;
 
@@ -240,6 +255,8 @@ impl WindowState {
 
     fn flush(&mut self) {
         self.packet.clear();
+        self.context.input.flush();
+        self.drain_scene_commands();
     }
 
     pub fn start(mut self) {
@@ -262,11 +279,19 @@ impl WindowState {
 
             self.frame();
 
-            self.renderer.present(&mut self.surface, &self.packet);
-            self.context.time.wait_for_next_frame();
+            {
+                let _p = profile::scope("render");
+                self.renderer.present(&mut self.surface, &self.packet);
+            }
 
-            self.drain_scene_commands();
+            {
+                let _p = profile::scope("wait");
+                self.context.time.wait_for_next_frame();
+            }
+
             self.flush();
+
+            profile::end_frame();
         }
     }
 }

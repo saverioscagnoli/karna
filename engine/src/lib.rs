@@ -1,6 +1,7 @@
 mod builder;
 mod context;
 pub mod input;
+mod mixer;
 mod scene;
 mod state;
 mod time;
@@ -10,6 +11,7 @@ use std::mem;
 use std::sync::Arc;
 use std::thread;
 
+use assets::AssetServer;
 use gpu::GpuState;
 use gpu::WindowSurface;
 use logging::debug;
@@ -53,8 +55,11 @@ pub struct App {
     enqueued_windows: Vec<WindowBuilder>,
     windows: FastHashMap<WindowId, WindowHandle>,
     proxy: Lazy<EventLoopProxy<UserEvent>>,
+
+    // ---- Shared (refcounted) ----
     pipelines: Arc<gpu::PipelineCache>,
     layouts: Arc<Layouts>,
+    assets: AssetServer,
 }
 
 /// Private or crate-private implementations
@@ -83,12 +88,19 @@ impl App {
             info.name, info.device_type, info.backend, info.driver_info
         );
 
+        let assets = AssetServer::new();
+        let r = assets.read();
+        let layouts = Arc::new(Layouts::new(r.atlas_bgl()));
+
+        drop(r);
+
         Self {
             enqueued_windows: Vec::new(),
             windows: FastHashMap::default(),
             proxy: Lazy::empty(),
             pipelines: Arc::new(gpu::PipelineCache::new()),
-            layouts: Arc::new(Layouts::new()),
+            layouts,
+            assets,
         }
     }
 
@@ -115,15 +127,17 @@ impl App {
         let layouts = self.layouts.clone();
         let proxy = self.proxy.clone();
         let window_arc = window.clone();
+        let assets = self.assets.clone();
 
         let thread = thread::spawn(move || {
-            let renderer = Renderer::new(pipelines, layouts);
+            let renderer = Renderer::new(pipelines, layouts, assets.reader());
             let state = WindowState::new(
                 window,
                 renderer,
                 surface,
                 scenes,
                 active_scenes,
+                assets,
                 proxy,
                 event_rx,
             );
@@ -178,6 +192,8 @@ impl ApplicationHandler<UserEvent> for App {
                 Err(e) => error!("Failed to spawn window '{}': {}", title, e),
             }
         }
+
+        info!("App initialization complete.");
     }
 
     fn window_event(
