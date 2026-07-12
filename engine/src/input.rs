@@ -73,15 +73,15 @@ impl Input {
     }
 
     /// Returns true if the given mouse button is being held down
-    pub fn mouse_held(&self, b: &MouseButton) -> bool {
-        self.held_mouse_buttons.contains(b)
+    pub fn mouse_held(&self, b: MouseButton) -> bool {
+        self.held_mouse_buttons.contains(&b)
     }
 
     /// Returns true if the given mouse button is pressed,
     /// but it does not persist across frames, so it can be useful
     /// for one-time actions, such as clicking something
-    pub fn mouse_pressed(&self, b: &MouseButton) -> bool {
-        self.pressed_mouse_buttons.contains(b)
+    pub fn mouse_pressed(&self, b: MouseButton) -> bool {
+        self.pressed_mouse_buttons.contains(&b)
     }
 
     /// Clears every input type that

@@ -15,6 +15,7 @@ pub trait Scene: Send {
     fn loaded_with(&mut self, ctx: ContextMut, scene: &mut SceneHandle, user_data: Box<dyn Any>) {}
     fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle);
     fn fixed_update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {}
+    fn imgui_frame(&mut self, ctx: ContextMut, scene: &mut SceneHandle, ui: &imgui::Ui) {}
     fn draw(&self, ctx: ContextRef, draw: &mut Draw);
 }
 

@@ -3,7 +3,7 @@ use imgui::MouseButton as IM;
 use winit::event::MouseButton as WM;
 use winit::keyboard::KeyCode as WK;
 
-pub fn winit_mousebutton_to_imgui(button: WM) -> Option<IM> {
+pub fn winit_mousebutton_to_imgui(button: &WM) -> Option<IM> {
     match button {
         WM::Left | WM::Other(0) => Some(IM::Left),
         WM::Right | WM::Other(1) => Some(IM::Right),

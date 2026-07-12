@@ -3,7 +3,6 @@ mod index_map;
 mod lazy;
 mod macros;
 mod mem;
-pub mod profile;
 mod sleep;
 mod slot_map;
 mod timer;

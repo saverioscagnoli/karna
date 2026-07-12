@@ -132,40 +132,6 @@ macro_rules! vertex {
     };
 }
 
-/// IMGUI
-impl From<imgui::DrawVert> for Vertex {
-    fn from(v: imgui::DrawVert) -> Self {
-        let [r, g, b, a] = v.col;
-        vertex!(
-            [v.pos[0], v.pos[1], 0.0],
-            [
-                r as f32 / 255.0,
-                g as f32 / 255.0,
-                b as f32 / 255.0,
-                a as f32 / 255.0
-            ],
-            [v.uv[0], v.uv[1]]
-        )
-    }
-}
-
-impl From<&imgui::DrawVert> for Vertex {
-    fn from(v: &imgui::DrawVert) -> Self {
-        let [r, g, b, a] = v.col;
-
-        vertex!(
-            [v.pos[0], v.pos[1], 0.0],
-            [
-                r as f32 / 255.0,
-                g as f32 / 255.0,
-                b as f32 / 255.0,
-                a as f32 / 255.0
-            ],
-            [v.uv[0], v.uv[1]]
-        )
-    }
-}
-
 /// Vertex type Specifically used for rendering
 /// circles in immediate mode via `draw.cirlce()`
 ///

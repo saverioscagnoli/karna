@@ -2,9 +2,10 @@ use karna::App;
 use karna::ContextMut;
 use karna::ContextRef;
 use karna::Scene;
+use karna::SceneHandle;
 use karna::WindowBuilder;
 use karna::imgui;
-use karna::input::KeyCode;
+use karna::input::Keycode;
 use karna::math::Vector2;
 use karna::render::Color;
 use karna::render::Draw;
@@ -18,33 +19,29 @@ struct S {
 }
 
 impl Scene for S {
-    fn load(&mut self, ctx: ContextMut) {
-        if let Some(monitor) = ctx.monitors.current() {
-            ctx.time.set_target_fps(monitor.refresh_rate());
-        }
-
+    fn load(&mut self, ctx: ContextMut, _scene: &mut SceneHandle) {
         ctx.time.set_target_fps(120);
     }
 
-    fn fixed_update(&mut self, ctx: ContextMut) {
+    fn fixed_update(&mut self, ctx: ContextMut, _scene: &mut SceneHandle) {
         const VEL: f32 = 250.0;
 
         // snapshot before mutating this tick
         self.prev_pos = self.pos;
 
-        if ctx.input.key_held(&KeyCode::KeyW) {
+        if ctx.input.key_held(Keycode::KeyW) {
             self.vel.y = -VEL;
         }
 
-        if ctx.input.key_held(&KeyCode::KeyA) {
+        if ctx.input.key_held(Keycode::KeyA) {
             self.vel.x = -VEL;
         }
 
-        if ctx.input.key_held(&KeyCode::KeyS) {
+        if ctx.input.key_held(Keycode::KeyS) {
             self.vel.y = VEL;
         }
 
-        if ctx.input.key_held(&KeyCode::KeyD) {
+        if ctx.input.key_held(Keycode::KeyD) {
             self.vel.x = VEL;
         }
 
@@ -56,11 +53,49 @@ impl Scene for S {
         }
     }
 
-    fn update(&mut self, ctx: ContextMut) {
-        let _ = ctx;
+    fn update(&mut self, _ctx: ContextMut, _scene: &mut SceneHandle) {}
+
+    fn imgui_frame(&mut self, ctx: ContextMut, _scene: &mut SceneHandle, ui: &imgui::Ui) {
+        self.fps_history.remove(0);
+        self.fps_history.push(ctx.time.fps() as f32);
+
+        ui.window("Panel")
+            .size([320.0, 500.0], imgui::Condition::FirstUseEver)
+            .position([10.0, 10.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                let fps = ctx.time.fps();
+                let dt = ctx.time.delta();
+                let fixed_dt = ctx.time.fixed_delta();
+                let tps = ctx.time.tps();
+
+                // color-code fps: green when healthy, yellow/red when struggling
+                let fps_color = if fps >= 55 {
+                    [0.2, 1.0, 0.2, 1.0]
+                } else if fps >= 30 {
+                    [1.0, 0.8, 0.2, 1.0]
+                } else {
+                    [1.0, 0.2, 0.2, 1.0]
+                };
+
+                ui.text_colored(fps_color, format!("FPS: {:.1}", fps));
+                ui.plot_lines("##fps_history", &self.fps_history)
+                    .scale_min(0.0)
+                    .graph_size([280.0, 60.0])
+                    .build();
+
+                ui.separator();
+                ui.text(format!("Frame step (delta):  {:.4} ms", dt * 1000.0));
+                ui.text(format!("Tick step (fixed dt): {:.4} ms", fixed_dt * 1000.0));
+                ui.text(format!("Ticks per second:    {:.1}", tps));
+                ui.text(format!("Interp alpha:        {:.3}", ctx.time.alpha()));
+
+                ui.color_picker4_config("clear color", &mut self.clear_color)
+                    .mode(imgui::ColorPickerMode::HueWheel)
+                    .build();
+            });
     }
 
-    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+    fn draw(&self, ctx: ContextRef, draw: &mut Draw) {
         draw.set_clear_color(self.clear_color);
         draw.set_color(Color::Cyan);
 
@@ -75,72 +110,35 @@ impl Scene for S {
 
         draw.set_color(Color::White);
         draw.rect(render_pos.x, render_pos.y, 50.0, 50.0);
-
-        draw.imgui(|ui| {
-            self.fps_history.remove(0);
-            self.fps_history.push(ctx.time.fps() as f32);
-
-            ui.window("Panel")
-                .size([320.0, 500.0], imgui::Condition::FirstUseEver)
-                .position([10.0, 10.0], imgui::Condition::FirstUseEver)
-                .build(|| {
-                    let fps = ctx.time.fps();
-                    let dt = ctx.time.delta();
-                    let fixed_dt = ctx.time.fixed_delta();
-                    let tps = ctx.time.tps();
-
-                    // color-code fps: green when healthy, yellow/red when struggling
-                    let fps_color = if fps >= 55 {
-                        [0.2, 1.0, 0.2, 1.0]
-                    } else if fps >= 30 {
-                        [1.0, 0.8, 0.2, 1.0]
-                    } else {
-                        [1.0, 0.2, 0.2, 1.0]
-                    };
-
-                    ui.text_colored(fps_color, format!("FPS: {:.1}", fps));
-                    ui.plot_lines("##fps_history", &self.fps_history)
-                        .scale_min(0.0)
-                        .graph_size([280.0, 60.0])
-                        .build();
-
-                    ui.separator();
-                    ui.text(format!("Frame step (delta):  {:.4} ms", dt * 1000.0));
-                    ui.text(format!("Tick step (fixed dt): {:.4} ms", fixed_dt * 1000.0));
-                    ui.text(format!("Ticks per second:    {:.1}", tps));
-                    ui.text(format!("Interp alpha:        {:.3}", ctx.time.alpha()));
-
-                    ui.color_picker4_config("clear color", &mut self.clear_color)
-                        .mode(imgui::ColorPickerMode::HueWheel)
-                        .build();
-                });
-        });
     }
 }
 
 struct AtlasScene;
 
 impl Scene for AtlasScene {
-    fn load(&mut self, ctx: ContextMut) {
+    fn load(&mut self, ctx: ContextMut, _scene: &mut SceneHandle) {
         ctx.time.set_target_fps(120);
     }
 
-    fn update(&mut self, ctx: ContextMut) {
-        _ = ctx;
+    fn update(&mut self, _ctx: ContextMut, _scene: &mut SceneHandle) {}
+
+    fn imgui_frame(&mut self, _ctx: ContextMut, _scene: &mut SceneHandle, ui: &imgui::Ui) {
+        ui.show_demo_window(&mut true);
+        ui.show_about_window(&mut true);
     }
 
-    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
-        _ = ctx;
-        draw.texture_atlas(0.0, 0.0);
-        draw.imgui(|ui| {
-            ui.show_demo_window(&mut true);
-            ui.show_about_window(&mut true);
-        });
-    }
+    fn draw(&self, _ctx: ContextRef, _draw: &mut Draw) {}
 }
 
 fn main() {
-    karna::init_logging();
+    karna::logging::init(
+        karna::logging::Config {
+            min_level: karna::logging::LevelFilter::Debug,
+            ..Default::default()
+        }
+        .hide_wgpu(true),
+    )
+    .expect("Failed to init logging");
 
     App::builder()
         .with_window(

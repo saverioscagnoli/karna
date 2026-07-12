@@ -8,6 +8,7 @@ use std::sync::Arc;
 use assets::AssetsReader;
 use gpu::GpuState;
 use gpu::Vertex;
+use imgui::ImguiPacket;
 use logging::warn;
 
 pub use crate::camera::Camera;
@@ -15,6 +16,7 @@ use crate::camera::CameraData;
 pub use crate::camera::Projection;
 pub use crate::color::Color;
 use crate::immediate::ImmediateRenderer;
+use crate::immediate::imgui::ImguiRenderer;
 
 #[repr(usize)]
 #[derive(Default)]
@@ -75,6 +77,7 @@ pub struct FramePacket {
     pub world: LayerPacket,
     pub ui: LayerPacket,
     pub debug: LayerPacket,
+    pub imgui: ImguiPacket,
 }
 
 impl FramePacket {
@@ -130,12 +133,14 @@ impl LayerGpu {
 
 pub struct WindowRenderData {
     layers: [LayerGpu; 3],
+    imgui: ImguiRenderer,
 }
 
 impl WindowRenderData {
     fn new(gpu: &GpuState, layouts: &Layouts) -> Self {
         Self {
             layers: array::from_fn(|_| LayerGpu::new(gpu, &layouts.camera)),
+            imgui: ImguiRenderer::new(gpu, &layouts.camera),
         }
     }
 }
@@ -267,6 +272,22 @@ impl Renderer {
                     })],
                     ..Default::default()
                 });
+
+                if !packet.imgui.cmds.is_empty() {
+                    let assets = self.assets.read();
+
+                    let fb = math::Size::new(output.texture.width(), output.texture.height());
+
+                    self.data.imgui.present(
+                        &packet.imgui,
+                        fb,
+                        &mut pass,
+                        &self.pipelines,
+                        &self.layouts,
+                        output.texture.format(),
+                        assets,
+                    );
+                }
 
                 let assets = self.assets.read();
 

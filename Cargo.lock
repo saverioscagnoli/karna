@@ -727,7 +727,6 @@ dependencies = [
 name = "gpu"
 version = "0.1.0"
 dependencies = [
- "imgui 0.1.0",
  "logging",
  "math",
  "parking_lot",
@@ -791,7 +790,9 @@ checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 name = "imgui"
 version = "0.1.0"
 dependencies = [
+ "gpu",
  "imgui 0.12.0",
+ "math",
  "parking_lot",
  "utils",
  "winit",

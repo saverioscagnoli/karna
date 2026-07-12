@@ -1,4 +1,5 @@
-mod batcher;
+pub mod batcher;
+pub mod imgui;
 
 use assets::AssetsRead;
 use gpu::Vertex;
@@ -31,7 +32,7 @@ impl ImmediateRenderer {
         pipelines: &gpu::PipelineCache,
         layouts: &Layouts,
         format: wgpu::TextureFormat,
-        assets: AssetsRead<'rp>,
+        _assets: AssetsRead<'rp>,
     ) {
         if !points.is_empty() {
             self.point_batcher.upload(&points.vertices, &points.indices);
@@ -45,7 +46,6 @@ impl ImmediateRenderer {
 
             let pipeline = pipelines.get_or_create(desc, format, &layouts.as_array());
             self.point_batcher.present(pass, &pipeline);
-            utils::profile::count("draw_calls", 1);
         }
 
         if !lines.is_empty() {
@@ -60,7 +60,6 @@ impl ImmediateRenderer {
 
             let pipeline = pipelines.get_or_create(desc, format, &layouts.as_array());
             self.line_batcher.present(pass, &pipeline);
-            utils::profile::count("draw_calls", 1);
         }
 
         if !triangles.is_empty() {
@@ -76,7 +75,6 @@ impl ImmediateRenderer {
 
             let pipeline = pipelines.get_or_create(desc, format, &layouts.as_array());
             self.triangle_batcher.present(pass, &pipeline);
-            utils::profile::count("draw_calls", 1);
         }
     }
 }

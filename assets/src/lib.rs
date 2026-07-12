@@ -1,5 +1,3 @@
-use std::any::Any;
-use std::ops::Deref;
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -52,16 +50,12 @@ impl AssetServer {
     }
 
     pub fn read(&self) -> AssetsRead<'_> {
-        utils::profile::count("asset_reads", 1);
-
         AssetsRead {
             lock: self.assets.read(),
         }
     }
 
     pub fn write(&self) -> RwLockWriteGuard<'_, Assets> {
-        utils::profile::count("asset_writes", 1);
-
         self.assets.write()
     }
 
@@ -69,8 +63,6 @@ impl AssetServer {
     where
         F: FnOnce(&mut AssetsWrite) -> R,
     {
-        utils::profile::count("asset_writes", 1);
-
         let mut lock = self.assets.write();
         let mut view = AssetsWrite { assets: &mut lock };
 
@@ -89,8 +81,6 @@ pub struct AssetsReader {
 
 impl AssetsReader {
     pub fn read<'a>(&'a self) -> AssetsRead<'a> {
-        utils::profile::count("asset_reads", 1);
-
         AssetsRead {
             lock: self.assets.read(),
         }
@@ -188,6 +178,11 @@ pub struct AssetsWrite<'a> {
 }
 
 impl<'a> AssetsWrite<'a> {
+    #[doc(hidden)]
+    pub fn load_raw(&mut self, data: Vec<u8>, size: math::Size<u32>) -> Handle<Image> {
+        self.assets.textures.load_raw(data, size, true)
+    }
+
     pub fn load_image(&mut self, bytes: &[u8]) -> Handle<Image> {
         self.assets.textures.load_image(bytes)
     }

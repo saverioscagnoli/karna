@@ -4,6 +4,7 @@ use assets::Font;
 use assets::Image;
 use glyph_brush_layout::GlyphPositioner;
 use gpu::Vertex;
+use imgui::SharedImgui;
 use logging::warn;
 use renderer::Camera;
 use renderer::Color;
@@ -26,13 +27,15 @@ pub struct WindowContext {
     pub mixer: Mixer,
     pub assets: AssetServer,
 
+    pub imgui: SharedImgui,
+
     pub world_camera: Camera,
     pub ui_camera: Camera,
     pub debug_camera: Camera,
 }
 
 impl WindowContext {
-    pub fn new(window: Window, assets: AssetServer) -> Self {
+    pub fn new(window: Window, assets: AssetServer, imgui: SharedImgui) -> Self {
         let view = window.size();
 
         Self {
@@ -42,6 +45,7 @@ impl WindowContext {
             scenes: SceneManager::new(),
             mixer: Mixer::new(assets.reader()),
             assets,
+            imgui,
             world_camera: Camera::new(Projection::standard_2d(view)),
             ui_camera: Camera::new(Projection::standard_2d(view)),
             debug_camera: Camera::new(Projection::standard_2d(view)),
@@ -90,6 +94,7 @@ impl WindowContext {
             scenes,
             mixer,
             assets,
+            imgui: _,
             world_camera,
             ui_camera,
             debug_camera,

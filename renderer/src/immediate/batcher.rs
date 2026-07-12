@@ -29,6 +29,16 @@ impl<V> Batcher<V> {
         self.index_count = indices.len();
     }
 
+    pub fn bind<'rp>(&'rp self, rp: &mut wgpu::RenderPass<'rp>, pipeline: &wgpu::RenderPipeline) {
+        if self.index_count == 0 {
+            return;
+        }
+
+        rp.set_pipeline(pipeline);
+        rp.set_vertex_buffer(0, self.vertex_buffer.slice_all());
+        rp.set_index_buffer(self.index_buffer.slice_all(), wgpu::IndexFormat::Uint32);
+    }
+
     pub fn present<'rp>(
         &'rp self,
         rp: &mut wgpu::RenderPass<'rp>,
@@ -38,9 +48,7 @@ impl<V> Batcher<V> {
             return;
         }
 
-        rp.set_pipeline(pipeline);
-        rp.set_vertex_buffer(0, self.vertex_buffer.slice_all());
-        rp.set_index_buffer(self.index_buffer.slice_all(), wgpu::IndexFormat::Uint32);
+        self.bind(rp, pipeline);
         rp.draw_indexed(0..self.index_count as u32, 0, 0..1);
     }
 }

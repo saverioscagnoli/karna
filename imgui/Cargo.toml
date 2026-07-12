@@ -8,3 +8,5 @@ imgui = "0.12.0"
 utils.workspace = true
 parking_lot.workspace = true
 winit.workspace = true
+math.workspace = true
+gpu.workspace = true
