@@ -1,5 +1,5 @@
-use imgui::Key as IK;
-use imgui::MouseButton as IM;
+use dear_imgui_rs::Key as IK;
+use dear_imgui_rs::MouseButton as IM;
 use winit::event::MouseButton as WM;
 use winit::keyboard::KeyCode as WK;
 
@@ -61,16 +61,16 @@ pub fn winit_keycode_to_imgui(code: WK) -> Option<IK> {
         WK::PrintScreen => Some(IK::PrintScreen),
         WK::Pause => Some(IK::Pause),
 
-        WK::Digit0 => Some(IK::Alpha0),
-        WK::Digit1 => Some(IK::Alpha1),
-        WK::Digit2 => Some(IK::Alpha2),
-        WK::Digit3 => Some(IK::Alpha3),
-        WK::Digit4 => Some(IK::Alpha4),
-        WK::Digit5 => Some(IK::Alpha5),
-        WK::Digit6 => Some(IK::Alpha6),
-        WK::Digit7 => Some(IK::Alpha7),
-        WK::Digit8 => Some(IK::Alpha8),
-        WK::Digit9 => Some(IK::Alpha9),
+        WK::Digit0 => Some(IK::Key0),
+        WK::Digit1 => Some(IK::Key1),
+        WK::Digit2 => Some(IK::Key2),
+        WK::Digit3 => Some(IK::Key3),
+        WK::Digit4 => Some(IK::Key4),
+        WK::Digit5 => Some(IK::Key5),
+        WK::Digit6 => Some(IK::Key6),
+        WK::Digit7 => Some(IK::Key7),
+        WK::Digit8 => Some(IK::Key8),
+        WK::Digit9 => Some(IK::Key9),
 
         WK::Numpad0 => Some(IK::Keypad0),
         WK::Numpad1 => Some(IK::Keypad1),

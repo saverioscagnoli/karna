@@ -4,9 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-imgui = "0.12.0"
 utils.workspace = true
 parking_lot.workspace = true
 winit.workspace = true
 math.workspace = true
 gpu.workspace = true
+dear-imgui-rs = "0.15.1"
+
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+dear-imgui-rs = { version = "0.15.1", features = ["wasm"] }

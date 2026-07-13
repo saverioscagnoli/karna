@@ -1,37 +1,3 @@
 [target.'cfg(target_os = "linux")']
 linker = "clang"
 rustflags = ["-C", "link-arg=-fuse-ld=/usr/bin/mold"]
-
-# ---- Web (wasm32-unknown-unknown) ----
-#
-# Building for the web requires the wasi-sdk toolchain extracted to
-# %USERPROFILE%\.wasi-sdk (https://github.com/WebAssembly/wasi-sdk/releases):
-# dear imgui is C++, so imgui-sys needs a clang that can target wasm, and
-# its libc calls (vsnprintf, sscanf, cosf, ...) are satisfied by linking
-# wasi-libc's static archive below.
-#
-# The getrandom cfg opts into the JS (crypto.getRandomValues) backend;
-# see https://docs.rs/getrandom/#webassembly-support
-[target.wasm32-unknown-unknown]
-rustflags = [
-    '--cfg', 'getrandom_backend="wasm_js"',
-    '-C', 'link-arg=C:/Users/Saverio/.wasi-sdk/share/wasi-sysroot/lib/wasm32-wasip1/libc.a',
-]
-
-[env]
-CC_wasm32-unknown-unknown = "C:/Users/Saverio/.wasi-sdk/bin/clang.exe"
-CXX_wasm32-unknown-unknown = "C:/Users/Saverio/.wasi-sdk/bin/clang++.exe"
-AR_wasm32-unknown-unknown = "C:/Users/Saverio/.wasi-sdk/bin/ar.exe"
-# dear imgui uses no STL and builds with -fno-exceptions; skip the C++
-# standard library entirely instead of linking libstdc++/libc++.
-CXXSTDLIB_wasm32-unknown-unknown = ""
-# wasi-sdk keeps libc headers under the wasip1 triple; the -isystem makes
-# them visible when compiling with --target=wasm32-unknown-unknown.
-# NDEBUG drops IM_ASSERT (musl's __assert_fail would drag in fd_write and
-# other WASI imports the browser can't provide); the IMGUI_DISABLE_*
-# defines cut the remaining file/OS surface for the same reason.
-CFLAGS_wasm32-unknown-unknown = "-isystem C:/Users/Saverio/.wasi-sdk/share/wasi-sysroot/include/wasm32-wasip1 -DNDEBUG"
-# IMGUI_DEBUG_PRINTF defaults to printf, whose mere reference drags musl's
-# fd-backed stdout (fd_write & co) into the module as WASI imports the
-# browser cannot satisfy — stub it out.
-CXXFLAGS_wasm32-unknown-unknown = "-isystem C:/Users/Saverio/.wasi-sdk/share/wasi-sysroot/include/wasm32-wasip1 -DNDEBUG -DIMGUI_DISABLE_FILE_FUNCTIONS -DIMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS -DIMGUI_DEBUG_PRINTF(...)=((void)0)"

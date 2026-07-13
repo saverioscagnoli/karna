@@ -78,7 +78,7 @@ impl Scene for S {
                 };
 
                 ui.text_colored(fps_color, format!("FPS: {:.1}", fps));
-                ui.plot_lines("##fps_history", &self.fps_history)
+                ui.plot_lines_config("##fps_history", &self.fps_history)
                     .scale_min(0.0)
                     .graph_size([280.0, 60.0])
                     .build();
@@ -90,7 +90,7 @@ impl Scene for S {
                 ui.text(format!("Interp alpha:        {:.3}", ctx.time.alpha()));
 
                 ui.color_picker4_config("clear color", &mut self.clear_color)
-                    .mode(imgui::ColorPickerMode::HueWheel)
+                    .picker_mode(imgui::ColorPickerMode::HueWheel)
                     .build();
             });
     }
