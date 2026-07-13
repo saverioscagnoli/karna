@@ -74,6 +74,27 @@ impl Target for File {
     }
 }
 
+/// Logs to the browser's developer console. Only available on the web.
+#[cfg(target_arch = "wasm32")]
+#[derive(Default)]
+pub struct WebConsole;
+
+#[cfg(target_arch = "wasm32")]
+impl Target for WebConsole {
+    fn write(&self, level: log::Level, message: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let message = wasm_bindgen::JsValue::from_str(&strip_ansi(message));
+
+        match level {
+            log::Level::Error => web_sys::console::error_1(&message),
+            log::Level::Warn => web_sys::console::warn_1(&message),
+            log::Level::Info => web_sys::console::info_1(&message),
+            log::Level::Debug | log::Level::Trace => web_sys::console::debug_1(&message),
+        }
+
+        Ok(())
+    }
+}
+
 pub fn strip_ansi(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();

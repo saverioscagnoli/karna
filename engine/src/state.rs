@@ -6,6 +6,7 @@ use gpu::GpuState;
 use gpu::WindowSurface;
 use imgui::SharedImgui;
 use logging::debug;
+use logging::trace;
 use logging::warn;
 use renderer::Layer;
 use renderer::Renderer;
@@ -128,6 +129,8 @@ impl WindowState {
     }
 
     fn handle_window_event(&mut self, event: &WindowEvent) {
+        trace!("Received window event: {:?}", event);
+
         match event {
             WindowEvent::CloseRequested => self.should_exit = true,
 
@@ -237,6 +240,8 @@ impl WindowState {
     }
 
     fn handle_device_event(&mut self, event: &DeviceEvent) {
+        trace!("Received device event: {:?}", event);
+
         match event {
             DeviceEvent::MouseMotion { delta } => {
                 let delta = [delta.0 as f32, delta.1 as f32];

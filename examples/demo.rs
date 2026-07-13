@@ -47,6 +47,23 @@ impl Scene for S {
         if ctx.input.key_pressed(Keycode::Space) {
             ctx.mixer.play(self.mammamia);
         }
+
+        if ctx.input.key_pressed(Keycode::KeyF) {
+            ctx.window.spawn(
+                WindowBuilder::new()
+                    .with_size(Size::new(1280, 720))
+                    .with_scene(
+                        "demo",
+                        S {
+                            pos: Vector2::new(50.0, 50.0),
+                            vel: Vector2::zero(),
+                            mammamia: Handle::default(),
+                            image: Handle::default(),
+                        },
+                    )
+                    .with_active_scene("demo"),
+            );
+        }
     }
 
     fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {

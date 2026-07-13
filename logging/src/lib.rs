@@ -23,6 +23,8 @@ pub use crate::target::Console;
 pub use crate::target::File;
 pub use crate::target::Output;
 pub use crate::target::Target;
+#[cfg(target_arch = "wasm32")]
+pub use crate::target::WebConsole;
 pub use crate::target::strip_ansi;
 
 pub type SharedLogs = Arc<RwLock<Vec<(Level, Arc<str>)>>>;
@@ -76,9 +78,16 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
+        // stdout/stderr go nowhere in the browser; default to the dev console.
+        #[cfg(target_arch = "wasm32")]
+        let target: Box<dyn Target> = Box::new(WebConsole);
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let target: Box<dyn Target> = Box::new(Console::new(Output::Stderr));
+
         Self {
             min_level: log::LevelFilter::Info,
-            targets: vec![Box::new(Console::new(Output::Stderr))],
+            targets: vec![target],
             formatter: Box::new(DefaultFormatter),
             module_filters: Vec::new(),
         }

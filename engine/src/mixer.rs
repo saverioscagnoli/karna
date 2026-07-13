@@ -1,13 +1,16 @@
 use assets::AssetsReader;
 use assets::Audio;
+#[cfg(not(target_arch = "wasm32"))]
 use rodio::DeviceSinkBuilder;
 use utils::Handle;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct Mixer {
     handle: rodio::MixerDeviceSink,
     assets: AssetsReader,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Mixer {
     pub(crate) fn new(assets: AssetsReader) -> Self {
         let mut handle =
@@ -25,5 +28,24 @@ impl Mixer {
         // Rodio uses Arc<[f32]>
         // Cloning is negligible
         self.handle.mixer().add(audio.source.clone());
+    }
+}
+
+/// Audio is not wired up on the web yet (rodio's cpal backend needs
+/// WebAudio plumbing and a user gesture to start). Playback is a no-op.
+#[cfg(target_arch = "wasm32")]
+pub struct Mixer {
+    #[allow(unused)]
+    assets: AssetsReader,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Mixer {
+    pub(crate) fn new(assets: AssetsReader) -> Self {
+        Self { assets }
+    }
+
+    pub fn play(&self, _audio: Handle<Audio>) {
+        logging::warn!("Audio playback is not supported on the web yet");
     }
 }

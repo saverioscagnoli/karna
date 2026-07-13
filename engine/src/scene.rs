@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::fmt;
 use std::mem;
 
 use logging::warn;
@@ -31,7 +32,14 @@ struct Entry {
     slot: Slot,
 }
 
+impl fmt::Debug for Entry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Entry({})", self.label)
+    }
+}
+
 #[derive(Default)]
+#[derive(Debug)]
 pub struct Scenes {
     entries: Vec<Entry>,
     index: FastHashMap<String, usize>,

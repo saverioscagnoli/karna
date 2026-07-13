@@ -12,11 +12,20 @@ use winit::window::WindowId;
 
 use crate::AppEvent;
 use crate::UserEvent;
+use crate::WindowBuilder;
 
 pub type WinitWindow = winit::window::Window;
 
 pub struct WindowHandle {
+    /// Native: the thread running this window's render/update loop.
+    #[cfg(not(target_arch = "wasm32"))]
     pub thread: JoinHandle<()>,
+
+    /// Web: no threads — the state lives here and is stepped from
+    /// `RedrawRequested`.
+    #[cfg(target_arch = "wasm32")]
+    pub state: crate::state::WindowState,
+
     pub event_tx: Sender<AppEvent>, // To loop thread
 
     #[allow(unused)]
@@ -51,16 +60,23 @@ impl Window {
         self.inner.id()
     }
 
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn request_redraw(&self) {
+        self.inner.request_redraw();
+    }
+
+    pub fn spawn(&self, b: WindowBuilder) {
+        if let Err(e) = self.proxy.send_event(UserEvent::SpawnWindow(b)) {
+            error!("Failed to send user event: {}", e);
+        }
+    }
+
     pub fn title(&self) -> String {
         self.inner.title()
     }
 
     pub fn size(&self) -> math::Size<u32> {
         self.inner.inner_size().into()
-    }
-
-    pub fn reset_icon(&self) {
-        self.inner.set_window_icon(None);
     }
 
     pub fn set_icon(&self, image: Handle<Image>) {
@@ -71,6 +87,10 @@ impl Window {
             Icon::from_rgba(image.data.clone(), image.size.width, image.size.height)
                 .expect("Failed to set window icon"),
         ));
+    }
+
+    pub fn reset_icon(&self) {
+        self.inner.set_window_icon(None);
     }
 
     pub fn set_custom_cursor<H>(&self, image: Handle<Image>, hotspot: H)

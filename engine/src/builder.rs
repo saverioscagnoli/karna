@@ -9,6 +9,7 @@ use crate::scene::Scene;
 use crate::scene::Scenes;
 
 #[derive(Default)]
+#[derive(Debug)]
 pub struct WindowBuilder {
     pub(crate) attrs: WindowAttributes,
     pub(crate) scenes: Scenes,

@@ -1,10 +1,16 @@
 use std::collections::VecDeque;
 use std::time::Duration;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
 
 use logging::info;
 use logging::warn;
+#[cfg(not(target_arch = "wasm32"))]
 use utils::SleepTimer;
+// `std::time::Instant` panics on wasm32; `web_time` falls back to
+// `performance.now()` there and re-exports std on native targets.
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
 
 pub struct Time {
     frame_step: Duration,
@@ -12,6 +18,8 @@ pub struct Time {
     last_frame: Instant,
     delta_time: f32,
     smoothed_delta_time: f32,
+
+    #[cfg(not(target_arch = "wasm32"))]
     sleep_timer: SleepTimer,
 
     // Ticks (fixed updates)
@@ -41,6 +49,7 @@ impl Time {
             last_frame: now,
             delta_time: frame_step.as_secs_f32(),
             smoothed_delta_time: frame_step.as_secs_f32(),
+            #[cfg(not(target_arch = "wasm32"))]
             sleep_timer: SleepTimer::new(),
             tps: 0,
             tick_step: 1.0 / 60.0,
@@ -171,7 +180,13 @@ impl Time {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn wait_for_next_frame(&mut self) {
         self.sleep_timer.sleep_until(self.next_frame);
     }
+
+    /// On the web the browser paces frames via `requestAnimationFrame`,
+    /// so there is nothing to sleep for.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn wait_for_next_frame(&mut self) {}
 }

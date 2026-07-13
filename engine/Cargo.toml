@@ -12,8 +12,15 @@ logging.workspace = true
 utils.workspace = true
 gpu.workspace = true
 renderer.workspace = true
-ctrlc = "3.5.2"
 imgui.workspace = true
-rodio.workspace = true
 crossbeam-channel.workspace = true
 glyph_brush_layout = "0.2.4"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rodio = { workspace = true, features = ["playback"] }
+pollster = "0.4.0"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures = "0.4"
+web-time = "1.1"
+console_error_panic_hook = "0.1"
