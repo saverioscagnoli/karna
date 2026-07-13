@@ -1,5 +1,4 @@
 #![allow(unused)]
-#![windows_subsystem = "windows"]
 
 use karna::App;
 use karna::ContextMut;

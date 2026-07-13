@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; height: 100%; }
+    canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+  </style>
+</head>
+<body>
+    <!-- Stubs for the wasi-libc imports (fd_write & friends) that dear
+         imgui's static destructors drag in; see wasi-shim.js. -->
+    <script type="importmap">
+      { "imports": { "wasi_snapshot_preview1": "./wasi-shim.js" } }
+    </script>
+    <script>
+      // rAF never fires in hidden/embedded panes (visibilityState === "hidden"),
+      // which stalls the winit frame loop. Fall back to setTimeout if a frame
+      // callback isn't serviced promptly.
+      (() => {
+        const raf = window.requestAnimationFrame.bind(window);
+        window.requestAnimationFrame = (cb) => {
+          let done = false;
+          const id = raf((t) => { if (!done) { done = true; cb(t); } });
+          setTimeout(() => { if (!done) { done = true; cb(performance.now()); } }, 100);
+          return id;
+        };
+      })();
+    </script>
+    <script type="module">
+      import init from "./pkg/imgui.js";
+      init();
+    </script>
+</body>
+</html>

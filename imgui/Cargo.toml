@@ -11,5 +11,12 @@ math.workspace = true
 gpu.workspace = true
 dear-imgui-rs = "0.15.1"
 
+# On wasm32 the imgui C++ is cross-compiled with wasi-sdk clang into the
+# same module (IMGUI_SYS_WASM_CC=1 + toolchain env in .cargo/config.toml).
+# Do NOT re-add the `wasm` feature here: it switches the bindings to a
+# separate Emscripten "imgui-sys-v0" provider module instead.
+# wasm-font-atlas-experimental only lifts the wasm32 panic guard in
+# font_atlas_mut()/fonts(); with the statically linked C++ the atlas
+# pointer is as valid as on native.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-dear-imgui-rs = { version = "0.15.1", features = ["wasm", "wasm-font-atlas-experimental"] }
+dear-imgui-rs = { version = "0.15.1", features = ["wasm-font-atlas-experimental"] }

@@ -1,3 +1,21 @@
 [target.'cfg(target_os = "linux")']
 linker = "clang"
 rustflags = ["-C", "link-arg=-fuse-ld=/usr/bin/mold"]
+
+# ---- Web (wasm32-unknown-unknown) ----
+#
+# Build with ./web/build.sh — it locates the wasi-sdk toolchain via
+# WASI_SDK_PATH (default ~/.wasi-sdk) and exports the CC/CXX/AR/*FLAGS
+# env vars plus the wasi libc.a link-arg. Only the path-free switches
+# live here so they also apply to bare cargo/rust-analyzer invocations.
+[env]
+# Opt dear-imgui-sys into compiling the C++ for wasm32-unknown-unknown
+# (its build.rs otherwise emits an import-only "skeleton" expecting the
+# separate Emscripten imgui-sys-v0 provider module).
+IMGUI_SYS_WASM_CC = "1"
+# ...and into the normal statically-linked bindings; without this, wasm32
+# builds select wasm_bindings_pregenerated.rs whose extern blocks import
+# from the "imgui-sys-v0" JS module even with the `wasm` feature off.
+# NOTE: build.rs declares no rerun-if-env-changed for these two vars —
+# after changing them, `cargo clean -p dear-imgui-sys`.
+IMGUI_SYS_SINGLE_MODULE = "1"
