@@ -34,8 +34,18 @@ fn vs_main(vertex: VertexInput) -> VertexOutput {
     return out;
 }
 
+// Vertex colors arrive sRGB-encoded (imgui, user-picked shape colors);
+// the render target is sRGB so the shader must output LINEAR values.
+// Texture samples are already linear (sRGB texture formats decode on
+// sample). Converting after interpolation matches imgui's AA feathering.
+fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
+    let lo = c / 12.92;
+    let hi = pow((c + 0.055) / 1.055, vec3<f32>(2.4));
+    return select(hi, lo, c <= vec3<f32>(0.04045));
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let tex_color = textureSample(texture_atlas, texture_sampler, in.uv_coords);
-    return in.color * tex_color;
+    return vec4<f32>(srgb_to_linear(in.color.rgb), in.color.a) * tex_color;
 }

@@ -39,6 +39,20 @@ impl Color {
     }
 }
 
+/// sRGB transfer function decode: one sRGB-encoded channel -> linear.
+///
+/// User-facing colors are sRGB (what you'd pick in a color picker); the
+/// engine renders in linear space to an sRGB target, so sRGB inputs are
+/// linearized at their entry points. Shader-side inputs are converted in
+/// the shaders; CPU-side inputs (the clear color) use this.
+pub fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
 impl From<wgpu::Color> for Color {
     fn from(c: wgpu::Color) -> Self {
         Self {

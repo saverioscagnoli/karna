@@ -18,6 +18,7 @@ pub use crate::camera::Camera;
 use crate::camera::CameraData;
 pub use crate::camera::Projection;
 pub use crate::color::Color;
+use crate::color::srgb_to_linear;
 use crate::immediate::ImmediateRenderer;
 use crate::immediate::imgui::ImguiRenderer;
 pub use crate::mesh::*;
@@ -260,9 +261,14 @@ impl Renderer {
             }
         };
 
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        // Render through the sRGB view of the swapchain: shaders output
+        // linear color and the hardware encodes on write. Pipelines must
+        // target this same format.
+        let view_format = surface.view_format();
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(view_format),
+            ..Default::default()
+        });
 
         let mut encoder = gpu
             .device
@@ -272,10 +278,12 @@ impl Renderer {
 
         for (i, &layer) in Layer::ALL.iter().enumerate() {
             let load_op = if i == 0 {
+                // The user-facing clear color is sRGB; the sRGB attachment
+                // expects linear values (it encodes on write).
                 wgpu::LoadOp::Clear(wgpu::Color {
-                    r: packet.clear_color.x as f64,
-                    g: packet.clear_color.y as f64,
-                    b: packet.clear_color.z as f64,
+                    r: srgb_to_linear(packet.clear_color.x) as f64,
+                    g: srgb_to_linear(packet.clear_color.y) as f64,
+                    b: srgb_to_linear(packet.clear_color.z) as f64,
                     a: packet.clear_color.w as f64,
                 })
             } else {
@@ -317,7 +325,7 @@ impl Renderer {
                         &mut pass,
                         &self.pipelines,
                         &self.layouts,
-                        output.texture.format(),
+                        view_format,
                         assets,
                     );
                 }
@@ -334,7 +342,7 @@ impl Renderer {
                     &mut pass,
                     &self.pipelines,
                     &self.layouts,
-                    output.texture.format(),
+                    view_format,
                     assets,
                 );
             }
