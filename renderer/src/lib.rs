@@ -1,6 +1,8 @@
 mod camera;
 mod color;
 mod immediate;
+mod mesh;
+mod retained;
 
 use std::array;
 use std::sync::Arc;
@@ -10,6 +12,7 @@ use gpu::GpuState;
 use gpu::Vertex;
 use imgui::ImguiPacket;
 use logging::warn;
+use utils::SlotMap;
 
 pub use crate::camera::Camera;
 use crate::camera::CameraData;
@@ -17,6 +20,7 @@ pub use crate::camera::Projection;
 pub use crate::color::Color;
 use crate::immediate::ImmediateRenderer;
 use crate::immediate::imgui::ImguiRenderer;
+pub use crate::mesh::*;
 
 #[repr(usize)]
 #[derive(Default)]
@@ -38,6 +42,10 @@ pub struct Shape<V: Copy> {
 impl<V: Copy> Shape<V> {
     pub fn is_empty(&self) -> bool {
         self.indices.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.indices.len()
     }
 
     pub fn push(&mut self, vertices: &[V], pattern: &[u32]) {
@@ -70,10 +78,12 @@ impl LayerPacket {
 }
 
 #[derive(Default)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FramePacket {
     pub viewport: math::Size<u32>,
     pub clear_color: math::Vector4<f32>,
+    pub queried_geometries: Vec<Geometry>,
+    pub queried_materials: Vec<Material>,
     pub world: LayerPacket,
     pub ui: LayerPacket,
     pub debug: LayerPacket,
@@ -148,6 +158,7 @@ impl WindowRenderData {
 pub struct Layouts {
     pub texture_atlas: wgpu::BindGroupLayout,
     pub camera: wgpu::BindGroupLayout,
+    pub material: wgpu::BindGroupLayout,
 }
 
 impl Layouts {
@@ -169,9 +180,26 @@ impl Layouts {
                 }],
             });
 
+        let material = gpu
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("material bind group layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
         Self {
             texture_atlas: a.clone(),
             camera: camera_layout,
+            material,
         }
     }
 }
@@ -184,9 +212,12 @@ impl Layouts {
 
 pub struct Renderer {
     pipelines: Arc<gpu::PipelineCache>,
-    layouts: Arc<Layouts>,
+    pub layouts: Arc<Layouts>,
     data: WindowRenderData,
-    assets: AssetsReader,
+    pub assets: AssetsReader,
+
+    pub geometries: SlotMap<Geometry>,
+    pub materials: SlotMap<Material>,
 }
 
 impl Renderer {
@@ -200,10 +231,12 @@ impl Renderer {
             data: WindowRenderData::new(GpuState::get(), &layouts),
             layouts,
             assets,
+            geometries: SlotMap::new(),
+            materials: SlotMap::new(),
         }
     }
 
-    pub fn present(&mut self, surface: &mut gpu::WindowSurface, packet: &FramePacket) {
+    pub fn present(&mut self, surface: &mut gpu::WindowSurface, packet: &mut FramePacket) {
         let gpu = GpuState::get();
 
         let output = match surface.acquire() {

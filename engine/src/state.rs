@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::mem;
 
 use assets::AssetServer;
 use crossbeam_channel::Receiver;
@@ -7,7 +6,8 @@ use gpu::GpuState;
 use gpu::WindowSurface;
 use imgui::SharedImgui;
 use logging::debug;
-use renderer::FramePacket;
+use logging::warn;
+use renderer::Layer;
 use renderer::Renderer;
 use winit::event::DeviceEvent;
 use winit::event::MouseScrollDelta;
@@ -24,17 +24,16 @@ use crate::window::Window;
 pub struct WindowState {
     should_exit: bool,
     context: WindowContext,
-    renderer: Renderer,
     surface: WindowSurface,
     surface_size: math::Size<u32>,
     pending_resize: Option<math::Size<u32>>,
 
     scenes: Scenes,
-    active_scenes: Vec<String>,
+    active: Vec<usize>,
 
+    imgui: SharedImgui,
     imgui_font_uv: math::Vector4<f32>,
 
-    packet: FramePacket,
     event_rx: Receiver<AppEvent>,
 }
 
@@ -66,15 +65,14 @@ impl WindowState {
 
         let mut state = Self {
             should_exit: false,
-            context: WindowContext::new(window, assets, imgui),
-            renderer,
+            context: WindowContext::new(window, assets, renderer),
             surface,
             surface_size: viewport,
             pending_resize: None,
             scenes,
-            active_scenes: Vec::new(),
+            active: Vec::new(),
+            imgui,
             imgui_font_uv: font_uv,
-            packet: FramePacket::default(),
             event_rx,
         };
 
@@ -85,72 +83,48 @@ impl WindowState {
         state
     }
 
-    fn register_scene<L>(&mut self, label: L, scene: Box<dyn Scene>)
-    where
-        L: Into<String>,
-    {
-        self.scenes.register(label, Box::new(move |_, _| scene));
+    fn register_scene<L: Into<String>>(&mut self, label: L, scene: Box<dyn Scene>) {
+        self.scenes.insert_built(label, scene);
     }
 
-    fn activate_scene<L>(&mut self, label: L, user_data: Option<Box<dyn Any>>)
-    where
-        L: Into<String>,
-    {
+    fn activate_scene<L: Into<String>>(&mut self, label: L, user_data: Option<Box<dyn Any>>) {
         let label: String = label.into();
 
-        if self.active_scenes.contains(&label) {
+        let Some(i) = self.scenes.index_of(&label) else {
+            warn!("activate_scene: nothing registered as {label:?}");
+            return;
+        };
+
+        if self.active.contains(&i) {
             return;
         }
 
-        let (ctx, mut s) = self.context.split_mut(&mut self.packet);
-        self.scenes.build(&label, ctx, &mut s);
-
-        if let Some(scene) = self.scenes.get_mut(&label) {
-            let (ctx, mut s) = self.context.split_mut(&mut self.packet);
-            scene.load(ctx, &mut s);
-
-            if let Some(user_data) = user_data {
-                let (ctx, mut s) = self.context.split_mut(&mut self.packet);
-                scene.loaded_with(ctx, &mut s, user_data);
-            }
+        {
+            let (ctx, mut s) = self.context.split_mut();
+            self.scenes.build(i, ctx, &mut s);
         }
 
-        self.active_scenes.push(label);
+        let scene = self.scenes.get_mut(i);
+
+        {
+            let (ctx, mut s) = self.context.split_mut();
+            scene.load(ctx, &mut s);
+        }
+
+        if let Some(user_data) = user_data {
+            let (ctx, mut s) = self.context.split_mut();
+            scene.loaded_with(ctx, &mut s, user_data);
+        }
+
+        self.active.push(i);
     }
 
     fn deactivate_scene(&mut self, label: &str) {
-        self.active_scenes.retain(|s| s != label);
-    }
+        let Some(i) = self.scenes.index_of(label) else {
+            return;
+        };
 
-    fn for_each_active_mut<F>(&mut self, mut f: F)
-    where
-        F: FnMut(&mut Box<dyn Scene>, &mut WindowContext),
-    {
-        let context = &mut self.context;
-
-        for label in &self.active_scenes {
-            if let Some(scene) = self.scenes.get_mut(label) {
-                f(scene, context);
-            }
-        }
-    }
-
-    fn for_each_active<F>(&mut self, mut f: F)
-    where
-        F: FnMut(&Box<dyn Scene>, &WindowContext),
-    {
-        let WindowState {
-            context,
-            scenes,
-            active_scenes,
-            ..
-        } = self;
-
-        for label in active_scenes.iter() {
-            if let Some(scene) = scenes.get(label) {
-                f(scene, context);
-            }
-        }
+        self.active.retain(|&a| a != i);
     }
 
     fn handle_window_event(&mut self, event: &WindowEvent) {
@@ -299,43 +273,40 @@ impl WindowState {
         }
     }
 
-    fn frame(&mut self, imgui: &mut imgui::Ui) {
-        let mut packet = mem::take(&mut self.packet);
-
+    fn frame(&mut self, imgui: &imgui::Ui) {
         while let Some(tick_start) = self.context.time.next_tick() {
-            self.for_each_active_mut(|scene, ctx| {
-                let (ctx, mut s) = ctx.split_mut(&mut packet);
+            for &i in &self.active {
+                let scene = self.scenes.get_mut(i);
+                let (ctx, mut s) = self.context.split_mut();
+
                 scene.fixed_update(ctx, &mut s);
-            });
+            }
 
             self.context.time.do_tick(tick_start);
         }
 
-        self.for_each_active_mut(|scene, ctx| {
-            let (ctx, mut s) = ctx.split_mut(&mut packet);
+        for &i in &self.active {
+            let scene = self.scenes.get_mut(i);
+            let (ctx, mut s) = self.context.split_mut();
+
             scene.update(ctx, &mut s);
-        });
+        }
 
-        self.for_each_active_mut(|scene, ctx| {
-            let (ctx, mut s) = ctx.split_mut(&mut packet);
-            scene.imgui_frame(ctx, &mut s, &mut *imgui);
-        });
+        for &i in &self.active {
+            let scene = self.scenes.get_mut(i);
+            let (ctx, mut d) = self.context.split(imgui);
 
-        self.for_each_active(|s, ctx| {
-            let (ctx, mut draw) = ctx.split(&mut packet);
-            s.draw(ctx, &mut draw);
-        });
+            scene.draw(ctx, &mut d);
+        }
 
-        self.packet = packet;
-
-        self.packet.viewport = self.surface_size;
-        self.packet.world.camera = self.context.world_camera.data();
-        self.packet.ui.camera = self.context.ui_camera.data();
-        self.packet.debug.camera = self.context.debug_camera.data();
+        self.context.packet.viewport = self.surface_size;
+        self.context.packet.world.camera = self.context.cameras[Layer::World].data();
+        self.context.packet.ui.camera = self.context.cameras[Layer::Ui].data();
+        self.context.packet.debug.camera = self.context.cameras[Layer::Debug].data();
     }
 
     fn flush(&mut self) {
-        self.packet.clear();
+        self.context.packet.clear();
         self.context.input.flush();
         self.drain_scene_commands();
     }
@@ -347,7 +318,7 @@ impl WindowState {
     /// Native drives this from a dedicated per-window thread ([`Self::start`]);
     /// the web drives it from `RedrawRequested`, once per animation frame.
     pub(crate) fn frame_once(&mut self) -> bool {
-        let shared_imgui = self.context.imgui.clone();
+        let shared_imgui = self.imgui.clone();
         let window_id = self.context.window.id();
 
         let mut imgui = shared_imgui.active(window_id);
@@ -362,9 +333,9 @@ impl WindowState {
         if let Some(size) = self.pending_resize.take() {
             self.surface.resize(GpuState::get(), size);
             self.surface_size = size;
-            self.context.world_camera.update(size);
-            self.context.ui_camera.update(size);
-            self.context.debug_camera.update(size);
+            self.context.cameras[Layer::World].update(size);
+            self.context.cameras[Layer::Ui].update(size);
+            self.context.cameras[Layer::Debug].update(size);
 
             debug!("Resized window to {:?}", size);
         }
@@ -374,11 +345,16 @@ impl WindowState {
 
         self.frame(imgui.frame());
 
-        self.packet.imgui.record(imgui.render(), self.imgui_font_uv);
+        self.context
+            .packet
+            .imgui
+            .record(imgui.render(), self.imgui_font_uv);
 
         drop(imgui);
 
-        self.renderer.present(&mut self.surface, &self.packet);
+        self.context
+            .renderer
+            .present(&mut self.surface, &mut self.context.packet);
         self.context.time.wait_for_next_frame();
 
         self.flush();

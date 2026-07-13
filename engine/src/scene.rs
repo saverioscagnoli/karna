@@ -1,6 +1,8 @@
 use std::any::Any;
+use std::mem;
 
-use utils::IndexMap;
+use logging::warn;
+use utils::FastHashMap;
 
 use crate::context::ContextMut;
 use crate::context::ContextRef;
@@ -15,54 +17,85 @@ pub trait Scene: Send {
     fn loaded_with(&mut self, ctx: ContextMut, scene: &mut SceneHandle, user_data: Box<dyn Any>) {}
     fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle);
     fn fixed_update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {}
-    fn imgui_frame(&mut self, ctx: ContextMut, scene: &mut SceneHandle, ui: &imgui::Ui) {}
-    fn draw(&self, ctx: ContextRef, draw: &mut Draw);
+    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw);
 }
 
-/// Holds the not-yet-constructed scene builders and the scenes that
-/// have already been built.
+enum Slot {
+    Pending(SceneBuilder),
+    Building, // transient; only observable if a builder re-enters its own label
+    Built(Box<dyn Scene>),
+}
+
+struct Entry {
+    label: String,
+    slot: Slot,
+}
+
 #[derive(Default)]
 pub struct Scenes {
-    builders: IndexMap<SceneBuilder>,
-    built: IndexMap<Box<dyn Scene>>,
+    entries: Vec<Entry>,
+    index: FastHashMap<String, usize>,
 }
 
 impl Scenes {
-    pub fn insert_builder<L: Into<String>>(&mut self, label: L, builder: SceneBuilder) {
-        let label: String = label.into();
+    pub fn index_of(&self, label: &str) -> Option<usize> {
+        self.index.get(label).copied()
+    }
 
-        if !self.builders.contains_key(&label) {
-            self.builders.insert(label.into(), builder);
+    fn insert(&mut self, label: String, slot: Slot) -> usize {
+        if let Some(&i) = self.index.get(&label) {
+            warn!("scene {label:?} already registered; ignoring");
+            return i;
+        }
+
+        let i = self.entries.len();
+        self.index.insert(label.clone(), i);
+        self.entries.push(Entry { label, slot });
+        i
+    }
+
+    pub fn insert_builder<L: Into<String>>(&mut self, label: L, builder: SceneBuilder) -> usize {
+        self.insert(label.into(), Slot::Pending(builder))
+    }
+
+    /// Registers an already-constructed scene. No factory needed: it has no
+    /// handles to resolve, or the caller resolved them already.
+    pub fn insert_built<L: Into<String>>(&mut self, label: L, scene: Box<dyn Scene>) -> usize {
+        self.insert(label.into(), Slot::Built(scene))
+    }
+
+    /// Runs the builder if this entry is still pending. Returns `true` if a
+    /// build actually happened.
+    pub fn build(&mut self, i: usize, ctx: ContextMut, handle: &mut SceneHandle) -> bool {
+        let entry = &mut self.entries[i];
+
+        match mem::replace(&mut entry.slot, Slot::Building) {
+            Slot::Pending(builder) => {
+                let scene = builder(ctx, handle);
+                self.entries[i].slot = Slot::Built(scene);
+                true
+            }
+
+            Slot::Building => {
+                warn!(
+                    "scene {:?} activated from inside its own builder",
+                    entry.label
+                );
+                false
+            }
+
+            built => {
+                entry.slot = built;
+                false
+            }
         }
     }
 
-    pub fn register<L: Into<String>>(&mut self, label: L, builder: SceneBuilder) {
-        self.insert_builder(label, builder);
-    }
-
-    /// Builds the scene if it hasn't been built yet, running its
-    /// construction closure with the given context.
-    /// Returns `true` if a build actually happened.
-    pub fn build(&mut self, label: &str, ctx: ContextMut, scene: &mut SceneHandle) -> bool {
-        if self.built.get(label).is_some() {
-            return false;
+    pub fn get_mut(&mut self, i: usize) -> &mut Box<dyn Scene> {
+        match &mut self.entries[i].slot {
+            Slot::Built(s) => s,
+            _ => panic!("Scene not build yet"),
         }
-
-        if let Some(builder) = self.builders.remove(label) {
-            let scene = builder(ctx, scene);
-            self.built.insert(label.to_string(), scene);
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn get(&self, label: &str) -> Option<&Box<dyn Scene>> {
-        self.built.get(label)
-    }
-
-    pub fn get_mut(&mut self, label: &str) -> Option<&mut Box<dyn Scene>> {
-        self.built.get_mut(label)
     }
 }
 

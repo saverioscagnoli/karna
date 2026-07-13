@@ -49,7 +49,7 @@ impl Scene for S {
         }
     }
 
-    fn draw(&self, ctx: ContextRef, draw: &mut Draw) {
+    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
         draw.set_color(Color::White);
 
         draw.rect(self.pos.x, self.pos.y, 50.0, 50.0);

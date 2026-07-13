@@ -1,4 +1,5 @@
-use imgui::sys::ImGuiSelectableFlags_DontClosePopups;
+#![allow(unused)]
+
 use karna::AppBuilder;
 use karna::ContextMut;
 use karna::ContextRef;
@@ -10,7 +11,6 @@ use karna::assets::Font;
 use karna::input::Keycode;
 use karna::render::Color;
 use karna::render::Draw;
-use utils::profile;
 
 #[derive(Default)]
 struct Donut {
@@ -125,7 +125,7 @@ impl Scene for Donut {
         }
     }
 
-    fn draw(&self, ctx: ContextRef, draw: &mut Draw) {
+    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
         let frame_content = self.generate_frame();
         let rainbow_color = self.get_rainbow_color();
         let win_size = ctx.window.size();
@@ -143,19 +143,6 @@ impl Scene for Donut {
         draw.set_color(Color::White);
         draw.debug_text(&format!("fps: {}", ctx.time.fps()), 10.0, 10.0);
         draw.debug_text(&format!("dt: {:.6}", ctx.time.delta()), 10.0, 30.0);
-        draw.debug_text(
-            &format!("asset reads: {}", profile::get("asset_reads").unwrap().last),
-            10.0,
-            50.0,
-        );
-        draw.debug_text(
-            &format!(
-                "asset writes: {}",
-                profile::get("asset_writes").unwrap().last
-            ),
-            10.0,
-            70.0,
-        );
 
         draw.set_color(rainbow_color);
 

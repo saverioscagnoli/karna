@@ -1,16 +1,22 @@
+use std::ops::Index;
+use std::ops::IndexMut;
+
 use assets::AssetServer;
 use assets::AssetsRead;
 use assets::Font;
 use assets::Image;
 use glyph_brush_layout::GlyphPositioner;
 use gpu::Vertex;
-use imgui::SharedImgui;
 use logging::warn;
 use renderer::Camera;
 use renderer::Color;
 use renderer::FramePacket;
+use renderer::Geometry;
 use renderer::Layer;
+use renderer::Material;
+use renderer::MaterialDesc;
 use renderer::Projection;
+use renderer::Renderer;
 use utils::Handle;
 
 use crate::SceneManager;
@@ -18,6 +24,35 @@ use crate::Time;
 use crate::Window;
 use crate::input::Input;
 use crate::mixer::Mixer;
+use crate::resources::Resources;
+
+pub struct Cameras {
+    world: Camera,
+    ui: Camera,
+    debug: Camera,
+}
+
+impl Index<Layer> for Cameras {
+    type Output = Camera;
+
+    fn index(&self, l: Layer) -> &Self::Output {
+        match l {
+            Layer::World => &self.world,
+            Layer::Ui => &self.ui,
+            Layer::Debug => &self.debug,
+        }
+    }
+}
+
+impl IndexMut<Layer> for Cameras {
+    fn index_mut(&mut self, l: Layer) -> &mut Self::Output {
+        match l {
+            Layer::World => &mut self.world,
+            Layer::Ui => &mut self.ui,
+            Layer::Debug => &mut self.debug,
+        }
+    }
+}
 
 pub struct WindowContext {
     pub window: Window,
@@ -26,16 +61,16 @@ pub struct WindowContext {
     pub scenes: SceneManager,
     pub mixer: Mixer,
     pub assets: AssetServer,
+    pub resources: Resources,
+    pub renderer: Renderer,
 
-    pub imgui: SharedImgui,
-
-    pub world_camera: Camera,
-    pub ui_camera: Camera,
-    pub debug_camera: Camera,
+    // Frame stuff
+    pub packet: FramePacket,
+    pub cameras: Cameras,
 }
 
 impl WindowContext {
-    pub fn new(window: Window, assets: AssetServer, imgui: SharedImgui) -> Self {
+    pub fn new(window: Window, assets: AssetServer, renderer: Renderer) -> Self {
         let view = window.size();
 
         Self {
@@ -45,10 +80,14 @@ impl WindowContext {
             scenes: SceneManager::new(),
             mixer: Mixer::new(assets.reader()),
             assets,
-            imgui,
-            world_camera: Camera::new(Projection::standard_2d(view)),
-            ui_camera: Camera::new(Projection::standard_2d(view)),
-            debug_camera: Camera::new(Projection::standard_2d(view)),
+            resources: Resources::new(),
+            renderer,
+            packet: FramePacket::default(),
+            cameras: Cameras {
+                world: Camera::new(Projection::standard_2d(view)),
+                ui: Camera::new(Projection::standard_2d(view)),
+                debug: Camera::new(Projection::standard_2d(view)),
+            },
         }
     }
 }
@@ -60,6 +99,7 @@ pub struct ContextMut<'a> {
     pub scenes: &'a mut SceneManager,
     pub mixer: &'a Mixer,        // Cannot be mutated, no sense making it &mut
     pub assets: &'a AssetServer, // Uses interior mutability, no sense making it &mut
+    pub resources: &'a mut Resources,
 }
 
 pub struct ContextRef<'a> {
@@ -69,24 +109,11 @@ pub struct ContextRef<'a> {
     pub scenes: &'a SceneManager,
     pub mixer: &'a Mixer,
     pub assets: AssetsRead<'a>,
+    pub resources: &'a Resources,
 }
 
 impl WindowContext {
-    pub fn as_ref<'a>(&'a self) -> ContextRef<'a> {
-        ContextRef {
-            window: &self.window,
-            time: &self.time,
-            input: &self.input,
-            scenes: &self.scenes,
-            mixer: &self.mixer,
-            assets: self.assets.read(),
-        }
-    }
-
-    pub fn split_mut<'a>(
-        &'a mut self,
-        packet: &'a mut FramePacket,
-    ) -> (ContextMut<'a>, SceneHandle<'a>) {
+    pub fn split_mut<'a>(&'a mut self) -> (ContextMut<'a>, SceneHandle<'a>) {
         let Self {
             window,
             time,
@@ -94,10 +121,10 @@ impl WindowContext {
             scenes,
             mixer,
             assets,
-            imgui: _,
-            world_camera,
-            ui_camera,
-            debug_camera,
+            resources,
+            renderer,
+            packet,
+            cameras,
         } = self;
 
         (
@@ -108,19 +135,30 @@ impl WindowContext {
                 scenes,
                 mixer,
                 assets,
+                resources,
             },
             SceneHandle {
+                renderer: renderer,
                 active_layer: Layer::World,
                 packet,
-                world_camera,
-                ui_camera,
-                debug_camera,
+                cameras,
             },
         )
     }
 
-    pub fn split<'a>(&'a self, packet: &'a mut FramePacket) -> (ContextRef<'a>, Draw<'a>) {
-        (self.as_ref(), Draw::new(packet, self.assets.read()))
+    pub fn split<'a>(&'a mut self, imgui: &'a imgui::Ui) -> (ContextRef<'a>, Draw<'a>) {
+        (
+            ContextRef {
+                window: &self.window,
+                time: &self.time,
+                input: &self.input,
+                scenes: &self.scenes,
+                mixer: &self.mixer,
+                assets: self.assets.read(),
+                resources: &self.resources,
+            },
+            Draw::new(&mut self.packet, self.assets.read(), imgui),
+        )
     }
 }
 
@@ -147,11 +185,16 @@ pub struct Draw<'a> {
     current_state: DrawState,
     active_layer: Layer,
     assets: AssetsRead<'a>,
+    imgui: &'a imgui::Ui,
     white_uv: math::Vector2<f32>,
 }
 
 impl<'a> Draw<'a> {
-    pub(crate) fn new(packet: &'a mut FramePacket, assets: AssetsRead<'a>) -> Self {
+    pub(crate) fn new(
+        packet: &'a mut FramePacket,
+        assets: AssetsRead<'a>,
+        imgui: &'a imgui::Ui,
+    ) -> Self {
         let white_uv = assets.get_image(assets.white_handle()).uv.xy();
 
         Self {
@@ -160,6 +203,7 @@ impl<'a> Draw<'a> {
             current_state: DrawState::default(),
             active_layer: Layer::World,
             assets,
+            imgui,
             white_uv,
         }
     }
@@ -403,14 +447,20 @@ impl<'a> Draw<'a> {
 
         self.text(debug_font, text, x, y);
     }
+
+    pub fn imgui<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&imgui::Ui),
+    {
+        f(&self.imgui)
+    }
 }
 
 pub struct SceneHandle<'a> {
+    renderer: &'a mut Renderer,
     active_layer: Layer,
     packet: &'a mut FramePacket,
-    pub world_camera: &'a mut Camera,
-    pub ui_camera: &'a mut Camera,
-    pub debug_camera: &'a mut Camera,
+    cameras: &'a mut Cameras,
 }
 
 impl<'a> SceneHandle<'a> {
@@ -429,19 +479,51 @@ impl<'a> SceneHandle<'a> {
         self.active_layer = layer;
     }
 
+    pub fn add_geometry(&mut self, geometry: Geometry) -> Handle<Geometry> {
+        self.renderer.geometries.insert(geometry)
+    }
+
+    pub fn get_geometry(&self, handle: Handle<Geometry>) -> &Geometry {
+        self.renderer
+            .geometries
+            .get(handle)
+            .expect("Failed to get geometry")
+    }
+
+    pub fn get_geometry_mut(&mut self, handle: Handle<Geometry>) -> &mut Geometry {
+        self.renderer
+            .geometries
+            .get_mut(handle)
+            .expect("Failed to get geometry")
+    }
+
+    pub fn add_material(&mut self, desc: MaterialDesc) -> Handle<Material> {
+        self.renderer.materials.insert(Material::new(
+            desc,
+            &self.renderer.assets.read(),
+            &self.renderer.layouts.material,
+        ))
+    }
+
+    pub fn get_material(&self, handle: Handle<Material>) -> &Material {
+        self.renderer
+            .materials
+            .get(handle)
+            .expect("Failed to get material")
+    }
+
+    pub fn get_material_mut(&mut self, handle: Handle<Material>) -> &mut Material {
+        self.renderer
+            .materials
+            .get_mut(handle)
+            .expect("Failed to get material")
+    }
+
     pub fn camera(&self) -> &Camera {
-        match self.active_layer {
-            Layer::World => &self.world_camera,
-            Layer::Ui => &self.ui_camera,
-            Layer::Debug => &self.debug_camera,
-        }
+        &self.cameras[self.active_layer]
     }
 
     pub fn camera_mut(&mut self) -> &mut Camera {
-        match self.active_layer {
-            Layer::World => &mut self.world_camera,
-            Layer::Ui => &mut self.ui_camera,
-            Layer::Debug => &mut self.debug_camera,
-        }
+        &mut self.cameras[self.active_layer]
     }
 }

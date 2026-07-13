@@ -6,18 +6,19 @@ use karna::App;
 use karna::ContextMut;
 use karna::ContextRef;
 use karna::Scene;
+use karna::SceneHandle;
 use karna::WindowBuilder;
-use karna::input::KeyCode;
+use karna::input::Keycode;
 use karna::render::Color;
 use karna::render::Draw;
 
 struct S;
 
 impl Scene for S {
-    fn load(&mut self, ctx: ContextMut) {}
+    fn load(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {}
 
-    fn update(&mut self, ctx: ContextMut) {
-        if ctx.input.key_pressed(&KeyCode::Digit2) {
+    fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
+        if ctx.input.key_pressed(Keycode::Digit2) {
             // When transitioning between exactly 2 scenes,
             // you have to call deactivate first, otherwise they will stack and
             // may not output the result you want.
@@ -41,19 +42,19 @@ struct A {
 }
 
 impl Scene for A {
-    fn load(&mut self, ctx: ContextMut) {}
+    fn load(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {}
 
-    fn loaded_with(&mut self, ctx: ContextMut, user_data: Box<dyn Any>) {
+    fn loaded_with(&mut self, ctx: ContextMut, scene: &mut SceneHandle, user_data: Box<dyn Any>) {
         self.user_data = user_data.downcast_ref::<String>().unwrap().clone();
     }
 
-    fn update(&mut self, ctx: ContextMut) {
-        if ctx.input.key_pressed(&KeyCode::Digit1) {
+    fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
+        if ctx.input.key_pressed(Keycode::Digit1) {
             ctx.scenes.deactivate("scene-2");
             ctx.scenes.activate("scene-1");
         }
 
-        if ctx.input.key_pressed(&KeyCode::Digit3) {
+        if ctx.input.key_pressed(Keycode::Digit3) {
             ctx.scenes.deactivate("scene-2");
             ctx.scenes.register("scene-3", Box::new(C));
             ctx.scenes.activate("scene-3");
@@ -79,15 +80,15 @@ impl Scene for A {
 struct C;
 
 impl Scene for C {
-    fn load(&mut self, ctx: ContextMut) {}
+    fn load(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {}
 
-    fn update(&mut self, ctx: ContextMut) {
-        if ctx.input.key_pressed(&KeyCode::Digit1) {
+    fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
+        if ctx.input.key_pressed(Keycode::Digit1) {
             ctx.scenes.deactivate("scene-3");
             ctx.scenes.activate("scene-1");
         }
 
-        if ctx.input.key_pressed(&KeyCode::Digit2) {
+        if ctx.input.key_pressed(Keycode::Digit2) {
             ctx.scenes.deactivate("scene-3");
             ctx.scenes.activate("scene-2");
         }

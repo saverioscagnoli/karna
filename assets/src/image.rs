@@ -1,5 +1,3 @@
-use std::io::Cursor;
-
 use gpu::GpuState;
 use logging::info;
 use utils::ByteSize;

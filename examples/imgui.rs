@@ -57,47 +57,7 @@ impl Scene for S {
 
     fn update(&mut self, _ctx: ContextMut, scene: &mut SceneHandle) {}
 
-    fn imgui_frame(&mut self, ctx: ContextMut, scene: &mut SceneHandle, ui: &imgui::Ui) {
-        self.fps_history.remove(0);
-        self.fps_history.push(ctx.time.fps() as f32);
-
-        ui.window("Panel")
-            .size([320.0, 500.0], imgui::Condition::FirstUseEver)
-            .position([10.0, 10.0], imgui::Condition::FirstUseEver)
-            .build(|| {
-                let fps = ctx.time.fps();
-                let dt = ctx.time.delta();
-                let fixed_dt = ctx.time.fixed_delta();
-                let tps = ctx.time.tps();
-
-                // color-code fps: green when healthy, yellow/red when struggling
-                let fps_color = if fps >= 55 {
-                    [0.2, 1.0, 0.2, 1.0]
-                } else if fps >= 30 {
-                    [1.0, 0.8, 0.2, 1.0]
-                } else {
-                    [1.0, 0.2, 0.2, 1.0]
-                };
-
-                ui.text_colored(fps_color, format!("FPS: {:.1}", fps));
-                ui.plot_lines_config("##fps_history", &self.fps_history)
-                    .scale_min(0.0)
-                    .graph_size([280.0, 60.0])
-                    .build();
-
-                ui.separator();
-                ui.text(format!("Frame step (delta):  {:.4} ms", dt * 1000.0));
-                ui.text(format!("Tick step (fixed dt): {:.4} ms", fixed_dt * 1000.0));
-                ui.text(format!("Ticks per second:    {:.1}", tps));
-                ui.text(format!("Interp alpha:        {:.3}", ctx.time.alpha()));
-
-                ui.color_picker4_config("clear color", &mut self.clear_color)
-                    .picker_mode(imgui::ColorPickerMode::HueWheel)
-                    .build();
-            });
-    }
-
-    fn draw(&self, ctx: ContextRef, draw: &mut Draw) {
+    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
         draw.set_clear_color(self.clear_color);
         draw.set_color(Color::Cyan);
 
@@ -112,6 +72,46 @@ impl Scene for S {
 
         draw.set_color(Color::White);
         draw.rect(render_pos.x, render_pos.y, 50.0, 50.0);
+
+        draw.imgui(|ui| {
+            self.fps_history.remove(0);
+            self.fps_history.push(ctx.time.fps() as f32);
+
+            ui.window("Panel")
+                .size([320.0, 500.0], imgui::Condition::FirstUseEver)
+                .position([10.0, 10.0], imgui::Condition::FirstUseEver)
+                .build(|| {
+                    let fps = ctx.time.fps();
+                    let dt = ctx.time.delta();
+                    let fixed_dt = ctx.time.fixed_delta();
+                    let tps = ctx.time.tps();
+
+                    // color-code fps: green when healthy, yellow/red when struggling
+                    let fps_color = if fps >= 55 {
+                        [0.2, 1.0, 0.2, 1.0]
+                    } else if fps >= 30 {
+                        [1.0, 0.8, 0.2, 1.0]
+                    } else {
+                        [1.0, 0.2, 0.2, 1.0]
+                    };
+
+                    ui.text_colored(fps_color, format!("FPS: {:.1}", fps));
+                    ui.plot_lines_config("##fps_history", &self.fps_history)
+                        .scale_min(0.0)
+                        .graph_size([280.0, 60.0])
+                        .build();
+
+                    ui.separator();
+                    ui.text(format!("Frame step (delta):  {:.4} ms", dt * 1000.0));
+                    ui.text(format!("Tick step (fixed dt): {:.4} ms", fixed_dt * 1000.0));
+                    ui.text(format!("Ticks per second:    {:.1}", tps));
+                    ui.text(format!("Interp alpha:        {:.3}", ctx.time.alpha()));
+
+                    ui.color_picker4_config("clear color", &mut self.clear_color)
+                        .picker_mode(imgui::ColorPickerMode::HueWheel)
+                        .build();
+                });
+        });
     }
 }
 
@@ -124,12 +124,12 @@ impl Scene for AtlasScene {
 
     fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {}
 
-    fn imgui_frame(&mut self, ctx: ContextMut, scene: &mut SceneHandle, ui: &imgui::Ui) {
-        ui.show_demo_window(&mut true);
-        ui.show_about_window(&mut true);
+    fn draw(&mut self, _ctx: ContextRef, draw: &mut Draw) {
+        draw.imgui(|ui| {
+            ui.show_demo_window(&mut true);
+            ui.show_about_window(&mut true);
+        });
     }
-
-    fn draw(&self, _ctx: ContextRef, _draw: &mut Draw) {}
 }
 
 fn main() {

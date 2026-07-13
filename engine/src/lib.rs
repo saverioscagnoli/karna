@@ -2,6 +2,7 @@ mod builder;
 mod context;
 pub mod input;
 mod mixer;
+mod resources;
 mod scene;
 mod state;
 mod time;

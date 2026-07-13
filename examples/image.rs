@@ -50,7 +50,7 @@ impl Scene for S {
         }
     }
 
-    fn draw(&self, _ctx: karna::ContextRef, draw: &mut Draw) {
+    fn draw(&mut self, _ctx: karna::ContextRef, draw: &mut Draw) {
         draw.image_v(self.image, self.pos);
     }
 }
