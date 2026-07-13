@@ -94,4 +94,32 @@ impl Geometry {
 
         Self::new(&vertices, &indices)
     }
+
+    pub fn vertex_buffer(&self) -> &gpu::Buffer<Vertex> {
+        &self.vertex_buffer
+    }
+
+    pub fn index_buffer(&self) -> &gpu::Buffer<u32> {
+        &self.index_buffer
+    }
+
+    pub fn index_count(&self) -> u32 {
+        self.index_count
+    }
+
+    pub fn update(&mut self, vertices: &[Vertex], indices: &[u32]) {
+        self.vertex_buffer = gpu::Buffer::new_filled(
+            "geometry vertex buffer",
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_SRC,
+            vertices,
+        );
+
+        self.index_buffer = gpu::Buffer::new_filled(
+            "geometry index buffer",
+            wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_SRC,
+            indices,
+        );
+
+        self.index_count = indices.len() as u32;
+    }
 }

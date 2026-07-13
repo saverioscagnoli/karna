@@ -6,7 +6,6 @@ use logging::warn;
 use utils::FastHashMap;
 
 use crate::context::ContextMut;
-use crate::context::ContextRef;
 use crate::context::Draw;
 use crate::context::SceneHandle;
 
@@ -18,7 +17,7 @@ pub trait Scene: Send {
     fn loaded_with(&mut self, ctx: ContextMut, scene: &mut SceneHandle, user_data: Box<dyn Any>) {}
     fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle);
     fn fixed_update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {}
-    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw);
+    fn draw(&mut self, ctx: ContextMut, draw: &mut Draw);
 }
 
 enum Slot {

@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
@@ -7,6 +8,7 @@ use crossbeam_channel::Sender;
 use logging::error;
 use utils::Handle;
 use winit::event_loop::EventLoopProxy;
+use winit::window::CursorGrabMode;
 use winit::window::Icon;
 use winit::window::WindowId;
 
@@ -36,6 +38,7 @@ pub struct WindowHandle {
 pub struct Window {
     inner: Arc<WinitWindow>,
     assets: AssetsReader,
+    cursor_captured: Cell<bool>,
     proxy: EventLoopProxy<UserEvent>,
 }
 
@@ -48,6 +51,7 @@ impl Window {
         Self {
             inner: Arc::new(inner),
             assets,
+            cursor_captured: Cell::new(false),
             proxy,
         }
     }
@@ -91,6 +95,31 @@ impl Window {
 
     pub fn reset_icon(&self) {
         self.inner.set_window_icon(None);
+    }
+
+    pub fn capture_cursor(&self, should: bool) {
+        if should {
+            let _ = self
+                .inner
+                .set_cursor_grab(CursorGrabMode::Locked)
+                .or_else(|_e| self.inner.set_cursor_grab(CursorGrabMode::Confined));
+
+            self.inner.set_cursor_visible(false);
+        } else {
+            let _ = self.inner.set_cursor_grab(CursorGrabMode::None);
+
+            self.inner.set_cursor_visible(true);
+        }
+
+        self.cursor_captured.set(should);
+    }
+
+    pub fn toggle_cursor_capture(&self) {
+        self.capture_cursor(!self.cursor_captured());
+    }
+
+    pub fn cursor_captured(&self) -> bool {
+        self.cursor_captured.get()
     }
 
     pub fn set_custom_cursor<H>(&self, image: Handle<Image>, hotspot: H)

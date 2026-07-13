@@ -1,25 +1,6 @@
 use std::f32;
 
-use assets::Geometry;
-use karna::App;
-use karna::ContextMut;
-use karna::ContextRef;
-use karna::Scene;
-use karna::WindowBuilder;
-use karna::assets::MaterialDesc;
-use karna::input::KeyCode;
-use karna::math::Size;
-use karna::render::Color;
-use karna::render::Draw;
-use karna::render::Layer;
-use karna::render::Mesh;
-use karna::render::Projection;
-use karna::render::Vertex;
-use math::Matrix4;
-use math::Vector2;
-use math::Vector3;
-use math::Vector4;
-use utils::Handle;
+use karna::prelude::*;
 
 const GRID: usize = 32; // vertices per side (GRID x GRID)
 const PLANE_SIZE: f32 = 10.0; // world-space extent of the plane
@@ -121,21 +102,15 @@ impl S {
 }
 
 impl Scene for S {
-    fn load(&mut self, mut ctx: ContextMut) {
-
-
-        if let Some(m) = ctx.monitors.current() {
-                    ctx.time.set_target_fps(m.refresh_rate());
-                }
-
-        ctx.scene.set_camera_projection(Projection::standard_3d(
+    fn load(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
+        scene.set_camera_projection(Projection::standard_3d(
             ctx.window.size(),
             75.0,
             0.1,
             1000.0,
         ));
 
-        //    ctx.time.set_target_fps(120);
+        ctx.time.set_target_fps(120);
 
         let (base, indices) = S::build_grid();
         self.offsets = vec![0.0; base.len()];
@@ -145,36 +120,32 @@ impl Scene for S {
         // initial vertex buffer
         self.rebuild_verts();
 
-        let geom = ctx.assets.load_geometry(&self.verts, &self.indices);
-        self.geometry = geom;
-
-        let mat = ctx
-            .assets
-            .load_material(MaterialDesc::default().color(Color::Cyan));
+        self.geometry = scene.add_geometry(Geometry::new(&self.verts, &self.indices));
+        let mat = scene.add_material(MaterialDesc::default().color(Color::Cyan));
 
         let mesh = Mesh {
-            geometry: geom,
+            geometry: self.geometry,
             material: mat,
-            transform: Matrix4::identity(),
+            transform: Transform::default(),
         };
 
-        self.mesh = ctx.scene.add_mesh(mesh);
+        self.mesh = scene.add_mesh(mesh);
 
         // start the camera up and back, looking at the plane
-        let camera = ctx.scene.camera_mut();
+        let camera = scene.camera_mut();
         camera.position = Vector3::new(0.0, 8.0, -12.0);
 
         ctx.window.capture_cursor(true);
     }
 
-    fn update(&mut self, mut ctx: ContextMut) {
+    fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
         let dt = ctx.time.delta();
         self.time += dt;
 
         // --- animate + upload the plane every frame ---
         self.rebuild_verts();
         {
-            let geom = ctx.assets.get_geometry_mut(self.geometry);
+            let geom = scene.get_geometry_mut(self.geometry);
             geom.update(&self.verts, &self.indices);
         }
 
@@ -202,22 +173,26 @@ impl Scene for S {
         let right = forward.cross(&world_up).normalize();
         let up = right.cross(&forward).normalize();
 
-        let camera = ctx.scene.camera_mut();
+        let camera = scene.camera_mut();
         let step = move_speed * dt;
 
-        if ctx.input.key_pressed(&KeyCode::Escape) {
+        if ctx.input.key_pressed(Keycode::Escape) {
             ctx.window.toggle_cursor_capture();
         }
-        if ctx.input.key_held(&KeyCode::KeyW) {
+
+        if ctx.input.key_held(Keycode::KeyW) {
             camera.position = camera.position + forward * step;
         }
-        if ctx.input.key_held(&KeyCode::KeyS) {
+
+        if ctx.input.key_held(Keycode::KeyS) {
             camera.position = camera.position - forward * step;
         }
-        if ctx.input.key_held(&KeyCode::KeyD) {
+
+        if ctx.input.key_held(Keycode::KeyD) {
             camera.position = camera.position + right * step;
         }
-        if ctx.input.key_held(&KeyCode::KeyA) {
+
+        if ctx.input.key_held(Keycode::KeyA) {
             camera.position = camera.position - right * step;
         }
 
@@ -225,7 +200,7 @@ impl Scene for S {
         camera.up = up;
     }
 
-    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+    fn draw(&mut self, ctx: ContextMut, draw: &mut Draw) {
         draw.set_layer(Layer::Ui);
 
         draw.debug_text(
@@ -288,7 +263,14 @@ impl Scene for S {
 }
 
 fn main() {
-    karna::init_logging();
+    karna::logging::init(
+        karna::logging::Config {
+            min_level: karna::logging::LevelFilter::Debug,
+            ..Default::default()
+        }
+        .hide_wgpu(true),
+    )
+    .expect("Failed to init logging");
 
     App::builder()
         .with_window(

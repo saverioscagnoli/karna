@@ -116,8 +116,10 @@ impl Camera {
     }
 
     pub fn data(&self) -> CameraData {
+        // Projection · View: transform into view space first, then project.
+        // The shader applies this as `view_projection * world_position`.
         CameraData {
-            view_projection: self.view_matrix().matmul(&self.projection.matrix()),
+            view_projection: self.projection.matrix().matmul(&self.view_matrix()),
         }
     }
 }

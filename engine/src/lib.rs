@@ -41,7 +41,6 @@ use winit::window::WindowId;
 pub use crate::builder::AppBuilder;
 pub use crate::builder::WindowBuilder;
 pub use crate::context::ContextMut;
-pub use crate::context::ContextRef;
 pub use crate::context::Draw;
 pub use crate::context::SceneHandle;
 pub use crate::scene::Scene;

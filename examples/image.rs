@@ -1,16 +1,6 @@
 #![allow(unused)]
 
-use karna::App;
-use karna::ContextMut;
-use karna::Handle;
-use karna::Scene;
-use karna::SceneHandle;
-use karna::WindowBuilder;
-use karna::assets::Image;
-use karna::input::Keycode;
-use karna::math::Size;
-use karna::render::Draw;
-use math::Vector2;
+use karna::prelude::*;
 
 struct S {
     pos: Vector2<f32>,
@@ -50,7 +40,7 @@ impl Scene for S {
         }
     }
 
-    fn draw(&mut self, _ctx: karna::ContextRef, draw: &mut Draw) {
+    fn draw(&mut self, _ctx: ContextMut, draw: &mut Draw) {
         draw.image_v(self.image, self.pos);
     }
 }

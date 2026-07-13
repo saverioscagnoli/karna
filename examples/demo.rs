@@ -2,20 +2,7 @@
 
 use std::f32;
 
-use karna::App;
-use karna::ContextMut;
-use karna::ContextRef;
-use karna::Scene;
-use karna::SceneHandle;
-use karna::WindowBuilder;
-use karna::assets::Audio;
-use karna::assets::Image;
-use karna::input::Keycode;
-use karna::math::Size;
-use karna::math::Vector2;
-use karna::render::Color;
-use karna::render::Draw;
-use utils::Handle;
+use karna::prelude::*;
 
 struct S {
     pos: Vector2<f32>,
@@ -66,7 +53,7 @@ impl Scene for S {
         }
     }
 
-    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+    fn draw(&mut self, ctx: ContextMut, draw: &mut Draw) {
         draw.set_color(Color::White);
 
         draw.rect(self.pos.x, self.pos.y, 50.0, 50.0);

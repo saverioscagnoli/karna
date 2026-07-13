@@ -2,7 +2,6 @@ pub use assets;
 pub use engine::App;
 pub use engine::AppBuilder;
 pub use engine::ContextMut;
-pub use engine::ContextRef;
 pub use engine::Scene;
 pub use engine::SceneHandle;
 pub use engine::SceneManager;
@@ -19,4 +18,14 @@ pub mod render {
     pub use gpu::CircleVertex;
     pub use gpu::Vertex;
     pub use renderer::*;
+}
+
+pub mod prelude {
+    pub use assets::*;
+    pub use engine::*;
+    pub use input::*;
+    pub use math::*;
+    pub use render::*;
+
+    pub use crate::*;
 }

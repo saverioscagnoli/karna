@@ -91,3 +91,20 @@ impl Into<Vector4<f32>> for Color {
         Vector4::new(self.r, self.g, self.b, self.a)
     }
 }
+
+impl From<[f32; 4]> for Color {
+    fn from(v: [f32; 4]) -> Self {
+        Self {
+            r: v[0],
+            g: v[1],
+            b: v[2],
+            a: v[3],
+        }
+    }
+}
+
+impl Into<[f32; 4]> for Color {
+    fn into(self) -> [f32; 4] {
+        [self.r, self.g, self.b, self.a]
+    }
+}

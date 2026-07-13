@@ -2,15 +2,7 @@
 
 use std::any::Any;
 
-use karna::App;
-use karna::ContextMut;
-use karna::ContextRef;
-use karna::Scene;
-use karna::SceneHandle;
-use karna::WindowBuilder;
-use karna::input::Keycode;
-use karna::render::Color;
-use karna::render::Draw;
+use karna::prelude::*;
 
 struct S;
 
@@ -30,7 +22,7 @@ impl Scene for S {
         }
     }
 
-    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+    fn draw(&mut self, ctx: ContextMut, draw: &mut Draw) {
         draw.debug_text("This is scene 1", 10.0, 10.0);
         draw.debug_text("Press '2' to go into scene 2!", 10.0, 30.0);
     }
@@ -61,7 +53,7 @@ impl Scene for A {
         }
     }
 
-    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+    fn draw(&mut self, ctx: ContextMut, draw: &mut Draw) {
         draw.debug_text("This is scene 2", 10.0, 10.0);
         draw.debug_text(
             &format!("user data was passed: {}", self.user_data),
@@ -94,7 +86,7 @@ impl Scene for C {
         }
     }
 
-    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+    fn draw(&mut self, ctx: ContextMut, draw: &mut Draw) {
         draw.debug_text("This is scene 3! (Registered programmatically)", 10.0, 10.0);
         draw.debug_text("Press '1' to go back to scene 1!", 10.0, 30.0);
         draw.debug_text("Press '2' to go back to scene 2!", 10.0, 50.0);

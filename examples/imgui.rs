@@ -1,16 +1,6 @@
 #![allow(unused)]
 
-use karna::App;
-use karna::ContextMut;
-use karna::ContextRef;
-use karna::Scene;
-use karna::SceneHandle;
-use karna::WindowBuilder;
-use karna::imgui;
-use karna::input::Keycode;
-use karna::math::Vector2;
-use karna::render::Color;
-use karna::render::Draw;
+use karna::prelude::*;
 
 struct S {
     pos: Vector2<f32>,
@@ -57,7 +47,7 @@ impl Scene for S {
 
     fn update(&mut self, _ctx: ContextMut, scene: &mut SceneHandle) {}
 
-    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+    fn draw(&mut self, ctx: ContextMut, draw: &mut Draw) {
         draw.set_clear_color(self.clear_color);
         draw.set_color(Color::Cyan);
 
@@ -124,7 +114,7 @@ impl Scene for AtlasScene {
 
     fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {}
 
-    fn draw(&mut self, _ctx: ContextRef, draw: &mut Draw) {
+    fn draw(&mut self, _ctx: ContextMut, draw: &mut Draw) {
         draw.imgui(|ui| {
             ui.show_demo_window(&mut true);
             ui.show_about_window(&mut true);

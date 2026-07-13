@@ -15,6 +15,7 @@ use renderer::Geometry;
 use renderer::Layer;
 use renderer::Material;
 use renderer::MaterialDesc;
+use renderer::Mesh;
 use renderer::Projection;
 use renderer::Renderer;
 use utils::Handle;
@@ -102,16 +103,6 @@ pub struct ContextMut<'a> {
     pub resources: &'a mut Resources,
 }
 
-pub struct ContextRef<'a> {
-    pub window: &'a Window,
-    pub time: &'a Time,
-    pub input: &'a Input,
-    pub scenes: &'a SceneManager,
-    pub mixer: &'a Mixer,
-    pub assets: AssetsRead<'a>,
-    pub resources: &'a Resources,
-}
-
 impl WindowContext {
     pub fn split_mut<'a>(&'a mut self) -> (ContextMut<'a>, SceneHandle<'a>) {
         let Self {
@@ -146,16 +137,16 @@ impl WindowContext {
         )
     }
 
-    pub fn split<'a>(&'a mut self, imgui: &'a imgui::Ui) -> (ContextRef<'a>, Draw<'a>) {
+    pub fn split<'a>(&'a mut self, imgui: &'a imgui::Ui) -> (ContextMut<'a>, Draw<'a>) {
         (
-            ContextRef {
+            ContextMut {
                 window: &self.window,
-                time: &self.time,
-                input: &self.input,
-                scenes: &self.scenes,
-                mixer: &self.mixer,
-                assets: self.assets.read(),
-                resources: &self.resources,
+                time: &mut self.time,
+                input: &mut self.input,
+                scenes: &mut self.scenes,
+                mixer: &mut self.mixer,
+                assets: &self.assets,
+                resources: &mut self.resources,
             },
             Draw::new(&mut self.packet, self.assets.read(), imgui),
         )
@@ -519,11 +510,46 @@ impl<'a> SceneHandle<'a> {
             .expect("Failed to get material")
     }
 
+    pub fn add_mesh(&mut self, mesh: Mesh) -> Handle<Mesh> {
+        self.renderer.data[self.active_layer]
+            .retained
+            .meshes
+            .insert(mesh)
+    }
+
+    pub fn get_mesh(&mut self, handle: Handle<Mesh>) -> &Mesh {
+        self.renderer.data[self.active_layer]
+            .retained
+            .meshes
+            .get(handle)
+            .expect("Failed to get mesh")
+    }
+
+    pub fn get_mesh_mut(&mut self, handle: Handle<Mesh>) -> &mut Mesh {
+        self.renderer.data[self.active_layer]
+            .retained
+            .meshes
+            .get_mut(handle)
+            .expect("Failed to get mesh")
+    }
+
     pub fn camera(&self) -> &Camera {
         &self.cameras[self.active_layer]
     }
 
     pub fn camera_mut(&mut self) -> &mut Camera {
         &mut self.cameras[self.active_layer]
+    }
+
+    pub fn camera_projection(&self) -> &Projection {
+        &self.cameras[self.active_layer].projection
+    }
+
+    pub fn camera_projection_mut(&mut self) -> &mut Projection {
+        &mut self.cameras[self.active_layer].projection
+    }
+
+    pub fn set_camera_projection(&mut self, proj: Projection) {
+        *self.camera_projection_mut() = proj;
     }
 }

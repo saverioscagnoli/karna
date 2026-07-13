@@ -1,16 +1,6 @@
 #![allow(unused)]
 
-use karna::AppBuilder;
-use karna::ContextMut;
-use karna::ContextRef;
-use karna::Handle;
-use karna::Scene;
-use karna::SceneHandle;
-use karna::WindowBuilder;
-use karna::assets::Font;
-use karna::input::Keycode;
-use karna::render::Color;
-use karna::render::Draw;
+use karna::prelude::*;
 
 #[derive(Default)]
 struct Donut {
@@ -125,11 +115,12 @@ impl Scene for Donut {
         }
     }
 
-    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {
+    fn draw(&mut self, ctx: ContextMut, draw: &mut Draw) {
         let frame_content = self.generate_frame();
         let rainbow_color = self.get_rainbow_color();
         let win_size = ctx.window.size();
-        let font = ctx.assets.get_font(self.font);
+        let assets = ctx.assets.read();
+        let font = assets.get_font(self.font);
 
         let char_width = 80;
         let char_height = 30;

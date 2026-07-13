@@ -5,6 +5,8 @@ mod mesh;
 mod retained;
 
 use std::array;
+use std::ops::Index;
+use std::ops::IndexMut;
 use std::sync::Arc;
 
 use assets::AssetsReader;
@@ -22,6 +24,7 @@ use crate::color::srgb_to_linear;
 use crate::immediate::ImmediateRenderer;
 use crate::immediate::imgui::ImguiRenderer;
 pub use crate::mesh::*;
+use crate::retained::RetainedRenderer;
 
 #[repr(usize)]
 #[derive(Default)]
@@ -112,9 +115,10 @@ impl Layer {
 }
 
 pub struct LayerGpu {
-    camera_buffer: gpu::Buffer<CameraData>,
-    camera_bg: wgpu::BindGroup,
-    immediate: ImmediateRenderer,
+    pub camera_buffer: gpu::Buffer<CameraData>,
+    pub camera_bg: wgpu::BindGroup,
+    pub immediate: ImmediateRenderer,
+    pub retained: RetainedRenderer,
 }
 
 impl LayerGpu {
@@ -138,13 +142,37 @@ impl LayerGpu {
             camera_buffer,
             camera_bg,
             immediate: ImmediateRenderer::new(),
+            retained: RetainedRenderer::new(),
         }
     }
 }
 
 pub struct WindowRenderData {
-    layers: [LayerGpu; 3],
-    imgui: ImguiRenderer,
+    pub layers: [LayerGpu; 3],
+    // Imgui rendering  happens on a separate layer
+    pub imgui: ImguiRenderer,
+}
+
+impl Index<Layer> for WindowRenderData {
+    type Output = LayerGpu;
+
+    fn index(&self, l: Layer) -> &Self::Output {
+        match l {
+            Layer::World => &self.layers[0],
+            Layer::Ui => &self.layers[1],
+            Layer::Debug => &self.layers[2],
+        }
+    }
+}
+
+impl IndexMut<Layer> for WindowRenderData {
+    fn index_mut(&mut self, l: Layer) -> &mut Self::Output {
+        match l {
+            Layer::World => &mut self.layers[0],
+            Layer::Ui => &mut self.layers[1],
+            Layer::Debug => &mut self.layers[2],
+        }
+    }
 }
 
 impl WindowRenderData {
@@ -160,6 +188,7 @@ pub struct Layouts {
     pub texture_atlas: wgpu::BindGroupLayout,
     pub camera: wgpu::BindGroupLayout,
     pub material: wgpu::BindGroupLayout,
+    pub transform: wgpu::BindGroupLayout,
 }
 
 impl Layouts {
@@ -197,10 +226,28 @@ impl Layouts {
                 }],
             });
 
+        // Per-mesh transform, bound with a dynamic offset into one shared buffer
+        let transform = gpu
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("transform bind group layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: true,
+                        min_binding_size: wgpu::BufferSize::new(64), // one mat4x4<f32>
+                    },
+                    count: None,
+                }],
+            });
+
         Self {
             texture_atlas: a.clone(),
             camera: camera_layout,
             material,
+            transform,
         }
     }
 }
@@ -209,12 +256,21 @@ impl Layouts {
     const fn as_array(&self) -> [&wgpu::BindGroupLayout; 2] {
         [&self.camera, &self.texture_atlas]
     }
+
+    const fn as_mesh_array(&self) -> [&wgpu::BindGroupLayout; 4] {
+        [
+            &self.camera,
+            &self.texture_atlas,
+            &self.material,
+            &self.transform,
+        ]
+    }
 }
 
 pub struct Renderer {
     pipelines: Arc<gpu::PipelineCache>,
     pub layouts: Arc<Layouts>,
-    data: WindowRenderData,
+    pub data: WindowRenderData,
     pub assets: AssetsReader,
 
     pub geometries: SlotMap<Geometry>,
@@ -334,6 +390,15 @@ impl Renderer {
 
                 pass.set_bind_group(0, &layer_gpu.camera_bg, &[]);
                 pass.set_bind_group(1, assets.atlas_bg(), &[]);
+
+                layer_gpu.retained.present(
+                    &self.geometries,
+                    &self.materials,
+                    &mut pass,
+                    &self.pipelines,
+                    &self.layouts,
+                    view_format,
+                );
 
                 layer_gpu.immediate.present(
                     &layer_packet.points,
