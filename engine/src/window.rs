@@ -1,12 +1,13 @@
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
+use assets::AssetsReader;
 use assets::Image;
 use crossbeam_channel::Sender;
 use logging::error;
 use utils::Handle;
-use winit::event::WindowEvent;
 use winit::event_loop::EventLoopProxy;
+use winit::window::Icon;
 use winit::window::WindowId;
 
 use crate::AppEvent;
@@ -25,13 +26,19 @@ pub struct WindowHandle {
 #[derive(Clone)]
 pub struct Window {
     inner: Arc<WinitWindow>,
+    assets: AssetsReader,
     proxy: EventLoopProxy<UserEvent>,
 }
 
 impl Window {
-    pub(crate) fn new(inner: WinitWindow, proxy: EventLoopProxy<UserEvent>) -> Self {
+    pub(crate) fn new(
+        inner: WinitWindow,
+        assets: AssetsReader,
+        proxy: EventLoopProxy<UserEvent>,
+    ) -> Self {
         Self {
             inner: Arc::new(inner),
+            assets,
             proxy,
         }
     }
@@ -52,7 +59,21 @@ impl Window {
         self.inner.inner_size().into()
     }
 
-    pub fn set_custom_cursor<H>(&mut self, image: Handle<Image>, hotspot: H)
+    pub fn reset_icon(&self) {
+        self.inner.set_window_icon(None);
+    }
+
+    pub fn set_icon(&self, image: Handle<Image>) {
+        let lock = self.assets.read();
+        let image = lock.get_image(image);
+
+        self.inner.set_window_icon(Some(
+            Icon::from_rgba(image.data.clone(), image.size.width, image.size.height)
+                .expect("Failed to set window icon"),
+        ));
+    }
+
+    pub fn set_custom_cursor<H>(&self, image: Handle<Image>, hotspot: H)
     where
         H: Into<math::Vector2<u16>>,
     {

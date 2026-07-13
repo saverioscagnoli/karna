@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::f32;
 
 use karna::App;

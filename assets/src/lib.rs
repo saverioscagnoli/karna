@@ -75,6 +75,7 @@ impl AssetServer {
 /// For example, a copy of this will be present in each renderer,
 /// because when we need to present the frame, we need handles for textures,
 /// materials, etc.
+#[derive(Clone)]
 pub struct AssetsReader {
     assets: Arc<RwLock<Assets>>,
 }

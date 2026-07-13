@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use karna::App;
 use karna::ContextMut;
 use karna::ContextRef;
@@ -53,9 +55,9 @@ impl Scene for S {
         }
     }
 
-    fn update(&mut self, _ctx: ContextMut, _scene: &mut SceneHandle) {}
+    fn update(&mut self, _ctx: ContextMut, scene: &mut SceneHandle) {}
 
-    fn imgui_frame(&mut self, ctx: ContextMut, _scene: &mut SceneHandle, ui: &imgui::Ui) {
+    fn imgui_frame(&mut self, ctx: ContextMut, scene: &mut SceneHandle, ui: &imgui::Ui) {
         self.fps_history.remove(0);
         self.fps_history.push(ctx.time.fps() as f32);
 
@@ -116,13 +118,13 @@ impl Scene for S {
 struct AtlasScene;
 
 impl Scene for AtlasScene {
-    fn load(&mut self, ctx: ContextMut, _scene: &mut SceneHandle) {
+    fn load(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
         ctx.time.set_target_fps(120);
     }
 
-    fn update(&mut self, _ctx: ContextMut, _scene: &mut SceneHandle) {}
+    fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {}
 
-    fn imgui_frame(&mut self, _ctx: ContextMut, _scene: &mut SceneHandle, ui: &imgui::Ui) {
+    fn imgui_frame(&mut self, ctx: ContextMut, scene: &mut SceneHandle, ui: &imgui::Ui) {
         ui.show_demo_window(&mut true);
         ui.show_about_window(&mut true);
     }

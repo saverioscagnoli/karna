@@ -169,8 +169,12 @@ impl TextureAtlas {
 
     // Existing: for real PNG file bytes
     pub fn load_image(&mut self, bytes: &[u8]) -> Handle<Image> {
-        let (data, size) = decode_png(bytes);
-        self.load_raw(data, size, false)
+        let image = image::decode_png(bytes).expect("Failed to decode png");
+        self.load_raw(
+            image.pixels,
+            math::Size::new(image.width, image.height),
+            false,
+        )
     }
 }
 
@@ -181,16 +185,4 @@ pub fn image_uv(atlas_size: &math::Size<u32>, region: rect_packer::Rect) -> math
         region.width as f32 / atlas_size.width as f32,
         region.height as f32 / atlas_size.height as f32,
     )
-}
-
-pub fn decode_png(bytes: &[u8]) -> (Vec<u8>, math::Size<u32>) {
-    let mut decoder = png::Decoder::new(Cursor::new(bytes));
-    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::ALPHA);
-
-    let mut reader = decoder.read_info().expect("Failed to read PNG info");
-    let mut buf = vec![0; reader.output_buffer_size().unwrap()];
-    let info = reader.next_frame(&mut buf).expect("Failed to decode PNG");
-    buf.truncate(info.buffer_size());
-
-    (buf, math::Size::new(info.width, info.height))
 }

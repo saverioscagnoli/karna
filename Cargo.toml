@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["assets","engine", "gpu", "imgui","logging", "math", "renderer", "utils"]
+members = ["assets","engine", "gpu", "image", "imgui","logging", "math", "renderer", "utils"]
 
 [workspace.dependencies]
 parking_lot = "0.12.5"
@@ -19,6 +19,7 @@ assets = { path = "assets" }
 imgui = { path = "imgui" }
 rodio = "0.22.2"
 crossbeam-channel = "0.5.16"
+image = { path = "image" }
 
 [dependencies]
 logging.workspace = true

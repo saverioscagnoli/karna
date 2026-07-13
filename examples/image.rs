@@ -1,10 +1,13 @@
+#![allow(unused)]
+
 use karna::App;
 use karna::ContextMut;
 use karna::Handle;
 use karna::Scene;
+use karna::SceneHandle;
 use karna::WindowBuilder;
 use karna::assets::Image;
-use karna::input::KeyCode;
+use karna::input::Keycode;
 use karna::math::Size;
 use karna::render::Draw;
 use math::Vector2;
@@ -12,46 +15,55 @@ use math::Vector2;
 struct S {
     pos: Vector2<f32>,
     image: Handle<Image>,
+    duck: Handle<Image>,
 }
 
 impl Scene for S {
-    fn load(&mut self, mut ctx: ContextMut) {
-        let bytes = include_bytes!("assets/tetsuo.png");
+    fn load(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
+        ctx.assets.write_scope(|a| {
+            let bytes = include_bytes!("assets/tetsuo.png");
+            self.image = a.load_image(bytes);
 
-        self.image = ctx.assets.load_image(bytes);
+            let duck_bytes = include_bytes!("assets/duck.png");
+            self.duck = a.load_image(duck_bytes);
+        });
 
-        let duck_bytes = include_bytes!("assets/duck.png");
-        let duck_image = ctx.assets.load_image(duck_bytes);
-
-        ctx.window.set_icon(duck_image);
-        ctx.window.set_custom_cursor(duck_image, 0, 0);
+        ctx.window.set_icon(self.duck);
+        ctx.window.set_custom_cursor(self.duck, [0, 0]);
     }
 
-    fn update(&mut self, ctx: ContextMut) {
-        if ctx.input.key_held(&KeyCode::KeyW) {
+    fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
+        if ctx.input.key_held(Keycode::KeyW) {
             self.pos.y -= 10.0;
         }
 
-        if ctx.input.key_held(&KeyCode::KeyA) {
+        if ctx.input.key_held(Keycode::KeyA) {
             self.pos.x -= 10.0;
         }
 
-        if ctx.input.key_held(&KeyCode::KeyS) {
+        if ctx.input.key_held(Keycode::KeyS) {
             self.pos.y += 10.0;
         }
 
-        if ctx.input.key_held(&KeyCode::KeyD) {
+        if ctx.input.key_held(Keycode::KeyD) {
             self.pos.x += 10.0;
         }
     }
 
-    fn draw(&mut self, _ctx: karna::ContextRef, draw: &mut Draw) {
+    fn draw(&self, _ctx: karna::ContextRef, draw: &mut Draw) {
         draw.image_v(self.image, self.pos);
     }
 }
 
 fn main() {
-    karna::init_logging();
+    karna::logging::init(
+        karna::logging::Config {
+            min_level: karna::logging::LevelFilter::Debug,
+            ..Default::default()
+        }
+        .hide_wgpu(true),
+    )
+    .expect("Failed to init logging");
 
     App::builder()
         .with_window(
@@ -62,6 +74,7 @@ fn main() {
                     S {
                         pos: Vector2::zero(),
                         image: Handle::default(),
+                        duck: Handle::default(),
                     },
                 )
                 .with_active_scene("image"),

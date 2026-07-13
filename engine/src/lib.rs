@@ -204,7 +204,7 @@ impl ApplicationHandler<UserEvent> for App {
             match event_loop.create_window(b.attrs) {
                 Ok(w) => {
                     // Wrap winit window
-                    let window = Window::new(w, self.proxy.clone());
+                    let window = Window::new(w, self.assets.reader(), self.proxy.clone());
 
                     info!("Created window '{}' {:?}", window.title(), window.size());
 
