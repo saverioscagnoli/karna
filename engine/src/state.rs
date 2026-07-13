@@ -56,10 +56,9 @@ impl WindowState {
 
         let (data, size) = {
             let mut ctx = imgui.active(window_id);
-            let fonts = ctx.fonts();
-            fonts.tex_id = imgui::TextureId::from(1); // non-zero; unused, one atlas
-            let tex = fonts.build_rgba32_texture(); // RGBA8
-            (tex.data.to_vec(), math::Size::new(tex.width, tex.height))
+            let baked = imgui::bake_font_atlas(&mut ctx);
+            ctx.fonts().set_texture_id(imgui::TextureId::from(1u64));
+            baked
         };
 
         let handle = assets.write_scope(|a| a.load_raw(data, size));
@@ -214,8 +213,8 @@ impl WindowState {
     fn handle_imgui_window_event(&mut self, event: &WindowEvent, io: &mut imgui::Io) {
         match event {
             WindowEvent::Resized(size) => {
-                io.display_size = [size.width as f32, size.height as f32];
-                io.display_framebuffer_scale = [1.0, 1.0];
+                io.set_display_size([size.width as f32, size.height as f32]);
+                io.set_display_framebuffer_scale([1.0, 1.0]);
             }
 
             WindowEvent::KeyboardInput {
@@ -241,8 +240,7 @@ impl WindowState {
             }
 
             WindowEvent::CursorMoved { position, .. } => {
-                let pos = [position.x as f32, position.y as f32];
-                io.mouse_pos = pos;
+                io.add_mouse_pos_event([position.x as f32, position.y as f32]);
             }
 
             WindowEvent::MouseInput { button, state, .. } => {
@@ -253,16 +251,10 @@ impl WindowState {
 
             WindowEvent::MouseWheel { delta, .. } => match delta {
                 MouseScrollDelta::LineDelta(x, y) => {
-                    let delta = [*x, *y];
-
-                    io.mouse_wheel = delta[1];
-                    io.mouse_wheel_h = delta[0];
+                    io.add_mouse_wheel_event([*x, *y]);
                 }
                 MouseScrollDelta::PixelDelta(pos) => {
-                    let delta = [pos.x as f32, pos.y as f32];
-
-                    io.mouse_wheel = delta[1];
-                    io.mouse_wheel_h = delta[0];
+                    io.add_mouse_wheel_event([pos.x as f32, pos.y as f32]);
                 }
             },
 
@@ -281,17 +273,6 @@ impl WindowState {
         }
     }
 
-    fn handle_imgui_device_event(&mut self, event: &DeviceEvent, io: &mut imgui::Io) {
-        match event {
-            DeviceEvent::MouseMotion { delta, .. } => {
-                let delta = [delta.0 as f32, delta.1 as f32];
-                io.mouse_delta = delta;
-            }
-
-            _ => {}
-        }
-    }
-
     fn drain_events(&mut self, io: &mut imgui::Io) {
         while let Ok(event) = self.event_rx.try_recv() {
             match event {
@@ -301,7 +282,6 @@ impl WindowState {
                 }
                 AppEvent::Device(e) => {
                     self.handle_device_event(&e);
-                    self.handle_imgui_device_event(&e, io);
                 }
             }
         }
@@ -360,43 +340,54 @@ impl WindowState {
         self.drain_scene_commands();
     }
 
-    pub fn start(mut self) {
+    /// Runs a single frame: drains queued events, applies resizes, updates
+    /// scenes, renders and presents. Returns `false` once the window wants
+    /// to close.
+    ///
+    /// Native drives this from a dedicated per-window thread ([`Self::start`]);
+    /// the web drives it from `RedrawRequested`, once per animation frame.
+    pub(crate) fn frame_once(&mut self) -> bool {
         let shared_imgui = self.context.imgui.clone();
         let window_id = self.context.window.id();
 
-        while !self.should_exit {
-            let mut imgui = shared_imgui.active(window_id);
-            let mut io = imgui.io_mut();
+        let mut imgui = shared_imgui.active(window_id);
+        let mut io = imgui.io_mut();
 
-            self.drain_events(&mut io);
+        self.drain_events(&mut io);
 
-            if self.should_exit {
-                break;
-            }
-
-            if let Some(size) = self.pending_resize.take() {
-                self.surface.resize(GpuState::get(), size);
-                self.surface_size = size;
-                self.context.world_camera.update(size);
-                self.context.ui_camera.update(size);
-                self.context.debug_camera.update(size);
-
-                debug!("Resized window to {:?}", size);
-            }
-
-            self.context.time.update();
-            io.delta_time = self.context.time.delta();
-
-            self.frame(imgui.new_frame());
-
-            self.packet.imgui.record(imgui.render(), self.imgui_font_uv);
-
-            drop(imgui);
-
-            self.renderer.present(&mut self.surface, &self.packet);
-            self.context.time.wait_for_next_frame();
-
-            self.flush();
+        if self.should_exit {
+            return false;
         }
+
+        if let Some(size) = self.pending_resize.take() {
+            self.surface.resize(GpuState::get(), size);
+            self.surface_size = size;
+            self.context.world_camera.update(size);
+            self.context.ui_camera.update(size);
+            self.context.debug_camera.update(size);
+
+            debug!("Resized window to {:?}", size);
+        }
+
+        self.context.time.update();
+        io.set_delta_time(self.context.time.delta());
+
+        self.frame(imgui.frame());
+
+        self.packet.imgui.record(imgui.render(), self.imgui_font_uv);
+
+        drop(imgui);
+
+        self.renderer.present(&mut self.surface, &self.packet);
+        self.context.time.wait_for_next_frame();
+
+        self.flush();
+
+        !self.should_exit
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn start(mut self) {
+        while self.frame_once() {}
     }
 }

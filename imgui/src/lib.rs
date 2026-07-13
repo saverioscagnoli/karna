@@ -1,10 +1,12 @@
-mod input;
+pub mod input;
 
 use std::fmt;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::path::PathBuf;
 use std::sync::Arc;
 
+pub use dear_imgui_rs as imgui;
 use gpu::Vertex;
 pub use imgui::*;
 use parking_lot::Mutex;
@@ -48,12 +50,12 @@ impl ImguiManager {
     pub fn register_window(&mut self, id: WindowId, size: math::Size<f32>) {
         let mut ctx = imgui::Context::create();
 
-        ctx.set_ini_filename(None);
+        let _ = ctx.set_ini_filename::<PathBuf>(None);
 
         {
             let io = ctx.io_mut();
-            io.display_size = size.into();
-            io.display_framebuffer_scale = [1.0, 1.0];
+            io.set_display_size(size.into());
+            io.set_display_framebuffer_scale([1.0, 1.0]);
         }
 
         self.contexts.insert(id, Some(ctx.suspend()));
@@ -171,6 +173,36 @@ impl SharedImgui {
     }
 }
 
+/// Builds the font atlas with every glyph range pre-baked (the pre-1.92
+/// full-build behavior) and returns its RGBA32 pixels and size.
+///
+/// The engine uploads the atlas once into its own texture atlas and remaps
+/// UVs, so it can't service the incremental texture updates of the newer
+/// backend protocol; pre-baking keeps the one-shot upload complete.
+pub fn bake_font_atlas(ctx: &mut imgui::Context) -> (Vec<u8>, math::Size<u32>) {
+    let mut fonts = ctx.font_atlas_mut();
+
+    unsafe {
+        let raw = fonts.raw();
+        (*raw).TexDesiredFormat = sys::ImTextureFormat_RGBA32;
+        sys::igImFontAtlasBuildMain(raw);
+        sys::igImFontAtlasBuildLegacyPreloadAllGlyphRanges(raw);
+    }
+
+    let tex = fonts
+        .tex_data_mut()
+        .expect("font atlas build produced no texture");
+
+    debug_assert_eq!(tex.format(), texture::TextureFormat::RGBA32);
+
+    let pixels = tex
+        .pixels()
+        .expect("font atlas texture has no pixel data")
+        .to_vec();
+
+    (pixels, math::Size::new(tex.width(), tex.height()))
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ImguiCmd {
     pub clip: [f32; 4],
@@ -200,6 +232,13 @@ impl ImguiPacket {
         self.display_size = dd.display_size;
         self.fb_scale = dd.framebuffer_scale;
 
+        // With no imgui windows drawn, CmdLists.Data is null and
+        // draw_lists() would build a slice from a null pointer (a
+        // debug-assert panic on wasm).
+        if dd.total_vtx_count() == 0 {
+            return;
+        }
+
         let (ox, oy, ew, eh) = (font_uv.x, font_uv.y, font_uv.z, font_uv.w);
 
         for list in dd.draw_lists() {
@@ -209,10 +248,10 @@ impl ImguiPacket {
             self.vertices.extend(list.vtx_buffer().iter().map(|v| {
                 let uv = math::Vector2::new(ox + v.uv[0] * ew, oy + v.uv[1] * eh);
                 let col = math::Vector4::new(
-                    v.col[0] as f32 / 255.0,
-                    v.col[1] as f32 / 255.0,
-                    v.col[2] as f32 / 255.0,
-                    v.col[3] as f32 / 255.0,
+                    v.rgba()[0] as f32 / 255.0,
+                    v.rgba()[1] as f32 / 255.0,
+                    v.rgba()[2] as f32 / 255.0,
+                    v.rgba()[3] as f32 / 255.0,
                 );
 
                 Vertex::new(math::Vector3::new(v.pos[0], v.pos[1], 0.0), col, uv)
@@ -222,7 +261,10 @@ impl ImguiPacket {
                 .extend(list.idx_buffer().iter().map(|&i| i as u32)); // Uint32, like your Batcher
 
             for cmd in list.commands() {
-                if let imgui::DrawCmd::Elements { count, cmd_params } = cmd {
+                if let imgui::DrawCmd::Elements {
+                    count, cmd_params, ..
+                } = cmd
+                {
                     self.cmds.push(ImguiCmd {
                         clip: cmd_params.clip_rect,
                         vtx_offset: vtx_base + cmd_params.vtx_offset as i32,
