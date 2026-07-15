@@ -27,6 +27,9 @@ use crate::input::Input;
 use crate::mixer::Mixer;
 use crate::resources::Resources;
 
+#[cfg(feature = "net")]
+use crate::net::Net;
+
 pub struct Cameras {
     world: Camera,
     ui: Camera,
@@ -68,6 +71,9 @@ pub struct WindowContext {
     // Frame stuff
     pub packet: FramePacket,
     pub cameras: Cameras,
+
+    #[cfg(feature = "net")]
+    pub net: Net,
 }
 
 impl WindowContext {
@@ -83,12 +89,16 @@ impl WindowContext {
             assets,
             resources: Resources::new(),
             renderer,
+
             packet: FramePacket::default(),
             cameras: Cameras {
                 world: Camera::new(Projection::standard_2d(view)),
                 ui: Camera::new(Projection::standard_2d(view)),
                 debug: Camera::new(Projection::standard_2d(view)),
             },
+
+            #[cfg(feature = "net")]
+            net: Net::new(),
         }
     }
 }
@@ -101,6 +111,9 @@ pub struct ContextMut<'a> {
     pub mixer: &'a Mixer,        // Cannot be mutated, no sense making it &mut
     pub assets: &'a AssetServer, // Uses interior mutability, no sense making it &mut
     pub resources: &'a mut Resources,
+
+    #[cfg(feature = "net")]
+    pub net: &'a mut Net,
 }
 
 impl WindowContext {
@@ -116,6 +129,9 @@ impl WindowContext {
             renderer,
             packet,
             cameras,
+
+            #[cfg(feature = "net")]
+            net,
         } = self;
 
         (
@@ -127,6 +143,9 @@ impl WindowContext {
                 mixer,
                 assets,
                 resources,
+
+                #[cfg(feature = "net")]
+                net,
             },
             SceneHandle {
                 renderer: renderer,
@@ -147,6 +166,9 @@ impl WindowContext {
                 mixer: &mut self.mixer,
                 assets: &self.assets,
                 resources: &mut self.resources,
+
+                #[cfg(feature = "net")]
+                net: &mut self.net,
             },
             Draw::new(&mut self.packet, self.assets.read(), imgui),
         )

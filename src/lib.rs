@@ -7,6 +7,8 @@ pub use engine::SceneHandle;
 pub use engine::SceneManager;
 pub use engine::WindowBuilder;
 pub use engine::input;
+#[cfg(feature = "net")]
+pub use engine::net;
 // Re-export imgui
 pub use imgui;
 pub use logging;
@@ -22,6 +24,8 @@ pub mod render {
 
 pub mod prelude {
     pub use assets::*;
+    #[cfg(feature = "net")]
+    pub use engine::net::*;
     pub use engine::*;
     pub use input::*;
     pub use math::*;

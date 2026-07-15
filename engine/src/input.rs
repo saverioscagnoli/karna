@@ -15,6 +15,9 @@ pub struct Input {
     pub(crate) wheel_delta: Vector2<f32>,
     pub(crate) held_mouse_buttons: FastHashSet<MouseButton>,
     pub(crate) pressed_mouse_buttons: FastHashSet<MouseButton>,
+
+    // Text
+    pub(crate) text: String,
 }
 
 impl Input {
@@ -28,6 +31,7 @@ impl Input {
             wheel_delta: Vector2::zero(),
             held_mouse_buttons: FastHashSet::default(),
             pressed_mouse_buttons: FastHashSet::default(),
+            text: String::new(),
         }
     }
 

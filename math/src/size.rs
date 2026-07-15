@@ -1,7 +1,7 @@
 use std::fmt;
 
-use num::Float;
-use num::Num;
+use num_traits::Float;
+use num_traits::Num;
 use winit::dpi::PhysicalSize;
 
 use crate::Vector2;

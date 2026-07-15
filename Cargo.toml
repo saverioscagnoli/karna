@@ -33,3 +33,7 @@ gpu.workspace = true
 
 [dev-dependencies]
 log = "0.4.33"
+serde = { version = "1.0.228", features = ["derive"] }
+
+[features]
+net = ["engine/net", "math/serde"]

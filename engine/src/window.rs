@@ -48,6 +48,8 @@ impl Window {
         assets: AssetsReader,
         proxy: EventLoopProxy<UserEvent>,
     ) -> Self {
+        inner.set_ime_allowed(true);
+
         Self {
             inner: Arc::new(inner),
             assets,

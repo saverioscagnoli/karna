@@ -15,9 +15,13 @@ pub type SceneBuilder = Box<dyn FnOnce(ContextMut, &mut SceneHandle) -> Box<dyn 
 pub trait Scene: Send {
     fn load(&mut self, ctx: ContextMut, scene: &mut SceneHandle);
     fn loaded_with(&mut self, ctx: ContextMut, scene: &mut SceneHandle, user_data: Box<dyn Any>) {}
-    fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle);
     fn fixed_update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {}
+    fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle);
     fn draw(&mut self, ctx: ContextMut, draw: &mut Draw);
+
+    // Events
+    fn on_resize(&mut self, ctx: ContextMut, scene: &mut SceneHandle, size: math::Size<u32>) {}
+    fn on_text_input(&mut self, ctx: ContextMut, scene: &mut SceneHandle, text: &str) {}
 }
 
 enum Slot {

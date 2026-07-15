@@ -15,9 +15,9 @@ use std::slice::Iter;
 use std::slice::IterMut;
 use std::usize;
 
-use num::Float;
-use num::Num;
-use num::Signed;
+use num_traits::Float;
+use num_traits::Num;
+use num_traits::Signed;
 use utils::impl_deref_to_generic;
 
 use crate::point::Point2;
@@ -27,6 +27,60 @@ use crate::point::Point4;
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Vector<const N: usize, T: Num + Copy>([T; N]);
+
+#[cfg(feature = "serde")]
+mod vector_serde {
+    use core::fmt;
+    use core::marker::PhantomData;
+
+    use serde::de::Deserialize;
+    use serde::de::Deserializer;
+    use serde::de::SeqAccess;
+    use serde::de::Visitor;
+    use serde::de::{self};
+    use serde::ser::Serialize;
+    use serde::ser::SerializeTuple;
+    use serde::ser::Serializer;
+
+    use super::Vector;
+    use crate::Num;
+
+    impl<const N: usize, T: Num + Copy + Serialize> Serialize for Vector<N, T> {
+        fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+            let mut tup = s.serialize_tuple(N)?;
+            for e in &self.0 {
+                tup.serialize_element(e)?;
+            }
+            tup.end()
+        }
+    }
+
+    impl<'de, const N: usize, T: Num + Copy + Deserialize<'de>> Deserialize<'de> for Vector<N, T> {
+        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+            struct VecVisitor<const N: usize, T>(PhantomData<T>);
+
+            impl<'de, const N: usize, T: Num + Copy + Deserialize<'de>> Visitor<'de> for VecVisitor<N, T> {
+                type Value = Vector<N, T>;
+
+                fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    write!(f, "{N} numbers (vector)")
+                }
+
+                fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                    let mut arr = [T::zero(); N];
+                    for i in 0..N {
+                        arr[i] = seq
+                            .next_element()?
+                            .ok_or_else(|| de::Error::invalid_length(i, &self))?;
+                    }
+                    Ok(Vector(arr))
+                }
+            }
+
+            d.deserialize_tuple(N, VecVisitor(PhantomData))
+        }
+    }
+}
 
 pub type Vector2<T> = Vector<2, T>;
 pub type Vector3<T> = Vector<3, T>;
@@ -239,11 +293,11 @@ impl<const N: usize, T: Num + Copy> Vector<N, T> {
 
 impl<const N: usize, T: Num + Copy + PartialOrd> Vector<N, T> {
     pub fn clamp(&self, min: T, max: T) -> Self {
-        Self(self.0.map(|x| num::clamp(x, min, max)))
+        Self(self.0.map(|x| num_traits::clamp(x, min, max)))
     }
 
     pub fn clamp_mut(&mut self, min: T, max: T) {
-        self.0 = self.0.map(|x| num::clamp(x, min, max))
+        self.0 = self.0.map(|x| num_traits::clamp(x, min, max))
     }
 
     pub fn min(&self, other: &Self) -> Self {

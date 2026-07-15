@@ -1,8 +1,9 @@
 use assets::AssetsReader;
 use assets::Audio;
+use utils::Handle;
+
 #[cfg(not(target_arch = "wasm32"))]
 use rodio::DeviceSinkBuilder;
-use utils::Handle;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub struct Mixer {

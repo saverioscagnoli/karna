@@ -8,8 +8,12 @@ mod state;
 mod time;
 mod window;
 
+#[cfg(feature = "net")]
+pub mod net;
+
 use std::mem;
 use std::sync::Arc;
+
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;
 

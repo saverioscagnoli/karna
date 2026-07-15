@@ -11,6 +11,7 @@ use logging::warn;
 use renderer::Layer;
 use renderer::Renderer;
 use winit::event::DeviceEvent;
+use winit::event::Ime;
 use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent;
 use winit::keyboard::PhysicalKey;
@@ -138,6 +139,14 @@ impl WindowState {
                 self.pending_resize = Some(math::Size::new(size.width, size.height));
             }
 
+            WindowEvent::Ime(ime) => match ime {
+                Ime::Commit(text) => {
+                    self.context.input.text.push_str(text);
+                }
+
+                _ => {}
+            },
+
             WindowEvent::KeyboardInput {
                 event: key_event, ..
             } => match key_event.physical_key {
@@ -145,6 +154,13 @@ impl WindowState {
                     if key_event.state.is_pressed() {
                         if !key_event.repeat {
                             self.context.input.pressed_keys.insert(c);
+                        }
+
+                        if let Some(text) = key_event.text.as_deref() {
+                            self.context
+                                .input
+                                .text
+                                .extend(text.chars().filter(|c| !c.is_control()));
                         }
 
                         self.context.input.held_keys.insert(c);
@@ -311,8 +327,12 @@ impl WindowState {
     }
 
     fn flush(&mut self) {
+        #[cfg(feature = "net")]
+        self.context.net.flush();
+
         self.context.packet.clear();
         self.context.input.flush();
+
         self.drain_scene_commands();
     }
 
@@ -329,7 +349,21 @@ impl WindowState {
         let mut imgui = shared_imgui.active(window_id);
         let mut io = imgui.io_mut();
 
+        let text = std::mem::take(&mut self.context.input.text);
+
+        if !text.is_empty() {
+            for &i in &self.active {
+                let scene = self.scenes.get_mut(i);
+                let (ctx, mut s) = self.context.split_mut();
+
+                scene.on_text_input(ctx, &mut s, &text);
+            }
+        }
+
         self.drain_events(&mut io);
+
+        #[cfg(feature = "net")]
+        self.context.net.poll();
 
         if self.should_exit {
             return false;
