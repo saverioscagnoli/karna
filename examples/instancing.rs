@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use karna::prelude::*;
 
 const MAX_PARTICLES: usize = 512 * 1024;
@@ -77,6 +79,12 @@ impl Scene for ParticleDemo {
         });
     }
 
+    fn on_key_press(&mut self, ctx: ContextMut, scene: &mut SceneHandle, keys: &[Keycode]) {
+        if keys.contains(&Keycode::Escape) {
+            ctx.scenes.toggle_pause("particles");
+        }
+    }
+
     fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
         let dt = ctx.time.delta();
         let res = ctx.resources.get_mut::<Res>();
@@ -100,12 +108,7 @@ impl Scene for ParticleDemo {
             let vz = angle.sin() * radial;
             let vy = randf(&mut res.rng) * 0.5 + 2.0;
 
-            let mesh = Mesh {
-                geometry: res.geometry,
-                material,
-                transform: Transform::default(),
-                color: Color::White,
-            };
+            let mesh = Mesh::new(res.geometry, material);
 
             let handle = scene.add_mesh(mesh);
             res.particles.push(Particle {
@@ -138,6 +141,14 @@ impl Scene for ParticleDemo {
 }
 
 fn main() {
+    karna::logging::init(
+        karna::logging::Config {
+            min_level: karna::logging::LevelFilter::Debug,
+            ..Default::default()
+        }
+        .hide_wgpu(true),
+    )
+    .expect("Failed to init logging");
     App::builder()
         .with_window(
             WindowBuilder::new()

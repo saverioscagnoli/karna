@@ -1,7 +1,7 @@
 mod camera;
 mod color;
 mod immediate;
-mod layouts;
+pub mod layouts;
 mod mesh;
 mod retained;
 mod vertex;
@@ -26,6 +26,7 @@ use crate::immediate::imgui::ImguiPacket;
 use crate::immediate::imgui::ImguiRenderer;
 pub use crate::mesh::*;
 use crate::retained::RetainedRenderer;
+pub use crate::vertex::CircleVertex;
 pub use crate::vertex::Vertex;
 
 #[repr(usize)]
@@ -73,6 +74,7 @@ pub struct LayerPacket {
     pub points: Shape<Vertex>,
     pub lines: Shape<Vertex>,
     pub triangles: Shape<Vertex>,
+    pub circles: Shape<CircleVertex>,
 }
 
 impl LayerPacket {
@@ -80,6 +82,7 @@ impl LayerPacket {
         self.points.clear();
         self.lines.clear();
         self.triangles.clear();
+        self.circles.clear();
     }
 }
 
@@ -124,7 +127,7 @@ pub struct LayerGpu {
 }
 
 impl LayerGpu {
-    fn new(gpu: &GpuState, camera_layout: &wgpu::BindGroupLayout) -> Self {
+    fn new(gpu: &GpuState) -> Self {
         let camera_buffer = gpu::Buffer::new_with_capacity(
             "camera uniform buffer",
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
@@ -133,7 +136,7 @@ impl LayerGpu {
 
         let camera_bg = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("layer camera bind group"),
-            layout: camera_layout,
+            layout: layouts::camera(),
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: camera_buffer.wgpu().as_entire_binding(),
@@ -178,76 +181,16 @@ impl IndexMut<Layer> for WindowRenderData {
 }
 
 impl WindowRenderData {
-    fn new(gpu: &GpuState, layouts: &Layouts) -> Self {
+    fn new(gpu: &GpuState) -> Self {
         Self {
-            layers: array::from_fn(|_| LayerGpu::new(gpu, &layouts.camera)),
-            imgui: ImguiRenderer::new(gpu, &layouts.camera),
+            layers: array::from_fn(|_| LayerGpu::new(gpu)),
+            imgui: ImguiRenderer::new(gpu),
         }
-    }
-}
-
-pub struct Layouts {
-    pub texture_atlas: wgpu::BindGroupLayout,
-    pub camera: wgpu::BindGroupLayout,
-    pub material: wgpu::BindGroupLayout,
-}
-
-impl Layouts {
-    pub fn new(a: &wgpu::BindGroupLayout) -> Self {
-        let gpu = GpuState::get();
-        let camera_layout = gpu
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("camera layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
-
-        let material = gpu
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("material bind group layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
-
-        Self {
-            texture_atlas: a.clone(),
-            camera: camera_layout,
-            material,
-        }
-    }
-}
-
-impl Layouts {
-    const fn as_array(&self) -> [&wgpu::BindGroupLayout; 2] {
-        [&self.camera, &self.texture_atlas]
-    }
-
-    const fn as_mesh_array(&self) -> [&wgpu::BindGroupLayout; 3] {
-        [&self.camera, &self.texture_atlas, &self.material]
     }
 }
 
 pub struct Renderer {
     pipelines: Arc<gpu::PipelineCache>,
-    pub layouts: Arc<Layouts>,
     pub data: WindowRenderData,
     pub assets: AssetsReader,
 
@@ -258,15 +201,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(
-        pipelines: Arc<gpu::PipelineCache>,
-        layouts: Arc<Layouts>,
-        assets: AssetsReader,
-    ) -> Self {
+    pub fn new(pipelines: Arc<gpu::PipelineCache>, assets: AssetsReader) -> Self {
         Self {
             pipelines,
-            data: WindowRenderData::new(GpuState::get(), &layouts),
-            layouts,
+            data: WindowRenderData::new(GpuState::get()),
             assets,
             geometries: SlotMap::new(),
             materials: SlotMap::new(),
@@ -378,7 +316,6 @@ impl Renderer {
                         fb,
                         &mut pass,
                         &self.pipelines,
-                        &self.layouts,
                         view_format,
                         assets,
                     );
@@ -394,7 +331,6 @@ impl Renderer {
                     &self.materials,
                     &mut pass,
                     &self.pipelines,
-                    &self.layouts,
                     view_format,
                 );
 
@@ -402,9 +338,9 @@ impl Renderer {
                     &layer_packet.points,
                     &layer_packet.lines,
                     &layer_packet.triangles,
+                    &layer_packet.circles,
                     &mut pass,
                     &self.pipelines,
-                    &self.layouts,
                     view_format,
                     assets,
                 );

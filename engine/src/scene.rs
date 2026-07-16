@@ -4,6 +4,7 @@ use std::mem;
 
 use logging::warn;
 use utils::FastHashMap;
+use winit::keyboard::KeyCode;
 
 use crate::context::ContextMut;
 use crate::context::Draw;
@@ -21,6 +22,7 @@ pub trait Scene: Send {
 
     // Events
     fn on_resize(&mut self, ctx: ContextMut, scene: &mut SceneHandle, size: math::Size<u32>) {}
+    fn on_key_press(&mut self, ctx: ContextMut, scene: &mut SceneHandle, keys: &[KeyCode]) {}
     fn on_text_input(&mut self, ctx: ContextMut, scene: &mut SceneHandle, text: &str) {}
 }
 
@@ -122,6 +124,20 @@ pub enum SceneCommand {
     Deactivate {
         label: String,
     },
+    Pause {
+        label: String,
+    },
+    Resume {
+        label: String,
+    },
+    TogglePause {
+        label: String,
+    },
+}
+
+pub struct ActiveScene {
+    pub index: usize,
+    pub paused: bool,
 }
 
 pub struct SceneManager {
@@ -156,6 +172,33 @@ impl SceneManager {
 
     pub fn deactivate<L: Into<String>>(&mut self, label: L) {
         self.buffer.push(SceneCommand::Deactivate {
+            label: label.into(),
+        })
+    }
+
+    pub fn pause<L>(&mut self, label: L)
+    where
+        L: Into<String>,
+    {
+        self.buffer.push(SceneCommand::Pause {
+            label: label.into(),
+        });
+    }
+
+    pub fn resume<L>(&mut self, label: L)
+    where
+        L: Into<String>,
+    {
+        self.buffer.push(SceneCommand::Resume {
+            label: label.into(),
+        });
+    }
+
+    pub fn toggle_pause<L>(&mut self, label: L)
+    where
+        L: Into<String>,
+    {
+        self.buffer.push(SceneCommand::TogglePause {
             label: label.into(),
         })
     }

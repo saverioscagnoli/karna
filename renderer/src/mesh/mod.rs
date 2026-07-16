@@ -16,25 +16,42 @@ pub use crate::mesh::material::MaterialKind;
 pub use crate::mesh::material::Topology;
 pub use crate::mesh::transform::Transform;
 
-const INSTANCE_ATTRS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
-    3 => Float32x4,
-    4 => Float32x4,
-    5 => Float32x4,
-    6 => Float32x4,
-    7 => Float32x4,
-];
-
-const INSTANCE_LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
-    array_stride: 80,
-    step_mode: wgpu::VertexStepMode::Instance,
-    attributes: &INSTANCE_ATTRS,
-};
-
+#[derive(Default)]
 pub struct Mesh {
-    pub geometry: Handle<Geometry>,
-    pub material: Handle<Material>,
+    pub(crate) geometry: Handle<Geometry>,
+    pub(crate) material: Handle<Material>,
+
+    // Only valid for mesh instances
     pub transform: Transform,
-    pub color: Color,
+    pub tint: Color,
+}
+
+impl Mesh {
+    pub fn new(geometry: Handle<Geometry>, material: Handle<Material>) -> Self {
+        Self {
+            geometry,
+            material,
+            ..Default::default()
+        }
+    }
+
+    pub fn with_transform(mut self, t: Transform) -> Self {
+        self.transform = t;
+        self
+    }
+
+    pub fn with_tint(mut self, c: Color) -> Self {
+        self.tint = c;
+        self
+    }
+
+    pub fn geometry(&self) -> Handle<Geometry> {
+        self.geometry
+    }
+
+    pub fn material(&self) -> Handle<Material> {
+        self.material
+    }
 }
 
 impl Deref for Mesh {
@@ -44,8 +61,16 @@ impl Deref for Mesh {
         &self.transform
     }
 }
+
 impl DerefMut for Mesh {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.transform
     }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct MeshInstanceData {
+    pub model: [[f32; 4]; 4],
+    pub tint: [f32; 4],
 }

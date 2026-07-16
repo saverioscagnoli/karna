@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 use parking_lot::RwLockReadGuard;
-use parking_lot::RwLockWriteGuard;
 use utils::Handle;
 
 pub use crate::audio::Audio;
@@ -30,8 +29,8 @@ pub struct AssetServer {
 }
 
 impl AssetServer {
-    pub fn new() -> Self {
-        let mut atlas = TextureAtlas::new((1024, 1024));
+    pub fn new(atlas_layouts: &wgpu::BindGroupLayout) -> Self {
+        let mut atlas = TextureAtlas::new((1024, 1024), atlas_layouts);
         let font_atlas = FontAtlas::new(&mut atlas);
 
         Self {
@@ -53,10 +52,6 @@ impl AssetServer {
         AssetsRead {
             lock: self.assets.read(),
         }
-    }
-
-    pub fn write(&self) -> RwLockWriteGuard<'_, Assets> {
-        self.assets.write()
     }
 
     pub fn write_scope<F, R>(&self, f: F) -> R
@@ -101,10 +96,6 @@ impl<'a> AssetsRead<'a> {
     // the need to lock the asset server each time
     //
     // see `Layouts` in `renderer`
-
-    pub fn atlas_bgl(&self) -> &wgpu::BindGroupLayout {
-        &self.lock.textures.bgl
-    }
 
     pub fn atlas_bg(&self) -> &wgpu::BindGroup {
         &self.lock.textures.texture.bind_group

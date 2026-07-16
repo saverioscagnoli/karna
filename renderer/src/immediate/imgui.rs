@@ -3,10 +3,11 @@ use gpu::GpuState;
 use imgui::ImguiCmd;
 
 use crate::Camera;
-use crate::Layouts;
 use crate::Projection;
 use crate::camera::CameraData;
 use crate::immediate::batcher::Batcher;
+use crate::layouts;
+use crate::layouts::LayoutDesc;
 use crate::vertex::Vertex;
 
 #[derive(Default)]
@@ -84,7 +85,7 @@ pub struct ImguiRenderer {
 }
 
 impl ImguiRenderer {
-    pub(crate) fn new(gpu: &GpuState, camera_layout: &wgpu::BindGroupLayout) -> Self {
+    pub(crate) fn new(gpu: &GpuState) -> Self {
         let camera_buffer = gpu::Buffer::new_with_capacity(
             "imgui camera uniform buffer",
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
@@ -93,7 +94,7 @@ impl ImguiRenderer {
 
         let camera_bg = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("imgui camera bind group"),
-            layout: camera_layout,
+            layout: layouts::camera(),
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: camera_buffer.wgpu().as_entire_binding(),
@@ -117,7 +118,6 @@ impl ImguiRenderer {
         viewport: math::Size<u32>,
         pass: &mut wgpu::RenderPass<'rp>,
         pipelines: &gpu::PipelineCache,
-        layouts: &Layouts,
         format: wgpu::TextureFormat,
         assets: AssetsRead<'rp>,
     ) {
@@ -143,12 +143,12 @@ impl ImguiRenderer {
             cull: None,
         };
 
-        let pipeline = pipelines.get_or_create(desc, format, &layouts.as_array());
+        let pipeline = pipelines.get_or_create(desc, format, &layouts::immediate());
 
         pass.set_bind_group(0, &self.camera_bg, &[]);
         pass.set_bind_group(1, assets.atlas_bg(), &[]);
 
-        self.batcher.bind(pass, &pipeline);
+        self.batcher.bind(pass, Some(&pipeline));
 
         let (fw, fh) = (viewport.width, viewport.height);
         let [dx, dy] = packet.display_pos;

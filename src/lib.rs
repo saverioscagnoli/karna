@@ -28,6 +28,7 @@ pub mod prelude {
     pub use input::*;
     pub use math::*;
     pub use render::*;
+    pub use ui::*;
 
     pub use crate::*;
 }

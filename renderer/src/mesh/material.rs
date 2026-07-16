@@ -2,8 +2,10 @@ use assets::AssetsRead;
 use assets::Image;
 use utils::Handle;
 
-use crate::mesh::INSTANCE_LAYOUT;
-use crate::vertex::Vertex;
+use crate::MeshInstanceData;
+use crate::Vertex;
+use crate::layouts;
+use crate::layouts::LayoutDesc;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Blend {
@@ -87,11 +89,7 @@ impl MaterialKind {
 }
 
 impl Material {
-    pub fn new(
-        desc: MaterialDesc,
-        assets: &AssetsRead,
-        material_bgl: &wgpu::BindGroupLayout,
-    ) -> Self {
+    pub fn new(desc: MaterialDesc, assets: &AssetsRead) -> Self {
         let image = assets.get_image(desc.base_color_texture.unwrap_or(assets.white_handle()));
 
         let uniforms = MaterialUniforms {
@@ -112,7 +110,7 @@ impl Material {
         let gpu = gpu::GpuState::get();
         let uniform_bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("material uniform bind group"),
-            layout: material_bgl,
+            layout: layouts::material(),
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: uniform_buffer.wgpu().as_entire_binding(),
@@ -125,7 +123,7 @@ impl Material {
                 vertex_layout: Vertex::desc(),
                 blend: desc.blend.to_wgpu(),
                 topology: desc.topology.to_wgpu(),
-                instance_layout: Some(INSTANCE_LAYOUT),
+                instance_layout: Some(MeshInstanceData::desc()),
                 depth: desc.blend.depth_mode(),
                 cull: Some(wgpu::Face::Back),
             },
@@ -140,9 +138,6 @@ impl Material {
     }
 
     pub fn set_base_color(&mut self, color: math::Vector4<f32>) {
-        // Rewrite just the uniform buffer. Assumes you store the
-        // current uniforms so you can re-upload the whole struct.
-        // Simplest: keep a cached copy of MaterialUniforms.
         self.uniforms.base_color = color.into();
         self.uniform_buffer.write(0, &[self.uniforms]);
     }

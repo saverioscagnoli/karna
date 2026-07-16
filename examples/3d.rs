@@ -122,12 +122,7 @@ impl Scene for S {
 
         self.geometry = scene.add_geometry(Geometry::new(&self.verts, &self.indices));
         let mat = scene.add_material(MaterialDesc::default().color(Color::Cyan));
-
-        let mesh = Mesh {
-            geometry: self.geometry,
-            material: mat,
-            transform: Transform::default(),
-        };
+        let mesh = Mesh::new(self.geometry, mat);
 
         self.mesh = scene.add_mesh(mesh);
 

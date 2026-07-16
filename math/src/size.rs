@@ -52,6 +52,16 @@ impl<T: Num + Copy> Size<T> {
         self.width >= other.width && self.height >= other.height
     }
 
+    pub fn contains_point(&self, size_pos: Vector2<T>, p: Vector2<T>) -> bool
+    where
+        T: PartialOrd + Copy + std::ops::Add<Output = T>,
+    {
+        p.x >= size_pos.x
+            && p.x < size_pos.x + self.width
+            && p.y >= size_pos.y
+            && p.y < size_pos.y + self.height
+    }
+
     pub fn is_zero(&self) -> bool {
         self.width == T::zero() && self.height == T::zero()
     }

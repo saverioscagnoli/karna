@@ -21,11 +21,7 @@ impl Scene for CubeDemo {
         let geometry = scene.add_geometry(Geometry::cube_sized(3.0));
         let material = scene.add_material(MaterialDesc::default().color(Color::Cyan));
 
-        let mut mesh = Mesh {
-            geometry,
-            material,
-            transform: Transform::default(),
-        };
+        let mut mesh = Mesh::new(geometry, material);
 
         // The default camera sits at (0, 0, -5) looking toward +z,
         let pos = Vector3::new(0.0, 0.0, 5.0);

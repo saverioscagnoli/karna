@@ -6,6 +6,7 @@ mod resources;
 mod scene;
 mod state;
 mod time;
+pub mod ui;
 mod window;
 
 #[cfg(feature = "net")]
@@ -27,8 +28,8 @@ use logging::error;
 use logging::info;
 use logging::trace;
 use logging::warn;
-use renderer::Layouts;
 use renderer::Renderer;
+use renderer::layouts;
 use utils::FastHashMap;
 use utils::Handle;
 use utils::Lazy;
@@ -66,6 +67,7 @@ pub enum AppEvent {
 #[derive(Debug)]
 pub enum UserEvent {
     SpawnWindow(WindowBuilder),
+    CloseWindow(WindowId),
     SetCustomCursor(Arc<WinitWindow>, Handle<Image>, math::Vector2<u16>),
 }
 
@@ -88,7 +90,6 @@ fn load_builtin_shaders(shaders: &mut gpu::ShaderStore, d: &gpu::wgpu::Device) {
 /// completed, because gpu initialization must be awaited there.
 struct AppShared {
     pipelines: Arc<gpu::PipelineCache>,
-    layouts: Arc<Layouts>,
     assets: AssetServer,
     imgui: SharedImgui,
 }
@@ -107,19 +108,16 @@ impl AppShared {
             info.name, info.device_type, info.backend, info.driver_info
         );
 
-        let assets = AssetServer::new();
-        let layouts = {
-            let r = assets.read();
-            Arc::new(Layouts::new(r.atlas_bgl()))
-        };
+        layouts::init();
+        debug!("Initialized bind group layouts");
 
+        let assets = AssetServer::new(layouts::texture_atlas());
         let imgui = SharedImgui::new();
 
         debug!("Initialized shared imgui context");
 
         Self {
             pipelines: Arc::new(gpu::PipelineCache::new()),
-            layouts,
             assets,
             imgui,
         }
@@ -208,13 +206,12 @@ impl App {
         let surface = WindowSurface::create(gpu, window.winit(), window.size());
 
         let pipelines = self.shared.pipelines.clone();
-        let layouts = self.shared.layouts.clone();
         let window_arc = window.clone();
         let assets = self.shared.assets.clone();
         let imgui = self.shared.imgui.clone();
 
         let thread = thread::spawn(move || {
-            let renderer = Renderer::new(pipelines, layouts, assets.reader());
+            let renderer = Renderer::new(pipelines, assets.reader());
             let state = WindowState::new(
                 window,
                 renderer,
@@ -273,11 +270,7 @@ impl App {
 
         let surface = WindowSurface::create(gpu, window.winit(), size);
 
-        let renderer = Renderer::new(
-            self.shared.pipelines.clone(),
-            self.shared.layouts.clone(),
-            self.shared.assets.reader(),
-        );
+        let renderer = Renderer::new(self.shared.pipelines.clone(), self.shared.assets.reader());
 
         let state = WindowState::new(
             window.clone(),
@@ -364,6 +357,20 @@ impl ApplicationHandler<UserEvent> for App {
 
         match event {
             UserEvent::SpawnWindow(b) => self.create_window(event_loop, b),
+            UserEvent::CloseWindow(w) => {
+                if let Some(handle) = self.windows.remove(&w) {
+                    let _ = handle
+                        .event_tx
+                        .send(AppEvent::Window(WindowEvent::CloseRequested));
+
+                    #[cfg(not(target_arch = "wasm32"))]
+                    handle.thread.join().expect("window thread panicked");
+                }
+
+                if self.windows.is_empty() {
+                    event_loop.exit();
+                }
+            }
 
             UserEvent::SetCustomCursor(window, image, hotspot) => {
                 let assets = self.shared.assets.read();

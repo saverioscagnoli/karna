@@ -4,27 +4,21 @@ use utils::Handle;
 use utils::SlotMap;
 
 use crate::Geometry;
-use crate::Layouts;
 use crate::Material;
 use crate::Mesh;
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct InstanceData {
-    model: [[f32; 4]; 4],
-    color: [f32; 4],
-}
+use crate::MeshInstanceData;
+use crate::layouts;
 
 struct DrawItem {
     material: Handle<Material>,
     geometry: Handle<Geometry>,
     matrix: math::Matrix4<f32>,
-    color: [f32; 4],
+    tint: [f32; 4],
 }
 
 pub struct RetainedRenderer {
     pub meshes: SlotMap<Mesh>,
-    instances: gpu::Buffer<InstanceData>,
+    instances: gpu::Buffer<MeshInstanceData>,
 }
 
 impl RetainedRenderer {
@@ -45,11 +39,10 @@ impl RetainedRenderer {
         materials: &'rp SlotMap<Material>,
         pass: &mut wgpu::RenderPass<'rp>,
         pipelines: &gpu::PipelineCache,
-        layouts: &Layouts,
         format: wgpu::TextureFormat,
     ) {
-        // 1. Collect draws, resolving handles up front so stale meshes
-        //    never occupy an instance slot (keeps indices contiguous).
+        // Collect draws, resolving handles up front so stale meshes
+        // never occupy an instance slot (keeps indices contiguous).
         let mut draws: Vec<DrawItem> = self
             .meshes
             .values()
@@ -58,9 +51,7 @@ impl RetainedRenderer {
                 material: m.material,
                 geometry: m.geometry,
                 matrix: m.transform.matrix(),
-                // Linearize here: the shader multiplies instance color
-                // directly, in linear space, without decoding it.
-                color: m.color.to_linear_array(),
+                tint: m.tint.to_linear_array(),
             })
             .collect();
 
@@ -68,28 +59,27 @@ impl RetainedRenderer {
             return;
         }
 
-        // 2. Bucket: material first (pipeline + bind group cost),
-        //    geometry second (vertex/index buffer cost).
         draws.sort_unstable_by_key(|item| (item.material, item.geometry));
 
-        // 3. Upload matrices in bucketed order.
-        let instance_data: Vec<InstanceData> = draws
+        let instance_data: Vec<MeshInstanceData> = draws
             .iter()
-            .map(|item| InstanceData {
+            .map(|item| MeshInstanceData {
                 model: item.matrix.as_array(),
-                color: item.color,
+                tint: item.tint,
             })
             .collect();
+
         self.instances.write_all(&instance_data);
 
-        // 4. Walk runs of identical (material, geometry) and emit one
-        //    draw per run.
-        let stride = mem::size_of::<InstanceData>() as u64;
+        let stride = mem::size_of::<MeshInstanceData>() as u64;
+
         let mut start = 0;
+
         while start < draws.len() {
             let mat_h = draws[start].material;
             let geo_h = draws[start].geometry;
             let mut end = start + 1;
+
             while end < draws.len() && draws[end].material == mat_h && draws[end].geometry == geo_h
             {
                 end += 1;
@@ -101,7 +91,7 @@ impl RetainedRenderer {
             let pipeline = pipelines.get_or_create(
                 material.pipeline_desc.clone(),
                 format,
-                &layouts.as_mesh_array(),
+                &layouts::retained(),
             );
 
             pass.set_pipeline(&pipeline);
@@ -110,7 +100,6 @@ impl RetainedRenderer {
             pass.set_vertex_buffer(
                 1,
                 self.instances
-                    .wgpu()
                     .slice(start as u64 * stride..end as u64 * stride),
             );
             pass.set_index_buffer(

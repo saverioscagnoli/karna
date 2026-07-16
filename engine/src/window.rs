@@ -9,6 +9,7 @@ use logging::error;
 use utils::Handle;
 use winit::event_loop::EventLoopProxy;
 use winit::window::CursorGrabMode;
+use winit::window::Fullscreen;
 use winit::window::Icon;
 use winit::window::WindowId;
 
@@ -77,12 +78,55 @@ impl Window {
         }
     }
 
+    pub fn close(&self) {
+        if let Err(e) = self.proxy.send_event(UserEvent::CloseWindow(self.id())) {
+            error!("Failed to send user event: {}", e);
+        }
+    }
+
     pub fn title(&self) -> String {
         self.inner.title()
     }
 
     pub fn size(&self) -> math::Size<u32> {
         self.inner.inner_size().into()
+    }
+
+    pub fn fullscreen(&self) -> bool {
+        matches!(self.inner.fullscreen(), Some(Fullscreen::Exclusive(_)))
+    }
+
+    pub fn set_fullscreen(&self, fullscreen: bool) {
+        if fullscreen
+            && let Some(monitor) = self.inner.current_monitor()
+            && let Some(video_mode) = monitor.video_modes().collect::<Vec<_>>().first().cloned()
+        {
+            self.inner
+                .set_fullscreen(Some(Fullscreen::Exclusive(video_mode)));
+        } else {
+            self.inner.set_fullscreen(None);
+        }
+    }
+
+    pub fn toggle_fullscreen(&self) {
+        if self.fullscreen() {
+            self.set_fullscreen(false);
+        } else {
+            self.set_fullscreen(true);
+        }
+    }
+
+    pub fn borderless(&self) -> bool {
+        matches!(self.inner.fullscreen(), Some(Fullscreen::Borderless(_)))
+    }
+
+    pub fn set_borderless(&self, borderless: bool) {
+        if borderless {
+            self.inner
+                .set_fullscreen(Some(Fullscreen::Borderless(None)));
+        } else {
+            self.inner.set_fullscreen(None);
+        }
     }
 
     pub fn set_icon(&self, image: Handle<Image>) {

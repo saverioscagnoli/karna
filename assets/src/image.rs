@@ -13,7 +13,6 @@ pub struct Image {
 
 pub struct TextureAtlas {
     pub(super) size: math::Size<u32>,
-    pub(super) bgl: wgpu::BindGroupLayout,
     pub(super) texture: gpu::Texture,
     packer: rect_packer::DensePacker,
     pub(super) images: SlotMap<Image>,
@@ -23,37 +22,13 @@ pub struct TextureAtlas {
 }
 
 impl TextureAtlas {
-    pub fn new<S: Into<math::Size<u32>>>(size: S) -> Self {
+    pub fn new<S: Into<math::Size<u32>>>(size: S, atlas_layout: &wgpu::BindGroupLayout) -> Self {
         let size: math::Size<u32> = size.into();
         let gpu = GpuState::get();
 
-        let bgl = gpu
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("texture atlas bind group layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
-
         let mut images = SlotMap::new();
         let mut packer = rect_packer::DensePacker::new(size.width as i32, size.height as i32);
-        let texture = gpu::Texture::new_empty("texture atlas", size, &bgl, &gpu.device);
+        let texture = gpu::Texture::new_empty("texture atlas", size, atlas_layout, &gpu.device);
 
         let white_region = packer.pack(1, 1, false).expect("Failed to pack");
         let white_handle = images.insert(Image {
@@ -96,7 +71,6 @@ impl TextureAtlas {
 
         Self {
             size,
-            bgl,
             texture,
             packer,
             images,

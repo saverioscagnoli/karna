@@ -8,6 +8,7 @@ use assets::Image;
 use glyph_brush_layout::GlyphPositioner;
 use logging::warn;
 use renderer::Camera;
+use renderer::CircleVertex;
 use renderer::Color;
 use renderer::FramePacket;
 use renderer::Geometry;
@@ -233,6 +234,10 @@ impl<'a> Draw<'a> {
         }
     }
 
+    pub fn viewport(&self) -> math::Size<u32> {
+        self.packet.viewport
+    }
+
     pub fn set_layer(&mut self, layer: Layer) {
         self.active_layer = layer;
     }
@@ -284,12 +289,27 @@ impl<'a> Draw<'a> {
             .matmul(&math::Matrix4::from_scale(math::Vector3::new(x, y, 1.0)));
     }
 
-    fn vertex(&self, x: f32, y: f32, uv: math::Vector2<f32>) -> Vertex {
-        let s = &self.current_state;
-        let t = s.transform.mul_vec(&math::Vector4::new(x, y, 0.0, 1.0));
-        let pos = math::Vector3::new(t.x, t.y, s.depth);
+    pub fn tp(&self, x: f32, y: f32) -> math::Vector3<f32> {
+        let pos = math::Vector4::new(x, y, 0.0, 1.0);
+        let t = self.current_state.transform.mul_vec(&pos);
 
-        Vertex::new(pos, s.draw_color, uv)
+        math::Vector3::new(t.x, t.y, self.current_state.depth)
+    }
+
+    fn vertex(&self, x: f32, y: f32, uv: math::Vector2<f32>) -> Vertex {
+        let p = self.tp(x, y);
+        Vertex::new(p, self.current_state.draw_color, uv)
+    }
+
+    fn circle_vertex(&self, x: f32, y: f32, center: math::Vector2<f32>, r: f32) -> CircleVertex {
+        let p = self.tp(x, y);
+        let c = self.tp(center.x, center.y);
+        CircleVertex::new(
+            p,
+            self.current_state.draw_color,
+            math::Vector2::new(c.x, c.y),
+            r,
+        )
     }
 
     // ---- primitives ----
@@ -358,6 +378,31 @@ impl<'a> Draw<'a> {
         let size: math::Size<f32> = size.into();
 
         self.rect(pos.x, pos.y, size.width, size.height);
+    }
+
+    pub fn circle(&mut self, x: f32, y: f32, r: f32) {
+        let c = math::Vector2::new(x, y);
+
+        let v = [
+            self.circle_vertex(x - r, y - r, c, r), // top-left
+            self.circle_vertex(x + r, y - r, c, r), // top-right
+            self.circle_vertex(x - r, y + r, c, r), // bottom-left
+            self.circle_vertex(x + r, y + r, c, r), // bottom-right
+        ];
+
+        self.packet
+            .layer_mut(self.active_layer)
+            .circles
+            .push(&v, &[0, 1, 2, 2, 1, 3]);
+    }
+
+    pub fn circle_v<P>(&mut self, pos: P, r: f32)
+    where
+        P: Into<math::Vector2<f32>>,
+    {
+        let pos: math::Vector2<f32> = pos.into();
+
+        self.circle(pos.x, pos.y, r);
     }
 
     pub fn image(&mut self, image: Handle<Image>, x: f32, y: f32) {
@@ -461,6 +506,53 @@ impl<'a> Draw<'a> {
         self.text(debug_font, text, x, y);
     }
 
+    pub fn measure_text<T>(&self, font: Handle<Font>, text: T) -> math::Size<f32>
+    where
+        T: AsRef<str>,
+    {
+        use glyph_brush_layout::ab_glyph::Font as _;
+        use glyph_brush_layout::ab_glyph::ScaleFont as _;
+
+        let text = text.as_ref();
+        let font_asset = self.assets.get_font(font);
+        let scale = glyph_brush_layout::ab_glyph::PxScale::from(font_asset.size() as f32);
+
+        let scaled = font_asset.inner().as_scaled(scale);
+        let line_height = scaled.ascent() - scaled.descent() + scaled.line_gap();
+
+        if text.is_empty() {
+            return math::Size::new(0.0, line_height);
+        }
+
+        let geometry = glyph_brush_layout::SectionGeometry {
+            screen_position: (0.0, 0.0),
+            bounds: (f32::INFINITY, f32::INFINITY),
+        };
+
+        let sections = &[glyph_brush_layout::SectionText {
+            text,
+            scale,
+            font_id: glyph_brush_layout::FontId(0),
+        }];
+
+        let fonts = [font_asset.inner()];
+        let glyphs = glyph_brush_layout::Layout::default_wrap()
+            .calculate_glyphs(&fonts, &geometry, sections);
+
+        let width = glyphs
+            .iter()
+            .map(|sg| sg.glyph.position.x + scaled.h_advance(sg.glyph.id))
+            .fold(0.0f32, f32::max);
+
+        let height = glyphs
+            .iter()
+            .map(|sg| sg.glyph.position.y)
+            .fold(0.0f32, f32::max)
+            - scaled.descent();
+
+        math::Size::new(width, height)
+    }
+
     pub fn imgui<F>(&mut self, mut f: F)
     where
         F: FnMut(&imgui::Ui),
@@ -511,11 +603,9 @@ impl<'a> SceneHandle<'a> {
     }
 
     pub fn add_material(&mut self, desc: MaterialDesc) -> Handle<Material> {
-        self.renderer.materials.insert(Material::new(
-            desc,
-            &self.renderer.assets.read(),
-            &self.renderer.layouts.material,
-        ))
+        self.renderer
+            .materials
+            .insert(Material::new(desc, &self.renderer.assets.read()))
     }
 
     pub fn get_material(&self, handle: Handle<Material>) -> &Material {

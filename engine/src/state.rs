@@ -14,11 +14,13 @@ use winit::event::DeviceEvent;
 use winit::event::Ime;
 use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent;
+use winit::keyboard::KeyCode;
 use winit::keyboard::PhysicalKey;
 
 use crate::AppEvent;
 use crate::Scene;
 use crate::context::WindowContext;
+use crate::scene::ActiveScene;
 use crate::scene::SceneCommand;
 use crate::scene::Scenes;
 use crate::window::Window;
@@ -31,7 +33,7 @@ pub struct WindowState {
     pending_resize: Option<math::Size<u32>>,
 
     scenes: Scenes,
-    active: Vec<usize>,
+    active: Vec<ActiveScene>,
 
     imgui: SharedImgui,
     imgui_font_uv: math::Vector4<f32>,
@@ -97,28 +99,27 @@ impl WindowState {
             return;
         };
 
-        if self.active.contains(&i) {
+        if self.active.iter().any(|s| s.index == i) {
             return;
         }
 
-        {
-            let (ctx, mut s) = self.context.split_mut();
-            self.scenes.build(i, ctx, &mut s);
-        }
+        let (ctx, mut s) = self.context.split_mut();
+        self.scenes.build(i, ctx, &mut s);
 
         let scene = self.scenes.get_mut(i);
 
-        {
-            let (ctx, mut s) = self.context.split_mut();
-            scene.load(ctx, &mut s);
-        }
+        let (ctx, mut s) = self.context.split_mut();
+        scene.load(ctx, &mut s);
 
         if let Some(user_data) = user_data {
             let (ctx, mut s) = self.context.split_mut();
             scene.loaded_with(ctx, &mut s, user_data);
         }
 
-        self.active.push(i);
+        self.active.push(ActiveScene {
+            index: i,
+            paused: false,
+        });
     }
 
     fn deactivate_scene(&mut self, label: &str) {
@@ -126,7 +127,37 @@ impl WindowState {
             return;
         };
 
-        self.active.retain(|&a| a != i);
+        self.active.retain(|s| s.index != i);
+    }
+
+    fn pause_scene(&mut self, label: &str) {
+        let Some(i) = self.scenes.index_of(label) else {
+            return;
+        };
+
+        if let Some(s) = self.active.iter_mut().find(|s| s.index == i) {
+            s.paused = true;
+        }
+    }
+
+    fn resume_scene(&mut self, label: &str) {
+        let Some(i) = self.scenes.index_of(label) else {
+            return;
+        };
+
+        if let Some(s) = self.active.iter_mut().find(|s| s.index == i) {
+            s.paused = false;
+        }
+    }
+
+    fn toggle_pause_scene(&mut self, label: &str) {
+        let Some(i) = self.scenes.index_of(label) else {
+            return;
+        };
+
+        if let Some(s) = self.active.iter_mut().find(|s| s.index == i) {
+            s.paused = !s.paused;
+        }
     }
 
     fn handle_window_event(&mut self, event: &WindowEvent) {
@@ -290,31 +321,34 @@ impl WindowState {
                     self.activate_scene(label, user_data)
                 }
                 SceneCommand::Deactivate { label } => self.deactivate_scene(&label),
+                SceneCommand::Pause { label } => self.pause_scene(&label),
+                SceneCommand::Resume { label } => self.resume_scene(&label),
+                SceneCommand::TogglePause { label } => self.toggle_pause_scene(&label),
             }
         }
     }
 
     fn frame(&mut self, imgui: &imgui::Ui) {
         while let Some(tick_start) = self.context.time.next_tick() {
-            for &i in &self.active {
-                let scene = self.scenes.get_mut(i);
-                let (ctx, mut s) = self.context.split_mut();
+            for s in self.active.iter().filter(|s| !s.paused) {
+                let scene = self.scenes.get_mut(s.index);
+                let (ctx, mut handle) = self.context.split_mut();
 
-                scene.fixed_update(ctx, &mut s);
+                scene.fixed_update(ctx, &mut handle);
             }
 
             self.context.time.do_tick(tick_start);
         }
 
-        for &i in &self.active {
-            let scene = self.scenes.get_mut(i);
-            let (ctx, mut s) = self.context.split_mut();
+        for s in self.active.iter().filter(|s| !s.paused) {
+            let scene = self.scenes.get_mut(s.index);
+            let (ctx, mut handle) = self.context.split_mut();
 
-            scene.update(ctx, &mut s);
+            scene.update(ctx, &mut handle);
         }
 
-        for &i in &self.active {
-            let scene = self.scenes.get_mut(i);
+        for s in &self.active {
+            let scene = self.scenes.get_mut(s.index);
             let (ctx, mut d) = self.context.split(imgui);
 
             scene.draw(ctx, &mut d);
@@ -352,15 +386,26 @@ impl WindowState {
         let text = std::mem::take(&mut self.context.input.text);
 
         if !text.is_empty() {
-            for &i in &self.active {
-                let scene = self.scenes.get_mut(i);
-                let (ctx, mut s) = self.context.split_mut();
+            for s in &self.active {
+                let scene = self.scenes.get_mut(s.index);
+                let (ctx, mut handle) = self.context.split_mut();
 
-                scene.on_text_input(ctx, &mut s, &text);
+                scene.on_text_input(ctx, &mut handle, &text);
             }
         }
 
         self.drain_events(&mut io);
+
+        let pressed: Vec<KeyCode> = self.context.input.pressed_keys.iter().copied().collect();
+
+        if !pressed.is_empty() {
+            for s in &self.active {
+                let scene = self.scenes.get_mut(s.index);
+                let (ctx, mut handle) = self.context.split_mut();
+
+                scene.on_key_press(ctx, &mut handle, &pressed);
+            }
+        }
 
         #[cfg(feature = "net")]
         self.context.net.poll();
@@ -376,10 +421,11 @@ impl WindowState {
             self.context.cameras[Layer::Ui].update(size);
             self.context.cameras[Layer::Debug].update(size);
 
-            for &i in &self.active {
-                let scene = self.scenes.get_mut(i);
-                let (ctx, mut s) = self.context.split_mut();
-                scene.on_resize(ctx, &mut s, size);
+            for s in &self.active {
+                let scene = self.scenes.get_mut(s.index);
+                let (ctx, mut handle) = self.context.split_mut();
+
+                scene.on_resize(ctx, &mut handle, size);
             }
 
             debug!("Resized window to {:?}", size);

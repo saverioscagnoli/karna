@@ -86,6 +86,10 @@ impl Scene for S {
             }
         }
 
+        draw.set_color(Color::Red);
+        draw.circle(300.0, 300.0, 50.0);
+
+        draw.set_color(Color::White);
         draw.image(self.image, 800.0, 300.0);
 
         draw.set_color(Color::White);
