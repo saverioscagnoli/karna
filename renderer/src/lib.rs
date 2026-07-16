@@ -1,8 +1,10 @@
 mod camera;
 mod color;
 mod immediate;
+mod layouts;
 mod mesh;
 mod retained;
+mod vertex;
 
 use std::array;
 use std::ops::Index;
@@ -11,8 +13,6 @@ use std::sync::Arc;
 
 use assets::AssetsReader;
 use gpu::GpuState;
-use gpu::Vertex;
-use imgui::ImguiPacket;
 use logging::warn;
 use utils::SlotMap;
 
@@ -22,9 +22,11 @@ pub use crate::camera::Projection;
 pub use crate::color::Color;
 use crate::color::srgb_to_linear;
 use crate::immediate::ImmediateRenderer;
+use crate::immediate::imgui::ImguiPacket;
 use crate::immediate::imgui::ImguiRenderer;
 pub use crate::mesh::*;
 use crate::retained::RetainedRenderer;
+pub use crate::vertex::Vertex;
 
 #[repr(usize)]
 #[derive(Default)]
@@ -188,7 +190,6 @@ pub struct Layouts {
     pub texture_atlas: wgpu::BindGroupLayout,
     pub camera: wgpu::BindGroupLayout,
     pub material: wgpu::BindGroupLayout,
-    pub transform: wgpu::BindGroupLayout,
 }
 
 impl Layouts {
@@ -226,28 +227,10 @@ impl Layouts {
                 }],
             });
 
-        // Per-mesh transform, bound with a dynamic offset into one shared buffer
-        let transform = gpu
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("transform bind group layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: true,
-                        min_binding_size: wgpu::BufferSize::new(64), // one mat4x4<f32>
-                    },
-                    count: None,
-                }],
-            });
-
         Self {
             texture_atlas: a.clone(),
             camera: camera_layout,
             material,
-            transform,
         }
     }
 }
@@ -257,13 +240,8 @@ impl Layouts {
         [&self.camera, &self.texture_atlas]
     }
 
-    const fn as_mesh_array(&self) -> [&wgpu::BindGroupLayout; 4] {
-        [
-            &self.camera,
-            &self.texture_atlas,
-            &self.material,
-            &self.transform,
-        ]
+    const fn as_mesh_array(&self) -> [&wgpu::BindGroupLayout; 3] {
+        [&self.camera, &self.texture_atlas, &self.material]
     }
 }
 
@@ -275,6 +253,8 @@ pub struct Renderer {
 
     pub geometries: SlotMap<Geometry>,
     pub materials: SlotMap<Material>,
+
+    depth: Option<gpu::DepthTexture>,
 }
 
 impl Renderer {
@@ -290,6 +270,7 @@ impl Renderer {
             assets,
             geometries: SlotMap::new(),
             materials: SlotMap::new(),
+            depth: None,
         }
     }
 
@@ -325,6 +306,13 @@ impl Renderer {
             format: Some(view_format),
             ..Default::default()
         });
+
+        // Depth buffer must match the swapchain size; recreate on resize.
+        let fb_size = math::Size::new(output.texture.width(), output.texture.height());
+        if self.depth.as_ref().map(|d| d.size) != Some(fb_size) {
+            self.depth = Some(gpu::DepthTexture::new(fb_size));
+        }
+        let depth_view = &self.depth.as_ref().unwrap().view;
 
         let mut encoder = gpu
             .device
@@ -367,6 +355,16 @@ impl Renderer {
                         },
                         depth_slice: None,
                     })],
+                    // Cleared per layer: each layer depth-tests only against
+                    // itself, so Ui/Debug always draw over World.
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: depth_view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    }),
                     ..Default::default()
                 });
 

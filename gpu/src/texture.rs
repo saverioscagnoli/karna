@@ -1,5 +1,46 @@
 use logging::debug;
 
+pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+/// Screen-sized depth attachment. Recreated whenever the surface is resized.
+pub struct DepthTexture {
+    #[allow(unused)]
+    inner: wgpu::Texture,
+    pub view: wgpu::TextureView,
+    pub size: math::Size<u32>,
+}
+
+impl DepthTexture {
+    pub fn new(size: math::Size<u32>) -> Self {
+        let gpu = crate::GpuState::get();
+
+        let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("depth texture"),
+            size: wgpu::Extent3d {
+                width: size.width.max(1),
+                height: size.height.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        debug!("Creating depth texture {:?}", size);
+
+        Self {
+            inner: texture,
+            view,
+            size,
+        }
+    }
+}
+
 #[allow(unused)]
 pub struct Texture {
     inner: wgpu::Texture,

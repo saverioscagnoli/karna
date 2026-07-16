@@ -6,7 +6,6 @@ use assets::AssetsRead;
 use assets::Font;
 use assets::Image;
 use glyph_brush_layout::GlyphPositioner;
-use gpu::Vertex;
 use logging::warn;
 use renderer::Camera;
 use renderer::Color;
@@ -18,6 +17,7 @@ use renderer::MaterialDesc;
 use renderer::Mesh;
 use renderer::Projection;
 use renderer::Renderer;
+use renderer::Vertex;
 use utils::Handle;
 
 use crate::SceneManager;

@@ -1,51 +1,41 @@
 use std::mem;
 
-use gpu::GpuState;
+use utils::Handle;
 use utils::SlotMap;
 
+use crate::Geometry;
 use crate::Layouts;
 use crate::Material;
 use crate::Mesh;
-use crate::mesh::Geometry;
 
-/// One slot per mesh in the shared transform buffer. Padded to 256 bytes,
-/// the maximum `min_uniform_buffer_offset_alignment` WebGPU allows, so
-/// slot offsets are always valid dynamic offsets.
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct TransformUniform {
-    matrix: [[f32; 4]; 4],
-    _pad: [[f32; 4]; 12],
+struct InstanceData {
+    model: [[f32; 4]; 4],
+    color: [f32; 4],
 }
 
-impl TransformUniform {
-    fn new(matrix: math::Matrix4<f32>) -> Self {
-        Self {
-            matrix: matrix.as_array(),
-            _pad: [[0.0; 4]; 12],
-        }
-    }
+struct DrawItem {
+    material: Handle<Material>,
+    geometry: Handle<Geometry>,
+    matrix: math::Matrix4<f32>,
+    color: [f32; 4],
 }
 
 pub struct RetainedRenderer {
     pub meshes: SlotMap<Mesh>,
-
-    transforms: gpu::Buffer<TransformUniform>,
-    transforms_bg: Option<wgpu::BindGroup>,
-    transforms_bg_capacity: usize,
+    instances: gpu::Buffer<InstanceData>,
 }
 
 impl RetainedRenderer {
     pub fn new() -> Self {
         Self {
             meshes: SlotMap::new(),
-            transforms: gpu::Buffer::new_with_capacity(
-                "retained transform buffer",
-                wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            instances: gpu::Buffer::new_with_capacity(
+                "retained instance buffer",
+                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 0,
             ),
-            transforms_bg: None,
-            transforms_bg_capacity: 0,
         }
     }
 
@@ -58,51 +48,55 @@ impl RetainedRenderer {
         layouts: &Layouts,
         format: wgpu::TextureFormat,
     ) {
-        if self.meshes.is_empty() {
+        // 1. Collect draws, resolving handles up front so stale meshes
+        //    never occupy an instance slot (keeps indices contiguous).
+        let mut draws: Vec<DrawItem> = self
+            .meshes
+            .values()
+            .filter(|m| geometries.get(m.geometry).is_some() && materials.get(m.material).is_some())
+            .map(|m| DrawItem {
+                material: m.material,
+                geometry: m.geometry,
+                matrix: m.transform.matrix(),
+                // Linearize here: the shader multiplies instance color
+                // directly, in linear space, without decoding it.
+                color: m.color.to_linear_array(),
+            })
+            .collect();
+
+        if draws.is_empty() {
             return;
         }
 
-        let uniforms: Vec<TransformUniform> = self
-            .meshes
-            .values()
-            .map(|mesh| TransformUniform::new(mesh.transform.matrix()))
+        // 2. Bucket: material first (pipeline + bind group cost),
+        //    geometry second (vertex/index buffer cost).
+        draws.sort_unstable_by_key(|item| (item.material, item.geometry));
+
+        // 3. Upload matrices in bucketed order.
+        let instance_data: Vec<InstanceData> = draws
+            .iter()
+            .map(|item| InstanceData {
+                model: item.matrix.as_array(),
+                color: item.color,
+            })
             .collect();
+        self.instances.write_all(&instance_data);
 
-        self.transforms.write_all(&uniforms);
+        // 4. Walk runs of identical (material, geometry) and emit one
+        //    draw per run.
+        let stride = mem::size_of::<InstanceData>() as u64;
+        let mut start = 0;
+        while start < draws.len() {
+            let mat_h = draws[start].material;
+            let geo_h = draws[start].geometry;
+            let mut end = start + 1;
+            while end < draws.len() && draws[end].material == mat_h && draws[end].geometry == geo_h
+            {
+                end += 1;
+            }
 
-        // Growing the buffer replaces the underlying wgpu buffer, which
-        // invalidates any bind group pointing at the old one.
-        if self.transforms_bg.is_none()
-            || self.transforms_bg_capacity != self.transforms.capacity()
-        {
-            let gpu = GpuState::get();
-
-            self.transforms_bg = Some(gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("retained transform bind group"),
-                layout: &layouts.transform,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: self.transforms.wgpu(),
-                        offset: 0,
-                        size: wgpu::BufferSize::new(mem::size_of::<[[f32; 4]; 4]>() as u64),
-                    }),
-                }],
-            }));
-
-            self.transforms_bg_capacity = self.transforms.capacity();
-        }
-
-        let transforms_bg = self.transforms_bg.as_ref().unwrap();
-
-        for (i, mesh) in self.meshes.values().enumerate() {
-            let Some(geometry) = geometries.get(mesh.geometry) else {
-                continue;
-            };
-
-            let Some(material) = materials.get(mesh.material) else {
-                continue;
-            };
+            let material = materials.get(mat_h).unwrap();
+            let geometry = geometries.get(geo_h).unwrap();
 
             let pipeline = pipelines.get_or_create(
                 material.pipeline_desc.clone(),
@@ -110,14 +104,22 @@ impl RetainedRenderer {
                 &layouts.as_mesh_array(),
             );
 
-            let offset = (i * mem::size_of::<TransformUniform>()) as u32;
-
             pass.set_pipeline(&pipeline);
             pass.set_bind_group(2, material.bind_group(), &[]);
-            pass.set_bind_group(3, transforms_bg, &[offset]);
             pass.set_vertex_buffer(0, geometry.vertex_buffer().slice_all());
-            pass.set_index_buffer(geometry.index_buffer().slice_all(), wgpu::IndexFormat::Uint32);
-            pass.draw_indexed(0..geometry.index_count(), 0, 0..1);
+            pass.set_vertex_buffer(
+                1,
+                self.instances
+                    .wgpu()
+                    .slice(start as u64 * stride..end as u64 * stride),
+            );
+            pass.set_index_buffer(
+                geometry.index_buffer().slice_all(),
+                wgpu::IndexFormat::Uint32,
+            );
+            pass.draw_indexed(0..geometry.index_count(), 0, 0..(end - start) as u32);
+
+            start = end;
         }
     }
 }

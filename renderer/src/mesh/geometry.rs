@@ -1,4 +1,4 @@
-use gpu::Vertex;
+use crate::vertex::Vertex;
 
 #[derive(Debug, Clone)]
 pub struct Geometry {

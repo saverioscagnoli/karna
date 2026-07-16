@@ -2,11 +2,11 @@ pub mod batcher;
 pub mod imgui;
 
 use assets::AssetsRead;
-use gpu::Vertex;
 
 use crate::Layouts;
 use crate::Shape;
 use crate::immediate::batcher::Batcher;
+use crate::vertex::Vertex;
 
 pub struct ImmediateRenderer {
     point_batcher: Batcher<Vertex>,
@@ -42,6 +42,9 @@ impl ImmediateRenderer {
                 vertex_layout: Vertex::desc(),
                 blend: wgpu::BlendState::ALPHA_BLENDING,
                 topology: wgpu::PrimitiveTopology::PointList,
+                instance_layout: None,
+                depth: gpu::DepthMode::Disabled,
+                cull: Some(wgpu::Face::Front),
             };
 
             let pipeline = pipelines.get_or_create(desc, format, &layouts.as_array());
@@ -56,6 +59,9 @@ impl ImmediateRenderer {
                 vertex_layout: Vertex::desc(),
                 blend: wgpu::BlendState::ALPHA_BLENDING,
                 topology: wgpu::PrimitiveTopology::LineList,
+                instance_layout: None,
+                depth: gpu::DepthMode::Disabled,
+                cull: Some(wgpu::Face::Front),
             };
 
             let pipeline = pipelines.get_or_create(desc, format, &layouts.as_array());
@@ -71,6 +77,9 @@ impl ImmediateRenderer {
                 vertex_layout: Vertex::desc(),
                 blend: wgpu::BlendState::ALPHA_BLENDING,
                 topology: wgpu::PrimitiveTopology::TriangleList,
+                instance_layout: None,
+                depth: gpu::DepthMode::Disabled,
+                cull: Some(wgpu::Face::Front),
             };
 
             let pipeline = pipelines.get_or_create(desc, format, &layouts.as_array());

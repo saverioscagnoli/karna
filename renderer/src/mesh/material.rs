@@ -2,6 +2,9 @@ use assets::AssetsRead;
 use assets::Image;
 use utils::Handle;
 
+use crate::mesh::INSTANCE_LAYOUT;
+use crate::vertex::Vertex;
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Blend {
     Opaque,
@@ -10,6 +13,15 @@ pub enum Blend {
 }
 
 impl Blend {
+    /// Opaque meshes write depth so they occlude what's behind them;
+    /// blended ones only test, so they don't punch holes in each other.
+    fn depth_mode(self) -> gpu::DepthMode {
+        match self {
+            Blend::Opaque => gpu::DepthMode::ReadWrite,
+            Blend::Alpha | Blend::Additive => gpu::DepthMode::ReadOnly,
+        }
+    }
+
     fn to_wgpu(self) -> wgpu::BlendState {
         match self {
             Blend::Opaque => wgpu::BlendState::REPLACE,
@@ -110,9 +122,12 @@ impl Material {
         Self {
             pipeline_desc: gpu::PipelineDesc {
                 shader: desc.kind.shader(),
-                vertex_layout: gpu::Vertex::desc(),
+                vertex_layout: Vertex::desc(),
                 blend: desc.blend.to_wgpu(),
                 topology: desc.topology.to_wgpu(),
+                instance_layout: Some(INSTANCE_LAYOUT),
+                depth: desc.blend.depth_mode(),
+                cull: Some(wgpu::Face::Back),
             },
             uniforms,
             uniform_buffer,
@@ -186,7 +201,7 @@ impl Default for MaterialDesc {
     fn default() -> Self {
         Self {
             kind: MaterialKind::Standard,
-            blend: Blend::Alpha,
+            blend: MaterialKind::Standard.default_blend(),
             topology: Topology::Triangles,
             base_color_texture: None,
             base_color: math::Vector4::new(1.0, 1.0, 1.0, 1.0),

@@ -1,13 +1,79 @@
 use assets::AssetsRead;
 use gpu::GpuState;
-use gpu::Vertex;
-use imgui::ImguiPacket;
+use imgui::ImguiCmd;
 
 use crate::Camera;
 use crate::Layouts;
 use crate::Projection;
 use crate::camera::CameraData;
 use crate::immediate::batcher::Batcher;
+use crate::vertex::Vertex;
+
+#[derive(Default)]
+#[derive(Debug, Clone)]
+pub struct ImguiPacket {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+    pub cmds: Vec<ImguiCmd>,
+    pub display_pos: [f32; 2],
+    pub display_size: [f32; 2],
+    pub fb_scale: [f32; 2],
+}
+
+impl ImguiPacket {
+    pub fn record(&mut self, dd: &imgui::DrawData, font_uv: math::Vector4<f32>) {
+        self.vertices.clear();
+        self.indices.clear();
+        self.cmds.clear();
+
+        self.display_pos = dd.display_pos;
+        self.display_size = dd.display_size;
+        self.fb_scale = dd.framebuffer_scale;
+
+        // With no imgui windows drawn, CmdLists.Data is null and
+        // draw_lists() would build a slice from a null pointer (a
+        // debug-assert panic on wasm).
+        if dd.total_vtx_count() == 0 {
+            return;
+        }
+
+        let (ox, oy, ew, eh) = (font_uv.x, font_uv.y, font_uv.z, font_uv.w);
+
+        for list in dd.draw_lists() {
+            let vtx_base = self.vertices.len() as i32;
+            let idx_base = self.indices.len() as u32;
+
+            self.vertices.extend(list.vtx_buffer().iter().map(|v| {
+                let uv = math::Vector2::new(ox + v.uv[0] * ew, oy + v.uv[1] * eh);
+                let col = math::Vector4::new(
+                    v.rgba()[0] as f32 / 255.0,
+                    v.rgba()[1] as f32 / 255.0,
+                    v.rgba()[2] as f32 / 255.0,
+                    v.rgba()[3] as f32 / 255.0,
+                );
+
+                Vertex::new(math::Vector3::new(v.pos[0], v.pos[1], 0.0), col, uv)
+            }));
+
+            self.indices
+                .extend(list.idx_buffer().iter().map(|&i| i as u32)); // Uint32, like your Batcher
+
+            for cmd in list.commands() {
+                if let imgui::DrawCmd::Elements {
+                    count, cmd_params, ..
+                } = cmd
+                {
+                    self.cmds.push(ImguiCmd {
+                        clip: cmd_params.clip_rect,
+                        vtx_offset: vtx_base + cmd_params.vtx_offset as i32,
+                        idx_offset: idx_base + cmd_params.idx_offset as u32,
+                        count: count as u32,
+                    });
+                }
+            }
+        }
+    }
+}
 
 pub struct ImguiRenderer {
     camera: Camera,
@@ -72,6 +138,9 @@ impl ImguiRenderer {
             vertex_layout: Vertex::desc(),
             blend: wgpu::BlendState::ALPHA_BLENDING,
             topology: wgpu::PrimitiveTopology::TriangleList,
+            instance_layout: None,
+            depth: gpu::DepthMode::Disabled,
+            cull: None,
         };
 
         let pipeline = pipelines.get_or_create(desc, format, &layouts.as_array());

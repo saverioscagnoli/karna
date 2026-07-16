@@ -3,7 +3,6 @@ mod pipeline;
 mod shaders;
 mod surface;
 mod texture;
-mod vertex;
 
 use std::sync::OnceLock;
 
@@ -11,12 +10,14 @@ use logging::debug;
 pub use wgpu; // re-export so engine can write gpu::wgpu::Device WASM ONLY
 
 pub use crate::buffer::Buffer;
+pub use crate::pipeline::DepthMode;
 pub use crate::pipeline::PipelineCache;
 pub use crate::pipeline::PipelineDesc;
 pub use crate::shaders::ShaderStore;
 pub use crate::surface::WindowSurface;
+pub use crate::texture::DEPTH_FORMAT;
+pub use crate::texture::DepthTexture;
 pub use crate::texture::Texture;
-pub use crate::vertex::*;
 
 static SINGLETON: OnceLock<GpuState> = OnceLock::new();
 

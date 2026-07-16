@@ -376,6 +376,12 @@ impl WindowState {
             self.context.cameras[Layer::Ui].update(size);
             self.context.cameras[Layer::Debug].update(size);
 
+            for &i in &self.active {
+                let scene = self.scenes.get_mut(i);
+                let (ctx, mut s) = self.context.split_mut();
+                scene.on_resize(ctx, &mut s, size);
+            }
+
             debug!("Resized window to {:?}", size);
         }
 

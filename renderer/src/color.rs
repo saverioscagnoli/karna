@@ -37,6 +37,15 @@ impl Color {
     pub const fn rgb(r: f32, g: f32, b: f32) -> Self {
         Self::rgba(r, g, b, 1.0)
     }
+
+    pub fn to_linear_array(&self) -> [f32; 4] {
+        [
+            srgb_to_linear(self.r),
+            srgb_to_linear(self.g),
+            srgb_to_linear(self.b),
+            srgb_to_linear(self.a),
+        ]
+    }
 }
 
 /// sRGB transfer function decode: one sRGB-encoded channel -> linear.
