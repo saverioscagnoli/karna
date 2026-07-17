@@ -23,7 +23,14 @@ macro_rules! impl_lerp {
                 let start_f = num_traits::ToPrimitive::to_f32(self).unwrap();
                 let end_f = num_traits::ToPrimitive::to_f32(end).unwrap();
                 let result = start_f + (end_f - start_f) * t;
-                num_traits::FromPrimitive::from_f32(result).unwrap()
+
+                num_traits::FromPrimitive::from_f32(result).unwrap_or_else(|| {
+                    if result < start_f.min(end_f) {
+                        (*self).min(*end)
+                    } else {
+                        (*self).max(*end)
+                    }
+                })
             }
         }
     };
@@ -50,15 +57,18 @@ impl<const N: usize> Lerp for Vector<N, f32> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
 #[derive(Default)]
+#[derive(Debug, Clone, Copy)]
 pub enum LoopMode {
     #[default]
     None,
     Once,
+    /// Loops forever, carrying frame overshoot so the period is exact.
     Repeat,
+    /// Plays n + 1 times total (the first play, then n repeats).
     RepeatN(u32),
     Yoyo,
+    /// n complete there-and-back cycles.
     YoyoN(u32),
 }
 
@@ -332,7 +342,7 @@ pub struct Tween<T: Lerp> {
     paused: bool,
     loop_mode: LoopMode,
     loop_counter: u32,
-    yoyo_forward: bool,
+    forward: bool,
 
     // Callbacks
     on_start: Option<Box<dyn FnMut(&mut Self) + Send>>,
@@ -350,7 +360,7 @@ impl<T: Lerp + std::fmt::Debug> std::fmt::Debug for Tween<T> {
             .field("paused", &self.paused)
             .field("loop_mode", &self.loop_mode)
             .field("loop_counter", &self.loop_counter)
-            .field("yoyo_forward", &self.yoyo_forward)
+            .field("forward", &self.forward)
             .finish()
     }
 }
@@ -366,7 +376,7 @@ impl<T: Lerp> Tween<T> {
             paused: true,
             loop_mode: LoopMode::default(),
             loop_counter: 0,
-            yoyo_forward: true,
+            forward: true,
             on_start: None,
             on_complete: None,
         }
@@ -429,50 +439,60 @@ impl<T: Lerp> Tween<T> {
         self.on_complete = Some(Box::new(callback));
     }
 
-    /// Sample at a specific normalized time (0.0 to 1.0)
+    /// Sample at a specific normalized time (0.0 to 1.0), honoring the
+    /// current playback direction.
     #[inline]
     pub fn sample(&self, t: f32) -> T {
         let t = self.easing.apply(t.clamp(0.0, 1.0));
-        self.a.lerp(&self.b, t)
+        if self.forward {
+            self.a.lerp(&self.b, t)
+        } else {
+            self.b.lerp(&self.a, t)
+        }
     }
 
-    /// Update with delta time, returns current value
+    /// Advance by delta time and return the current value.
+    ///
+    /// `on_complete` fires at most once per call, even if `dt` spans
+    /// multiple loop iterations.
     #[inline]
-    pub fn update(&mut self, dt: f32) {
-        let was_complete = self.is_complete();
-
-        if !self.paused {
-            self.elapsed = (self.elapsed + dt).min(self.duration);
+    pub fn update(&mut self, dt: f32) -> T {
+        // FIX #2: zero/negative duration is an instantly-complete tween;
+        // never divide by it.
+        if self.paused || self.duration <= 0.0 || self.is_complete() {
+            return self.value();
         }
 
-        if !was_complete && self.is_complete() {
+        self.elapsed += dt;
+
+        if self.elapsed >= self.duration {
             if let Some(mut callback) = self.on_complete.take() {
                 callback(self);
 
                 self.on_complete = Some(callback);
             }
 
+            let over = (self.elapsed - self.duration) % self.duration;
+
             match self.loop_mode {
                 LoopMode::Once => self.elapsed = self.duration,
-                LoopMode::Repeat => self.elapsed %= self.duration,
+                LoopMode::Repeat => self.elapsed = over,
                 LoopMode::RepeatN(n) if self.loop_counter < n => {
-                    self.elapsed %= self.duration;
+                    self.elapsed = over;
                     self.loop_counter += 1;
                 }
 
                 LoopMode::Yoyo => {
-                    self.reverse();
-                    self.elapsed = 0.0;
-                    self.yoyo_forward = !self.yoyo_forward;
+                    self.forward = !self.forward;
+                    self.elapsed = over;
                 }
 
                 LoopMode::YoyoN(n) => {
                     // Each complete yoyo = forward + backward (2 reversals)
                     let complete_yoyos = self.loop_counter / 2;
                     if complete_yoyos < n {
-                        self.reverse();
-                        self.elapsed = 0.0;
-                        self.yoyo_forward = !self.yoyo_forward;
+                        self.forward = !self.forward;
+                        self.elapsed = over;
                         self.loop_counter += 1;
                     } else {
                         self.elapsed = self.duration;
@@ -482,11 +502,18 @@ impl<T: Lerp> Tween<T> {
                 _ => self.elapsed = self.duration,
             }
         }
+
+        self.value()
+    }
+
+    #[inline]
+    pub fn animate(&mut self, target: &mut T, dt: f32) {
+        *target = self.update(dt);
     }
 
     #[inline]
     pub fn value(&self) -> T {
-        self.sample(self.elapsed / self.duration)
+        self.sample(self.progress())
     }
 
     /// Start/resume the tween
@@ -513,33 +540,40 @@ impl<T: Lerp> Tween<T> {
         self.paused = !self.paused;
     }
 
-    /// Reverse the tween by swapping start and end
+    /// Reverse playback direction from the current position. The value
+    /// is continuous across the reversal (smooth turnaround), and the
+    /// endpoints `a`/`b` are left untouched.
     #[inline]
     pub fn reverse(&mut self) {
-        std::mem::swap(&mut self.a, &mut self.b);
-        self.elapsed = self.duration - self.elapsed;
+        self.forward = !self.forward;
+        self.elapsed = (self.duration - self.elapsed).max(0.0);
     }
 
-    /// Play tween in reverse direction from current position
+    /// Play tween in reverse direction from the beginning
     #[inline]
     pub fn play_reverse(&mut self) {
-        self.reverse();
+        let forward = self.forward;
         self.reset();
+        self.forward = !forward;
         self.start();
     }
 
-    /// Toggle between forward and reverse playback
+    /// FIX #5: reverse direction and keep playing — works mid-flight
+    /// (smooth turnaround) as well as when paused or complete.
     #[inline]
     pub fn toggle_direction(&mut self) {
-        if self.is_complete() || self.is_paused() {
-            self.play_reverse();
-        }
+        self.reverse();
+        self.paused = false;
     }
 
     /// Check if tween is complete
     #[inline]
     pub fn is_complete(&self) -> bool {
-        self.elapsed >= self.duration
+        match self.loop_mode {
+            // Infinite loops never complete.
+            LoopMode::Repeat | LoopMode::Yoyo => false,
+            _ => self.duration <= 0.0 || self.elapsed >= self.duration,
+        }
     }
 
     /// Check if tween is paused
@@ -548,17 +582,21 @@ impl<T: Lerp> Tween<T> {
         self.paused
     }
 
-    /// Reset the tween to start
+    /// Reset the tween to start (forward direction, loop count cleared)
     #[inline]
     pub fn reset(&mut self) {
         self.elapsed = 0.0;
         self.loop_counter = 0;
-        self.yoyo_forward = true;
+        self.forward = true;
     }
 
     /// Get normalized progress (0.0 to 1.0)
     #[inline]
     pub fn progress(&self) -> f32 {
-        (self.elapsed / self.duration).min(1.0)
+        if self.duration <= 0.0 {
+            1.0
+        } else {
+            (self.elapsed / self.duration).min(1.0)
+        }
     }
 }

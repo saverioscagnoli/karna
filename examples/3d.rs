@@ -1,9 +1,25 @@
+#![allow(unused)]
 use std::f32;
 
 use karna::prelude::*;
 
-const GRID: usize = 32; // vertices per side (GRID x GRID)
-const PLANE_SIZE: f32 = 10.0; // world-space extent of the plane
+const GRID: usize = 48; // vertices per side (GRID x GRID)
+const PLANE_SIZE: f32 = 14.0; // world-space extent of the plane
+
+#[derive(Clone, Copy, PartialEq)]
+enum BrushMode {
+    Raise,
+    Smooth,
+    Flatten,
+}
+
+/// One wave component. Two of these are summed: a radial ripple from the
+/// origin and a directional swell.
+struct Wave {
+    amp: f32,
+    freq: f32,
+    speed: f32,
+}
 
 struct S {
     mesh: Handle<Mesh>,
@@ -11,31 +27,35 @@ struct S {
 
     // base (flat) positions in the XZ plane, y = 0
     base: Vec<Vector3<f32>>,
-    // per-vertex manual height you push up/down via imgui
+    // per-vertex sculpted height
     offsets: Vec<f32>,
     // static index buffer for the grid
     indices: Vec<u32>,
-    // scratch vertex buffer we upload each frame
+    // scratch: final heights this frame (needed for normals), then verts
+    heights: Vec<f32>,
     verts: Vec<Vertex>,
 
     time: f32,
+    time_scale: f32,
+    paused: bool,
 
-    // wave params (tweakable in imgui)
-    wave_amp: f32,
-    wave_freq: f32,
-    wave_speed: f32,
+    ripple: Wave, // radial, from origin
+    swell: Wave,  // directional, along +x
 
-    // vertex the imgui "raise" tools act on
-    selected: i32,
-    raise_step: f32,
+    // sculpting brush (applied at the crosshair ray / ground intersection)
+    brush_mode: BrushMode,
+    brush_radius: f32,
+    brush_strength: f32,
+    brush_pos: Option<Vector2<f32>>, // xz of crosshair hit this frame
+
+    height_gradient: bool,
+    plane_color: [f32; 3],
 
     yaw: f32,
     pitch: f32,
-    plane_color: [f32; 3],
 }
 
 impl S {
-    /// Build the flat grid: positions + indices.
     fn build_grid() -> (Vec<Vector3<f32>>, Vec<u32>) {
         let mut base = Vec::with_capacity(GRID * GRID);
         let mut indices = Vec::with_capacity((GRID - 1) * (GRID - 1) * 6);
@@ -51,7 +71,6 @@ impl S {
             }
         }
 
-        // two triangles per quad cell
         for z in 0..GRID - 1 {
             for x in 0..GRID - 1 {
                 let i0 = (z * GRID + x) as u32;
@@ -67,28 +86,88 @@ impl S {
         (base, indices)
     }
 
-    /// Rebuild `self.verts` from base + wave + manual offsets.
+    fn wave_height(&self, x: f32, z: f32) -> f32 {
+        let dist = (x * x + z * z).sqrt();
+        let ripple =
+            (dist * self.ripple.freq - self.time * self.ripple.speed).sin() * self.ripple.amp;
+        let swell = (x * self.swell.freq + self.time * self.swell.speed).sin() * self.swell.amp;
+        ripple + swell
+    }
+
+    fn palette(&self, y: f32) -> Vector3<f32> {
+        let deep = Vector3::new(0.10, 0.25, 0.55);
+        let mid = Vector3::new(0.15, 0.55, 0.30);
+        let peak = Vector3::new(0.85, 0.85, 0.90);
+
+        // Normalize y into [0,1] over the plausible height range.
+        let span = (self.ripple.amp + self.swell.amp + 2.5).max(0.5);
+        let t = ((y / span) * 0.5 + 0.5).clamp(0.0, 1.0);
+
+        if t < 0.5 {
+            let k = t * 2.0;
+            deep + (mid - deep) * k
+        } else {
+            let k = (t - 0.5) * 2.0;
+            mid + (peak - mid) * k
+        }
+    }
+
     fn rebuild_verts(&mut self) {
-        self.verts.clear();
-        self.verts.reserve(self.base.len());
+        let n = self.base.len();
+
+        self.heights.clear();
+        self.heights.reserve(n);
 
         for (idx, p) in self.base.iter().enumerate() {
-            // radial wave based on distance from origin
-            let dist = (p.x * p.x + p.z * p.z).sqrt();
-            let wave = (dist * self.wave_freq - self.time * self.wave_speed).sin() * self.wave_amp;
+            self.heights
+                .push(self.wave_height(p.x, p.z) + self.offsets[idx]);
+        }
 
-            let y = wave + self.offsets[idx];
+        let step = PLANE_SIZE / (GRID as f32 - 1.0);
+        let light = Vector3::new(0.45, 1.0, 0.3).normalize();
 
-            // color by height for a bit of visual feedback
-            let t = (y / (self.wave_amp.max(0.001) + 3.0)) * 0.5 + 0.5;
-            let color = Vector4::new(
-                self.plane_color[0] * t + 0.1,
-                self.plane_color[1] * (1.0 - t) + 0.1,
-                self.plane_color[2],
+        self.verts.clear();
+        self.verts.reserve(n);
+
+        for (idx, p) in self.base.iter().enumerate() {
+            let x = idx % GRID;
+            let z = idx / GRID;
+            let y = self.heights[idx];
+
+            let hl = self.heights[z * GRID + x.saturating_sub(1)];
+            let hr = self.heights[z * GRID + (x + 1).min(GRID - 1)];
+            let hd = self.heights[z.saturating_sub(1) * GRID + x];
+            let hu = self.heights[(z + 1).min(GRID - 1) * GRID + x];
+
+            let normal = Vector3::new(hl - hr, 2.0 * step, hd - hu).normalize();
+            let shade = 0.25 + 0.75 * normal.dot(&light).max(0.0);
+
+            let base_rgb = if self.height_gradient {
+                self.palette(y)
+            } else {
+                Vector3::new(
+                    self.plane_color[0],
+                    self.plane_color[1],
+                    self.plane_color[2],
+                )
+            };
+
+            let mut color = Vector4::new(
+                base_rgb.x * shade,
+                base_rgb.y * shade,
+                base_rgb.z * shade,
                 1.0,
             );
 
-            // uv in [0,1] across the grid
+            if let Some(b) = self.brush_pos {
+                let d = ((p.x - b.x).powi(2) + (p.z - b.y).powi(2)).sqrt();
+                if d < self.brush_radius {
+                    let k = 1.0 - d / self.brush_radius;
+                    color.x = (color.x + 0.6 * k).min(1.0);
+                    color.y = (color.y + 0.25 * k).min(1.0);
+                }
+            }
+
             let u = (p.x / PLANE_SIZE) + 0.5;
             let v = (p.z / PLANE_SIZE) + 0.5;
 
@@ -97,6 +176,66 @@ impl S {
                 color,
                 Vector2::new(u, v),
             ));
+        }
+    }
+
+    fn crosshair_ground_hit(cam_pos: Vector3<f32>, forward: Vector3<f32>) -> Option<Vector2<f32>> {
+        if forward.y.abs() < 1e-4 {
+            return None;
+        }
+
+        let t = -cam_pos.y / forward.y;
+
+        if t <= 0.0 {
+            return None;
+        }
+
+        let hit = cam_pos + forward * t;
+        let half = PLANE_SIZE * 0.5;
+
+        if hit.x.abs() > half || hit.z.abs() > half {
+            return None;
+        }
+
+        Some(Vector2::new(hit.x, hit.z))
+    }
+
+    fn sculpt(&mut self, center: Vector2<f32>, dt: f32, invert: bool) {
+        let step = PLANE_SIZE / (GRID as f32 - 1.0);
+        let half = PLANE_SIZE * 0.5;
+        let cx = (((center.x + half) / step).round() as usize).min(GRID - 1);
+        let cz = (((center.y + half) / step).round() as usize).min(GRID - 1);
+        let flatten_to = self.offsets[cz * GRID + cx];
+
+        for (idx, p) in self.base.iter().enumerate() {
+            let d = ((p.x - center.x).powi(2) + (p.z - center.y).powi(2)).sqrt();
+            if d >= self.brush_radius {
+                continue;
+            }
+
+            let k = 0.5 + 0.5 * (d / self.brush_radius * f32::consts::PI).cos();
+
+            match self.brush_mode {
+                BrushMode::Raise => {
+                    let sign = if invert { -1.0 } else { 1.0 };
+                    self.offsets[idx] += sign * self.brush_strength * k * dt;
+                }
+                BrushMode::Smooth => {
+                    let x = idx % GRID;
+                    let z = idx / GRID;
+                    let avg = (self.offsets[z * GRID + x.saturating_sub(1)]
+                        + self.offsets[z * GRID + (x + 1).min(GRID - 1)]
+                        + self.offsets[z.saturating_sub(1) * GRID + x]
+                        + self.offsets[(z + 1).min(GRID - 1) * GRID + x])
+                        * 0.25;
+                    let rate = (self.brush_strength * 2.0 * k * dt).min(1.0);
+                    self.offsets[idx] += (avg - self.offsets[idx]) * rate;
+                }
+                BrushMode::Flatten => {
+                    let rate = (self.brush_strength * 2.0 * k * dt).min(1.0);
+                    self.offsets[idx] += (flatten_to - self.offsets[idx]) * rate;
+                }
+            }
         }
     }
 }
@@ -117,35 +256,28 @@ impl Scene for S {
         self.base = base;
         self.indices = indices;
 
-        // initial vertex buffer
         self.rebuild_verts();
 
         self.geometry = scene.add_geometry(Geometry::new(&self.verts, &self.indices));
-        let mat = scene.add_material(MaterialDesc::default().color(Color::Cyan));
+        let mat = scene.add_material(MaterialDesc::default().color(Color::White));
         let mesh = Mesh::new(self.geometry, mat);
-
         self.mesh = scene.add_mesh(mesh);
 
-        // start the camera up and back, looking at the plane
         let camera = scene.camera_mut();
-        camera.position = Vector3::new(0.0, 8.0, -12.0);
+        camera.position = Vector3::new(0.0, 9.0, -13.0);
 
         ctx.window.capture_cursor(true);
     }
 
     fn update(&mut self, ctx: ContextMut, scene: &mut SceneHandle) {
         let dt = ctx.time.delta();
-        self.time += dt;
-
-        // --- animate + upload the plane every frame ---
-        self.rebuild_verts();
-        {
-            let geom = scene.get_geometry_mut(self.geometry);
-            geom.update(&self.verts, &self.indices);
+        if !self.paused {
+            self.time += dt * self.time_scale;
         }
 
-        // --- camera look ---
-        let move_speed = 8.0;
+        if ctx.input.key_pressed(Keycode::Escape) {
+            ctx.window.toggle_cursor_capture();
+        }
 
         if ctx.window.cursor_captured() {
             let sensitivity = 0.5f32.to_radians();
@@ -168,88 +300,162 @@ impl Scene for S {
         let right = forward.cross(&world_up).normalize();
         let up = right.cross(&forward).normalize();
 
-        let camera = scene.camera_mut();
-        let step = move_speed * dt;
+        let move_speed = 8.0;
+        {
+            let camera = scene.camera_mut();
+            let step = move_speed * dt;
 
-        if ctx.input.key_pressed(Keycode::Escape) {
-            ctx.window.toggle_cursor_capture();
+            if ctx.input.key_held(Keycode::KeyW) {
+                camera.position = camera.position + forward * step;
+            }
+            if ctx.input.key_held(Keycode::KeyS) {
+                camera.position = camera.position - forward * step;
+            }
+            if ctx.input.key_held(Keycode::KeyD) {
+                camera.position = camera.position + right * step;
+            }
+            if ctx.input.key_held(Keycode::KeyA) {
+                camera.position = camera.position - right * step;
+            }
+            if ctx.input.key_held(Keycode::Space) {
+                camera.position = camera.position + world_up * step;
+            }
+            if ctx.input.key_held(Keycode::KeyC) {
+                camera.position = camera.position - world_up * step;
+            }
+
+            camera.target = camera.position + forward;
+            camera.up = up;
         }
 
-        if ctx.input.key_held(Keycode::KeyW) {
-            camera.position = camera.position + forward * step;
+        if ctx.input.key_held(Keycode::KeyQ) {
+            self.brush_radius = (self.brush_radius - 4.0 * dt).max(0.3);
         }
 
-        if ctx.input.key_held(Keycode::KeyS) {
-            camera.position = camera.position - forward * step;
+        if ctx.input.key_held(Keycode::KeyE) {
+            self.brush_radius = (self.brush_radius + 4.0 * dt).min(PLANE_SIZE);
         }
 
-        if ctx.input.key_held(Keycode::KeyD) {
-            camera.position = camera.position + right * step;
+        self.brush_pos = None;
+        if ctx.window.cursor_captured() {
+            let cam_pos = scene.camera().position;
+            self.brush_pos = S::crosshair_ground_hit(cam_pos, forward);
+
+            if let Some(center) = self.brush_pos {
+                let lmb = ctx.input.mouse_held(MouseButton::Left);
+                let rmb = ctx.input.mouse_held(MouseButton::Right);
+
+                if lmb || rmb {
+                    self.sculpt(center, dt, rmb && !lmb);
+                }
+            }
         }
 
-        if ctx.input.key_held(Keycode::KeyA) {
-            camera.position = camera.position - right * step;
+        self.rebuild_verts();
+        {
+            let geom = scene.get_geometry_mut(self.geometry);
+            geom.update(&self.verts, &self.indices);
         }
-
-        camera.target = camera.position + forward;
-        camera.up = up;
     }
 
     fn draw(&mut self, ctx: ContextMut, draw: &mut Draw) {
         draw.set_layer(Layer::Ui);
 
+        if ctx.window.cursor_captured() {
+            let view = draw.viewport().as_f32();
+            let (cx, cy) = (view.width * 0.5, view.height * 0.5);
+            draw.set_color(Color::rgba(1.0, 1.0, 1.0, 0.8));
+            draw.circle_outline(cx, cy, 5.0, 1.5);
+            draw.point(cx, cy);
+        }
+
+        draw.set_color(Color::White);
         draw.debug_text(
             &format!(
-                "fps {}\ndt {}\nPress 'Esc' to toggle cursor",
+                "fps {}\n[Esc] cursor  [WASD/Space/C] fly  [Q/E] brush size\n[LMB] sculpt  [RMB] inverse",
                 ctx.time.fps(),
-                ctx.time.delta()
             ),
             10.0,
             10.0,
         );
 
         draw.imgui(|ui| {
-            ui.window("Plane").build(|| {
+            ui.window("Terrain").build(|| {
                 ui.text(format!("grid {GRID}x{GRID}  verts {}", self.base.len()));
 
-                ui.separator();
-                ui.text("wave");
-                ui.slider("amplitude", 0.0, 3.0, &mut self.wave_amp);
-                ui.slider("frequency", 0.0, 5.0, &mut self.wave_freq);
-                ui.slider("speed", 0.0, 8.0, &mut self.wave_speed);
+                if ui.collapsing_header("waves", imgui::TreeNodeFlags::DEFAULT_OPEN) {
+                    ui.checkbox("paused", &mut self.paused);
+                    ui.slider("time scale", 0.0, 3.0, &mut self.time_scale);
 
-                ui.separator();
-                ui.color_picker3("plane color", &mut self.plane_color);
+                    ui.text("radial ripple");
+                    ui.slider("amp##r", 0.0, 3.0, &mut self.ripple.amp);
+                    ui.slider("freq##r", 0.0, 5.0, &mut self.ripple.freq);
+                    ui.slider("speed##r", 0.0, 8.0, &mut self.ripple.speed);
 
-                ui.separator();
-                ui.text("raise a vertex");
+                    ui.text("directional swell");
+                    ui.slider("amp##s", 0.0, 3.0, &mut self.swell.amp);
+                    ui.slider("freq##s", 0.0, 5.0, &mut self.swell.freq);
+                    ui.slider("speed##s", 0.0, 8.0, &mut self.swell.speed);
 
-                let max = self.base.len() as i32 - 1;
-                ui.slider("vertex index", 0, max, &mut self.selected);
-                ui.slider("raise step", 0.1, 3.0, &mut self.raise_step);
-
-                let sel = self.selected.clamp(0, max) as usize;
-
-                if ui.button("raise +") {
-                    self.offsets[sel] += self.raise_step;
+                    if ui.button("calm") {
+                        self.ripple = Wave {
+                            amp: 0.3,
+                            freq: 1.0,
+                            speed: 1.2,
+                        };
+                        self.swell = Wave {
+                            amp: 0.15,
+                            freq: 0.6,
+                            speed: 0.8,
+                        };
+                    }
+                    ui.same_line();
+                    if ui.button("stormy") {
+                        self.ripple = Wave {
+                            amp: 1.2,
+                            freq: 1.8,
+                            speed: 4.5,
+                        };
+                        self.swell = Wave {
+                            amp: 0.9,
+                            freq: 1.1,
+                            speed: 3.0,
+                        };
+                    }
+                    ui.same_line();
+                    if ui.button("still (sculpt canvas)") {
+                        self.ripple.amp = 0.0;
+                        self.swell.amp = 0.0;
+                    }
                 }
-                ui.same_line();
-                if ui.button("lower -") {
-                    self.offsets[sel] -= self.raise_step;
+
+                if ui.collapsing_header("brush", imgui::TreeNodeFlags::DEFAULT_OPEN) {
+                    if ui.radio_button("raise / lower", self.brush_mode == BrushMode::Raise) {
+                        self.brush_mode = BrushMode::Raise;
+                    }
+
+                    if ui.radio_button("smooth", self.brush_mode == BrushMode::Smooth) {
+                        self.brush_mode = BrushMode::Smooth;
+                    }
+
+                    if ui.radio_button("flatten", self.brush_mode == BrushMode::Flatten) {
+                        self.brush_mode = BrushMode::Flatten;
+                    }
+
+                    ui.slider("radius", 0.3, PLANE_SIZE, &mut self.brush_radius);
+                    ui.slider("strength", 0.2, 8.0, &mut self.brush_strength);
+
+                    if ui.button("reset ALL sculpting") {
+                        for o in self.offsets.iter_mut() {
+                            *o = 0.0;
+                        }
+                    }
                 }
-                ui.same_line();
-                if ui.button("reset vertex") {
-                    self.offsets[sel] = 0.0;
-                }
 
-                ui.text(format!("offset[{sel}] = {:.2}", self.offsets[sel]));
-
-                // direct drag on the selected vertex height
-                ui.slider("offset##sel", -5.0, 5.0, &mut self.offsets[sel]);
-
-                if ui.button("reset ALL vertices") {
-                    for o in self.offsets.iter_mut() {
-                        *o = 0.0;
+                if ui.collapsing_header("color", imgui::TreeNodeFlags::empty()) {
+                    ui.checkbox("height gradient", &mut self.height_gradient);
+                    if !self.height_gradient {
+                        ui.color_picker3("plane color", &mut self.plane_color);
                     }
                 }
             });
@@ -279,16 +485,29 @@ fn main() {
                         base: Vec::new(),
                         offsets: Vec::new(),
                         indices: Vec::new(),
+                        heights: Vec::new(),
                         verts: Vec::new(),
                         time: 0.0,
-                        wave_amp: 0.8,
-                        wave_freq: 1.2,
-                        wave_speed: 3.0,
-                        selected: 0,
-                        raise_step: 0.5,
+                        time_scale: 1.0,
+                        paused: false,
+                        ripple: Wave {
+                            amp: 0.8,
+                            freq: 1.2,
+                            speed: 3.0,
+                        },
+                        swell: Wave {
+                            amp: 0.4,
+                            freq: 0.7,
+                            speed: 1.5,
+                        },
+                        brush_mode: BrushMode::Raise,
+                        brush_radius: 2.0,
+                        brush_strength: 3.0,
+                        brush_pos: None,
+                        height_gradient: true,
+                        plane_color: [0.2, 0.6, 1.0],
                         yaw: f32::consts::FRAC_PI_2,
                         pitch: -0.4,
-                        plane_color: [0.2, 0.6, 1.0],
                     },
                 )
                 .with_active_scene("demo"),
