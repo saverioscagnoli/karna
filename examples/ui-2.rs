@@ -1,39 +1,32 @@
 use karna::prelude::*;
 
+fn v(r: f32, g: f32, b: f32) -> math::Vector4<f32> {
+    math::Vector4::new(r, g, b, 1.0)
+}
+
+fn rounded(mut w: WidgetStyle, base: f32, hovered: f32, held: f32) -> WidgetStyle {
+    w.base.border_radius = base;
+    w.hovered.border_radius = hovered;
+    w.held.border_radius = held;
+    w
+}
+
 fn gold() -> WidgetStyle {
-    let fg = Color::rgb(1.0, 0.96, 0.85).into();
-    WidgetStyle {
-        base: Style {
-            bg: Color::rgb(0.55, 0.42, 0.10).into(),
-            fg,
-        },
-        hovered: Style {
-            bg: Color::rgb(0.72, 0.56, 0.16).into(),
-            fg,
-        },
-        held: Style {
-            bg: Color::rgb(0.42, 0.31, 0.07).into(),
-            fg,
-        },
-    }
+    rounded(
+        WidgetStyle::from_accent(v(0.55, 0.42, 0.10), v(1.0, 0.96, 0.85)),
+        4.0,
+        12.0,
+        6.0,
+    )
 }
 
 fn red() -> WidgetStyle {
-    let fg = Color::rgb(1.0, 0.90, 0.90).into();
-    WidgetStyle {
-        base: Style {
-            bg: Color::rgb(0.45, 0.13, 0.13).into(),
-            fg,
-        },
-        hovered: Style {
-            bg: Color::rgb(0.60, 0.18, 0.18).into(),
-            fg,
-        },
-        held: Style {
-            bg: Color::rgb(0.33, 0.09, 0.09).into(),
-            fg,
-        },
-    }
+    rounded(
+        WidgetStyle::from_accent(v(0.45, 0.13, 0.13), v(1.0, 0.90, 0.90)),
+        4.0,
+        12.0,
+        6.0,
+    )
 }
 
 struct BarColors {
@@ -100,6 +93,7 @@ pub struct HudDemo {
     ui: UiState,
     theme: Theme,
     font: Handle<Font>,
+    ability_style: WidgetStyle,
 
     hp: f32,
     hp_max: f32,
@@ -114,10 +108,13 @@ pub struct HudDemo {
 
 impl HudDemo {
     pub fn new(font: Handle<Font>) -> Self {
+        let theme = Theme::dark(font);
+
         Self {
             ui: UiState::default(),
-            theme: Theme::dark(font),
+            theme,
             font,
+            ability_style: rounded(theme.button, 6.0, 14.0, 8.0),
             hp: 340.0,
             hp_max: 425.0,
             mp: 120.0,
@@ -153,11 +150,13 @@ impl Scene for HudDemo {
     }
 
     fn draw(&mut self, ctx: ContextMut, draw: &mut Draw) {
-        let mut ui = Ui::begin(draw, ctx.input, &mut self.ui, self.theme);
+        let dt = ctx.time.delta();
+        let mut ui_state = std::mem::take(&mut self.ui);
+        let mut ui = Ui::begin(draw, ctx.input, &mut ui_state, self.theme, dt);
+
         let view = ui.viewport();
         let font = self.font;
 
-        // top-left: player frame
         let hp_colors = BarColors {
             back: Color::rgb(0.15, 0.05, 0.05),
             fill: Color::rgb(0.75, 0.15, 0.15),
@@ -218,7 +217,7 @@ impl Scene for HudDemo {
         for i in 0..5 {
             ui.at(origin.x + i as f32 * (slot + gap), origin.y, slot);
             let label = ["1", "2", "3", "4", "5"][i];
-            if ui.button_styled(label, self.theme.button) {
+            if ui.button_styled(label, self.ability_style) {
                 cast = Some(i);
             }
         }
@@ -226,6 +225,7 @@ impl Scene for HudDemo {
         if self.show_quest {
             let mut abandon = false;
             let music = &mut self.music_volume;
+            let slider_style = self.theme.slider;
 
             panel(
                 &mut ui,
@@ -252,13 +252,7 @@ impl Scene for HudDemo {
                     }
 
                     ui.spacing(12.0);
-                    ui.slider_styled(
-                        "Music",
-                        music,
-                        0.0..=1.0,
-                        Theme::dark(font).slider,
-                        Color::rgb(0.85, 0.85, 0.88).into(),
-                    );
+                    ui.slider_styled("Music", music, 0.0..=1.0, slider_style, v(0.85, 0.85, 0.88));
                 },
             );
 
@@ -268,6 +262,7 @@ impl Scene for HudDemo {
         }
 
         ui.end();
+        self.ui = ui_state;
 
         if let Some(i) = cast {
             self.cast_ability(i);

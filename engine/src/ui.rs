@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -10,7 +11,7 @@ use winit::event::MouseButton;
 use crate::Draw;
 use crate::input::Input;
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UiId(u64);
 
 impl UiId {
@@ -33,6 +34,63 @@ pub struct Rect {
 pub struct Style {
     pub bg: math::Vector4<f32>,
     pub fg: math::Vector4<f32>,
+    pub border_radius: f32,
+    pub border_thickness: f32,
+    pub border_color: math::Vector4<f32>,
+}
+
+impl Default for Style {
+    fn default() -> Self {
+        Self {
+            bg: math::Vector4::new(1.0, 1.0, 1.0, 1.0),
+            fg: math::Vector4::new(0.0, 0.0, 0.0, 1.0),
+            border_radius: 0.0,
+            border_thickness: 0.0,
+            border_color: math::Vector4::new(1.0, 1.0, 1.0, 1.0),
+        }
+    }
+}
+
+impl Style {
+    pub fn lerp(&self, to: &Style, t: f32) -> Style {
+        use math::Lerp;
+
+        Style {
+            bg: self.bg.lerp(&to.bg, t),
+            fg: self.fg.lerp(&to.fg, t),
+            border_radius: self.border_radius.lerp(&to.border_radius, t),
+            border_thickness: self.border_thickness.lerp(&to.border_thickness, t),
+            border_color: self.border_color.lerp(&to.border_color, t),
+        }
+    }
+
+    pub fn patched(mut self, p: &StylePatch) -> Self {
+        if let Some(bg) = p.bg {
+            self.bg = bg;
+        }
+        if let Some(fg) = p.fg {
+            self.fg = fg;
+        }
+        if let Some(r) = p.border_radius {
+            self.border_radius = r;
+        }
+        if let Some(t) = p.border_thickness {
+            self.border_thickness = t;
+        }
+        if let Some(c) = p.border_color {
+            self.border_color = c;
+        }
+        self
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
+pub struct StylePatch {
+    pub bg: Option<math::Vector4<f32>>,
+    pub fg: Option<math::Vector4<f32>>,
+    pub border_radius: Option<f32>,
+    pub border_thickness: Option<f32>,
+    pub border_color: Option<math::Vector4<f32>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -43,14 +101,42 @@ pub struct WidgetStyle {
 }
 
 impl WidgetStyle {
-    fn resolve(&self, hovered: bool, held: bool) -> &Style {
-        if held {
-            &self.held
-        } else if hovered {
-            &self.hovered
-        } else {
-            &self.base
+    pub fn from_accent(accent: math::Vector4<f32>, fg: math::Vector4<f32>) -> Self {
+        let shade = |c: math::Vector4<f32>, k: f32| {
+            math::Vector4::new(
+                (c.x * k).min(1.0),
+                (c.y * k).min(1.0),
+                (c.z * k).min(1.0),
+                c.w,
+            )
+        };
+
+        Self {
+            base: Style {
+                bg: accent,
+                fg,
+                ..Default::default()
+            },
+            hovered: Style {
+                bg: shade(accent, 1.35),
+                fg,
+                ..Default::default()
+            },
+            held: Style {
+                bg: shade(accent, 0.7),
+                fg,
+                ..Default::default()
+            },
         }
+    }
+
+    pub fn resolve_animated(&self, t_hover: f32, t_held: f32) -> Style {
+        let t_hover = math::Easing::CubicOut.apply(t_hover);
+        let t_held = math::Easing::QuadOut.apply(t_held);
+
+        self.base
+            .lerp(&self.hovered, t_hover)
+            .lerp(&self.held, t_held)
     }
 }
 
@@ -69,37 +155,15 @@ pub struct Theme {
 impl Theme {
     pub fn dark(font: Handle<Font>) -> Self {
         let v = |r, g, b| math::Vector4::new(r, g, b, 1.0);
-        let ws = |n, h, a| WidgetStyle {
-            base: Style {
-                bg: n,
-                fg: v(0.9, 0.9, 0.9),
-            },
-            hovered: Style {
-                bg: h,
-                fg: v(1.0, 1.0, 1.0),
-            },
-            held: Style {
-                bg: a,
-                fg: v(1.0, 1.0, 1.0),
-            },
-        };
+        let fg = v(0.9, 0.9, 0.9);
+
+        let mut slider = WidgetStyle::from_accent(v(0.20, 0.22, 0.27), fg);
+        slider.held.bg = v(0.35, 0.55, 0.95);
 
         Self {
-            button: ws(
-                v(0.20, 0.22, 0.27),
-                v(0.28, 0.31, 0.38),
-                v(0.14, 0.15, 0.19),
-            ),
-            checkbox: ws(
-                v(0.20, 0.22, 0.27),
-                v(0.28, 0.31, 0.38),
-                v(0.14, 0.15, 0.19),
-            ),
-            slider: ws(
-                v(0.20, 0.22, 0.27),
-                v(0.28, 0.31, 0.38),
-                v(0.35, 0.55, 0.95),
-            ),
+            button: WidgetStyle::from_accent(v(0.20, 0.22, 0.27), fg),
+            checkbox: WidgetStyle::from_accent(v(0.20, 0.22, 0.27), fg),
+            slider,
             text: v(0.92, 0.92, 0.92),
             padding: 8.0,
             item_gap: 6.0,
@@ -109,11 +173,27 @@ impl Theme {
     }
 }
 
+#[derive(Default, Clone, Copy)]
+struct AnimState {
+    hover: f32,
+    held: f32,
+    seen: bool,
+}
+
 #[derive(Default)]
 pub struct UiState {
     hot: Option<UiId>,
     active: Option<UiId>,
     pub wants_mouse: bool,
+    anims: HashMap<UiId, AnimState>,
+}
+
+impl UiState {
+    pub fn is_animating(&self) -> bool {
+        self.anims
+            .values()
+            .any(|a| (a.hover > 0.0 && a.hover < 1.0) || (a.held > 0.0 && a.held < 1.0))
+    }
 }
 
 pub struct Ui<'a, 'd> {
@@ -129,14 +209,18 @@ pub struct Ui<'a, 'd> {
     mouse: math::Vector2<f32>,
     mouse_pressed: bool,
     mouse_held: bool,
+    dt: f32,
+
+    style_stack: Vec<StylePatch>,
 }
 
 impl<'a, 'd> Ui<'a, 'd> {
     pub fn begin(
         draw: &'a mut Draw<'d>,
-        input: &'a Input,
+        input: &Input,
         state: &'a mut UiState,
         theme: Theme,
+        dt: f32,
     ) -> Self {
         draw.set_layer(renderer::Layer::Ui);
 
@@ -156,6 +240,8 @@ impl<'a, 'd> Ui<'a, 'd> {
             mouse,
             mouse_pressed,
             mouse_held,
+            dt,
+            style_stack: Vec::new(),
         }
     }
 
@@ -167,6 +253,13 @@ impl<'a, 'd> Ui<'a, 'd> {
         }
 
         self.state.wants_mouse = self.hot_this_frame.is_some() || self.state.active.is_some();
+        self.state.anims.retain(|_, a| std::mem::take(&mut a.seen));
+    }
+
+    pub fn with_style(&mut self, patch: StylePatch, f: impl FnOnce(&mut Self)) {
+        self.style_stack.push(patch);
+        f(self);
+        self.style_stack.pop();
     }
 
     pub fn vstack_centered(&mut self, width: f32, f: impl FnOnce(&mut Self)) {
@@ -210,6 +303,36 @@ impl<'a, 'd> Ui<'a, 'd> {
         (hovered, held && self.mouse_held, clicked)
     }
 
+    fn animate(&mut self, id: UiId, hovered: bool, held: bool) -> (f32, f32) {
+        let a = self.state.anims.entry(id).or_default();
+        a.seen = true;
+
+        let step = |v: &mut f32, target: f32, secs: f32, dt: f32| {
+            let d = dt / secs.max(1e-6);
+            *v = if target > *v {
+                (*v + d).min(1.0)
+            } else {
+                (*v - d).max(0.0)
+            };
+        };
+
+        step(&mut a.hover, hovered as u8 as f32, 0.12, self.dt);
+        step(&mut a.held, held as u8 as f32, 0.05, self.dt);
+
+        (a.hover, a.held)
+    }
+
+    fn resolve(&mut self, id: UiId, widget: WidgetStyle, hovered: bool, held: bool) -> Style {
+        let (t_hover, t_held) = self.animate(id, hovered, held);
+        let mut style = widget.resolve_animated(t_hover, t_held);
+
+        for patch in &self.style_stack {
+            style = style.patched(patch);
+        }
+
+        style
+    }
+
     pub fn label(&mut self, text: &str) {
         let size = self.draw.measure_text(self.theme.font, text);
         let rect = self.next_rect(size.height.max(self.theme.widget_height));
@@ -224,12 +347,17 @@ impl<'a, 'd> Ui<'a, 'd> {
     }
 
     pub fn button(&mut self, label: &str) -> bool {
+        let widget = self.theme.button;
+        self.button_styled(label, widget)
+    }
+
+    pub fn button_styled(&mut self, label: &str, widget: WidgetStyle) -> bool {
         self.seq += 1;
         let id = UiId::make(label, self.seq);
         let rect = self.next_rect(self.theme.widget_height);
         let (hovered, held, clicked) = self.interact(id, rect);
 
-        let style = self.theme.button.resolve(hovered, held);
+        let style = self.resolve(id, widget, hovered, held);
 
         self.draw.set_color(style.bg);
         self.draw.rect_v(rect.position, rect.size);
@@ -256,7 +384,8 @@ impl<'a, 'd> Ui<'a, 'd> {
             *value = !*value;
         }
 
-        let style = self.theme.checkbox.resolve(hovered, held);
+        let widget = self.theme.checkbox;
+        let style = self.resolve(id, widget, hovered, held);
         let box_size = rect.size.height - 2.0 * self.theme.padding;
         let bx = rect.position.x;
         let by = rect.position.y + self.theme.padding;
@@ -315,7 +444,8 @@ impl<'a, 'd> Ui<'a, 'd> {
             self.state.active = None;
         }
 
-        let style = self.theme.slider.resolve(hovered, dragging);
+        let widget = self.theme.slider;
+        let style = self.resolve(id, widget, hovered, dragging);
         let (lo, hi) = (*range.start(), *range.end());
         let t = ((*value - lo) / (hi - lo)).clamp(0.0, 1.0);
 
@@ -338,49 +468,12 @@ impl<'a, 'd> Ui<'a, 'd> {
         changed
     }
 
-    pub fn draw(&mut self) -> &mut Draw<'d> {
-        self.draw
-    }
-
-    pub fn at(&mut self, x: f32, y: f32, width: f32) {
-        self.cursor = math::Vector2::new(x, y);
-        self.col_width = width;
-    }
-
-    pub fn viewport(&self) -> math::Size<f32> {
-        self.draw.viewport().as_f32()
-    }
-
-    pub fn button_styled(&mut self, label: &str, style: WidgetStyle) -> bool {
-        self.seq += 1;
-        let id = UiId::make(label, self.seq);
-        let rect = self.next_rect(self.theme.widget_height);
-        let (hovered, held, clicked) = self.interact(id, rect);
-
-        let s = style.resolve(hovered, held);
-
-        self.draw.set_color(s.bg);
-        self.draw.rect_v(rect.position, rect.size);
-
-        let ts = self.draw.measure_text(self.theme.font, label);
-
-        self.draw.set_color(s.fg);
-        self.draw.text(
-            self.theme.font,
-            label,
-            rect.position.x + (rect.size.width - ts.width) * 0.5,
-            rect.position.y + (rect.size.height - ts.height) * 0.5,
-        );
-
-        clicked
-    }
-
     pub fn slider_styled(
         &mut self,
         label: &str,
         value: &mut f32,
-        range: std::ops::RangeInclusive<f32>,
-        style: WidgetStyle,
+        range: RangeInclusive<f32>,
+        widget: WidgetStyle,
         label_color: math::Vector4<f32>,
     ) -> bool {
         self.seq += 1;
@@ -401,6 +494,7 @@ impl<'a, 'd> Ui<'a, 'd> {
                 self.state.active = Some(id);
             }
         }
+
         let dragging = self.state.active == Some(id) && self.mouse_held;
         let mut changed = false;
 
@@ -411,11 +505,12 @@ impl<'a, 'd> Ui<'a, 'd> {
             changed = new != *value;
             *value = new;
         }
+
         if self.state.active == Some(id) && !self.mouse_held {
             self.state.active = None;
         }
 
-        let s = style.resolve(hovered, dragging);
+        let style = self.resolve(id, widget, hovered, dragging);
         let (lo, hi) = (*range.start(), *range.end());
         let t = ((*value - lo) / (hi - lo)).clamp(0.0, 1.0);
 
@@ -427,14 +522,27 @@ impl<'a, 'd> Ui<'a, 'd> {
             rect.position.y + self.theme.padding,
         );
 
-        self.draw.set_color(s.bg);
+        self.draw.set_color(style.bg);
         self.draw.rect_v(track.position, track.size);
-        self.draw.set_color(s.fg);
+        self.draw.set_color(style.fg);
         self.draw.rect_v(
             track.position,
             math::Size::new(track.size.width * t, track.size.height),
         );
 
         changed
+    }
+
+    pub fn draw(&mut self) -> &mut Draw<'d> {
+        self.draw
+    }
+
+    pub fn at(&mut self, x: f32, y: f32, width: f32) {
+        self.cursor = math::Vector2::new(x, y);
+        self.col_width = width;
+    }
+
+    pub fn viewport(&self) -> math::Size<f32> {
+        self.draw.viewport().as_f32()
     }
 }
