@@ -73,12 +73,10 @@ pub enum UserEvent {
 
 fn load_builtin_shaders(shaders: &mut gpu::ShaderStore, d: &gpu::wgpu::Device) {
     let src = include_str!("../../shaders/immediate-2d.wgsl");
-    let src1 = include_str!("../../shaders/immediate-2d-circles.wgsl");
-    let src2 = include_str!("../../shaders/mesh-3d.wgsl");
+    let src1 = include_str!("../../shaders/mesh-3d.wgsl");
 
     shaders.load("immediate-2d", src, d);
-    shaders.load("immediate-2d-circles", src1, d);
-    shaders.load("mesh-3d", src2, d);
+    shaders.load("mesh-3d", src1, d);
 
     debug!("Built-in shaders loaded.");
 }

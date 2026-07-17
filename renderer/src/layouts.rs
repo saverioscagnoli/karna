@@ -5,7 +5,7 @@ use gpu::GpuState;
 
 use crate::MeshInstanceData;
 use crate::Vertex;
-use crate::vertex::CircleVertex;
+use crate::vertex::ShapeVertex;
 
 pub trait LayoutDesc: Sized {
     const STEP_MODE: wgpu::VertexStepMode;
@@ -29,16 +29,6 @@ impl LayoutDesc for Vertex {
     ];
 }
 
-impl LayoutDesc for CircleVertex {
-    const STEP_MODE: wgpu::VertexStepMode = wgpu::VertexStepMode::Vertex;
-    const ATTRIBUTES: &'static [wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
-        0 => Float32x3,
-        1 => Float32x4,
-        2 => Float32x2,
-        3 => Float32
-    ];
-}
-
 impl LayoutDesc for MeshInstanceData {
     const STEP_MODE: wgpu::VertexStepMode = wgpu::VertexStepMode::Instance;
     const ATTRIBUTES: &'static [wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
@@ -47,6 +37,19 @@ impl LayoutDesc for MeshInstanceData {
         5 => Float32x4,
         6 => Float32x4,
         7 => Float32x4
+    ];
+}
+
+impl LayoutDesc for ShapeVertex {
+    const STEP_MODE: wgpu::VertexStepMode = wgpu::VertexStepMode::Vertex;
+    const ATTRIBUTES: &'static [wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
+        0 => Float32x3,
+        1 => Float32x4,
+        2 => Float32x2,
+        3 => Float32x2,
+        4 => Float32x4,
+        5 => Float32x4,
+        6 => Uint32,
     ];
 }
 

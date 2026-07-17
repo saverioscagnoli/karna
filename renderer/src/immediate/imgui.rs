@@ -8,12 +8,13 @@ use crate::camera::CameraData;
 use crate::immediate::batcher::Batcher;
 use crate::layouts;
 use crate::layouts::LayoutDesc;
-use crate::vertex::Vertex;
+use crate::vertex::MODE_TEXTURED;
+use crate::vertex::ShapeVertex;
 
 #[derive(Default)]
 #[derive(Debug, Clone)]
 pub struct ImguiPacket {
-    pub vertices: Vec<Vertex>,
+    pub vertices: Vec<ShapeVertex>,
     pub indices: Vec<u32>,
     pub cmds: Vec<ImguiCmd>,
     pub display_pos: [f32; 2],
@@ -31,14 +32,16 @@ impl ImguiPacket {
         self.display_size = dd.display_size;
         self.fb_scale = dd.framebuffer_scale;
 
-        // With no imgui windows drawn, CmdLists.Data is null and
-        // draw_lists() would build a slice from a null pointer (a
-        // debug-assert panic on wasm).
         if dd.total_vtx_count() == 0 {
             return;
         }
 
         let (ox, oy, ew, eh) = (font_uv.x, font_uv.y, font_uv.z, font_uv.w);
+
+        let font_rect = math::Vector4::new(ox, oy, ox + ew, oy + eh);
+
+        let z2 = math::Vector2::new(0.0, 0.0);
+        let z4 = math::Vector4::new(0.0, 0.0, 0.0, 0.0);
 
         for list in dd.draw_lists() {
             let vtx_base = self.vertices.len() as i32;
@@ -53,11 +56,19 @@ impl ImguiPacket {
                     v.rgba()[3] as f32 / 255.0,
                 );
 
-                Vertex::new(math::Vector3::new(v.pos[0], v.pos[1], 0.0), col, uv)
+                ShapeVertex {
+                    position: math::Vector3::new(v.pos[0], v.pos[1], 0.0),
+                    color: col,
+                    uv,
+                    local: z2,
+                    params: z4,
+                    uv_rect: font_rect,
+                    mode: MODE_TEXTURED,
+                }
             }));
 
             self.indices
-                .extend(list.idx_buffer().iter().map(|&i| i as u32)); // Uint32, like your Batcher
+                .extend(list.idx_buffer().iter().map(|&i| i as u32)); // Uint32, like the Batcher
 
             for cmd in list.commands() {
                 if let imgui::DrawCmd::Elements {
@@ -81,7 +92,7 @@ pub struct ImguiRenderer {
     camera_size: math::Size<u32>,
     camera_buffer: gpu::Buffer<CameraData>,
     camera_bg: wgpu::BindGroup,
-    batcher: Batcher<Vertex>,
+    batcher: Batcher<ShapeVertex>,
 }
 
 impl ImguiRenderer {
@@ -135,7 +146,7 @@ impl ImguiRenderer {
 
         let desc = gpu::PipelineDesc {
             shader: "immediate-2d",
-            vertex_layout: Vertex::desc(),
+            vertex_layout: ShapeVertex::desc(),
             blend: wgpu::BlendState::ALPHA_BLENDING,
             topology: wgpu::PrimitiveTopology::TriangleList,
             instance_layout: None,
@@ -160,7 +171,6 @@ impl ImguiRenderer {
             let x2 = (((cmd.clip[2] - dx) * sx).max(0.0).ceil() as u32).min(fw);
             let y2 = (((cmd.clip[3] - dy) * sy).max(0.0).ceil() as u32).min(fh);
 
-            // wgpu validation-errors on zero-area or out-of-bounds scissors
             if x2 <= x1 || y2 <= y1 {
                 continue;
             }
@@ -173,7 +183,6 @@ impl ImguiRenderer {
             );
         }
 
-        // Scissor state persists for the rest of the pass — reset it.
         pass.set_scissor_rect(0, 0, fw, fh);
     }
 }

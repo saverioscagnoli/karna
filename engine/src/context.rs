@@ -8,17 +8,21 @@ use assets::Image;
 use glyph_brush_layout::GlyphPositioner;
 use logging::warn;
 use renderer::Camera;
-use renderer::CircleVertex;
 use renderer::Color;
+use renderer::FLAG_NO_AA;
 use renderer::FramePacket;
 use renderer::Geometry;
 use renderer::Layer;
+use renderer::MODE_CAPSULE;
+use renderer::MODE_CIRCLE;
+use renderer::MODE_RRECT;
+use renderer::MODE_TEXTURED;
 use renderer::Material;
 use renderer::MaterialDesc;
 use renderer::Mesh;
 use renderer::Projection;
 use renderer::Renderer;
-use renderer::Vertex;
+use renderer::ShapeVertex;
 use utils::Handle;
 
 use crate::SceneManager;
@@ -181,6 +185,8 @@ struct DrawState {
     draw_color: math::Vector4<f32>,
     transform: math::Matrix4<f32>,
     depth: f32,
+    line_width: f32,
+    anti_alias: bool,
 }
 
 impl Default for DrawState {
@@ -189,6 +195,8 @@ impl Default for DrawState {
             draw_color: math::Vector4::new(1.0, 1.0, 1.0, 1.0),
             transform: math::Matrix4::identity(),
             depth: 0.0,
+            line_width: 1.0,
+            anti_alias: true,
         }
     }
 }
@@ -200,16 +208,26 @@ pub struct Draw<'a> {
     active_layer: Layer,
     assets: AssetsRead<'a>,
     imgui: &'a imgui::Ui,
-    white_uv: math::Vector2<f32>,
+    white_uv: math::Vector2<f32>,   // CENTER of the white atlas entry
+    white_rect: math::Vector4<f32>, // its full bounds (min.xy, max.zw)
 }
 
 impl<'a> Draw<'a> {
+    /// Extra local-space padding around SDF quads so the screen-space AA
+    /// feather (and any outline) isn't clipped by the quad edge. If you
+    /// zoom the world camera OUT so far that one screen pixel spans more
+    /// than ~2 local units, tiny shapes will show a hard edge — bump this
+    /// (or scale it by 1/zoom) if that ever matters.
+    const AA_PAD: f32 = 2.0;
+
     pub(crate) fn new(
         packet: &'a mut FramePacket,
         assets: AssetsRead<'a>,
         imgui: &'a imgui::Ui,
     ) -> Self {
-        let white_uv = assets.get_image(assets.white_handle()).uv.xy();
+        let white = assets.get_image(assets.white_handle()).uv; // xy origin, zw extent
+        let white_uv = math::Vector2::new(white.x + white.z * 0.5, white.y + white.w * 0.5);
+        let white_rect = math::Vector4::new(white.x, white.y, white.x + white.z, white.y + white.w);
 
         Self {
             packet,
@@ -219,6 +237,7 @@ impl<'a> Draw<'a> {
             assets,
             imgui,
             white_uv,
+            white_rect,
         }
     }
 
@@ -236,6 +255,14 @@ impl<'a> Draw<'a> {
 
     pub fn viewport(&self) -> math::Size<u32> {
         self.packet.viewport
+    }
+
+    pub fn anti_alias(&self) -> bool {
+        self.current_state.anti_alias
+    }
+
+    pub fn set_anti_alias(&mut self, on: bool) {
+        self.current_state.anti_alias = on;
     }
 
     pub fn set_layer(&mut self, layer: Layer) {
@@ -264,6 +291,14 @@ impl<'a> Draw<'a> {
 
     pub fn set_depth(&mut self, d: f32) {
         self.current_state.depth = d;
+    }
+
+    pub fn line_width(&self) -> f32 {
+        self.current_state.line_width
+    }
+
+    pub fn set_line_width(&mut self, w: f32) {
+        self.current_state.line_width = w.max(0.0);
     }
 
     pub fn translate(&mut self, x: f32, y: f32) {
@@ -296,31 +331,44 @@ impl<'a> Draw<'a> {
         math::Vector3::new(t.x, t.y, self.current_state.depth)
     }
 
-    fn vertex(&self, x: f32, y: f32, uv: math::Vector2<f32>) -> Vertex {
-        let p = self.tp(x, y);
-        Vertex::new(p, self.current_state.draw_color, uv)
+    fn shape_vertex(
+        &self,
+        x: f32,
+        y: f32,
+        uv: math::Vector2<f32>,
+        uv_rect: math::Vector4<f32>,
+        local: math::Vector2<f32>,
+        params: math::Vector4<f32>,
+        mode: u32,
+    ) -> ShapeVertex {
+        let mode = if self.current_state.anti_alias {
+            mode
+        } else {
+            mode | FLAG_NO_AA
+        };
+
+        ShapeVertex {
+            position: self.tp(x, y),
+            color: self.current_state.draw_color,
+            uv,
+            local,
+            params,
+            uv_rect,
+            mode,
+        }
     }
 
-    fn circle_vertex(&self, x: f32, y: f32, center: math::Vector2<f32>, r: f32) -> CircleVertex {
-        let p = self.tp(x, y);
-        let c = self.tp(center.x, center.y);
-        CircleVertex::new(
-            p,
-            self.current_state.draw_color,
-            math::Vector2::new(c.x, c.y),
-            r,
-        )
+    fn push_quad(&mut self, v: [ShapeVertex; 4]) {
+        self.packet
+            .layer_mut(self.active_layer)
+            .shapes
+            .push(&v, &[0, 1, 2, 2, 1, 3]);
     }
 
     // ---- primitives ----
 
     pub fn point(&mut self, x: f32, y: f32) {
-        let v = [self.vertex(x, y, self.white_uv)];
-
-        self.packet
-            .layer_mut(self.active_layer)
-            .points
-            .push(&v, &[0]);
+        self.circle(x, y, (self.current_state.line_width * 0.5).max(0.5));
     }
 
     pub fn point_v<P>(&mut self, pos: P)
@@ -333,15 +381,7 @@ impl<'a> Draw<'a> {
     }
 
     pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
-        let v = [
-            self.vertex(x1, y1, self.white_uv),
-            self.vertex(x2, y2, self.white_uv),
-        ];
-
-        self.packet
-            .layer_mut(self.active_layer)
-            .lines
-            .push(&v, &[0, 1]);
+        self.capsule(x1, y1, x2, y2, self.current_state.line_width);
     }
 
     pub fn line_v<P, Q>(&mut self, p: P, q: Q)
@@ -355,18 +395,102 @@ impl<'a> Draw<'a> {
         self.line(p.x, p.y, q.x, q.y);
     }
 
-    pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
+    fn textured_quad(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        uv_min: math::Vector2<f32>,
+        uv_max: math::Vector2<f32>,
+    ) {
+        let z2 = math::Vector2::new(0.0, 0.0);
+        let z4 = math::Vector4::new(0.0, 0.0, 0.0, 0.0);
+        let uvr = math::Vector4::new(uv_min.x, uv_min.y, uv_max.x, uv_max.y);
+
         let v = [
-            self.vertex(x, y, self.white_uv),
-            self.vertex(x + w, y, self.white_uv),
-            self.vertex(x, y + h, self.white_uv),
-            self.vertex(x + w, y + h, self.white_uv),
+            self.shape_vertex(x, y, uv_min, uvr, z2, z4, MODE_TEXTURED),
+            self.shape_vertex(
+                x + w,
+                y,
+                math::Vector2::new(uv_max.x, uv_min.y),
+                uvr,
+                z2,
+                z4,
+                MODE_TEXTURED,
+            ),
+            self.shape_vertex(
+                x,
+                y + h,
+                math::Vector2::new(uv_min.x, uv_max.y),
+                uvr,
+                z2,
+                z4,
+                MODE_TEXTURED,
+            ),
+            self.shape_vertex(x + w, y + h, uv_max, uvr, z2, z4, MODE_TEXTURED),
         ];
 
-        self.packet
-            .layer_mut(self.active_layer)
-            .triangles
-            .push(&v, &[0, 1, 2, 2, 1, 3]);
+        self.push_quad(v);
+    }
+
+    fn rounded_rect_impl(&mut self, x: f32, y: f32, w: f32, h: f32, r: f32, stroke: f32) {
+        let r = r.clamp(0.0, (w * 0.5).min(h * 0.5));
+        let (cx, cy) = (x + w * 0.5, y + h * 0.5);
+        let (hw, hh) = (w * 0.5, h * 0.5);
+        let (ex, ey) = (
+            hw + stroke * 0.5 + Self::AA_PAD,
+            hh + stroke * 0.5 + Self::AA_PAD,
+        );
+
+        let params = math::Vector4::new(hw, hh, r, stroke);
+        let uv = self.white_uv;
+        let uvr = self.white_rect;
+
+        let v = [
+            self.shape_vertex(
+                cx - ex,
+                cy - ey,
+                uv,
+                uvr,
+                math::Vector2::new(-ex, -ey),
+                params,
+                MODE_RRECT,
+            ),
+            self.shape_vertex(
+                cx + ex,
+                cy - ey,
+                uv,
+                uvr,
+                math::Vector2::new(ex, -ey),
+                params,
+                MODE_RRECT,
+            ),
+            self.shape_vertex(
+                cx - ex,
+                cy + ey,
+                uv,
+                uvr,
+                math::Vector2::new(-ex, ey),
+                params,
+                MODE_RRECT,
+            ),
+            self.shape_vertex(
+                cx + ex,
+                cy + ey,
+                uv,
+                uvr,
+                math::Vector2::new(ex, ey),
+                params,
+                MODE_RRECT,
+            ),
+        ];
+
+        self.push_quad(v);
+    }
+
+    pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
+        self.rounded_rect_impl(x, y, w, h, 0.0, 0.0);
     }
 
     pub fn rect_v<P, S>(&mut self, pos: P, size: S)
@@ -380,20 +504,101 @@ impl<'a> Draw<'a> {
         self.rect(pos.x, pos.y, size.width, size.height);
     }
 
-    pub fn circle(&mut self, x: f32, y: f32, r: f32) {
-        let c = math::Vector2::new(x, y);
+    pub fn rect_outline(&mut self, x: f32, y: f32, w: f32, h: f32, stroke: f32) {
+        self.rounded_rect_impl(x, y, w, h, 0.0, stroke.max(0.0));
+    }
+
+    pub fn rect_outline_v<P, S>(&mut self, pos: P, size: S, stroke: f32)
+    where
+        P: Into<math::Vector2<f32>>,
+        S: Into<math::Size<f32>>,
+    {
+        let pos: math::Vector2<f32> = pos.into();
+        let size: math::Size<f32> = size.into();
+
+        self.rect_outline(pos.x, pos.y, size.width, size.height, stroke);
+    }
+
+    pub fn rounded_rect(&mut self, x: f32, y: f32, w: f32, h: f32, r: f32) {
+        self.rounded_rect_impl(x, y, w, h, r, 0.0);
+    }
+
+    pub fn rounded_rect_v<P, S>(&mut self, pos: P, size: S, r: f32)
+    where
+        P: Into<math::Vector2<f32>>,
+        S: Into<math::Size<f32>>,
+    {
+        let pos: math::Vector2<f32> = pos.into();
+        let size: math::Size<f32> = size.into();
+
+        self.rounded_rect(pos.x, pos.y, size.width, size.height, r);
+    }
+
+    pub fn rounded_rect_outline(&mut self, x: f32, y: f32, w: f32, h: f32, r: f32, stroke: f32) {
+        self.rounded_rect_impl(x, y, w, h, r, stroke.max(0.0));
+    }
+
+    pub fn rounded_rect_outline_v<P, S>(&mut self, pos: P, size: S, r: f32, stroke: f32)
+    where
+        P: Into<math::Vector2<f32>>,
+        S: Into<math::Size<f32>>,
+    {
+        let pos: math::Vector2<f32> = pos.into();
+        let size: math::Size<f32> = size.into();
+
+        self.rounded_rect_outline(pos.x, pos.y, size.width, size.height, r, stroke);
+    }
+
+    fn circle_impl(&mut self, x: f32, y: f32, r: f32, stroke: f32) {
+        let e = r + stroke * 0.5 + Self::AA_PAD;
+        let params = math::Vector4::new(r, stroke, 0.0, 0.0);
+        let uv = self.white_uv;
+        let uvr = self.white_rect;
 
         let v = [
-            self.circle_vertex(x - r, y - r, c, r), // top-left
-            self.circle_vertex(x + r, y - r, c, r), // top-right
-            self.circle_vertex(x - r, y + r, c, r), // bottom-left
-            self.circle_vertex(x + r, y + r, c, r), // bottom-right
+            self.shape_vertex(
+                x - e,
+                y - e,
+                uv,
+                uvr,
+                math::Vector2::new(-e, -e),
+                params,
+                MODE_CIRCLE,
+            ),
+            self.shape_vertex(
+                x + e,
+                y - e,
+                uv,
+                uvr,
+                math::Vector2::new(e, -e),
+                params,
+                MODE_CIRCLE,
+            ),
+            self.shape_vertex(
+                x - e,
+                y + e,
+                uv,
+                uvr,
+                math::Vector2::new(-e, e),
+                params,
+                MODE_CIRCLE,
+            ),
+            self.shape_vertex(
+                x + e,
+                y + e,
+                uv,
+                uvr,
+                math::Vector2::new(e, e),
+                params,
+                MODE_CIRCLE,
+            ),
         ];
 
-        self.packet
-            .layer_mut(self.active_layer)
-            .circles
-            .push(&v, &[0, 1, 2, 2, 1, 3]);
+        self.push_quad(v);
+    }
+
+    pub fn circle(&mut self, x: f32, y: f32, r: f32) {
+        self.circle_impl(x, y, r, 0.0);
     }
 
     pub fn circle_v<P>(&mut self, pos: P, r: f32)
@@ -405,24 +610,148 @@ impl<'a> Draw<'a> {
         self.circle(pos.x, pos.y, r);
     }
 
-    pub fn image(&mut self, image: Handle<Image>, x: f32, y: f32) {
-        let image = self.assets.get_image(image);
-        let size = image.size.as_f32();
-        let uv = image.uv;
-        let uv_min = uv.xy();
-        let uv_max = math::Vector2::new(uv.x + uv.z, uv.y + uv.w);
+    pub fn circle_outline(&mut self, x: f32, y: f32, r: f32, stroke: f32) {
+        self.circle_impl(x, y, r, stroke.max(0.0));
+    }
 
-        let v = [
-            self.vertex(x, y, uv_min),
-            self.vertex(x + size.width, y, math::Vector2::new(uv_max.x, uv_min.y)),
-            self.vertex(x, y + size.height, math::Vector2::new(uv_min.x, uv_max.y)),
-            self.vertex(x + size.width, y + size.height, uv_max),
+    pub fn circle_outline_v<P>(&mut self, pos: P, r: f32, stroke: f32)
+    where
+        P: Into<math::Vector2<f32>>,
+    {
+        let pos: math::Vector2<f32> = pos.into();
+
+        self.circle_outline(pos.x, pos.y, r, stroke);
+    }
+
+    pub fn capsule(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32) {
+        let dx = x2 - x1;
+        let dy = y2 - y1;
+        let len = (dx * dx + dy * dy).sqrt();
+        let ht = (thickness * 0.5).max(0.0);
+
+        // Degenerate segment: a capsule of zero length is a circle.
+        if len < 1e-4 {
+            self.circle(x1, y1, ht.max(0.5));
+            return;
+        }
+
+        let (ux, uy) = (dx / len, dy / len); // direction
+        let (nx, ny) = (-uy, ux); // normal
+        let pad = ht + Self::AA_PAD;
+
+        let params = math::Vector4::new(dx, dy, ht, 0.0);
+        let uv = self.white_uv;
+        let uvr = self.white_rect;
+
+        // Oriented bounding box around the segment, expanded by pad.
+        let corners = [
+            (x1 - ux * pad - nx * pad, y1 - uy * pad - ny * pad),
+            (x2 + ux * pad - nx * pad, y2 + uy * pad - ny * pad),
+            (x1 - ux * pad + nx * pad, y1 - uy * pad + ny * pad),
+            (x2 + ux * pad + nx * pad, y2 + uy * pad + ny * pad),
         ];
 
-        self.packet
-            .layer_mut(self.active_layer)
-            .triangles
-            .push(&v, &[0, 1, 2, 2, 1, 3])
+        let v = corners.map(|(px, py)| {
+            self.shape_vertex(
+                px,
+                py,
+                uv,
+                uvr,
+                math::Vector2::new(px - x1, py - y1),
+                params,
+                MODE_CAPSULE,
+            )
+        });
+
+        self.push_quad(v);
+    }
+
+    pub fn capsule_v<P, Q>(&mut self, p: P, q: Q, thickness: f32)
+    where
+        P: Into<math::Vector2<f32>>,
+        Q: Into<math::Vector2<f32>>,
+    {
+        let p: math::Vector2<f32> = p.into();
+        let q: math::Vector2<f32> = q.into();
+
+        self.capsule(p.x, p.y, q.x, q.y, thickness);
+    }
+
+    pub fn image_rounded(&mut self, image: Handle<Image>, x: f32, y: f32, corner_radius: f32) {
+        let img = self.assets.get_image(image);
+        let size = img.size.as_f32();
+        let uv = img.uv; // Vector4: xy = origin, zw = extent
+
+        let (w, h) = (size.width, size.height);
+        let r = corner_radius.clamp(0.0, (w * 0.5).min(h * 0.5));
+        let (cx, cy) = (x + w * 0.5, y + h * 0.5);
+        let (hw, hh) = (w * 0.5, h * 0.5);
+        let pad = Self::AA_PAD;
+        let (ex, ey) = (hw + pad, hh + pad);
+
+        // Corner uvs still extrapolate linearly over the pad, but the
+        // shader clamps the sample coordinate to uv_rect — so the pad can
+        // never bleed neighboring atlas entries, gutters or not.
+        let (du, dv) = (uv.z / w, uv.w / h);
+        let uv_min = math::Vector2::new(uv.x - du * pad, uv.y - dv * pad);
+        let uv_max = math::Vector2::new(uv.x + uv.z + du * pad, uv.y + uv.w + dv * pad);
+        let uvr = math::Vector4::new(uv.x, uv.y, uv.x + uv.z, uv.y + uv.w);
+
+        let params = math::Vector4::new(hw, hh, r, 0.0);
+
+        let v = [
+            self.shape_vertex(
+                cx - ex,
+                cy - ey,
+                uv_min,
+                uvr,
+                math::Vector2::new(-ex, -ey),
+                params,
+                MODE_TEXTURED,
+            ),
+            self.shape_vertex(
+                cx + ex,
+                cy - ey,
+                math::Vector2::new(uv_max.x, uv_min.y),
+                uvr,
+                math::Vector2::new(ex, -ey),
+                params,
+                MODE_TEXTURED,
+            ),
+            self.shape_vertex(
+                cx - ex,
+                cy + ey,
+                math::Vector2::new(uv_min.x, uv_max.y),
+                uvr,
+                math::Vector2::new(-ex, ey),
+                params,
+                MODE_TEXTURED,
+            ),
+            self.shape_vertex(
+                cx + ex,
+                cy + ey,
+                uv_max,
+                uvr,
+                math::Vector2::new(ex, ey),
+                params,
+                MODE_TEXTURED,
+            ),
+        ];
+
+        self.push_quad(v);
+    }
+
+    pub fn image_rounded_v<P>(&mut self, image: Handle<Image>, pos: P, corner_radius: f32)
+    where
+        P: Into<math::Vector2<f32>>,
+    {
+        let pos: math::Vector2<f32> = pos.into();
+
+        self.image_rounded(image, pos.x, pos.y, corner_radius);
+    }
+
+    pub fn image(&mut self, image: Handle<Image>, x: f32, y: f32) {
+        self.image_rounded(image, x, y, 0.0);
     }
 
     pub fn image_v<P>(&mut self, image: Handle<Image>, pos: P)
@@ -442,6 +771,8 @@ impl<'a> Draw<'a> {
         let view = self.packet.viewport.as_f32();
         let font_asset = self.assets.get_font(font);
 
+        let font_size = font_asset.size();
+
         let geometry = glyph_brush_layout::SectionGeometry {
             screen_position: (x, y),
             bounds: (view.width, view.height),
@@ -449,7 +780,7 @@ impl<'a> Draw<'a> {
 
         let sections = &[glyph_brush_layout::SectionText {
             text,
-            scale: glyph_brush_layout::ab_glyph::PxScale::from(font_asset.size() as f32),
+            scale: glyph_brush_layout::ab_glyph::PxScale::from(font_size as f32),
             font_id: glyph_brush_layout::FontId(0),
         }];
 
@@ -466,35 +797,32 @@ impl<'a> Draw<'a> {
                 continue; // whitespace has no cached glyph/quad, position already accounts for its advance
             }
 
-            let info = self.assets.get_glyph(font, ch, font_asset.size());
-
+            let info = self.assets.get_glyph(font, ch, font_size);
             let draw_x = sg.glyph.position.x + info.bearing.x;
             let draw_y = sg.glyph.position.y + info.bearing.y;
-
+            let size = info.size;
             let uv = info.uv; // Vector4: xy = origin, zw = extent
-            let uv_min = uv.xy();
-            let uv_max = math::Vector2::new(uv.x + uv.z, uv.y + uv.w);
 
-            let v = [
-                self.vertex(draw_x, draw_y, uv_min),
-                self.vertex(
-                    draw_x + info.size.width,
-                    draw_y,
-                    math::Vector2::new(uv_max.x, uv_min.y),
-                ),
-                self.vertex(
-                    draw_x,
-                    draw_y + info.size.height,
-                    math::Vector2::new(uv_min.x, uv_max.y),
-                ),
-                self.vertex(draw_x + info.size.width, draw_y + info.size.height, uv_max),
-            ];
-
-            self.packet
-                .layer_mut(self.active_layer)
-                .triangles
-                .push(&v, &[0, 1, 2, 2, 1, 3]);
+            self.textured_quad(
+                draw_x,
+                draw_y,
+                size.width,
+                size.height,
+                uv.xy(),
+                math::Vector2::new(uv.x + uv.z, uv.y + uv.w),
+            );
         }
+    }
+
+    pub fn text_v<P, T>(&mut self, font: Handle<Font>, text: T, pos: P)
+    where
+        P: Into<math::Vector2<f32>>,
+        T: AsRef<str>,
+    {
+        let pos: math::Vector2<f32> = pos.into();
+        let text: &str = text.as_ref();
+
+        self.text(font, text, pos.x, pos.y);
     }
 
     pub fn debug_text<T>(&mut self, text: T, x: f32, y: f32)
@@ -503,7 +831,21 @@ impl<'a> Draw<'a> {
     {
         let debug_font = self.assets.debug_font_handle();
 
+        let a = self.anti_alias();
+        self.set_anti_alias(false);
         self.text(debug_font, text, x, y);
+        self.set_anti_alias(a);
+    }
+
+    pub fn debug_text_v<P, T>(&mut self, text: T, pos: P)
+    where
+        P: Into<math::Vector2<f32>>,
+        T: AsRef<str>,
+    {
+        let pos: math::Vector2<f32> = pos.into();
+        let text: &str = text.as_ref();
+
+        self.debug_text(text, pos.x, pos.y);
     }
 
     pub fn measure_text<T>(&self, font: Handle<Font>, text: T) -> math::Size<f32>

@@ -21,34 +21,43 @@ impl Vertex {
     }
 }
 
-/// Vertex type Specifically used for rendering
-/// circles in immediate mode via `draw.cirlce()`
-///
-/// Uses a shader for cutting out pixels and make it
-/// into a circle.
+pub const MODE_TEXTURED: u32 = 0;
+pub const MODE_CIRCLE: u32 = 1;
+pub const MODE_RRECT: u32 = 2;
+pub const MODE_CAPSULE: u32 = 3;
+pub const FLAG_NO_AA: u32 = 0x100;
+
 #[repr(C)]
 #[derive(Default)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct CircleVertex {
-    pub position: math::Vector3<f32>, // 12 bytes
-    pub color: math::Vector4<f32>,    // 16 bytes
-    pub center: math::Vector2<f32>,   // 8 bytes
-    pub radius: f32,                  // 4 bytes
-}
+#[derive(Debug, Clone, Copy)]
+pub struct ShapeVertex {
+    pub position: math::Vector3<f32>, // offset  0, Float32x3
+    pub color: math::Vector4<f32>,    // offset 12, Float32x4
+    pub uv: math::Vector2<f32>,       // offset 28, Float32x2
+    pub local: math::Vector2<f32>,    // offset 36, Float32x2
+    pub params: math::Vector4<f32>,   // offset 44, Float32x4
+    pub uv_rect: math::Vector4<f32>,  // offset 60, Float32x4 (min.xy, max.zw)
+    pub mode: u32,                    // offset 76, Uint32 (mode | flags)
+} // stride 80
 
-impl CircleVertex {
-    #[inline]
+impl ShapeVertex {
     pub fn new(
         position: math::Vector3<f32>,
         color: math::Vector4<f32>,
-        center: math::Vector2<f32>,
-        radius: f32,
+        uv: math::Vector2<f32>,
+        local: math::Vector2<f32>,
+        params: math::Vector4<f32>,
+        uv_rect: math::Vector4<f32>,
+        mode: u32,
     ) -> Self {
         Self {
             position,
             color,
-            center,
-            radius,
+            uv,
+            local,
+            params,
+            uv_rect,
+            mode,
         }
     }
 }

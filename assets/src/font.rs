@@ -55,11 +55,11 @@ impl FontAtlas {
             debug_font: Handle::default(),
         };
 
-        let bytes = include_bytes!("../../bundled/DOS-V.ttf");
+        let bytes = include_bytes!("../../bundled/PixelOperatorMono.ttf");
         let debug_font =
             ab_glyph::FontVec::try_from_vec(bytes.to_vec()).expect("Failed to load debug font");
 
-        let debug_font = font_atlas.register_font(tex_atlas, debug_font, 16);
+        let debug_font = font_atlas.register_font(tex_atlas, debug_font, 18);
 
         font_atlas.debug_font = debug_font;
         font_atlas

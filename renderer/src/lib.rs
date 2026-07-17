@@ -26,8 +26,7 @@ use crate::immediate::imgui::ImguiPacket;
 use crate::immediate::imgui::ImguiRenderer;
 pub use crate::mesh::*;
 use crate::retained::RetainedRenderer;
-pub use crate::vertex::CircleVertex;
-pub use crate::vertex::Vertex;
+pub use crate::vertex::*;
 
 #[repr(usize)]
 #[derive(Default)]
@@ -71,18 +70,12 @@ impl<V: Copy> Shape<V> {
 #[derive(Debug, Clone)]
 pub struct LayerPacket {
     pub camera: CameraData,
-    pub points: Shape<Vertex>,
-    pub lines: Shape<Vertex>,
-    pub triangles: Shape<Vertex>,
-    pub circles: Shape<CircleVertex>,
+    pub shapes: Shape<ShapeVertex>,
 }
 
 impl LayerPacket {
     pub fn clear(&mut self) {
-        self.points.clear();
-        self.lines.clear();
-        self.triangles.clear();
-        self.circles.clear();
+        self.shapes.clear();
     }
 }
 
@@ -306,21 +299,6 @@ impl Renderer {
                     ..Default::default()
                 });
 
-                if !packet.imgui.cmds.is_empty() {
-                    let assets = self.assets.read();
-
-                    let fb = math::Size::new(output.texture.width(), output.texture.height());
-
-                    self.data.imgui.present(
-                        &packet.imgui,
-                        fb,
-                        &mut pass,
-                        &self.pipelines,
-                        view_format,
-                        assets,
-                    );
-                }
-
                 let assets = self.assets.read();
 
                 pass.set_bind_group(0, &layer_gpu.camera_bg, &[]);
@@ -335,15 +313,22 @@ impl Renderer {
                 );
 
                 layer_gpu.immediate.present(
-                    &layer_packet.points,
-                    &layer_packet.lines,
-                    &layer_packet.triangles,
-                    &layer_packet.circles,
+                    &layer_packet.shapes,
                     &mut pass,
                     &self.pipelines,
                     view_format,
-                    assets,
                 );
+
+                if layer == Layer::Debug && !packet.imgui.cmds.is_empty() {
+                    self.data.imgui.present(
+                        &packet.imgui,
+                        fb_size,
+                        &mut pass,
+                        &self.pipelines,
+                        view_format,
+                        assets,
+                    );
+                }
             }
         }
 

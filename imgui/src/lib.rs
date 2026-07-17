@@ -6,6 +6,8 @@ use std::ops::DerefMut;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use ::logging::debug;
+use ::logging::warn;
 pub use dear_imgui_rs as imgui;
 pub use imgui::*;
 use parking_lot::Mutex;
@@ -15,6 +17,23 @@ use winit::window::WindowId;
 
 pub use crate::input::winit_keycode_to_imgui;
 pub use crate::input::winit_mousebutton_to_imgui;
+
+struct Clipboard(arboard::Clipboard);
+
+impl imgui::ClipboardBackend for Clipboard {
+    fn get(&mut self) -> Option<String> {
+        self.0.get_text().ok()
+    }
+
+    fn set(&mut self, text: &str) {
+        if let Err(e) = self.0.set_text(text) {
+            warn!("clipboard set failed: {e}");
+            return;
+        }
+
+        debug!("Text copied to clipboard.");
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum ImguiError {
@@ -48,6 +67,12 @@ impl ImguiManager {
 
     pub fn register_window(&mut self, id: WindowId, size: math::Size<f32>) {
         let mut ctx = imgui::Context::create();
+
+        #[cfg(not(target_arch = "wasm32"))]
+        match arboard::Clipboard::new() {
+            Ok(cb) => ctx.set_clipboard_backend(Clipboard(cb)),
+            Err(e) => warn!("clipboard unavailable: {e}"),
+        }
 
         let _ = ctx.set_ini_filename::<PathBuf>(None);
 

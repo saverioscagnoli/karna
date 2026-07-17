@@ -10,6 +10,8 @@ winit.workspace = true
 math.workspace = true
 gpu.workspace = true
 dear-imgui-rs = "0.15.1"
+arboard = "3.6.1"
+logging.workspace = true
 
 # On wasm32 the imgui C++ is cross-compiled with wasi-sdk clang into the
 # same module (IMGUI_SYS_WASM_CC=1 + toolchain env in .cargo/config.toml).
