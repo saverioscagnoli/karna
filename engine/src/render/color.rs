@@ -37,6 +37,29 @@ impl Color {
     pub const fn rgb(r: f32, g: f32, b: f32) -> Self {
         Self::rgba(r, g, b, 1.0)
     }
+
+    pub fn to_linear_array(&self) -> [f32; 4] {
+        [
+            srgb_to_linear(self.r),
+            srgb_to_linear(self.g),
+            srgb_to_linear(self.b),
+            srgb_to_linear(self.a),
+        ]
+    }
+}
+
+/// sRGB transfer function decode: one sRGB-encoded channel -> linear.
+///
+/// User-facing colors are sRGB (what you'd pick in a color picker); the
+/// engine renders in linear space to an sRGB target, so sRGB inputs are
+/// linearized at their entry points. Shader-side inputs are converted in
+/// the shaders; CPU-side inputs (the clear color) use this.
+pub fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
 }
 
 impl From<wgpu::Color> for Color {
@@ -75,5 +98,22 @@ impl From<Vector4<f32>> for Color {
 impl Into<Vector4<f32>> for Color {
     fn into(self) -> Vector4<f32> {
         Vector4::new(self.r, self.g, self.b, self.a)
+    }
+}
+
+impl From<[f32; 4]> for Color {
+    fn from(v: [f32; 4]) -> Self {
+        Self {
+            r: v[0],
+            g: v[1],
+            b: v[2],
+            a: v[3],
+        }
+    }
+}
+
+impl Into<[f32; 4]> for Color {
+    fn into(self) -> [f32; 4] {
+        [self.r, self.g, self.b, self.a]
     }
 }

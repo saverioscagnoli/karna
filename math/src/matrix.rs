@@ -2,8 +2,8 @@ use std::ops::Index;
 use std::ops::IndexMut;
 use std::slice;
 
-use num::Float;
-use num::Num;
+use num_traits::Float;
+use num_traits::Num;
 
 use crate::Vector;
 use crate::Vector3;
@@ -15,6 +15,68 @@ pub struct Matrix<const R: usize, const C: usize, T: Num + Copy>([[T; R]; C]);
 pub type Matrix2<T> = Matrix<2, 2, T>;
 pub type Matrix3<T> = Matrix<3, 3, T>;
 pub type Matrix4<T> = Matrix<4, 4, T>;
+
+#[cfg(feature = "serde")]
+mod matrix_serde {
+    use core::fmt;
+    use core::marker::PhantomData;
+
+    use serde::de::Deserialize;
+    use serde::de::Deserializer;
+    use serde::de::SeqAccess;
+    use serde::de::Visitor;
+    use serde::de::{self};
+    use serde::ser::Serialize;
+    use serde::ser::SerializeTuple;
+    use serde::ser::Serializer;
+
+    use super::Matrix;
+    use crate::Num;
+
+    impl<const R: usize, const C: usize, T: Num + Copy + Serialize> Serialize for Matrix<R, C, T> {
+        fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+            let mut tup = s.serialize_tuple(R * C)?;
+            for col in &self.0 {
+                for e in col {
+                    tup.serialize_element(e)?;
+                }
+            }
+            tup.end()
+        }
+    }
+
+    impl<'de, const R: usize, const C: usize, T: Num + Copy + Deserialize<'de>> Deserialize<'de>
+        for Matrix<R, C, T>
+    {
+        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+            struct MatVisitor<const R: usize, const C: usize, T>(PhantomData<T>);
+
+            impl<'de, const R: usize, const C: usize, T: Num + Copy + Deserialize<'de>> Visitor<'de>
+                for MatVisitor<R, C, T>
+            {
+                type Value = Matrix<R, C, T>;
+
+                fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    write!(f, "{} numbers ({R}x{C} matrix)", R * C)
+                }
+
+                fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                    let mut m = [[T::zero(); R]; C];
+                    for c in 0..C {
+                        for r in 0..R {
+                            m[c][r] = seq
+                                .next_element()?
+                                .ok_or_else(|| de::Error::invalid_length(c * R + r, &self))?;
+                        }
+                    }
+                    Ok(Matrix(m))
+                }
+            }
+
+            d.deserialize_tuple(R * C, MatVisitor(PhantomData))
+        }
+    }
+}
 
 impl<const R: usize, const C: usize, T: Num + Copy> Default for Matrix<R, C, T> {
     fn default() -> Self {

@@ -1,30 +1,13 @@
-mod buffer;
-mod pipeline;
-mod shaders;
-mod texture;
-mod vertex;
+mod surface;
 
 use std::sync::OnceLock;
 
 use logging::debug;
-use parking_lot::Mutex;
+use wgpu::InstanceDescriptor;
 
-pub use crate::buffer::Buffer;
-pub use crate::pipeline::PipelineCache;
-pub use crate::pipeline::PipelineDesc;
-use crate::shaders::ShaderStore;
-pub use crate::texture::Texture;
-pub use crate::vertex::*;
+pub use crate::surface::WindowSurface;
 
 static SINGLETON: OnceLock<GpuState> = OnceLock::new();
-
-pub fn init(f: impl FnOnce(&mut ShaderStore, &wgpu::Device)) {
-    SINGLETON.get_or_init(|| {
-        let mut state = pollster::block_on(GpuState::new());
-        f(&mut state.shaders, &state.device);
-        state
-    });
-}
 
 #[derive(Debug)]
 pub struct GpuState {
@@ -32,13 +15,21 @@ pub struct GpuState {
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub shaders: ShaderStore,
-    pub submit: Mutex<()>,
 }
 
 impl GpuState {
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn get() -> &'static Self {
         SINGLETON.get_or_init(|| pollster::block_on(Self::new()))
+    }
+
+    /// On the web the singleton cannot be created lazily (that would require
+    /// blocking), so it must have been set by awaiting [`init_async`] first.
+    #[cfg(target_arch = "wasm32")]
+    pub fn get() -> &'static Self {
+        SINGLETON
+            .get()
+            .expect("GpuState::get() called before gpu::init_async() completed")
     }
 
     async fn new() -> Self {
@@ -49,13 +40,17 @@ impl GpuState {
             backend_options
         );
 
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
-            backend_options,
-            display: None,
-            flags: wgpu::InstanceFlags::default(),
-            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-        });
+        let instance =
+            wgpu::Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
+
+        #[cfg(not(target_arch = "wasm32"))]
+        debug!(
+            "adapters {:?}",
+            instance
+                .enumerate_adapters(wgpu::Backends::all())
+                .await
+                .to_vec()
+        );
 
         // Will be parsed from a configuration file maybe?
         let power_preference = wgpu::PowerPreference::HighPerformance;
@@ -96,8 +91,6 @@ impl GpuState {
             adapter,
             device,
             queue,
-            shaders: ShaderStore::new(),
-            submit: Mutex::new(()),
         }
     }
 }

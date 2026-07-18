@@ -1,12 +1,12 @@
 use std::fmt;
 
-use num::Float;
-use num::Num;
-use winit::dpi::PhysicalSize;
+use num_traits::Float;
+use num_traits::Num;
 
 use crate::Vector2;
 
-#[derive(Clone, Copy)]
+#[derive(Default)]
+#[derive(Clone, Copy, PartialEq, PartialOrd)]
 pub struct Size<T: Num + Copy> {
     pub width: T,
     pub height: T,
@@ -49,6 +49,20 @@ impl<T: Num + Copy> Size<T> {
         T: PartialOrd,
     {
         self.width >= other.width && self.height >= other.height
+    }
+
+    pub fn contains_point(&self, size_pos: Vector2<T>, p: Vector2<T>) -> bool
+    where
+        T: PartialOrd + Copy + std::ops::Add<Output = T>,
+    {
+        p.x >= size_pos.x
+            && p.x < size_pos.x + self.width
+            && p.y >= size_pos.y
+            && p.y < size_pos.y + self.height
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.width == T::zero() && self.height == T::zero()
     }
 }
 
@@ -95,17 +109,5 @@ impl<T: Num + Copy> Into<Vector2<T>> for Size<T> {
 impl<T: Num + Copy> Into<[T; 2]> for Size<T> {
     fn into(self) -> [T; 2] {
         [self.width, self.height]
-    }
-}
-
-impl<T: Num + Copy> From<PhysicalSize<T>> for Size<T> {
-    fn from(value: PhysicalSize<T>) -> Self {
-        Self::new(value.width, value.height)
-    }
-}
-
-impl<T: Num + Copy> Into<PhysicalSize<T>> for Size<T> {
-    fn into(self) -> PhysicalSize<T> {
-        PhysicalSize::new(self.width, self.height)
     }
 }

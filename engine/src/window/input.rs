@@ -1,13 +1,14 @@
 use math::Vector2;
 use utils::FastHashSet;
-pub use winit::event::MouseButton;
-pub use winit::keyboard::KeyCode;
+
+pub use sdl3::keyboard::Scancode as Keycode;
+pub use sdl3::mouse::MouseButton;
 
 pub struct Input {
     // Keyboard
-    pub(crate) held_keys: FastHashSet<KeyCode>,
-    pub(crate) pressed_keys: FastHashSet<KeyCode>,
-    pub(crate) released_keys: FastHashSet<KeyCode>,
+    pub(crate) held_keys: FastHashSet<Keycode>,
+    pub(crate) pressed_keys: FastHashSet<Keycode>,
+    pub(crate) released_keys: FastHashSet<Keycode>,
 
     // Mouse
     pub(crate) mouse_position: Vector2<f32>,
@@ -15,6 +16,10 @@ pub struct Input {
     pub(crate) wheel_delta: Vector2<f32>,
     pub(crate) held_mouse_buttons: FastHashSet<MouseButton>,
     pub(crate) pressed_mouse_buttons: FastHashSet<MouseButton>,
+    pub(crate) released_mouse_buttons: FastHashSet<MouseButton>,
+
+    // Text
+    pub(crate) text: String,
 }
 
 impl Input {
@@ -28,68 +33,69 @@ impl Input {
             wheel_delta: Vector2::zero(),
             held_mouse_buttons: FastHashSet::default(),
             pressed_mouse_buttons: FastHashSet::default(),
+            released_mouse_buttons: FastHashSet::default(),
+            text: String::new(),
         }
+    }
+
+    pub fn key_axis(&self, keys: [Keycode; 2]) -> f32 {
+        if self.key_held(keys[0]) {
+            return -1.0;
+        }
+
+        if self.key_held(keys[1]) {
+            return 1.0;
+        }
+
+        0.0
     }
 
     /// Returns true if the given key is being held down
-    pub fn key_held(&self, k: &KeyCode) -> bool {
-        self.held_keys.contains(k)
-    }
-
-    pub fn key_axis(&self, keys: [KeyCode; 2]) -> f32 {
-        if self.key_held(&keys[0]) {
-            -1.0
-        } else if self.key_held(&keys[1]) {
-            1.0
-        } else {
-            0.0
-        }
+    pub fn key_held(&self, k: Keycode) -> bool {
+        self.held_keys.contains(&k)
     }
 
     /// Returns true if the given is pressed, but it
     /// does not persist across frame, so it can be useful
     /// for one-time actions, such as toggling
-    pub fn key_pressed(&self, k: &KeyCode) -> bool {
-        self.pressed_keys.contains(k)
+    pub fn key_pressed(&self, k: Keycode) -> bool {
+        self.pressed_keys.contains(&k)
     }
 
     /// Returns true if the given key was released this frame
-    pub fn key_released(&self, k: &KeyCode) -> bool {
+    pub fn key_released(&self, k: &Keycode) -> bool {
         self.released_keys.contains(k)
     }
 
-    pub fn mouse_position(&self) -> &Vector2<f32> {
-        &self.mouse_position
+    pub fn mouse_position(&self) -> Vector2<f32> {
+        self.mouse_position
     }
 
-    pub fn mouse_delta(&self) -> &Vector2<f32> {
-        &self.mouse_delta
+    pub fn mouse_delta(&self) -> Vector2<f32> {
+        self.mouse_delta
     }
 
-    pub fn whele_delta(&self) -> &Vector2<f32> {
-        &self.wheel_delta
+    pub fn whele_delta(&self) -> Vector2<f32> {
+        self.wheel_delta
     }
 
     /// Returns true if the given mouse button is being held down
-    pub fn mouse_held(&self, b: &MouseButton) -> bool {
-        self.held_mouse_buttons.contains(b)
+    pub fn mouse_held(&self, b: MouseButton) -> bool {
+        self.held_mouse_buttons.contains(&b)
     }
 
     /// Returns true if the given mouse button is pressed,
     /// but it does not persist across frames, so it can be useful
     /// for one-time actions, such as clicking something
-    pub fn mouse_pressed(&self, b: &MouseButton) -> bool {
-        self.pressed_mouse_buttons.contains(b)
+    pub fn mouse_pressed(&self, b: MouseButton) -> bool {
+        self.pressed_mouse_buttons.contains(&b)
     }
 
-    /// Clears every input type that
-    /// must not persits across frames.
-    ///
-    /// (i.e.) key presses, one-time
-    pub fn flush(&mut self) {
+    pub(crate) fn flush(&mut self) {
         self.pressed_keys.clear();
         self.released_keys.clear();
         self.pressed_mouse_buttons.clear();
+        self.released_mouse_buttons.clear();
         self.mouse_delta.set([0.0, 0.0]);
         self.wheel_delta.set([0.0, 0.0]);
     }

@@ -4,31 +4,26 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["assets","engine", "gpu", "imgui","logging", "math", "renderer", "utils"]
+members = ["engine", "gpu", "logging", "math", "utils"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
 
 [workspace.dependencies]
-parking_lot = "0.12.5"
-wgpu = { version = "30.0.0", default-features = false, features = ["wgsl", "vulkan"] }
-utils = { path = "utils" }
-winit = "0.30.13"
-math = {path = "math" }
-logging = { path = "logging" }
 gpu = { path = "gpu" }
-renderer = { path = "renderer" }
-assets = { path = "assets" }
-imgui = { path = "imgui" }
-rodio = "0.22.2"
+logging = { path = "logging" }
+math = { path = "math" }
+utils = { path = "utils" }
 
+
+sdl3 = { version = "0.18.4", features = ["raw-window-handle"] }
+wgpu = "30.0.0"
+parking_lot = "0.12.5"
 
 [dependencies]
-logging.workspace = true
 engine = { path = "engine" }
-math.workspace = true
-renderer.workspace = true
-assets.workspace = true
-utils.workspace = true
-imgui.workspace = true
-gpu.workspace = true
 
-[dev-dependencies]
-log = "0.4.33"
+logging.workspace = true
+math.workspace = true
+utils.workspace = true

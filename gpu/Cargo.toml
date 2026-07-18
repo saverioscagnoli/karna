@@ -1,13 +1,12 @@
 [package]
 name = "gpu"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-pollster = "0.4.0"
-math.workspace = true
-wgpu.workspace = true
-utils.workspace = true
-parking_lot.workspace = true
 logging.workspace = true
-imgui.workspace = true
+math.workspace = true
+sdl3.workspace = true
+wgpu.workspace = true
+
+pollster = "1.0.1"

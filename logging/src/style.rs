@@ -1,7 +1,5 @@
 use std::fmt;
 
-use log::kv;
-
 pub trait Formatter: Send + Sync {
     fn format(&self, record: &log::Record) -> String;
 }
@@ -21,37 +19,7 @@ impl Formatter for DefaultFormatter {
         let level = format!("[{}]", name).color(color);
         let target = format!("[{}]", record.target()).color(Color::BrightBlack);
 
-        // collect key-value pairs
-        let kvs = collect_kvs(record);
-        let kv_str = if kvs.is_empty() {
-            String::new()
-        } else {
-            let pairs = kvs
-                .iter()
-                .map(|(k, v)| format!("{}={}", k.color(Color::BrightBlack), v))
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!(" ({})", pairs)
-        };
-
-        format!("{} {}{} {}", level, record.args(), kv_str, target)
-    }
-}
-
-fn collect_kvs(record: &log::Record) -> Vec<(String, String)> {
-    let mut visitor = KvCollector { pairs: vec![] };
-    record.key_values().visit(&mut visitor).ok();
-    visitor.pairs
-}
-
-struct KvCollector {
-    pairs: Vec<(String, String)>,
-}
-
-impl<'kvs> kv::VisitSource<'kvs> for KvCollector {
-    fn visit_pair(&mut self, key: kv::Key<'kvs>, value: kv::Value<'kvs>) -> Result<(), kv::Error> {
-        self.pairs.push((key.to_string(), value.to_string()));
-        Ok(())
+        format!("{} {} {}", level, record.args(), target)
     }
 }
 
