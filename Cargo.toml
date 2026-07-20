@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["engine", "gpu", "logging", "math", "utils"]
+members = ["engine", "gpu", "logging", "math", "packer", "utils"]
 
 [workspace.package]
 version = "0.1.0"
@@ -16,8 +16,7 @@ logging = { path = "logging" }
 math = { path = "math" }
 utils = { path = "utils" }
 
-
-sdl3 = { version = "0.18.4", features = ["raw-window-handle"] }
+sdl3 = { version = "0.18.4", features = ["raw-window-handle", "image", "build-from-source"] }
 wgpu = "30.0.0"
 parking_lot = "0.12.5"
 

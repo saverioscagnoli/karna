@@ -25,7 +25,7 @@ use crate::point::Point3;
 use crate::point::Point4;
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Vector<const N: usize, T: Num + Copy>([T; N]);
 
 #[cfg(feature = "serde")]

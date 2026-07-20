@@ -10,7 +10,7 @@ impl Formatter for DefaultFormatter {
     fn format(&self, record: &log::Record) -> String {
         let (name, color) = match record.level() {
             log::Level::Trace => ("TRCE", Color::Cyan),
-            log::Level::Debug => ("DEBG", Color::Blue),
+            log::Level::Debug => ("DEBG", Color::Magenta),
             log::Level::Info => ("INFO", Color::Green),
             log::Level::Warn => ("WARN", Color::Yellow),
             log::Level::Error => ("ERRO", Color::Red),

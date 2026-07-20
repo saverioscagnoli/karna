@@ -4,17 +4,14 @@ use utils::FastHashMap;
 
 use crate::render::Draw;
 use crate::window::context::Context;
+use crate::window::scene::SceneView;
 
+#[allow(unused)]
 pub trait Scene: Send {
-    fn load(&mut self, ctx: Context);
-
-    fn fixed_update(&mut self, ctx: Context) {
-        _ = ctx
-    }
-
-    fn update(&mut self, ctx: Context);
-
-    fn draw(&mut self, ctx: Context, draw: &mut Draw);
+    fn load(&mut self, ctx: &mut Context, scene: &mut SceneView);
+    fn fixed_update(&mut self, ctx: &mut Context, scene: &mut SceneView) {}
+    fn update(&mut self, ctx: &mut Context, scene: &mut SceneView);
+    fn draw(&mut self, ctx: &mut Context, draw: &mut Draw);
 }
 
 #[derive(Default)]

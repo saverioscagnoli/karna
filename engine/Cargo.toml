@@ -4,10 +4,14 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+arc-swap = "1.9.2"
 
 gpu.workspace = true
 logging.workspace = true
 math.workspace = true
+parking_lot.workspace = true
 sdl3.workspace = true
 utils.workspace = true
 wgpu.workspace = true
+
+packer = { path = "../packer" }

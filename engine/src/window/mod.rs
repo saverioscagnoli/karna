@@ -1,5 +1,6 @@
 pub mod context;
 pub mod input;
+pub mod scene;
 pub mod state;
 pub mod time;
 
@@ -54,10 +55,6 @@ impl Window {
         }) {
             error!("Failed to send window request: {}", e);
         }
-    }
-
-    pub(crate) fn id(&self) -> u32 {
-        self.id
     }
 
     pub fn title(&self) -> &str {

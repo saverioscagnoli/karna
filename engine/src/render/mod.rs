@@ -1,29 +1,132 @@
+mod camera;
 mod color;
 mod draw;
+mod layer;
+pub mod layouts;
+mod transform;
+mod vertex;
+
+use std::ops::Index;
+use std::ops::IndexMut;
 
 use gpu::GpuState;
+use logging::debug;
 use logging::warn;
 
-use crate::window::context::FramePacket;
+use crate::assets::AssetReader;
+use crate::render::camera::CameraData;
+use crate::render::layer::RenderLayer;
+use crate::render::layer::RenderLayers;
 
+pub use crate::render::camera::Camera;
+pub use crate::render::camera::Projection;
 pub use crate::render::color::Color;
 pub use crate::render::draw::Draw;
+pub use crate::render::layer::Layer;
+pub use crate::render::layouts::LayoutDesc;
+pub use crate::render::layouts::Layouts;
+pub use crate::render::vertex::Vertex;
+
+#[derive(Default)]
+#[derive(Debug, Clone)]
+pub struct LayerPacket {
+    pub camera: CameraData,
+}
+
+#[derive(Debug, Clone)]
+pub struct FramePacket {
+    pub viewport: math::Size<u32>,
+    pub clear_color: math::Vector4<f32>,
+    pub world: LayerPacket,
+    pub ui: LayerPacket,
+    pub debug: LayerPacket,
+
+    /// SDL timestamp (ns) of the oldest input event this frame is the first to reflect.
+    pub input_timestamp: Option<u64>,
+}
+
+impl Default for FramePacket {
+    fn default() -> Self {
+        Self {
+            viewport: math::Size::new(1280, 720),
+            clear_color: Color::Gray.into(),
+            world: LayerPacket::default(),
+            ui: LayerPacket::default(),
+            debug: LayerPacket::default(),
+            input_timestamp: None,
+        }
+    }
+}
+
+impl Index<Layer> for FramePacket {
+    type Output = LayerPacket;
+
+    fn index(&self, l: Layer) -> &Self::Output {
+        match l {
+            Layer::World => &self.world,
+            Layer::Ui => &self.ui,
+            Layer::Debug => &self.debug,
+        }
+    }
+}
+
+impl IndexMut<Layer> for FramePacket {
+    fn index_mut(&mut self, l: Layer) -> &mut Self::Output {
+        match l {
+            Layer::World => &mut self.world,
+            Layer::Ui => &mut self.ui,
+            Layer::Debug => &mut self.debug,
+        }
+    }
+}
+
+impl FramePacket {
+    pub fn clear(&mut self) {
+        self.input_timestamp = None;
+    }
+}
+
+#[derive(Default)]
+struct RenderData {
+    layers: RenderLayers,
+}
 
 pub struct Renderer {
     surface: gpu::WindowSurface,
+    pipelines: gpu::PipelineCache,
+    assets: AssetReader,
+    data: RenderData,
 }
 
 impl Renderer {
-    pub(crate) fn new(surface: gpu::WindowSurface) -> Self {
-        Self { surface }
+    pub(crate) fn new(surface: gpu::WindowSurface, assets: AssetReader) -> Self {
+        layouts::init();
+        debug!("Bind group layouts registry initialized.");
+
+        Self {
+            surface,
+            pipelines: gpu::PipelineCache::new(),
+            assets,
+            data: RenderData::default(),
+        }
     }
 
     pub(crate) fn resize(&mut self, gpu: &gpu::GpuState, size: math::Size<u32>) {
         self.surface.resize(gpu, size);
     }
 
+    pub(crate) fn layer(&self, l: Layer) -> &RenderLayer {
+        &self.data.layers[l]
+    }
+
+    pub(crate) fn layer_mut(&mut self, l: Layer) -> &mut RenderLayer {
+        &mut self.data.layers[l]
+    }
+
     pub(crate) fn present(&mut self, packet: &FramePacket) {
         let gpu = GpuState::get();
+        let assets = self.assets.snapshot();
+
         let output = match self.surface.acquire() {
             wgpu::CurrentSurfaceTexture::Success(t) => t,
             wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
@@ -62,13 +165,31 @@ impl Renderer {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(Color::Cyan.into()),
+                        load: wgpu::LoadOp::Clear(gpu::Color {
+                            r: packet.clear_color.x as f64,
+                            g: packet.clear_color.y as f64,
+                            b: packet.clear_color.z as f64,
+                            a: packet.clear_color.w as f64,
+                        }),
                         store: wgpu::StoreOp::Store,
                     },
                     depth_slice: None,
                 })],
                 ..Default::default()
             });
+
+            for l in Layer::ALL {
+                let layer = &mut self.data.layers[l];
+                let layer_packet = &packet[l];
+
+                layer.camera_buffer.write_all(&[layer_packet.camera]);
+
+                pass.set_bind_group(0, &layer.camera_bind_group, &[]);
+
+                for (index, bind_group) in assets.atlas_bind_groups() {
+                    pass.set_bind_group(index + 1, bind_group, &[]);
+                }
+            }
         }
 
         gpu.queue.submit(std::iter::once(encoder.finish()));

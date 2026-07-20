@@ -1,13 +1,23 @@
+use crate::render::FramePacket;
 use crate::render::Renderer;
 use crate::render::color::Color;
-use crate::window::context::FramePacket;
+use crate::render::layer::Layer;
 
 pub struct Draw<'ctx> {
     pub(crate) r: &'ctx mut Renderer,
+    pub(crate) active_layer: Layer,
     pub(crate) packet: &'ctx mut FramePacket,
 }
 
 impl<'ctx> Draw<'ctx> {
+    pub fn layer(&self) -> Layer {
+        self.active_layer
+    }
+
+    pub fn set_layer(&mut self, layer: Layer) {
+        self.active_layer = layer;
+    }
+
     pub fn clear_color(&self) -> Color {
         self.packet.clear_color.into()
     }

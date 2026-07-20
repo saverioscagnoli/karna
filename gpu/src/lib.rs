@@ -1,13 +1,62 @@
+mod bind_group;
+mod buffer;
+mod layout;
+mod pipeline;
+mod shaders;
 mod surface;
+mod texture;
 
 use std::sync::OnceLock;
 
 use logging::debug;
 use wgpu::InstanceDescriptor;
 
+pub use wgpu::BindGroup;
+pub use wgpu::BindGroupLayout;
+pub use wgpu::BlendState;
+pub use wgpu::Color;
+pub use wgpu::Face as Cull;
+pub use wgpu::PrimitiveTopology;
+pub use wgpu::RenderPipeline;
+pub use wgpu::VertexAttribute;
+pub use wgpu::VertexStepMode;
+pub use wgpu::vertex_attr_array;
+
+use crate::shaders::ShaderRegistry;
+
+pub use crate::bind_group::BindGroupBuilder;
+pub use crate::buffer::*;
+pub use crate::layout::*;
+pub use crate::pipeline::PipelineCache;
+pub use crate::pipeline::PipelineKey;
 pub use crate::surface::WindowSurface;
+pub use crate::texture::Texture;
+
+pub type VertexBufferLayout = wgpu::VertexBufferLayout<'static>;
 
 static SINGLETON: OnceLock<GpuState> = OnceLock::new();
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn init(f: impl FnOnce(&mut ShaderRegistry, &wgpu::Device)) {
+    SINGLETON.get_or_init(|| {
+        let mut state = pollster::block_on(GpuState::new());
+        f(&mut state.shaders, &state.device);
+        state
+    });
+}
+
+/// Async variant of [`init`] — the only option on the web, where the
+/// adapter/device requests must actually be awaited instead of blocked on.
+pub async fn init_async(f: impl FnOnce(&mut ShaderRegistry, &wgpu::Device)) {
+    if SINGLETON.get().is_some() {
+        return;
+    }
+
+    let mut state = GpuState::new().await;
+    f(&mut state.shaders, &state.device);
+
+    _ = SINGLETON.set(state);
+}
 
 #[derive(Debug)]
 pub struct GpuState {
@@ -15,6 +64,7 @@ pub struct GpuState {
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
+    pub shaders: ShaderRegistry,
 }
 
 impl GpuState {
@@ -91,6 +141,7 @@ impl GpuState {
             adapter,
             device,
             queue,
+            shaders: ShaderRegistry::new(),
         }
     }
 }

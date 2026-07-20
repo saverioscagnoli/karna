@@ -5,11 +5,10 @@ use logging::debug;
 use sdl3::event::Event;
 use sdl3::event::WindowEvent;
 
+use crate::render::FramePacket;
 use crate::scene::SceneManagerCommand;
 use crate::scene::SceneRegistry;
-use crate::window::context::FramePacket;
 use crate::window::context::WindowContext;
-use crate::window::time;
 
 pub struct WindowState {
     pub context: WindowContext,
@@ -27,9 +26,9 @@ impl WindowState {
     fn init(&mut self) {
         for &index in &self.active_scenes {
             let scene = self.scenes.get_mut(index);
-            let (ctx, _) = self.context.split_draw(&mut self.packet);
+            let (mut ctx, mut view) = self.context.split_scene(&mut self.packet);
 
-            scene.load(ctx);
+            scene.load(&mut ctx, &mut view);
         }
     }
 
@@ -106,9 +105,9 @@ impl WindowState {
         while let Some(tick_start) = self.context.time.next_tick() {
             for &index in &self.active_scenes {
                 let scene = self.scenes.get_mut(index);
-                let (ctx, _) = self.context.split_draw(&mut self.packet);
+                let (mut ctx, mut view) = self.context.split_scene(&mut self.packet);
 
-                scene.fixed_update(ctx);
+                scene.fixed_update(&mut ctx, &mut view);
             }
 
             self.context.time.do_tick(tick_start);
@@ -116,16 +115,16 @@ impl WindowState {
 
         for &index in &self.active_scenes {
             let scene = self.scenes.get_mut(index);
-            let (ctx, _) = self.context.split_draw(&mut self.packet);
+            let (mut ctx, mut view) = self.context.split_scene(&mut self.packet);
 
-            scene.update(ctx);
+            scene.update(&mut ctx, &mut view);
         }
 
         for &index in &self.active_scenes {
             let scene = self.scenes.get_mut(index);
-            let (ctx, mut draw) = self.context.split_draw(&mut self.packet);
+            let (mut ctx, mut draw) = self.context.split_draw(&mut self.packet);
 
-            scene.draw(ctx, &mut draw);
+            scene.draw(&mut ctx, &mut draw);
         }
 
         self.context.renderer.present(&self.packet);

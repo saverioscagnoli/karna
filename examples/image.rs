@@ -5,15 +5,23 @@ use karna::Context;
 use karna::Scene;
 use karna::SceneView;
 use karna::WindowBuilder;
+use karna::assets::Handle;
+use karna::assets::Image;
 use karna::logging::Config;
 use karna::render::Draw;
 
-const DEMO_SCENE: usize = 0;
+const IMAGE_SCENE: usize = 0;
 
-struct Demo;
+struct ImageDemo {
+    pcb: Handle<Image>,
+}
 
-impl Scene for Demo {
-    fn load(&mut self, ctx: &mut Context, scene: &mut SceneView) {}
+impl Scene for ImageDemo {
+    fn load(&mut self, mut ctx: &mut Context, scene: &mut SceneView) {
+        ctx.assets.write_scope(|w| {
+            self.pcb = w.load_image(include_bytes!("assets/pcb.png"));
+        })
+    }
 
     fn fixed_update(&mut self, ctx: &mut Context, scene: &mut SceneView) {}
 
@@ -30,8 +38,13 @@ fn main() {
             WindowBuilder::new()
                 .with_title("Demo window")
                 .with_size((1280, 720))
-                .with_scene(DEMO_SCENE, Demo)
-                .with_active_scene(DEMO_SCENE),
+                .with_scene(
+                    IMAGE_SCENE,
+                    ImageDemo {
+                        pcb: Handle::INVALID,
+                    },
+                )
+                .with_active_scene(IMAGE_SCENE),
         )
         .build()
         .run();

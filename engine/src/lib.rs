@@ -1,3 +1,4 @@
+pub mod assets;
 mod builder;
 mod event;
 mod logs;
@@ -20,14 +21,18 @@ use sdl3::event::Event;
 use sdl3::event::WindowEvent;
 use utils::FastHashMap;
 
+use crate::assets::AssetServer;
+use crate::render::Camera;
+use crate::render::FramePacket;
+use crate::render::Projection;
 use crate::render::Renderer;
 use crate::window::MainThreadRequest;
 use crate::window::Window;
 use crate::window::WindowHandle;
 use crate::window::WindowRequest;
-use crate::window::context::FramePacket;
 use crate::window::context::WindowContext;
 use crate::window::input::Input;
+use crate::window::scene::Cameras;
 use crate::window::state::WindowState;
 use crate::window::time::Time;
 
@@ -38,6 +43,9 @@ pub use crate::render::Draw;
 pub use crate::scene::Scene;
 pub use crate::scene::SceneManager;
 pub use crate::window::context::Context;
+pub use crate::window::scene::SceneView;
+
+const IMMEDIATE_SHADER: usize = 0;
 
 pub struct App {
     windows: FastHashMap<u32, WindowHandle>,
@@ -55,12 +63,18 @@ impl App {
 
         events.register_custom_event::<WindowRequest>().unwrap();
 
-        let gpu = GpuState::get();
-        debug!("GPU initialized.");
+        gpu::init(|shaders, device| {
+            let src = include_str!("../../shaders/immediate.wgsl");
 
+            shaders.load(IMMEDIATE_SHADER, src, device);
+        });
+
+        debug!("GPU initialized.");
         info!("Video driver: {:?}", video.current_video_driver());
 
+        let gpu = GpuState::get();
         let info = gpu.device.adapter_info();
+
         info!(
             "GPU: {} ({:?}, {}, driver {})",
             info.name, info.device_type, info.backend, info.driver_info
@@ -101,13 +115,25 @@ impl App {
         let proxy = self.events.event_sender();
 
         let thread = thread::spawn(move || {
+            let assets = AssetServer::new();
+            debug!("Asset Server initialized.");
+
+            let renderer = Renderer::new(surface, assets.reader());
+            debug!("Renderer initialized.");
+
             WindowState {
                 context: WindowContext {
                     window: Window::new(window_id, window_title, window_size, proxy),
                     input: Input::new(),
                     time: Time::new(),
                     scenes: SceneManager::new(),
-                    renderer: Renderer::new(surface),
+                    assets,
+                    cameras: Cameras {
+                        world: Camera::new(Projection::standard_2d(window_size)),
+                        ui: Camera::new(Projection::standard_2d(window_size)),
+                        debug: Camera::new(Projection::standard_2d(window_size)),
+                    },
+                    renderer,
                 },
                 scenes: b.scenes,
                 active_scenes: b.initial_active,
@@ -184,6 +210,7 @@ impl App {
                 } => match w_event {
                     WindowEvent::CloseRequested => {
                         self.close_window(w_id);
+                        info!("Closing window '{}'", w_id);
 
                         if self.windows.is_empty() {
                             info!("All windows were closed. Exiting.");
