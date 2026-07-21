@@ -4,19 +4,39 @@ pub mod scene;
 pub mod state;
 pub mod time;
 
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::Sender;
 use std::thread::JoinHandle;
 
 use logging::error;
+use parking_lot::Mutex;
 use sdl3::event::Event;
 use sdl3::event::EventSender;
 
+use crate::render::FrameSubmission;
+use crate::render::RenderLayers;
+use crate::render::Renderer;
+
 pub use sdl3::video::Window as SdlWindow;
+
+/// Latest-wins slot a window's logic thread drops finished frames into.
+/// The main thread takes them out when it receives [`MainThreadRequest::FrameReady`].
+pub type FrameSlot = Arc<Mutex<Option<FrameSubmission>>>;
+
+/// True while a [`MainThreadRequest::Present`] event for this window is in the
+/// SDL event queue. Bounds the queue to one Present per window: the logic
+/// thread can outrun the vsync-blocked main thread by orders of magnitude, and
+/// unthrottled Present events fill SDL's 65535-event queue in seconds.
+pub type PresentPending = Arc<AtomicBool>;
 
 #[derive(Debug)]
 pub enum MainThreadRequest {
     SetWindowTitle(String),
     SetWindowSize(math::Size<u32>),
+    /// A finished frame is waiting in the window's [`FrameSlot`].
+    Present,
 }
 
 pub struct WindowRequest {
@@ -26,6 +46,11 @@ pub struct WindowRequest {
 
 pub struct WindowHandle {
     pub window: SdlWindow,
+    pub renderer: Renderer,
+    pub frame_slot: FrameSlot,
+    pub present_pending: PresentPending,
+    /// Returns rendered frames' geometry buffers to the logic thread for reuse.
+    pub recycle: Sender<RenderLayers>,
     pub event_sender: Sender<Event>,
     pub shutdown: Sender<()>,
     pub thread: JoinHandle<()>,
@@ -36,24 +61,49 @@ pub struct Window {
     title: String,
     size: math::Size<u32>,
     proxy: EventSender,
+    present_pending: PresentPending,
 }
 
 impl Window {
-    pub(crate) fn new(id: u32, title: String, size: math::Size<u32>, proxy: EventSender) -> Self {
+    pub(crate) fn new(
+        id: u32,
+        title: String,
+        size: math::Size<u32>,
+        proxy: EventSender,
+        present_pending: PresentPending,
+    ) -> Self {
         Self {
             id,
             title,
             size,
             proxy,
+            present_pending,
         }
     }
 
-    fn push(&self, req: MainThreadRequest) {
-        if let Err(e) = self.proxy.push_custom_event(WindowRequest {
+    fn push(&self, req: MainThreadRequest) -> bool {
+        match self.proxy.push_custom_event(WindowRequest {
             window_id: self.id,
             request: req,
         }) {
-            error!("Failed to send window request: {}", e);
+            Ok(()) => true,
+            Err(e) => {
+                error!("Failed to send window request: {}", e);
+                false
+            }
+        }
+    }
+
+    /// Wakes the main thread to render the frame in this window's slot.
+    /// A no-op if a Present event is already queued — the frame slot is
+    /// latest-wins, so the queued event will pick up the newest frame.
+    pub(crate) fn present(&self) {
+        if !self.present_pending.swap(true, Ordering::AcqRel)
+            && !self.push(MainThreadRequest::Present)
+        {
+            // The event never made it into the queue; clear the flag so the
+            // next frame retries instead of never presenting again.
+            self.present_pending.store(false, Ordering::Release);
         }
     }
 
@@ -101,11 +151,11 @@ impl Window {
 
     pub fn set_width(&mut self, width: u32) {
         self.size.width = width;
-        self.push(MainThreadRequest::SetWindowSize(self.size))
+        self.push(MainThreadRequest::SetWindowSize(self.size));
     }
 
     pub fn set_height(&mut self, height: u32) {
         self.size.height = height;
-        self.push(MainThreadRequest::SetWindowSize(self.size))
+        self.push(MainThreadRequest::SetWindowSize(self.size));
     }
 }

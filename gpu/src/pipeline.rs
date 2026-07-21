@@ -1,110 +1,155 @@
 use logging::debug;
+use sdl3::gpu::BlendFactor;
+use sdl3::gpu::BlendOp;
+use sdl3::gpu::ColorTargetBlendState;
+use sdl3::gpu::ColorTargetDescription;
+use sdl3::gpu::CullMode;
+use sdl3::gpu::FillMode;
+use sdl3::gpu::FrontFace;
+use sdl3::gpu::GraphicsPipelineTargetInfo;
+use sdl3::gpu::RasterizerState;
+use sdl3::gpu::VertexBufferDescription;
+use sdl3::gpu::VertexInputRate;
+use sdl3::gpu::VertexInputState;
 use utils::FastHashMap;
 
-use crate::BlendState;
-use crate::Cull;
-use crate::GpuState;
+use crate::Gpu;
 use crate::PrimitiveTopology;
-use crate::RenderPipeline;
-use crate::VertexBufferLayout;
+use crate::TextureFormat;
+use crate::VertexLayout;
 use crate::shaders::ShaderRef;
 
-fn build_pipeline(
-    gpu: &GpuState,
-    desc: &PipelineDesc,
-    bgl: &[&wgpu::BindGroupLayout],
-    surface_format: wgpu::TextureFormat,
-) -> wgpu::RenderPipeline {
-    let shader = gpu.shaders.get(&desc.shader);
-    let buffers = vec![Some(desc.vertex_layout.clone())];
+pub use sdl3::gpu::GraphicsPipeline as RenderPipeline;
 
-    // pipeline layout — empty for now, add bind group layouts later (camera uniform, textures)
-    let pipeline_layout = gpu
-        .device
-        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("pipeline layout"),
-            bind_group_layouts: &bgl.iter().map(|b| Some(*b)).collect::<Vec<_>>(),
-            ..Default::default()
-        });
-
-    gpu.device
-        .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("render pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: shader,
-                entry_point: Some("vs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &buffers,
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: shader,
-                entry_point: Some("fs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: surface_format,
-                    blend: Some(desc.blend),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: desc.topology,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: desc.cull,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            cache: None,
-            multiview_mask: None,
-        })
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BlendState {
+    None,
+    Alpha,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+impl BlendState {
+    pub const ALPHA_BLENDING: Self = Self::Alpha;
+
+    fn apply(&self, target: ColorTargetDescription) -> ColorTargetDescription {
+        match self {
+            Self::None => target,
+            Self::Alpha => target.with_blend_state(
+                ColorTargetBlendState::new()
+                    .with_enable_blend(true)
+                    .with_color_blend_op(BlendOp::Add)
+                    .with_src_color_blendfactor(BlendFactor::SrcAlpha)
+                    .with_dst_color_blendfactor(BlendFactor::OneMinusSrcAlpha)
+                    .with_alpha_blend_op(BlendOp::Add)
+                    .with_src_alpha_blendfactor(BlendFactor::One)
+                    .with_dst_alpha_blendfactor(BlendFactor::OneMinusSrcAlpha),
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Cull {
+    Front,
+    Back,
+}
+
+fn build_pipeline(gpu: &Gpu, desc: &PipelineDesc) -> RenderPipeline {
+    let shader = gpu.shaders.get(&desc.shader);
+
+    let buffer_descriptions = [VertexBufferDescription::new()
+        .with_slot(0)
+        .with_pitch(desc.vertex_layout.pitch)
+        .with_input_rate(VertexInputRate::Vertex)
+        .with_instance_step_rate(0)];
+
+    let attributes: Vec<_> = desc
+        .vertex_layout
+        .attributes
+        .iter()
+        .map(|a| {
+            sdl3::gpu::VertexAttribute::new()
+                .with_buffer_slot(0)
+                .with_location(a.location)
+                .with_format(a.format)
+                .with_offset(a.offset)
+        })
+        .collect();
+
+    let color_targets =
+        [desc
+            .blend
+            .apply(ColorTargetDescription::new().with_format(desc.format))];
+
+    gpu.device()
+        .create_graphics_pipeline()
+        .with_vertex_shader(&shader.vertex)
+        .with_fragment_shader(&shader.fragment)
+        .with_primitive_type(desc.topology)
+        .with_vertex_input_state(
+            VertexInputState::new()
+                .with_vertex_buffer_descriptions(&buffer_descriptions)
+                .with_vertex_attributes(&attributes),
+        )
+        .with_rasterizer_state(
+            RasterizerState::new()
+                .with_fill_mode(FillMode::Fill)
+                .with_front_face(FrontFace::CounterClockwise)
+                .with_cull_mode(match desc.cull {
+                    Some(Cull::Front) => CullMode::Front,
+                    Some(Cull::Back) => CullMode::Back,
+                    None => CullMode::None,
+                }),
+        )
+        .with_target_info(
+            GraphicsPipelineTargetInfo::new().with_color_target_descriptions(&color_targets),
+        )
+        .build()
+        .expect("Failed to create render pipeline")
+}
+
+#[derive(Debug, Clone)]
 pub struct PipelineDesc {
     pub shader: ShaderRef,
-    pub vertex_layout: VertexBufferLayout,
+    pub vertex_layout: VertexLayout,
     pub blend: BlendState,
     pub topology: PrimitiveTopology,
     pub cull: Option<Cull>,
-    pub format: wgpu::TextureFormat,
+    pub format: TextureFormat,
 }
 
+/// The sdl3 enums don't implement `Hash`, so they are stored as their raw
+/// discriminants here.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PipelineKey {
     pub shader: ShaderRef,
-    pub vertex_stride: u64,
-    pub vertex_step_mode: wgpu::VertexStepMode,
-    pub vertex_attributes: Vec<wgpu::VertexAttribute>,
+    pub vertex_pitch: u32,
+    pub vertex_attributes: Vec<(u32, u32, u32)>,
     pub blend: BlendState,
-    pub topology: PrimitiveTopology,
-    pub format: wgpu::TextureFormat,
+    pub topology: u32,
+    pub format: u32,
 }
 
 impl PipelineKey {
     pub fn new(desc: &PipelineDesc) -> Self {
         Self {
             shader: desc.shader,
-            vertex_stride: desc.vertex_layout.array_stride,
-            vertex_step_mode: desc.vertex_layout.step_mode,
-            vertex_attributes: desc.vertex_layout.attributes.to_vec(),
+            vertex_pitch: desc.vertex_layout.pitch,
+            vertex_attributes: desc
+                .vertex_layout
+                .attributes
+                .iter()
+                .map(|a| (a.location, a.format as u32, a.offset))
+                .collect(),
             blend: desc.blend,
-            topology: desc.topology,
-            format: desc.format,
+            topology: desc.topology as u32,
+            format: desc.format as u32,
         }
     }
 }
 
 #[derive(Default)]
 pub struct PipelineCache {
-    pip: FastHashMap<PipelineKey, wgpu::RenderPipeline>,
+    pip: FastHashMap<PipelineKey, RenderPipeline>,
 }
 
 impl PipelineCache {
@@ -112,10 +157,9 @@ impl PipelineCache {
         Self::default()
     }
 
-    pub fn create(&mut self, desc: &PipelineDesc, layouts: &[&wgpu::BindGroupLayout]) {
-        let gpu = GpuState::get();
-        let key = PipelineKey::new(&desc);
-        let pip = build_pipeline(gpu, desc, layouts, desc.format);
+    pub fn create(&mut self, gpu: &Gpu, desc: &PipelineDesc) {
+        let key = PipelineKey::new(desc);
+        let pip = build_pipeline(gpu, desc);
 
         debug!("Created new render pipeline {:?}", desc);
 
@@ -123,7 +167,7 @@ impl PipelineCache {
     }
 
     pub fn get(&self, desc: &PipelineDesc) -> &RenderPipeline {
-        let key = PipelineKey::new(&desc);
+        let key = PipelineKey::new(desc);
         self.pip.get(&key).expect("Failed to get render pipeline")
     }
 }

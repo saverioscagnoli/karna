@@ -62,28 +62,6 @@ pub fn srgb_to_linear(c: f32) -> f32 {
     }
 }
 
-impl From<wgpu::Color> for Color {
-    fn from(c: wgpu::Color) -> Self {
-        Self {
-            r: c.r as f32,
-            g: c.g as f32,
-            b: c.b as f32,
-            a: c.a as f32,
-        }
-    }
-}
-
-impl Into<wgpu::Color> for Color {
-    fn into(self) -> wgpu::Color {
-        wgpu::Color {
-            r: self.r as f64,
-            g: self.g as f64,
-            b: self.b as f64,
-            a: self.a as f64,
-        }
-    }
-}
-
 impl From<Vector4<f32>> for Color {
     fn from(v: Vector4<f32>) -> Self {
         Self {

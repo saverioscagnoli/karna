@@ -15,6 +15,7 @@ use utils::SlotMap;
 use crate::assets::atlas::TextureAtlas;
 
 pub use crate::assets::atlas::Image;
+pub use crate::assets::atlas::PagePixels;
 pub use crate::assets::font::Font;
 pub use crate::assets::font::Glyph;
 
@@ -60,12 +61,8 @@ impl Assets {
         assets
     }
 
-    pub fn atlas_bind_groups(&self) -> impl Iterator<Item = (u32, &gpu::BindGroup)> + '_ {
-        self.atlas.all_bind_groups()
-    }
-
-    pub fn atlas_page_bind_group(&self, index: usize) -> &gpu::BindGroup {
-        self.atlas.page_bind_group(index)
+    pub fn atlas_pages(&self) -> impl Iterator<Item = &PagePixels> + '_ {
+        self.atlas.pages()
     }
 
     pub fn atlas_page_handles(&self) -> impl Iterator<Item = Handle<Image>> + '_ {
@@ -74,10 +71,6 @@ impl Assets {
 
     pub fn white_pixel(&self) -> &Image {
         self.atlas.white_pixel()
-    }
-
-    pub fn white_pixel_bind_group(&self) -> &gpu::BindGroup {
-        self.atlas.page_bind_group(0)
     }
 
     pub fn debug_font(&self) -> Handle<Font> {
@@ -171,24 +164,12 @@ impl<'a> AssetsView<'a> {
         }
     }
 
-    pub fn atlas_bind_groups(&self) -> impl Iterator<Item = (u32, &gpu::BindGroup)> + '_ {
-        self.snapshot.atlas_bind_groups()
-    }
-
-    pub fn atlas_page_bind_group(&self, index: usize) -> &gpu::BindGroup {
-        self.snapshot.atlas_page_bind_group(index)
-    }
-
     pub fn atlas_page_handles(&self) -> impl Iterator<Item = Handle<Image>> + '_ {
         self.snapshot.atlas_page_handles()
     }
 
     pub fn white_pixel(&self) -> &Image {
         self.snapshot.white_pixel()
-    }
-
-    pub fn white_pixel_bind_group(&self) -> &gpu::BindGroup {
-        self.snapshot.white_pixel_bind_group()
     }
 
     pub fn debug_font(&self) -> Handle<Font> {

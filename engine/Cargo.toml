@@ -12,6 +12,5 @@ math.workspace = true
 parking_lot.workspace = true
 sdl3.workspace = true
 utils.workspace = true
-wgpu.workspace = true
 
 packer = { path = "../packer" }

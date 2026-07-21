@@ -3,29 +3,29 @@ mod color;
 mod draw;
 mod immediate;
 mod layer;
-pub mod layouts;
 mod transform;
 mod vertex;
 
 use std::ops::Index;
 use std::ops::IndexMut;
 
-use gpu::GpuState;
-use logging::debug;
+use gpu::Gpu;
 use logging::warn;
+use sdl3::gpu::ColorTargetInfo;
+use sdl3::gpu::LoadOp;
+use sdl3::gpu::StoreOp;
 
 use crate::assets::AssetReader;
 use crate::render::camera::CameraData;
-use crate::render::layer::RenderLayer;
-use crate::render::layer::RenderLayers;
 
 pub use crate::render::camera::Camera;
 pub use crate::render::camera::Projection;
 pub use crate::render::color::Color;
 pub use crate::render::draw::Draw;
 pub use crate::render::layer::Layer;
-pub use crate::render::layouts::LayoutDesc;
-pub use crate::render::layouts::Layouts;
+pub use crate::render::layer::RenderLayer;
+pub use crate::render::layer::RenderLayers;
+pub use crate::render::vertex::LayoutDesc;
 pub use crate::render::vertex::Vertex;
 
 #[derive(Default)]
@@ -87,155 +87,201 @@ impl FramePacket {
     }
 }
 
-#[derive(Default)]
-struct RenderData {
-    layers: RenderLayers,
+/// A finished frame handed from a window's logic thread to the main thread:
+/// per-layer camera state plus the CPU geometry to upload and draw.
+#[derive(Debug, Clone)]
+pub struct FrameSubmission {
+    pub packet: FramePacket,
+    pub layers: RenderLayers,
+}
+
+/// GPU buffers backing one layer's immediate-mode geometry.
+struct LayerBuffers {
+    vertex: gpu::Buffer<Vertex>,
+    index: gpu::Buffer<u32>,
+}
+
+impl LayerBuffers {
+    fn new(gpu: &Gpu) -> Self {
+        Self {
+            vertex: gpu::Buffer::new(
+                gpu,
+                "Immediate mode vertex buffer",
+                gpu::BufferUsages::VERTEX,
+                1024,
+            ),
+            index: gpu::Buffer::new(
+                gpu,
+                "Immediate mode index buffer",
+                gpu::BufferUsages::INDEX,
+                1024,
+            ),
+        }
+    }
+}
+
+/// An atlas page texture and the CPU-side version it was last synced with.
+struct PageTexture {
+    texture: gpu::Texture,
+    version: u64,
 }
 
 pub struct Renderer {
-    surface: gpu::WindowSurface,
+    format: gpu::TextureFormat,
     pipelines: gpu::PipelineCache,
     assets: AssetReader,
-    data: RenderData,
+    buffers: [LayerBuffers; 3],
+    pages: Vec<PageTexture>,
 }
 
 impl Renderer {
-    pub(crate) fn new(surface: gpu::WindowSurface, assets: AssetReader) -> Self {
-        let pipelines = Self::init_pipelines(surface.format());
-        debug!("Builtin render pipelines initialized.");
+    pub(crate) fn new(gpu: &Gpu, format: gpu::TextureFormat, assets: AssetReader) -> Self {
+        let mut pipelines = gpu::PipelineCache::new();
+        pipelines.create(gpu, &Self::immediate_desc(format));
 
         Self {
-            surface,
+            format,
             pipelines,
             assets,
-            data: RenderData::default(),
+            buffers: [
+                LayerBuffers::new(gpu),
+                LayerBuffers::new(gpu),
+                LayerBuffers::new(gpu),
+            ],
+            pages: Vec::new(),
         }
     }
 
-    fn init_pipelines(format: gpu::TextureFormat) -> gpu::PipelineCache {
-        let mut cache = gpu::PipelineCache::new();
-
-        let desc = gpu::PipelineDesc {
+    fn immediate_desc(format: gpu::TextureFormat) -> gpu::PipelineDesc {
+        gpu::PipelineDesc {
             shader: gpu::ShaderRef::Builtin(0),
             vertex_layout: Vertex::desc(),
             blend: gpu::BlendState::ALPHA_BLENDING,
             topology: gpu::PrimitiveTopology::TriangleList,
             cull: None,
             format,
-        };
-
-        cache.create(&desc, &layouts::immediate());
-        cache
+        }
     }
 
-    pub(crate) fn resize(&mut self, gpu: &gpu::GpuState, size: math::Size<u32>) {
-        self.surface.resize(gpu, size);
+    /// Re-uploads atlas pages whose CPU pixels changed since the last frame.
+    fn sync_atlas(&mut self, gpu: &Gpu, copy_pass: &gpu::CopyPass, assets: &crate::assets::Assets) {
+        for (i, page) in assets.atlas_pages().enumerate() {
+            if self.pages.len() <= i {
+                let size = math::Size::new(page.size(), page.size());
+                let texture = gpu::Texture::new_blank(gpu, format!("atlas page {i}"), size);
+
+                self.pages.push(PageTexture {
+                    texture,
+                    version: page.version().wrapping_sub(1),
+                });
+            }
+
+            let entry = &mut self.pages[i];
+
+            if entry.version != page.version() {
+                entry.texture.write(
+                    gpu,
+                    copy_pass,
+                    page.bytes(),
+                    math::Vector2::new(0, 0),
+                    entry.texture.size,
+                );
+                entry.version = page.version();
+            }
+        }
     }
 
-    pub(crate) fn layer_mut(&mut self, l: Layer) -> &mut RenderLayer {
-        &mut self.data.layers[l]
-    }
-
-    pub(crate) fn present(&mut self, packet: &FramePacket) {
-        let gpu = GpuState::get();
+    pub(crate) fn present(
+        &mut self,
+        gpu: &Gpu,
+        window: &sdl3::video::Window,
+        frame: &FrameSubmission,
+    ) {
         let assets = self.assets.snapshot();
+        let mut cmd = gpu.acquire_command_buffer();
 
-        let output = match self.surface.acquire() {
-            wgpu::CurrentSurfaceTexture::Success(t) => t,
-            wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
-            wgpu::CurrentSurfaceTexture::Outdated => {
-                self.surface.resize(gpu, packet.viewport);
-                warn!("Received an outdated texture, skipping this frame");
-                return;
+        // Upload phase: atlas pages and this frame's geometry.
+        let copy_pass = gpu.begin_copy_pass(&cmd);
+
+        self.sync_atlas(gpu, &copy_pass, &assets);
+
+        for l in Layer::ALL {
+            let layer = &frame.layers[l];
+
+            if layer.indices.is_empty() {
+                continue;
             }
 
-            wgpu::CurrentSurfaceTexture::Timeout
-            | wgpu::CurrentSurfaceTexture::Occluded
-            | wgpu::CurrentSurfaceTexture::Validation => {
-                warn!("Failed to acquire a texture, skipping this frame");
-                return;
-            }
+            let buffers = &mut self.buffers[l as usize];
+            buffers.vertex.write_all(gpu, &copy_pass, &layer.vertices);
+            buffers.index.write_all(gpu, &copy_pass, &layer.indices);
+        }
 
-            wgpu::CurrentSurfaceTexture::Lost => {
-                panic!("Device lost");
+        gpu.end_copy_pass(copy_pass);
+
+        let swapchain = match cmd.wait_and_acquire_swapchain_texture(window) {
+            Ok(t) => t,
+            Err(e) => {
+                warn!("Failed to acquire swapchain texture ({e}), skipping this frame");
+                cmd.cancel();
+                return;
             }
         };
 
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        let c = frame.packet.clear_color;
+        let clear = sdl3::pixels::Color::RGBA(
+            (c.x.clamp(0.0, 1.0) * 255.0) as u8,
+            (c.y.clamp(0.0, 1.0) * 255.0) as u8,
+            (c.z.clamp(0.0, 1.0) * 255.0) as u8,
+            (c.w.clamp(0.0, 1.0) * 255.0) as u8,
+        );
 
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("clear"),
-            });
+        let targets = [ColorTargetInfo::default()
+            .with_texture(&swapchain)
+            .with_load_op(LoadOp::CLEAR)
+            .with_store_op(StoreOp::STORE)
+            .with_clear_color(clear)];
 
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("render pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(gpu::Color {
-                            r: packet.clear_color.x as f64,
-                            g: packet.clear_color.y as f64,
-                            b: packet.clear_color.z as f64,
-                            a: packet.clear_color.w as f64,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                ..Default::default()
-            });
+        let pass = gpu
+            .device()
+            .begin_render_pass(&cmd, &targets, None)
+            .expect("Failed to begin render pass");
 
-            for l in Layer::ALL {
-                let layer = &mut self.data.layers[l];
-                let layer_packet = &packet[l];
+        let pip = self.pipelines.get(&Self::immediate_desc(self.format));
 
-                if layer.indices.is_empty() {
-                    layer.clear();
-                    continue;
-                }
+        for l in Layer::ALL {
+            let layer = &frame.layers[l];
 
-                layer.camera_buffer.write_all(&[layer_packet.camera]);
+            if layer.indices.is_empty() {
+                continue;
+            }
 
-                layer.vertex_buffer.write_all(&layer.vertices);
-                layer.index_buffer.write_all(&layer.indices);
+            let buffers = &self.buffers[l as usize];
 
-                let immediate_key = gpu::PipelineDesc {
-                    shader: gpu::ShaderRef::Builtin(0),
-                    vertex_layout: Vertex::desc(),
-                    blend: gpu::BlendState::ALPHA_BLENDING,
-                    topology: gpu::PrimitiveTopology::TriangleList,
-                    cull: None,
-                    format: view.texture().format(),
-                };
+            pass.bind_graphics_pipeline(pip);
+            cmd.push_vertex_uniform_data(0, &frame.packet[l].camera);
+            pass.bind_vertex_buffers(0, &[buffers.vertex.binding()]);
+            pass.bind_index_buffer(&buffers.index.binding(), gpu::IndexElementSize::_32BIT);
 
-                let pip = self.pipelines.get(&immediate_key);
+            for batch in &layer.batches {
+                // Page 0 always exists and holds the white pixel.
+                let page = &self.pages[batch.page.unwrap_or(0)];
 
-                pass.set_pipeline(pip);
-                pass.set_bind_group(0, &layer.camera_bind_group, &[]);
-                pass.set_vertex_buffer(0, layer.vertex_buffer.slice_all());
-                pass.set_index_buffer(layer.index_buffer.slice_all(), gpu::IndexFormat::Uint32);
-
-                for batch in &layer.batches {
-                    let bind_group = match batch.page {
-                        Some(p) => assets.atlas_page_bind_group(p),
-                        None => assets.white_pixel_bind_group(),
-                    };
-
-                    pass.set_bind_group(1, bind_group, &[]);
-                    pass.draw_indexed(batch.indices.clone(), 0, 0..1);
-                }
+                pass.bind_fragment_samplers(0, &[page.texture.binding(gpu)]);
+                pass.draw_indexed_primitives(
+                    batch.indices.end - batch.indices.start,
+                    1,
+                    batch.indices.start,
+                    0,
+                    0,
+                );
             }
         }
 
-        gpu.queue.submit(std::iter::once(encoder.finish()));
-        gpu.queue.present(output);
+        gpu.device().end_render_pass(pass);
 
-        self.data.layers.clear();
+        if let Err(e) = cmd.submit() {
+            warn!("Failed to submit frame: {e}");
+        }
     }
 }

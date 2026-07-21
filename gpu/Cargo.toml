@@ -8,6 +8,3 @@ logging.workspace = true
 math.workspace = true
 sdl3.workspace = true
 utils.workspace = true
-wgpu.workspace = true
-
-pollster = "1.0.1"

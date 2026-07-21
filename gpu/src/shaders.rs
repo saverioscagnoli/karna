@@ -1,6 +1,7 @@
-use std::borrow::Cow;
-
 use logging::debug;
+use sdl3::gpu::Shader;
+use sdl3::gpu::ShaderFormat;
+use sdl3::gpu::ShaderStage;
 use utils::FastHashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
@@ -8,10 +9,25 @@ pub enum ShaderRef {
     Builtin(usize),
 }
 
+/// A precompiled SPIR-V vertex/fragment shader pair.
+///
+/// SDL GPU has no reflection: the number of resources each stage uses must be
+/// declared up front, matching the shader source.
+pub struct ShaderDesc<'a> {
+    pub vertex_spirv: &'a [u8],
+    pub fragment_spirv: &'a [u8],
+    pub vertex_uniform_buffers: u32,
+    pub fragment_samplers: u32,
+}
+
+pub struct ShaderPair {
+    pub vertex: Shader,
+    pub fragment: Shader,
+}
+
 #[derive(Default)]
-#[derive(Debug, Clone)]
 pub struct ShaderRegistry {
-    shaders: FastHashMap<usize, wgpu::ShaderModule>,
+    shaders: FastHashMap<usize, ShaderPair>,
 }
 
 impl ShaderRegistry {
@@ -19,21 +35,32 @@ impl ShaderRegistry {
         Self::default()
     }
 
-    pub fn load<S>(&mut self, index: usize, src: S, device: &wgpu::Device)
-    where
-        S: Into<String>,
-    {
-        let src: String = src.into();
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Wgsl(Cow::Owned(src)),
-        });
+    pub fn load(&mut self, device: &sdl3::gpu::Device, index: usize, desc: ShaderDesc) {
+        let vertex = device
+            .create_shader()
+            .with_code(ShaderFormat::SPIRV, desc.vertex_spirv, ShaderStage::Vertex)
+            .with_uniform_buffers(desc.vertex_uniform_buffers)
+            .with_entrypoint(c"main")
+            .build()
+            .expect("Failed to create vertex shader");
 
-        self.shaders.insert(index, module);
+        let fragment = device
+            .create_shader()
+            .with_code(
+                ShaderFormat::SPIRV,
+                desc.fragment_spirv,
+                ShaderStage::Fragment,
+            )
+            .with_samplers(desc.fragment_samplers)
+            .with_entrypoint(c"main")
+            .build()
+            .expect("Failed to create fragment shader");
+
+        self.shaders.insert(index, ShaderPair { vertex, fragment });
         debug!("Loaded shader.");
     }
 
-    pub fn get(&self, r: &ShaderRef) -> &wgpu::ShaderModule {
+    pub fn get(&self, r: &ShaderRef) -> &ShaderPair {
         match r {
             ShaderRef::Builtin(index) => self.shaders.get(index).expect("Failed to get shader"),
         }

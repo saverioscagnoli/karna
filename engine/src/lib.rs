@@ -8,15 +8,18 @@ mod window;
 pub mod render;
 
 use std::mem;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::thread;
 
-use gpu::GpuState;
-use gpu::WindowSurface;
+use gpu::Gpu;
 use logging::debug;
 use logging::error;
 use logging::info;
 use logging::warn;
+use parking_lot::Mutex;
 use sdl3::event::Event;
 use sdl3::event::WindowEvent;
 use utils::FastHashMap;
@@ -26,8 +29,9 @@ use crate::render::Camera;
 use crate::render::FramePacket;
 use crate::render::Projection;
 use crate::render::Renderer;
-use crate::render::layouts;
+use crate::window::FrameSlot;
 use crate::window::MainThreadRequest;
+use crate::window::PresentPending;
 use crate::window::Window;
 use crate::window::WindowHandle;
 use crate::window::WindowRequest;
@@ -59,7 +63,10 @@ struct AppOwned {
 }
 
 pub struct App {
+    // Field order matters: window handles own GPU resources (renderers),
+    // so they must drop before the GPU context.
     windows: FastHashMap<u32, WindowHandle>,
+    gpu: Gpu,
     events: sdl3::EventSubsystem,
     video: sdl3::VideoSubsystem,
     sdl: sdl3::Sdl,
@@ -75,34 +82,28 @@ impl App {
 
         events.register_custom_event::<WindowRequest>().unwrap();
 
-        gpu::init(|shaders, device| {
-            let src = include_str!("../../shaders/immediate.wgsl");
+        let mut gpu = Gpu::new();
 
-            shaders.load(IMMEDIATE_SHADER, src, device);
-        });
-
-        // Initialize bind group layouts here,
-        // if we do it in the spawn_window function it will
-        // crash for setting a oncelock multiple times
-        layouts::init();
-        debug!("Bind group layouts registry initialized.");
+        gpu.load_shader(
+            IMMEDIATE_SHADER,
+            gpu::ShaderDesc {
+                vertex_spirv: include_bytes!(concat!(env!("OUT_DIR"), "/immediate.vert.spv")),
+                fragment_spirv: include_bytes!(concat!(env!("OUT_DIR"), "/immediate.frag.spv")),
+                vertex_uniform_buffers: 1,
+                fragment_samplers: 1,
+            },
+        );
 
         debug!("GPU initialized.");
         info!("Video driver: {:?}", video.current_video_driver());
-
-        let gpu = GpuState::get();
-        let info = gpu.device.adapter_info();
-
-        info!(
-            "GPU: {} ({:?}, {}, driver {})",
-            info.name, info.device_type, info.backend, info.driver_info
-        );
+        info!("GPU driver: {:?}", gpu.device().get_shader_formats());
 
         let assets = AssetServer::new();
         debug!("Asset Server initialized.");
 
         Self {
             windows: FastHashMap::default(),
+            gpu,
             events,
             video,
             sdl,
@@ -123,9 +124,12 @@ impl App {
         let sdl_builder = self.video.window(&b.title, b.size.width, b.size.height);
         let window = b.build_sdl(sdl_builder);
 
-        let gpu = GpuState::get();
+        // Swapchain lives on the main thread
+        self.gpu.claim_window(&window);
 
-        let surface = WindowSurface::create(&gpu, &window);
+        let format = self.gpu.swapchain_format(&window);
+        let renderer = Renderer::new(&self.gpu, format, self.owned.assets.reader());
+        debug!("Renderer initialized.");
 
         let window_id = window.id();
         let window_title = window.title().to_owned();
@@ -134,16 +138,18 @@ impl App {
         // Channels
         let (event_tx, event_rx) = mpsc::channel::<Event>();
         let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>();
+        let (recycle_tx, recycle_rx) = mpsc::channel::<render::RenderLayers>();
+        let frame_slot: FrameSlot = Arc::new(Mutex::new(None));
+        let thread_slot = frame_slot.clone();
+        let present_pending: PresentPending = Arc::new(AtomicBool::new(false));
+        let thread_pending = present_pending.clone();
         let proxy = self.events.event_sender();
         let assets = self.owned.assets.clone();
 
         let thread = thread::spawn(move || {
-            let renderer = Renderer::new(surface, assets.reader());
-            debug!("Renderer initialized.");
-
             WindowState {
                 context: WindowContext {
-                    window: Window::new(window_id, window_title, window_size, proxy),
+                    window: Window::new(window_id, window_title, window_size, proxy, thread_pending),
                     input: Input::new(),
                     time: Time::new(),
                     scenes: SceneManager::new(),
@@ -153,13 +159,15 @@ impl App {
                         ui: Camera::new(Projection::standard_2d(window_size)),
                         debug: Camera::new(Projection::standard_2d(window_size)),
                     },
-                    renderer,
+                    layers: Default::default(),
                 },
                 scenes: b.scenes,
                 active_scenes: b.initial_active,
                 events: event_rx,
                 shutdown: shutdown_rx,
                 packet: FramePacket::default(),
+                frame_slot: thread_slot,
+                recycled: recycle_rx,
                 pending_input_timestamp: None,
             }
             .run_loop();
@@ -169,6 +177,10 @@ impl App {
             window_id,
             WindowHandle {
                 window,
+                renderer,
+                frame_slot,
+                present_pending,
+                recycle: recycle_tx,
                 event_sender: event_tx,
                 shutdown: shutdown_tx,
                 thread,
@@ -214,6 +226,21 @@ impl App {
                         if let Some(handle) = self.windows.get_mut(&req.window_id) {
                             let _ = handle.window.set_size(size.width, size.height);
                             debug!("Size set to {:?} for window {}", size, req.window_id);
+                        }
+                    }
+
+                    MainThreadRequest::Present => {
+                        if let Some(handle) = self.windows.get_mut(&req.window_id) {
+                            // Clear before taking the slot: a frame finished
+                            // after this point must queue a fresh Present.
+                            handle.present_pending.store(false, Ordering::Release);
+
+                            let frame = handle.frame_slot.lock().take();
+
+                            if let Some(frame) = frame {
+                                handle.renderer.present(&self.gpu, &handle.window, &frame);
+                                let _ = handle.recycle.send(frame.layers);
+                            }
                         }
                     }
                 }

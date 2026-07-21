@@ -1,149 +1,134 @@
-mod bind_group;
 mod buffer;
-mod layout;
 mod pipeline;
 mod shaders;
-mod surface;
 mod texture;
-
-use std::sync::OnceLock;
+mod vertex;
 
 use logging::debug;
-use wgpu::InstanceDescriptor;
+use logging::warn;
+use sdl3::video::Window;
 
-pub use wgpu::BindGroup;
-pub use wgpu::BindGroupLayout;
-pub use wgpu::BlendState;
-pub use wgpu::Color;
-pub use wgpu::Face as Cull;
-pub use wgpu::IndexFormat;
-pub use wgpu::PrimitiveTopology;
-pub use wgpu::RenderPipeline;
-pub use wgpu::TextureFormat;
-pub use wgpu::VertexAttribute;
-pub use wgpu::VertexStepMode;
-pub use wgpu::vertex_attr_array;
+pub use sdl3::gpu::CommandBuffer;
+pub use sdl3::gpu::CopyPass;
+pub use sdl3::gpu::PresentMode;
+pub use sdl3::gpu::PrimitiveType as PrimitiveTopology;
+pub use sdl3::gpu::RenderPass;
+pub use sdl3::gpu::ShaderFormat;
+pub use sdl3::gpu::SwapchainComposition;
+pub use sdl3::gpu::TextureFormat;
+pub use sdl3::gpu::TextureSamplerBinding;
+pub use sdl3::gpu::VertexElementFormat;
 
-use crate::shaders::ShaderRegistry;
-
-pub use crate::bind_group::BindGroupBuilder;
 pub use crate::buffer::*;
-pub use crate::layout::*;
 pub use crate::pipeline::*;
+pub use crate::shaders::ShaderDesc;
 pub use crate::shaders::ShaderRef;
-pub use crate::surface::WindowSurface;
+pub use crate::shaders::ShaderRegistry;
 pub use crate::texture::Texture;
+pub use crate::vertex::VertexAttribute;
+pub use crate::vertex::VertexLayout;
 
-pub type VertexBufferLayout = wgpu::VertexBufferLayout<'static>;
-
-static SINGLETON: OnceLock<GpuState> = OnceLock::new();
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn init(f: impl FnOnce(&mut ShaderRegistry, &wgpu::Device)) {
-    SINGLETON.get_or_init(|| {
-        let mut state = pollster::block_on(GpuState::new());
-        f(&mut state.shaders, &state.device);
-        state
-    });
-}
-
-/// Async variant of [`init`] — the only option on the web, where the
-/// adapter/device requests must actually be awaited instead of blocked on.
-pub async fn init_async(f: impl FnOnce(&mut ShaderRegistry, &wgpu::Device)) {
-    if SINGLETON.get().is_some() {
-        return;
-    }
-
-    let mut state = GpuState::new().await;
-    f(&mut state.shaders, &state.device);
-
-    _ = SINGLETON.set(state);
-}
-
-#[derive(Debug)]
-pub struct GpuState {
-    pub instance: wgpu::Instance,
-    pub adapter: wgpu::Adapter,
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
+/// The GPU context. Owned by the app and only ever touched from the main
+/// thread: SDL GPU requires swapchain operations to happen on the thread
+/// that created the window, so all rendering lives there.
+pub struct Gpu {
+    device: sdl3::gpu::Device,
+    sampler: sdl3::gpu::Sampler,
     pub shaders: ShaderRegistry,
 }
 
-impl GpuState {
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn get() -> &'static Self {
-        SINGLETON.get_or_init(|| pollster::block_on(Self::new()))
-    }
+impl Gpu {
+    /// Only SPIR-V shaders are shipped, which pins SDL to the Vulkan backend.
+    /// (D3D12/Metal would need DXIL/MSL variants of the shaders.)
+    pub fn new() -> Self {
+        let device = sdl3::gpu::Device::new(ShaderFormat::SPIRV, cfg!(debug_assertions))
+            .expect("Failed to create GPU device");
 
-    /// On the web the singleton cannot be created lazily (that would require
-    /// blocking), so it must have been set by awaiting [`init_async`] first.
-    #[cfg(target_arch = "wasm32")]
-    pub fn get() -> &'static Self {
-        SINGLETON
-            .get()
-            .expect("GpuState::get() called before gpu::init_async() completed")
-    }
+        debug!("GPU device created (formats: {:?})", device.get_shader_formats());
 
-    async fn new() -> Self {
-        let backend_options = wgpu::BackendOptions::default();
-
-        debug!(
-            "Creating instance with backend options {:?}",
-            backend_options
-        );
-
-        let instance =
-            wgpu::Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
-
-        #[cfg(not(target_arch = "wasm32"))]
-        debug!(
-            "adapters {:?}",
-            instance
-                .enumerate_adapters(wgpu::Backends::all())
-                .await
-                .to_vec()
-        );
-
-        // Will be parsed from a configuration file maybe?
-        let power_preference = wgpu::PowerPreference::HighPerformance;
-
-        debug!(
-            "Requesting adapter with power preference {:?}",
-            power_preference
-        );
-
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: None,
-                force_fallback_adapter: false,
-                ..Default::default()
-            })
-            .await
-            .expect("Failed to request adapter");
-
-        // Will be parsed from a configuration file maybe?
-        let required_limits = wgpu::Limits::default();
-        let required_features = wgpu::Features::default();
-
-        debug!("Requesting device features={:?}", required_features);
-
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("device"),
-                required_limits,
-                required_features,
-                ..Default::default()
-            })
-            .await
-            .expect("Failed to request device");
+        let sampler = device
+            .create_sampler(
+                sdl3::gpu::SamplerCreateInfo::new()
+                    .with_min_filter(sdl3::gpu::Filter::Nearest)
+                    .with_mag_filter(sdl3::gpu::Filter::Nearest)
+                    .with_mipmap_mode(sdl3::gpu::SamplerMipmapMode::Nearest)
+                    .with_address_mode_u(sdl3::gpu::SamplerAddressMode::ClampToEdge)
+                    .with_address_mode_v(sdl3::gpu::SamplerAddressMode::ClampToEdge)
+                    .with_address_mode_w(sdl3::gpu::SamplerAddressMode::ClampToEdge),
+            )
+            .expect("Failed to create sampler");
 
         Self {
-            instance,
-            adapter,
             device,
-            queue,
+            sampler,
             shaders: ShaderRegistry::new(),
         }
+    }
+
+    pub fn device(&self) -> &sdl3::gpu::Device {
+        &self.device
+    }
+
+    pub fn load_shader(&mut self, index: usize, desc: ShaderDesc) {
+        let Self {
+            device, shaders, ..
+        } = self;
+
+        shaders.load(device, index, desc);
+    }
+
+    pub fn sampler(&self) -> &sdl3::gpu::Sampler {
+        &self.sampler
+    }
+
+    /// Creates a swapchain for the window. Must be called on the main thread
+    /// before rendering to it.
+    pub fn claim_window(&mut self, window: &Window) {
+        self.device = self
+            .device
+            .clone()
+            .with_window(window)
+            .expect("Failed to claim window for GPU device");
+
+        // Prefer a linear (sRGB-view) swapchain so the shaders keep working
+        // in linear space, and mailbox presentation like the wgpu renderer.
+        let attempts = [
+            (PresentMode::Mailbox, SwapchainComposition::SdrLinear),
+            (PresentMode::Vsync, SwapchainComposition::SdrLinear),
+            (PresentMode::Mailbox, SwapchainComposition::Sdr),
+        ];
+
+        for (present, composition) in attempts {
+            if self
+                .device
+                .set_swapchain_parameters(window, present, composition)
+                .is_ok()
+            {
+                debug!("Swapchain configured: {:?} / {:?}", present, composition);
+                return;
+            }
+        }
+
+        warn!("Falling back to default swapchain parameters (vsync, sdr)");
+    }
+
+    pub fn swapchain_format(&self, window: &Window) -> TextureFormat {
+        self.device.get_swapchain_texture_format(window)
+    }
+
+    pub fn acquire_command_buffer(&self) -> CommandBuffer {
+        self.device
+            .acquire_command_buffer()
+            .expect("Failed to acquire command buffer")
+    }
+
+    pub fn begin_copy_pass(&self, cmd: &CommandBuffer) -> CopyPass {
+        self.device
+            .begin_copy_pass(cmd)
+            .expect("Failed to begin copy pass")
+    }
+
+    pub fn end_copy_pass(&self, pass: CopyPass) {
+        self.device.end_copy_pass(pass);
     }
 }

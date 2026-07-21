@@ -1,4 +1,16 @@
-use crate::render::LayoutDesc;
+use std::mem;
+
+/// Describes how a vertex struct maps to shader inputs.
+pub trait LayoutDesc: Sized {
+    const ATTRIBUTES: &'static [gpu::VertexAttribute];
+
+    fn desc() -> gpu::VertexLayout {
+        gpu::VertexLayout {
+            pitch: mem::size_of::<Self>() as u32,
+            attributes: Self::ATTRIBUTES,
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Default)]
@@ -10,10 +22,21 @@ pub struct Vertex {
 }
 
 impl LayoutDesc for Vertex {
-    const STEP_MODE: gpu::VertexStepMode = gpu::VertexStepMode::Vertex;
-    const ATTRIBUTES: &'static [gpu::VertexAttribute] = &gpu::vertex_attr_array![
-        0 => Float32x3,
-        1 => Float32x4,
-        2 => Float32x2
+    const ATTRIBUTES: &'static [gpu::VertexAttribute] = &[
+        gpu::VertexAttribute {
+            location: 0,
+            format: gpu::VertexElementFormat::Float3,
+            offset: 0,
+        },
+        gpu::VertexAttribute {
+            location: 1,
+            format: gpu::VertexElementFormat::Float4,
+            offset: 12,
+        },
+        gpu::VertexAttribute {
+            location: 2,
+            format: gpu::VertexElementFormat::Float2,
+            offset: 28,
+        },
     ];
 }

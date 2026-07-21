@@ -2,9 +2,7 @@ use std::ops::Index;
 use std::ops::IndexMut;
 
 use crate::render::Vertex;
-use crate::render::camera::CameraData;
 use crate::render::immediate::Batch;
-use crate::render::layouts::{self};
 
 /// Nominative of each render layer,
 /// Used for ease of access
@@ -22,50 +20,20 @@ impl Layer {
     pub const ALL: [Layer; 3] = [Layer::World, Layer::Ui, Layer::Debug];
 }
 
+/// CPU-side geometry for one layer. Window threads fill this while drawing;
+/// the GPU buffers live in the main-thread renderer, which uploads this data
+/// when the frame is presented.
+#[derive(Default)]
+#[derive(Debug, Clone)]
 pub struct RenderLayer {
-    pub camera_buffer: gpu::Buffer<CameraData>,
-    pub camera_bind_group: gpu::BindGroup,
-
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub batches: Vec<Batch>,
-    pub vertex_buffer: gpu::Buffer<Vertex>,
-    pub index_buffer: gpu::Buffer<u32>,
 }
 
 impl RenderLayer {
     pub fn new() -> Self {
-        let camera_buffer = gpu::Buffer::builder("Camera buffer")
-            .uniform()
-            .writable()
-            .capacity(1)
-            .build();
-
-        let camera_bind_group = gpu::BindGroupBuilder::new("Camera bind group", layouts::camera())
-            .buffer(&camera_buffer)
-            .build();
-
-        let vertex_buffer = gpu::Buffer::builder("Immediate mode vertex buffer")
-            .vertex()
-            .writable()
-            .capacity(1024)
-            .build();
-
-        let index_buffer = gpu::Buffer::builder("Immediate mode index buffer")
-            .index()
-            .writable()
-            .capacity(1024)
-            .build();
-
-        Self {
-            camera_buffer,
-            camera_bind_group,
-            vertices: Vec::new(),
-            indices: Vec::new(),
-            batches: Vec::new(),
-            vertex_buffer,
-            index_buffer,
-        }
+        Self::default()
     }
 
     fn batch_for(&mut self, page: Option<usize>) -> &mut Batch {
@@ -105,6 +73,8 @@ impl RenderLayer {
     }
 }
 
+#[derive(Default)]
+#[derive(Debug, Clone)]
 pub struct RenderLayers {
     world: RenderLayer,
     ui: RenderLayer,
@@ -116,16 +86,6 @@ impl RenderLayers {
         self.world.clear();
         self.ui.clear();
         self.debug.clear();
-    }
-}
-
-impl Default for RenderLayers {
-    fn default() -> Self {
-        Self {
-            world: RenderLayer::new(),
-            ui: RenderLayer::new(),
-            debug: RenderLayer::new(),
-        }
     }
 }
 

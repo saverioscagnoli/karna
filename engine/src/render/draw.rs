@@ -4,13 +4,13 @@ use crate::assets::AssetsView;
 use crate::assets::Font;
 use crate::assets::Image;
 use crate::render::FramePacket;
-use crate::render::Renderer;
 use crate::render::Vertex;
 use crate::render::color::Color;
 use crate::render::layer::Layer;
+use crate::render::layer::RenderLayers;
 
 pub struct Draw<'ctx> {
-    pub(crate) r: &'ctx mut Renderer,
+    pub(crate) r: &'ctx mut RenderLayers,
     pub(crate) active_layer: Layer,
     pub(crate) color: math::Vector4<f32>,
     pub(crate) packet: &'ctx mut FramePacket,
@@ -70,9 +70,7 @@ impl<'ctx> Draw<'ctx> {
             uv,
         };
 
-        self.r
-            .layer_mut(self.active_layer)
-            .push_quad([v(x, y), v(x + w, y), v(x + w, y + h), v(x, y + h)], None);
+        self.r[self.active_layer].push_quad([v(x, y), v(x + w, y), v(x + w, y + h), v(x, y + h)], None);
     }
 
     pub fn text<T>(&mut self, font: Handle<Font>, text: T, x: f32, y: f32)
@@ -106,7 +104,7 @@ impl<'ctx> Draw<'ctx> {
                     uv: math::Vector2::new(u, vv),
                 };
 
-                self.r.layer_mut(self.active_layer).push_quad(
+                self.r[self.active_layer].push_quad(
                     [
                         v(pen.x, pen.y, u0, v0),
                         v(pen.x + size.width, pen.y, u1, v0),
@@ -139,7 +137,7 @@ impl<'ctx> Draw<'ctx> {
             uv: math::Vector2::new(u, vv),
         };
 
-        let layer = self.r.layer_mut(self.active_layer);
+        let layer = &mut self.r[self.active_layer];
         layer.push_quad(
             [
                 v(x, y, u0, v0),

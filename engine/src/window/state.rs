@@ -1,13 +1,16 @@
+use std::mem;
 use std::sync::mpsc::Receiver;
 
-use gpu::GpuState;
 use logging::debug;
 use sdl3::event::Event;
 use sdl3::event::WindowEvent;
 
 use crate::render::FramePacket;
+use crate::render::FrameSubmission;
+use crate::render::RenderLayers;
 use crate::scene::SceneManagerCommand;
 use crate::scene::SceneRegistry;
+use crate::window::FrameSlot;
 use crate::window::context::WindowContext;
 
 pub struct WindowState {
@@ -17,6 +20,13 @@ pub struct WindowState {
     pub events: Receiver<Event>,
     pub shutdown: Receiver<()>,
     pub packet: FramePacket,
+
+    /// Where finished frames are dropped for the main thread to render.
+    pub frame_slot: FrameSlot,
+
+    /// Geometry buffers coming back from the main thread after rendering,
+    /// reused so vertex data isn't reallocated every frame.
+    pub recycled: Receiver<RenderLayers>,
 
     /// SDL timestamp (ns) of the oldest input event not yet shipped in a frame.
     pub pending_input_timestamp: Option<u64>,
@@ -42,11 +52,11 @@ impl WindowState {
                 Event::Window { win_event, .. } => match win_event {
                     WindowEvent::CloseRequested => return true,
                     WindowEvent::Resized(w, h) => {
-                        let gpu = GpuState::get();
+                        // The SDL GPU swapchain resizes itself; only the
+                        // cached size needs updating.
                         let size = math::Size::new(w as u32, h as u32);
 
                         self.context.window.sync_size(size);
-                        self.context.renderer.resize(gpu, size);
                         debug!("Resized window '{}' to {:?}", self.context.window.id, size);
                     }
                     _ => {}
@@ -131,7 +141,24 @@ impl WindowState {
         let viewport = self.packet.viewport;
         self.context.cameras.write_to(&mut self.packet, viewport);
 
-        self.context.renderer.present(&self.packet);
+        // Hand the finished frame to the main thread (latest wins) and wake it.
+        let stale = self.frame_slot.lock().replace(FrameSubmission {
+            packet: self.packet.clone(),
+            layers: mem::take(&mut self.context.layers),
+        });
+
+        // Refill the layers for the next frame with already-allocated buffers:
+        // either a stale frame the main thread never rendered, or one it sent
+        // back after rendering.
+        let mut next = match stale {
+            Some(stale) => stale.layers,
+            None => self.recycled.try_recv().unwrap_or_default(),
+        };
+
+        next.clear();
+        self.context.layers = next;
+
+        self.context.window.present();
     }
 
     fn flush(&mut self) {
@@ -153,6 +180,7 @@ impl WindowState {
 
             self.frame();
             self.flush();
+
             self.context.time.wait_for_next_frame();
         }
     }

@@ -4,7 +4,7 @@ use crate::render::Color;
 use crate::render::Draw;
 use crate::render::FramePacket;
 use crate::render::Layer;
-use crate::render::Renderer;
+use crate::render::RenderLayers;
 use crate::scene::SceneManager;
 use crate::window::Window;
 use crate::window::input::Input;
@@ -19,7 +19,7 @@ pub struct WindowContext {
     pub scenes: SceneManager,
     pub assets: AssetServer,
     pub cameras: Cameras,
-    pub renderer: Renderer,
+    pub layers: RenderLayers,
 }
 
 pub struct Context<'a> {
@@ -61,7 +61,7 @@ impl WindowContext {
                 scenes: &mut self.scenes,
             },
             Draw {
-                r: &mut self.renderer,
+                r: &mut self.layers,
                 active_layer: Layer::default(),
                 color: Color::White.into(),
                 assets: AssetsView::new(&self.assets),

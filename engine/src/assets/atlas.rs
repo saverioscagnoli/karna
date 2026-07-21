@@ -1,10 +1,10 @@
+use std::sync::Arc;
+
 use packer::PagePacker;
 use utils::FastHashMap;
 use utils::Handle;
 use utils::SlotMap;
 use utils::hash_bytes;
-
-use crate::render::layouts;
 
 const PAGE_SIZE: u32 = 1024;
 const PADDING: u32 = 1;
@@ -18,9 +18,57 @@ pub struct Image {
     pub size: math::Size<u32>,
 }
 
+/// CPU-side pixels of one atlas page. The GPU textures live in the
+/// main-thread renderer, which re-uploads a page whenever its version
+/// changes; this is what lets assets be loaded from any thread now that
+/// SDL GPU resources are confined to the main thread.
+#[derive(Debug, Clone)]
+pub struct PagePixels {
+    /// Tightly packed RGBA, PAGE_SIZE x PAGE_SIZE. Arc so snapshot clones
+    /// of the asset store don't copy 4MB per page; writes use make_mut.
+    pixels: Arc<Vec<u8>>,
+    version: u64,
+}
+
+impl PagePixels {
+    fn new() -> Self {
+        Self {
+            pixels: Arc::new(vec![0; (PAGE_SIZE * PAGE_SIZE * 4) as usize]),
+            version: 0,
+        }
+    }
+
+    /// Blits tightly packed RGBA data into the page and bumps the version.
+    fn write(&mut self, data: &[u8], origin: math::Vector2<u32>, size: math::Size<u32>) {
+        let pixels = Arc::make_mut(&mut self.pixels);
+        let row_bytes = (size.width * 4) as usize;
+
+        for row in 0..size.height {
+            let src = (row * size.width * 4) as usize;
+            let dst = (((origin.y + row) * PAGE_SIZE + origin.x) * 4) as usize;
+
+            pixels[dst..dst + row_bytes].copy_from_slice(&data[src..src + row_bytes]);
+        }
+
+        self.version += 1;
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.pixels
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
+    pub fn size(&self) -> u32 {
+        PAGE_SIZE
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Page {
-    texture: gpu::Texture,
+    data: PagePixels,
     packer: PagePacker,
     dedicated: bool,
     handle: Handle<Image>,
@@ -31,7 +79,6 @@ pub struct TextureAtlas {
     pages: Vec<Page>,
     images: SlotMap<Image>,
     by_content: FastHashMap<u64, Handle<Image>>,
-    counter: u64,
 
     white_pixel: Image,
 }
@@ -42,7 +89,6 @@ impl TextureAtlas {
             pages: Vec::new(),
             images: SlotMap::new(),
             by_content: FastHashMap::default(),
-            counter: 0,
             white_pixel: Image::default(),
         };
 
@@ -62,8 +108,7 @@ impl TextureAtlas {
         data: &[u8],
         size: math::Size<u32>,
     ) -> Image {
-        page.texture
-            .write(data, math::Vector2::new(pos.x, pos.y), size);
+        page.data.write(data, math::Vector2::new(pos.x, pos.y), size);
 
         let inv = 1.0 / PAGE_SIZE as f32;
 
@@ -80,14 +125,6 @@ impl TextureAtlas {
 
     fn new_page(&mut self) -> usize {
         let page_idx = self.pages.len() as u32;
-        let plabel = format!("texture n.{}-page{}", self.counter, page_idx);
-        self.counter += 1;
-
-        let texture = gpu::Texture::new_blank(
-            plabel,
-            math::Size::new(PAGE_SIZE, PAGE_SIZE),
-            layouts::atlas(),
-        );
 
         // A phantom image covering the whole page, for debug display.
         let handle = self.images.insert(Image {
@@ -98,7 +135,7 @@ impl TextureAtlas {
         });
 
         self.pages.push(Page {
-            texture,
+            data: PagePixels::new(),
             packer: PagePacker::new(PAGE_SIZE, PADDING),
             dedicated: false,
             handle,
@@ -144,15 +181,8 @@ impl TextureAtlas {
         &self.images[h]
     }
 
-    pub fn page_bind_group(&self, index: usize) -> &gpu::BindGroup {
-        &self.pages[index].texture.bind_group
-    }
-
-    pub fn all_bind_groups(&self) -> impl Iterator<Item = (u32, &gpu::BindGroup)> + '_ {
-        self.pages
-            .iter()
-            .enumerate()
-            .map(|(i, p)| (i as u32, &p.texture.bind_group))
+    pub fn pages(&self) -> impl Iterator<Item = &PagePixels> + '_ {
+        self.pages.iter().map(|p| &p.data)
     }
 
     pub fn all_handles(&self) -> impl Iterator<Item = Handle<Image>> + '_ {
