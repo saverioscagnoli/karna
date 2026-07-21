@@ -12,6 +12,24 @@ pub struct Cameras {
     pub debug: Camera,
 }
 
+impl Cameras {
+    pub fn update(&mut self, viewport: math::Size<u32>) {
+        self.world.update(viewport);
+        self.ui.update(viewport);
+        self.debug.update(viewport);
+    }
+
+    pub fn write_to(&mut self, packet: &mut FramePacket, viewport: math::Size<u32>) {
+        self.world.update(viewport);
+        self.ui.update(viewport);
+        self.debug.update(viewport);
+
+        packet[Layer::World].camera = self.world.data();
+        packet[Layer::Ui].camera = self.ui.data();
+        packet[Layer::Debug].camera = self.debug.data();
+    }
+}
+
 impl Index<Layer> for Cameras {
     type Output = Camera;
 

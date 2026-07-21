@@ -1,5 +1,6 @@
 use crate::assets::AssetServer;
 use crate::assets::AssetsView;
+use crate::render::Color;
 use crate::render::Draw;
 use crate::render::FramePacket;
 use crate::render::Layer;
@@ -62,6 +63,8 @@ impl WindowContext {
             Draw {
                 r: &mut self.renderer,
                 active_layer: Layer::default(),
+                color: Color::White.into(),
+                assets: AssetsView::new(&self.assets),
                 packet,
             },
         )

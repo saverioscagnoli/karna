@@ -40,10 +40,19 @@ pub fn init() {
         .expect("Layout singleton already set")
 }
 
+fn all() -> &'static Layouts {
+    &LAYOUTS.get().expect("Layouts not initialized")
+}
+
 pub fn atlas() -> &'static gpu::BindGroupLayout {
     &LAYOUTS.get().unwrap().atlas
 }
 
 pub fn camera() -> &'static gpu::BindGroupLayout {
     &LAYOUTS.get().unwrap().camera
+}
+
+pub fn immediate() -> [&'static wgpu::BindGroupLayout; 2] {
+    let l = all();
+    [&l.camera, &l.atlas]
 }

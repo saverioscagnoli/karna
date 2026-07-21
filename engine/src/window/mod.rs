@@ -83,6 +83,12 @@ impl Window {
         self.size.height
     }
 
+    /// Updates the cached size without requesting a resize.
+    /// Used when the OS resized the window (e.g. user drag).
+    pub(crate) fn sync_size(&mut self, size: math::Size<u32>) {
+        self.size = size;
+    }
+
     pub fn set_size<S>(&mut self, size: S)
     where
         S: Into<math::Size<u32>>,

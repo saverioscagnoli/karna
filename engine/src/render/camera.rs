@@ -2,7 +2,7 @@
 #[derive(Default)]
 #[derive(Debug, Clone, Copy)]
 pub struct CameraData {
-    view_projection: math::Matrix4<f32>,
+    pub view_projection: math::Matrix4<f32>,
 }
 
 #[derive(Debug)]

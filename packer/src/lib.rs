@@ -1,72 +1,125 @@
+pub struct Placement {
+    pub x: u32,
+    pub y: u32,
+}
+
 #[derive(Debug, Clone, Copy)]
-pub struct Shelf {
-    y: u32,      // top of this shelf
-    height: u32, // set by first (tallest) image placed
-    cursor_x: u32,
+struct Node {
+    /// Left edge of this skyline segment
+    x: u32,
+    /// Height of the contour here (top of whatever is below)
+    y: u32,
+    /// Width of the segment
+    w: u32,
 }
 
 #[derive(Debug, Clone)]
 pub struct PagePacker {
-    size: u32, // e.g. 4096
-    shelves: Vec<Shelf>,
-    next_y: u32,  // top of unallocated space
-    padding: u32, // e.g. 1 or 2 px
-}
-
-pub struct Placement {
-    pub x: u32,
-    pub y: u32,
+    size: u32,
+    padding: u32,
+    nodes: Vec<Node>,
 }
 
 impl PagePacker {
     pub fn new(size: u32, padding: u32) -> Self {
         Self {
             size,
-            shelves: Vec::new(),
-            next_y: 0,
             padding,
+            nodes: vec![Node {
+                x: 0,
+                y: 0,
+                w: size,
+            }],
         }
     }
 
     pub fn insert(&mut self, w: u32, h: u32) -> Option<Placement> {
-        let (pw, ph) = (w + self.padding, h + self.padding);
+        let pw = w + self.padding;
+        let ph = h + self.padding;
 
-        // 1. Try existing shelves: pick the one wasting the least height
-        let mut best: Option<(usize, u32)> = None;
-        for (i, s) in self.shelves.iter().enumerate() {
-            if ph <= s.height && s.cursor_x + pw <= self.size {
-                let waste = s.height - ph;
-                if best.map_or(true, |(_, bw)| waste < bw) {
-                    best = Some((i, waste));
+        if pw > self.size || ph > self.size {
+            return None;
+        }
+
+        let mut best: Option<(usize, u32, u32)> = None;
+
+        for i in 0..self.nodes.len() {
+            if let Some(y) = self.fit(i, pw, ph) {
+                let x = self.nodes[i].x;
+                let better = match best {
+                    None => true,
+                    Some((_, bx, by)) => y < by || (y == by && x < bx),
+                };
+
+                if better {
+                    best = Some((i, x, y));
                 }
             }
         }
-        if let Some((i, _)) = best {
-            let s = &mut self.shelves[i];
-            let p = Placement {
-                x: s.cursor_x,
-                y: s.y,
-            };
-            s.cursor_x += pw;
-            return Some(p);
+
+        let (i, x, y) = best?;
+        self.place(i, x, y, pw, ph);
+
+        Some(Placement { x, y })
+    }
+
+    fn fit(&self, i: usize, w: u32, h: u32) -> Option<u32> {
+        let x = self.nodes[i].x;
+        if x + w > self.size {
+            return None;
         }
 
-        // 2. Open a new shelf
-        if self.next_y + ph <= self.size && pw <= self.size {
-            let shelf = Shelf {
-                y: self.next_y,
-                height: ph,
-                cursor_x: pw,
-            };
-            let p = Placement {
-                x: 0,
-                y: self.next_y,
-            };
-            self.next_y += ph;
-            self.shelves.push(shelf);
-            return Some(p);
+        let mut y = 0u32;
+        let mut remaining = w as i64;
+        let mut j = i;
+
+        while remaining > 0 {
+            let n = self.nodes.get(j)?;
+            y = y.max(n.y);
+            if y + h > self.size {
+                return None;
+            }
+            remaining -= n.w as i64;
+            j += 1;
         }
 
-        None // page full → caller opens a new page
+        Some(y)
+    }
+
+    fn place(&mut self, i: usize, x: u32, y: u32, w: u32, h: u32) {
+        self.nodes.insert(i, Node { x, y: y + h, w });
+
+        let right = x + w;
+        let j = i + 1;
+
+        while j < self.nodes.len() {
+            let n = self.nodes[j];
+
+            if n.x >= right {
+                break; // past the new rect, untouched
+            }
+
+            if n.x + n.w <= right {
+                // fully shadowed by the new rect
+                self.nodes.remove(j);
+            } else {
+                // partially shadowed: clip its left edge
+                let overlap = right - n.x;
+                self.nodes[j].x += overlap;
+                self.nodes[j].w -= overlap;
+                break;
+            }
+        }
+
+        let mut k = 0;
+
+        while k + 1 < self.nodes.len() {
+            if self.nodes[k].y == self.nodes[k + 1].y {
+                self.nodes[k].w += self.nodes[k + 1].w;
+                self.nodes.remove(k + 1);
+            } else {
+                k += 1;
+            }
+        }
     }
 }

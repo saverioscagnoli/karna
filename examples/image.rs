@@ -7,10 +7,12 @@ use karna::SceneView;
 use karna::WindowBuilder;
 use karna::assets::Handle;
 use karna::assets::Image;
+use karna::input::Keycode;
 use karna::logging::Config;
 use karna::render::Draw;
 
 const IMAGE_SCENE: usize = 0;
+const ATLAS_SCENE: usize = 0;
 
 struct ImageDemo {
     pcb: Handle<Image>,
@@ -27,7 +29,33 @@ impl Scene for ImageDemo {
 
     fn update(&mut self, ctx: &mut Context, scene: &mut SceneView) {}
 
-    fn draw(&mut self, ctx: &mut Context, draw: &mut Draw) {}
+    fn draw(&mut self, ctx: &mut Context, draw: &mut Draw) {
+        draw.image(self.pcb, 300.0, 300.0);
+    }
+}
+
+struct Atlas {
+    active_page: usize,
+}
+
+impl Scene for Atlas {
+    fn load(&mut self, ctx: &mut Context, scene: &mut SceneView) {}
+
+    fn update(&mut self, ctx: &mut Context, scene: &mut SceneView) {}
+
+    fn draw(&mut self, ctx: &mut Context, draw: &mut Draw) {
+        let handles = ctx
+            .assets
+            .atlas_page_handles()
+            .enumerate()
+            .collect::<Vec<_>>();
+
+        for (i, handle) in handles {
+            if i == self.active_page {
+                draw.image(handle, 0.0, 0.0);
+            }
+        }
+    }
 }
 
 fn main() {
@@ -45,6 +73,13 @@ fn main() {
                     },
                 )
                 .with_active_scene(IMAGE_SCENE),
+        )
+        .with_window(
+            WindowBuilder::new()
+                .with_title("texture atlas")
+                .with_size((1024, 1024))
+                .with_scene(ATLAS_SCENE, Atlas { active_page: 0 })
+                .with_active_scene(ATLAS_SCENE),
         )
         .build()
         .run();

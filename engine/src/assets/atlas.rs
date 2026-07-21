@@ -9,6 +9,7 @@ use crate::render::layouts;
 const PAGE_SIZE: u32 = 1024;
 const PADDING: u32 = 1;
 
+#[derive(Default)]
 #[derive(Debug, Clone)]
 pub struct Image {
     pub page: u32,
@@ -25,18 +26,33 @@ struct Page {
     handle: Handle<Image>,
 }
 
-#[derive(Default)]
 #[derive(Debug, Clone)]
 pub struct TextureAtlas {
     pages: Vec<Page>,
     images: SlotMap<Image>,
     by_content: FastHashMap<u64, Handle<Image>>,
     counter: u64,
+
+    white_pixel: Image,
 }
 
 impl TextureAtlas {
     pub fn new() -> Self {
-        Self::default()
+        let mut atlas = Self {
+            pages: Vec::new(),
+            images: SlotMap::new(),
+            by_content: FastHashMap::default(),
+            counter: 0,
+            white_pixel: Image::default(),
+        };
+
+        const WHITE: [u8; 4 * 4 * 4] = [0xFF; 64];
+        let h = atlas.insert(&WHITE, math::Size::new(4, 4));
+        let white_pixel = atlas.get(h).clone();
+
+        atlas.white_pixel = white_pixel;
+
+        atlas
     }
 
     fn place(
@@ -128,6 +144,10 @@ impl TextureAtlas {
         &self.images[h]
     }
 
+    pub fn page_bind_group(&self, index: usize) -> &gpu::BindGroup {
+        &self.pages[index].texture.bind_group
+    }
+
     pub fn all_bind_groups(&self) -> impl Iterator<Item = (u32, &gpu::BindGroup)> + '_ {
         self.pages
             .iter()
@@ -137,5 +157,9 @@ impl TextureAtlas {
 
     pub fn all_handles(&self) -> impl Iterator<Item = Handle<Image>> + '_ {
         self.pages.iter().map(|p| p.handle)
+    }
+
+    pub fn white_pixel(&self) -> &Image {
+        &self.white_pixel
     }
 }

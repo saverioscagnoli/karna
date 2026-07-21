@@ -10,6 +10,12 @@ pub struct Handle<T> {
     _d: PhantomData<T>,
 }
 
+impl<T> Default for Handle<T> {
+    fn default() -> Self {
+        Self::INVALID
+    }
+}
+
 impl<T> Hash for Handle<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.index.hash(state);

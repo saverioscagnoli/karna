@@ -45,6 +45,7 @@ impl WindowState {
                         let gpu = GpuState::get();
                         let size = math::Size::new(w as u32, h as u32);
 
+                        self.context.window.sync_size(size);
                         self.context.renderer.resize(gpu, size);
                         debug!("Resized window '{}' to {:?}", self.context.window.id, size);
                     }
@@ -126,6 +127,9 @@ impl WindowState {
 
             scene.draw(&mut ctx, &mut draw);
         }
+
+        let viewport = self.packet.viewport;
+        self.context.cameras.write_to(&mut self.packet, viewport);
 
         self.context.renderer.present(&self.packet);
     }

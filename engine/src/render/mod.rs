@@ -1,6 +1,7 @@
 mod camera;
 mod color;
 mod draw;
+mod immediate;
 mod layer;
 pub mod layouts;
 mod transform;
@@ -49,7 +50,7 @@ impl Default for FramePacket {
     fn default() -> Self {
         Self {
             viewport: math::Size::new(1280, 720),
-            clear_color: Color::Gray.into(),
+            clear_color: Color::Black.into(),
             world: LayerPacket::default(),
             ui: LayerPacket::default(),
             debug: LayerPacket::default(),
@@ -100,23 +101,35 @@ pub struct Renderer {
 
 impl Renderer {
     pub(crate) fn new(surface: gpu::WindowSurface, assets: AssetReader) -> Self {
-        layouts::init();
-        debug!("Bind group layouts registry initialized.");
+        let pipelines = Self::init_pipelines(surface.format());
+        debug!("Builtin render pipelines initialized.");
 
         Self {
             surface,
-            pipelines: gpu::PipelineCache::new(),
+            pipelines,
             assets,
             data: RenderData::default(),
         }
     }
 
-    pub(crate) fn resize(&mut self, gpu: &gpu::GpuState, size: math::Size<u32>) {
-        self.surface.resize(gpu, size);
+    fn init_pipelines(format: gpu::TextureFormat) -> gpu::PipelineCache {
+        let mut cache = gpu::PipelineCache::new();
+
+        let desc = gpu::PipelineDesc {
+            shader: gpu::ShaderRef::Builtin(0),
+            vertex_layout: Vertex::desc(),
+            blend: gpu::BlendState::ALPHA_BLENDING,
+            topology: gpu::PrimitiveTopology::TriangleList,
+            cull: None,
+            format,
+        };
+
+        cache.create(&desc, &layouts::immediate());
+        cache
     }
 
-    pub(crate) fn layer(&self, l: Layer) -> &RenderLayer {
-        &self.data.layers[l]
+    pub(crate) fn resize(&mut self, gpu: &gpu::GpuState, size: math::Size<u32>) {
+        self.surface.resize(gpu, size);
     }
 
     pub(crate) fn layer_mut(&mut self, l: Layer) -> &mut RenderLayer {
@@ -182,17 +195,47 @@ impl Renderer {
                 let layer = &mut self.data.layers[l];
                 let layer_packet = &packet[l];
 
+                if layer.indices.is_empty() {
+                    layer.clear();
+                    continue;
+                }
+
                 layer.camera_buffer.write_all(&[layer_packet.camera]);
 
-                pass.set_bind_group(0, &layer.camera_bind_group, &[]);
+                layer.vertex_buffer.write_all(&layer.vertices);
+                layer.index_buffer.write_all(&layer.indices);
 
-                for (index, bind_group) in assets.atlas_bind_groups() {
-                    pass.set_bind_group(index + 1, bind_group, &[]);
+                let immediate_key = gpu::PipelineDesc {
+                    shader: gpu::ShaderRef::Builtin(0),
+                    vertex_layout: Vertex::desc(),
+                    blend: gpu::BlendState::ALPHA_BLENDING,
+                    topology: gpu::PrimitiveTopology::TriangleList,
+                    cull: None,
+                    format: view.texture().format(),
+                };
+
+                let pip = self.pipelines.get(&immediate_key);
+
+                pass.set_pipeline(pip);
+                pass.set_bind_group(0, &layer.camera_bind_group, &[]);
+                pass.set_vertex_buffer(0, layer.vertex_buffer.slice_all());
+                pass.set_index_buffer(layer.index_buffer.slice_all(), gpu::IndexFormat::Uint32);
+
+                for batch in &layer.batches {
+                    let bind_group = match batch.page {
+                        Some(p) => assets.atlas_page_bind_group(p),
+                        None => assets.white_pixel_bind_group(),
+                    };
+
+                    pass.set_bind_group(1, bind_group, &[]);
+                    pass.draw_indexed(batch.indices.clone(), 0, 0..1);
                 }
             }
         }
 
         gpu.queue.submit(std::iter::once(encoder.finish()));
         gpu.queue.present(output);
+
+        self.data.layers.clear();
     }
 }

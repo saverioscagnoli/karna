@@ -26,6 +26,7 @@ use crate::render::Camera;
 use crate::render::FramePacket;
 use crate::render::Projection;
 use crate::render::Renderer;
+use crate::render::layouts;
 use crate::window::MainThreadRequest;
 use crate::window::Window;
 use crate::window::WindowHandle;
@@ -43,9 +44,19 @@ pub use crate::render::Draw;
 pub use crate::scene::Scene;
 pub use crate::scene::SceneManager;
 pub use crate::window::context::Context;
+pub use crate::window::input;
 pub use crate::window::scene::SceneView;
 
 const IMMEDIATE_SHADER: usize = 0;
+
+/// Everything that should be shared across windows,
+/// e.g. the asset servers, should live in the app and be cloned around
+/// (possibly with arc, so that the same instance is shared)
+#[derive(Clone)]
+struct AppOwned {
+    /// The asset server uses arc internally, safe to clone
+    assets: AssetServer,
+}
 
 pub struct App {
     windows: FastHashMap<u32, WindowHandle>,
@@ -53,6 +64,7 @@ pub struct App {
     video: sdl3::VideoSubsystem,
     sdl: sdl3::Sdl,
     queued_windows: Vec<WindowBuilder>,
+    owned: AppOwned,
 }
 
 impl App {
@@ -69,6 +81,12 @@ impl App {
             shaders.load(IMMEDIATE_SHADER, src, device);
         });
 
+        // Initialize bind group layouts here,
+        // if we do it in the spawn_window function it will
+        // crash for setting a oncelock multiple times
+        layouts::init();
+        debug!("Bind group layouts registry initialized.");
+
         debug!("GPU initialized.");
         info!("Video driver: {:?}", video.current_video_driver());
 
@@ -80,12 +98,16 @@ impl App {
             info.name, info.device_type, info.backend, info.driver_info
         );
 
+        let assets = AssetServer::new();
+        debug!("Asset Server initialized.");
+
         Self {
             windows: FastHashMap::default(),
             events,
             video,
             sdl,
             queued_windows: Vec::new(),
+            owned: AppOwned { assets },
         }
     }
 
@@ -113,11 +135,9 @@ impl App {
         let (event_tx, event_rx) = mpsc::channel::<Event>();
         let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>();
         let proxy = self.events.event_sender();
+        let assets = self.owned.assets.clone();
 
         let thread = thread::spawn(move || {
-            let assets = AssetServer::new();
-            debug!("Asset Server initialized.");
-
             let renderer = Renderer::new(surface, assets.reader());
             debug!("Renderer initialized.");
 

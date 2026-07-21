@@ -112,15 +112,10 @@ impl PipelineCache {
         Self::default()
     }
 
-    pub fn create(
-        &mut self,
-        desc: &PipelineDesc,
-        layouts: &[&wgpu::BindGroupLayout],
-        surface_format: wgpu::TextureFormat,
-    ) {
+    pub fn create(&mut self, desc: &PipelineDesc, layouts: &[&wgpu::BindGroupLayout]) {
         let gpu = GpuState::get();
         let key = PipelineKey::new(&desc);
-        let pip = build_pipeline(gpu, desc, layouts, surface_format);
+        let pip = build_pipeline(gpu, desc, layouts, desc.format);
 
         debug!("Created new render pipeline {:?}", desc);
 

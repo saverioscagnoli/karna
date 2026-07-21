@@ -16,7 +16,7 @@ logging = { path = "logging" }
 math = { path = "math" }
 utils = { path = "utils" }
 
-sdl3 = { version = "0.18.4", features = ["raw-window-handle", "image", "build-from-source"] }
+sdl3 = { version = "0.18.4", features = ["raw-window-handle", "image", "ttf", "build-from-source-static"] }
 wgpu = "30.0.0"
 parking_lot = "0.12.5"
 
@@ -26,3 +26,6 @@ engine = { path = "engine" }
 logging.workspace = true
 math.workspace = true
 utils.workspace = true
+
+[dev-dependencies]
+image = { version = "0.25.10", default-features = false, features = ["png"] }

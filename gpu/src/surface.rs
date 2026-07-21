@@ -92,4 +92,8 @@ impl WindowSurface {
     pub fn acquire(&mut self) -> wgpu::CurrentSurfaceTexture {
         self.inner.get_current_texture()
     }
+
+    pub fn format(&self) -> wgpu::TextureFormat {
+        self.config.format
+    }
 }
