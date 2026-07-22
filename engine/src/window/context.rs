@@ -69,7 +69,6 @@ impl WindowContext {
             Draw {
                 r: &mut self.layers,
                 active_layer: Layer::default(),
-                active_canvas: None,
                 color: Color::White.into(),
                 assets: AssetsView::new(&self.assets),
                 packet,

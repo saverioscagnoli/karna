@@ -42,36 +42,6 @@ impl Texture {
         Self { inner, size }
     }
 
-    /// Creates a texture that can be rendered to and then sampled, e.g. an
-    /// offscreen canvas. The format must match the pipeline drawing into it.
-    pub fn new_target<L>(gpu: &Gpu, label: L, size: math::Size<u32>, format: TextureFormat) -> Self
-    where
-        L: AsRef<str>,
-    {
-        let inner = gpu
-            .device()
-            .create_texture(
-                TextureCreateInfo::new()
-                    .with_type(TextureType::_2D)
-                    .with_format(format)
-                    .with_width(size.width)
-                    .with_height(size.height)
-                    .with_layer_count_or_depth(1)
-                    .with_num_levels(1)
-                    .with_sample_count(SampleCount::NoMultiSampling)
-                    .with_usage(TextureUsage::SAMPLER | TextureUsage::COLOR_TARGET),
-            )
-            .expect("Failed to create render target texture");
-
-        debug!(
-            "Creating new render target '{}' {:?}",
-            label.as_ref(),
-            size
-        );
-
-        Self { inner, size }
-    }
-
     /// Records an upload of RGBA pixels into a region of the texture.
     pub fn write(
         &self,

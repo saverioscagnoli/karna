@@ -1,5 +1,4 @@
 mod camera;
-mod canvas;
 mod color;
 mod draw;
 mod imgui;
@@ -23,17 +22,12 @@ use crate::render::camera::CameraData;
 
 pub use crate::render::camera::Camera;
 pub use crate::render::camera::Projection;
-pub use crate::render::canvas::Canvas;
-pub use crate::render::canvas::CanvasPacket;
-pub use crate::render::canvas::SamplerKind;
 pub use crate::render::color::Color;
 pub use crate::render::draw::Draw;
 pub use crate::render::imgui::ImguiBatch;
 pub use crate::render::imgui::ImguiPacket;
 pub use crate::render::imgui::ImguiTextureUpdate;
 pub use crate::render::imgui::ImguiVertex;
-pub use crate::render::immediate::Batch;
-pub use crate::render::immediate::BatchTexture;
 pub use crate::render::layer::Layer;
 pub use crate::render::layer::RenderLayer;
 pub use crate::render::layer::RenderLayers;
@@ -139,66 +133,37 @@ struct PageTexture {
 }
 
 /// GPU state backing imgui rendering: geometry buffers, the textures imgui
-/// asked to create (font atlas and friends), and one sampler per
-/// `SamplerKind`, selected through the high bits of the texture id.
+/// asked to create (font atlas and friends), and a linear sampler since the
+/// shared engine sampler is nearest.
 struct ImguiResources {
     vertices: gpu::Buffer<ImguiVertex>,
     indices: gpu::Buffer<u16>,
     textures: FastHashMap<u64, gpu::Texture>,
-    samplers: [sdl3::gpu::Sampler; SamplerKind::COUNT],
+    sampler: sdl3::gpu::Sampler,
 }
 
 impl ImguiResources {
     fn new(gpu: &Gpu) -> Self {
-        use sdl3::gpu::Filter;
-        use sdl3::gpu::SamplerAddressMode as Wrap;
-
-        // Indexed by `SamplerKind`; imgui's own textures (id high bits zero)
-        // get LinearClamp.
-        let samplers = [
-            (Filter::Linear, Wrap::ClampToEdge),
-            (Filter::Nearest, Wrap::ClampToEdge),
-            (Filter::Nearest, Wrap::Repeat),
-            (Filter::Linear, Wrap::MirroredRepeat),
-        ]
-        .map(|(filter, wrap)| {
-            gpu.device()
-                .create_sampler(
-                    sdl3::gpu::SamplerCreateInfo::new()
-                        .with_min_filter(filter)
-                        .with_mag_filter(filter)
-                        .with_mipmap_mode(sdl3::gpu::SamplerMipmapMode::Nearest)
-                        .with_address_mode_u(wrap)
-                        .with_address_mode_v(wrap)
-                        .with_address_mode_w(wrap),
-                )
-                .expect("Failed to create imgui sampler")
-        });
+        let sampler = gpu
+            .device()
+            .create_sampler(
+                sdl3::gpu::SamplerCreateInfo::new()
+                    .with_min_filter(sdl3::gpu::Filter::Linear)
+                    .with_mag_filter(sdl3::gpu::Filter::Linear)
+                    .with_mipmap_mode(sdl3::gpu::SamplerMipmapMode::Nearest)
+                    .with_address_mode_u(sdl3::gpu::SamplerAddressMode::ClampToEdge)
+                    .with_address_mode_v(sdl3::gpu::SamplerAddressMode::ClampToEdge)
+                    .with_address_mode_w(sdl3::gpu::SamplerAddressMode::ClampToEdge),
+            )
+            .expect("Failed to create imgui sampler");
 
         Self {
             vertices: gpu::Buffer::new(gpu, "Imgui vertex buffer", gpu::BufferUsages::VERTEX, 1024),
             indices: gpu::Buffer::new(gpu, "Imgui index buffer", gpu::BufferUsages::INDEX, 1024),
             textures: FastHashMap::default(),
-            samplers,
+            sampler,
         }
     }
-}
-
-/// GPU state backing one offscreen canvas: its render target texture and the
-/// buffers holding the geometry drawn into it this frame.
-struct CanvasResources {
-    texture: gpu::Texture,
-    vertex: gpu::Buffer<Vertex>,
-    index: gpu::Buffer<u32>,
-}
-
-fn to_sdl_color(c: math::Vector4<f32>) -> sdl3::pixels::Color {
-    sdl3::pixels::Color::RGBA(
-        (c.x.clamp(0.0, 1.0) * 255.0) as u8,
-        (c.y.clamp(0.0, 1.0) * 255.0) as u8,
-        (c.z.clamp(0.0, 1.0) * 255.0) as u8,
-        (c.w.clamp(0.0, 1.0) * 255.0) as u8,
-    )
 }
 
 /// Maps imgui coordinates (pixels, y-down) to NDC. Matches the `Transform`
@@ -216,7 +181,6 @@ pub struct Renderer {
     buffers: [LayerBuffers; 3],
     pages: Vec<PageTexture>,
     imgui: ImguiResources,
-    canvases: FastHashMap<u64, CanvasResources>,
 }
 
 impl Renderer {
@@ -236,7 +200,6 @@ impl Renderer {
             ],
             pages: Vec::new(),
             imgui: ImguiResources::new(gpu),
-            canvases: FastHashMap::default(),
         }
     }
 
@@ -292,113 +255,12 @@ impl Renderer {
         }
 
         if !packet.indices.is_empty() {
-            self.imgui.vertices.write_all(gpu, copy_pass, &packet.vertices);
-            self.imgui.indices.write_all(gpu, copy_pass, &packet.indices);
-        }
-    }
-
-    /// Creates/resizes canvas render targets and uploads their geometry.
-    fn sync_canvases(&mut self, gpu: &Gpu, copy_pass: &gpu::CopyPass, canvases: &[CanvasPacket]) {
-        for packet in canvases {
-            // Nothing to upload for a canvas no one drew into this frame, and
-            // its texture must be left as-is for `draw_canvases` to keep.
-            if !packet.touched {
-                continue;
-            }
-
-            let entry = self.canvases.entry(packet.id).or_insert_with(|| {
-                CanvasResources {
-                    texture: gpu::Texture::new_target(
-                        gpu,
-                        format!("canvas {}", packet.id),
-                        packet.size,
-                        self.format,
-                    ),
-                    vertex: gpu::Buffer::new(
-                        gpu,
-                        "Canvas vertex buffer",
-                        gpu::BufferUsages::VERTEX,
-                        1024,
-                    ),
-                    index: gpu::Buffer::new(
-                        gpu,
-                        "Canvas index buffer",
-                        gpu::BufferUsages::INDEX,
-                        1024,
-                    ),
-                }
-            });
-
-            if entry.texture.size != packet.size {
-                entry.texture = gpu::Texture::new_target(
-                    gpu,
-                    format!("canvas {}", packet.id),
-                    packet.size,
-                    self.format,
-                );
-            }
-
-            entry.vertex.write_all(gpu, copy_pass, &packet.layer.vertices);
-            entry.index.write_all(gpu, copy_pass, &packet.layer.indices);
-        }
-    }
-
-    /// Resolves what a batch samples to a texture, or `None` if it references
-    /// a canvas that has never been rendered.
-    fn batch_texture(&self, texture: BatchTexture) -> Option<&gpu::Texture> {
-        match texture {
-            BatchTexture::Page(i) => self.pages.get(i).map(|p| &p.texture),
-            BatchTexture::Canvas(id) => self.canvases.get(&id).map(|c| &c.texture),
-        }
-    }
-
-    /// Renders each canvas in its own pass, before the main pass so their
-    /// textures can be sampled by it (e.g. from imgui).
-    fn draw_canvases(&self, gpu: &Gpu, cmd: &gpu::CommandBuffer, canvases: &[CanvasPacket]) {
-        for packet in canvases {
-            // Untouched canvases keep whatever they were last rendered with,
-            // so a canvas can be painted once and reused for many frames.
-            if !packet.touched {
-                continue;
-            }
-
-            let resources = &self.canvases[&packet.id];
-
-            let targets = [ColorTargetInfo::default()
-                .with_texture(resources.texture.raw())
-                .with_load_op(LoadOp::CLEAR)
-                .with_store_op(StoreOp::STORE)
-                .with_clear_color(to_sdl_color(packet.clear_color))];
-
-            let pass = gpu
-                .device()
-                .begin_render_pass(cmd, &targets, None)
-                .expect("Failed to begin canvas render pass");
-
-            if !packet.layer.indices.is_empty() {
-                pass.bind_graphics_pipeline(self.pipelines.get(&Self::immediate_desc(self.format)));
-                cmd.push_vertex_uniform_data(0, &packet.camera);
-                pass.bind_vertex_buffers(0, &[resources.vertex.binding()]);
-                pass.bind_index_buffer(&resources.index.binding(), gpu::IndexElementSize::_32BIT);
-
-                for batch in &packet.layer.batches {
-                    let Some(texture) = self.batch_texture(batch.texture) else {
-                        warn!("Canvas draw references unknown {:?}", batch.texture);
-                        continue;
-                    };
-
-                    pass.bind_fragment_samplers(0, &[texture.binding(gpu)]);
-                    pass.draw_indexed_primitives(
-                        batch.indices.end - batch.indices.start,
-                        1,
-                        batch.indices.start,
-                        0,
-                        0,
-                    );
-                }
-            }
-
-            gpu.device().end_render_pass(pass);
+            self.imgui
+                .vertices
+                .write_all(gpu, copy_pass, &packet.vertices);
+            self.imgui
+                .indices
+                .write_all(gpu, copy_pass, &packet.indices);
         }
     }
 
@@ -427,9 +289,6 @@ impl Renderer {
         pass.bind_vertex_buffers(0, &[self.imgui.vertices.binding()]);
         pass.bind_index_buffer(&self.imgui.indices.binding(), gpu::IndexElementSize::_16BIT);
 
-        use crate::render::canvas::SAMPLER_SHIFT;
-        use crate::render::canvas::TEXTURE_ID_MASK;
-
         for batch in &packet.batches {
             let x0 = batch.clip[0].max(0.0) as i32;
             let y0 = batch.clip[1].max(0.0) as i32;
@@ -440,21 +299,9 @@ impl Renderer {
                 continue;
             }
 
-            // The high bits of the id pick the sampler; the id proper is
-            // either an imgui-managed texture or a canvas.
-            let id = batch.texture & TEXTURE_ID_MASK;
-            let sampler_index = (batch.texture >> SAMPLER_SHIFT) as usize;
-            let sampler = &self.imgui.samplers[sampler_index.min(self.imgui.samplers.len() - 1)];
-
-            let texture = match self.imgui.textures.get(&id) {
-                Some(texture) => texture,
-                None => match self.canvases.get(&id) {
-                    Some(canvas) => &canvas.texture,
-                    None => {
-                        warn!("Imgui draw references unknown texture {}", id);
-                        continue;
-                    }
-                },
+            let Some(texture) = self.imgui.textures.get(&batch.texture) else {
+                warn!("Imgui draw references unknown texture {}", batch.texture);
+                continue;
             };
 
             pass.set_scissor(sdl3::rect::Rect::new(
@@ -468,7 +315,7 @@ impl Renderer {
                 0,
                 &[gpu::TextureSamplerBinding::new()
                     .with_texture(texture.raw())
-                    .with_sampler(sampler)],
+                    .with_sampler(&self.imgui.sampler)],
             );
 
             pass.draw_indexed_primitives(
@@ -480,16 +327,11 @@ impl Renderer {
             );
         }
 
-        // Restore the full-window scissor for whoever draws next.
-        pass.set_scissor(sdl3::rect::Rect::new(
-            0,
-            0,
-            viewport.width,
-            viewport.height,
-        ));
+        // Restore the full-window scissor for whoever draws next
+        pass.set_scissor(sdl3::rect::Rect::new(0, 0, viewport.width, viewport.height));
     }
 
-    /// Re-uploads atlas pages whose CPU pixels changed since the last frame.
+    /// Re-uploads atlas pages whose CPU pixels changed since the last frame
     fn sync_atlas(&mut self, gpu: &Gpu, copy_pass: &gpu::CopyPass, assets: &crate::assets::Assets) {
         for (i, page) in assets.atlas_pages().enumerate() {
             if self.pages.len() <= i {
@@ -544,11 +386,8 @@ impl Renderer {
         }
 
         self.sync_imgui(gpu, &copy_pass, &frame.layers.imgui);
-        self.sync_canvases(gpu, &copy_pass, &frame.layers.canvases);
 
         gpu.end_copy_pass(copy_pass);
-
-        self.draw_canvases(gpu, &cmd, &frame.layers.canvases);
 
         let swapchain = match cmd.wait_and_acquire_swapchain_texture(window) {
             Ok(t) => t,
@@ -559,11 +398,19 @@ impl Renderer {
             }
         };
 
+        let c = frame.packet.clear_color;
+        let clear = sdl3::pixels::Color::RGBA(
+            (c.x.clamp(0.0, 1.0) * 255.0) as u8,
+            (c.y.clamp(0.0, 1.0) * 255.0) as u8,
+            (c.z.clamp(0.0, 1.0) * 255.0) as u8,
+            (c.w.clamp(0.0, 1.0) * 255.0) as u8,
+        );
+
         let targets = [ColorTargetInfo::default()
             .with_texture(&swapchain)
             .with_load_op(LoadOp::CLEAR)
             .with_store_op(StoreOp::STORE)
-            .with_clear_color(to_sdl_color(frame.packet.clear_color))];
+            .with_clear_color(clear)];
 
         let pass = gpu
             .device()
@@ -587,12 +434,10 @@ impl Renderer {
             pass.bind_index_buffer(&buffers.index.binding(), gpu::IndexElementSize::_32BIT);
 
             for batch in &layer.batches {
-                let Some(texture) = self.batch_texture(batch.texture) else {
-                    warn!("Draw references unknown {:?}", batch.texture);
-                    continue;
-                };
+                // Page 0 always exists and holds the white pixel.
+                let page = &self.pages[batch.page.unwrap_or(0)];
 
-                pass.bind_fragment_samplers(0, &[texture.binding(gpu)]);
+                pass.bind_fragment_samplers(0, &[page.texture.binding(gpu)]);
                 pass.draw_indexed_primitives(
                     batch.indices.end - batch.indices.start,
                     1,

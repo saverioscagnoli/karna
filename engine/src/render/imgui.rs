@@ -8,7 +8,7 @@ use crate::render::vertex::LayoutDesc;
 /// Ids handed out to imgui textures. Global so every window's context gets
 /// unique ids even though each renderer keeps its own texture map.
 /// Id 0 is reserved: imgui uses it as "no texture".
-pub(crate) static NEXT_TEXTURE_ID: AtomicU64 = AtomicU64::new(1);
+static NEXT_TEXTURE_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Layout-identical to `imgui::DrawVert`, so draw lists can be copied
 /// straight into the packet without per-vertex conversion.

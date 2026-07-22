@@ -6,18 +6,13 @@ use crate::assets::Font;
 use crate::assets::Image;
 use crate::render::FramePacket;
 use crate::render::Vertex;
-use crate::render::canvas::Canvas;
-use crate::render::canvas::CanvasPacket;
 use crate::render::color::Color;
-use crate::render::immediate::BatchTexture;
 use crate::render::layer::Layer;
 use crate::render::layer::RenderLayers;
 
 pub struct Draw<'ctx> {
     pub(crate) r: &'ctx mut RenderLayers,
     pub(crate) active_layer: Layer,
-    /// Index into `r.canvases` while drawing inside `Draw::canvas`.
-    pub(crate) active_canvas: Option<usize>,
     pub(crate) color: math::Vector4<f32>,
     pub(crate) packet: &'ctx mut FramePacket,
     pub(crate) assets: AssetsView<'ctx>,
@@ -64,16 +59,6 @@ impl<'ctx> Draw<'ctx> {
     }
 
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
-        self.quad([
-            math::Vector2::new(x, y),
-            math::Vector2::new(x + w, y),
-            math::Vector2::new(x + w, y + h),
-            math::Vector2::new(x, y + h),
-        ]);
-    }
-
-    /// An arbitrary convex quad in the current color, corners in order.
-    pub fn quad(&mut self, corners: [math::Vector2<f32>; 4]) {
         let color = self.color;
         let white = self.assets.white_pixel();
         let uv = math::Vector2::new(
@@ -81,63 +66,14 @@ impl<'ctx> Draw<'ctx> {
             (white.uv_min.y + white.uv_max.y) * 0.5,
         );
 
-        let v = |p: math::Vector2<f32>| Vertex {
-            position: math::Vector3::new(p.x, p.y, 0.0),
+        let v = |px, py| Vertex {
+            position: math::Vector3::new(px, py, 0.0),
             color,
             uv,
         };
 
-        self.r
-            .target(self.active_canvas, self.active_layer)
-            .push_quad(corners.map(v), BatchTexture::WHITE);
-    }
-
-    /// Draws an offscreen canvas' contents as a textured quad, like `image`
-    /// but for a render target.
-    ///
-    /// The canvas is rendered before the layers that sample it, so content
-    /// drawn into it this frame shows up in the same frame. Drawing a canvas
-    /// into itself samples the previous frame's contents.
-    pub fn canvas_image(&mut self, canvas: &Canvas, x: f32, y: f32, w: f32, h: f32) {
-        let v = |px, py, u, vv| Vertex {
-            position: math::Vector3::new(px, py, 0.0),
-            color: Color::White.into(),
-            uv: math::Vector2::new(u, vv),
-        };
-
-        self.r.target(self.active_canvas, self.active_layer).push_quad(
-            [
-                v(x, y, 0.0, 0.0),
-                v(x + w, y, 1.0, 0.0),
-                v(x + w, y + h, 1.0, 1.0),
-                v(x, y + h, 0.0, 1.0),
-            ],
-            BatchTexture::Canvas(canvas.id()),
-        );
-    }
-
-    /// Redirects drawing to an offscreen canvas for the duration of the
-    /// closure. The canvas is cleared to its own clear color each frame and
-    /// rendered before the window's main pass, so it can be displayed in the
-    /// same frame, e.g. in imgui through [`Canvas::texture_id`].
-    pub fn canvas<F>(&mut self, canvas: &Canvas, f: F)
-    where
-        F: FnOnce(&mut Self),
-    {
-        let index = match self.r.canvases.iter().position(|p| p.id == canvas.id()) {
-            Some(i) => {
-                self.r.canvases[i].sync(canvas);
-                i
-            }
-            None => {
-                self.r.canvases.push(CanvasPacket::new(canvas));
-                self.r.canvases.len() - 1
-            }
-        };
-
-        let prev = self.active_canvas.replace(index);
-        f(self);
-        self.active_canvas = prev;
+        self.r[self.active_layer]
+            .push_quad([v(x, y), v(x + w, y), v(x + w, y + h), v(x, y + h)], None);
     }
 
     pub fn text<T>(&mut self, font: Handle<Font>, text: T, x: f32, y: f32)
@@ -171,14 +107,14 @@ impl<'ctx> Draw<'ctx> {
                     uv: math::Vector2::new(u, vv),
                 };
 
-                self.r.target(self.active_canvas, self.active_layer).push_quad(
+                self.r[self.active_layer].push_quad(
                     [
                         v(pen.x, pen.y, u0, v0),
                         v(pen.x + size.width, pen.y, u1, v0),
                         v(pen.x + size.width, pen.y + size.height, u1, v1),
                         v(pen.x, pen.y + size.height, u0, v1),
                     ],
-                    BatchTexture::Page(img.page as usize),
+                    Some(img.page as usize),
                 );
             }
 
@@ -204,7 +140,7 @@ impl<'ctx> Draw<'ctx> {
             uv: math::Vector2::new(u, vv),
         };
 
-        let layer = self.r.target(self.active_canvas, self.active_layer);
+        let layer = &mut self.r[self.active_layer];
         layer.push_quad(
             [
                 v(x, y, u0, v0),
@@ -212,7 +148,7 @@ impl<'ctx> Draw<'ctx> {
                 v(x + size.width, y + size.height, u1, v1),
                 v(x, y + size.height, u0, v1),
             ],
-            BatchTexture::Page(img.page as usize),
+            Some(img.page as usize),
         );
     }
 
