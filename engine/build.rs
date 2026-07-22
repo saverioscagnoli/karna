@@ -10,7 +10,12 @@ fn main() {
     let out = env::var("OUT_DIR").unwrap();
     let shaders = Path::new(&manifest).join("../shaders");
 
-    for name in ["immediate.vert", "immediate.frag"] {
+    for name in [
+        "immediate.vert",
+        "immediate.frag",
+        "imgui.vert",
+        "imgui.frag",
+    ] {
         let src = shaders.join(name);
         let dst = Path::new(&out).join(format!("{name}.spv"));
 

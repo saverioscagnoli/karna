@@ -4,8 +4,16 @@ mod shaders;
 mod texture;
 mod vertex;
 
+use std::ffi::CStr;
+
 use logging::debug;
+use logging::info;
 use logging::warn;
+use sdl3::sys::gpu::SDL_GetGPUDeviceDriver;
+use sdl3::sys::gpu::SDL_GetGPUDeviceProperties;
+use sdl3::sys::gpu::SDL_PROP_GPU_DEVICE_DRIVER_INFO_STRING;
+use sdl3::sys::gpu::SDL_PROP_GPU_DEVICE_NAME_STRING;
+use sdl3::sys::properties::SDL_GetStringProperty;
 use sdl3::video::Window;
 
 pub use sdl3::gpu::CommandBuffer;
@@ -44,7 +52,10 @@ impl Gpu {
         let device = sdl3::gpu::Device::new(ShaderFormat::SPIRV, cfg!(debug_assertions))
             .expect("Failed to create GPU device");
 
-        debug!("GPU device created (formats: {:?})", device.get_shader_formats());
+        debug!(
+            "GPU device created (formats: {:?})",
+            device.get_shader_formats()
+        );
 
         let sampler = device
             .create_sampler(
@@ -62,6 +73,31 @@ impl Gpu {
             device,
             sampler,
             shaders: ShaderRegistry::new(),
+        }
+    }
+
+    pub fn log_info(&self) {
+        unsafe {
+            let raw = self.device.raw();
+
+            let backend = CStr::from_ptr(SDL_GetGPUDeviceDriver(raw)).to_string_lossy();
+
+            let props = SDL_GetGPUDeviceProperties(raw); // 0 on failure
+            let unknown = c"unknown".as_ptr();
+            let name = CStr::from_ptr(SDL_GetStringProperty(
+                props,
+                SDL_PROP_GPU_DEVICE_NAME_STRING,
+                unknown,
+            ))
+            .to_string_lossy();
+            let driver = CStr::from_ptr(SDL_GetStringProperty(
+                props,
+                SDL_PROP_GPU_DEVICE_DRIVER_INFO_STRING,
+                unknown,
+            ))
+            .to_string_lossy();
+
+            info!("GPU: {} (backend {}, driver {})", name, backend, driver);
         }
     }
 

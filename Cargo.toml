@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["engine", "gpu", "logging", "math", "packer", "utils"]
+members = ["engine", "gpu", "imgui", "logging", "math", "packer", "utils"]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,6 +13,7 @@ edition = "2024"
 [workspace.dependencies]
 gpu = { path = "gpu" }
 logging = { path = "logging" }
+imgui = { path = "imgui" }
 math = { path = "math" }
 utils = { path = "utils" }
 

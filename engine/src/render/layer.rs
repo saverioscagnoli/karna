@@ -2,7 +2,10 @@ use std::ops::Index;
 use std::ops::IndexMut;
 
 use crate::render::Vertex;
+use crate::render::canvas::CanvasPacket;
+use crate::render::imgui::ImguiPacket;
 use crate::render::immediate::Batch;
+use crate::render::immediate::BatchTexture;
 
 /// Nominative of each render layer,
 /// Used for ease of access
@@ -36,9 +39,9 @@ impl RenderLayer {
         Self::default()
     }
 
-    fn batch_for(&mut self, page: Option<usize>) -> &mut Batch {
+    fn batch_for(&mut self, texture: BatchTexture) -> &mut Batch {
         let need_new = match self.batches.last() {
-            Some(b) => b.page != page,
+            Some(b) => b.texture != texture,
             None => true,
         };
 
@@ -47,17 +50,17 @@ impl RenderLayer {
 
             self.batches.push(Batch {
                 indices: start..start,
-                page,
+                texture,
             });
         }
 
         self.batches.last_mut().unwrap()
     }
 
-    pub fn push_quad(&mut self, corners: [Vertex; 4], page: Option<usize>) {
+    pub fn push_quad(&mut self, corners: [Vertex; 4], texture: BatchTexture) {
         let base = self.vertices.len() as u32;
 
-        self.batch_for(page);
+        self.batch_for(texture);
 
         self.vertices.extend_from_slice(&corners);
         self.indices
@@ -79,6 +82,11 @@ pub struct RenderLayers {
     world: RenderLayer,
     ui: RenderLayer,
     debug: RenderLayer,
+    /// Imgui draws on top of every layer and manages its own textures,
+    /// so it travels alongside them instead of being one of them.
+    pub imgui: ImguiPacket,
+    /// Offscreen canvases drawn this frame, rendered before the main pass.
+    pub canvases: Vec<CanvasPacket>,
 }
 
 impl RenderLayers {
@@ -86,6 +94,24 @@ impl RenderLayers {
         self.world.clear();
         self.ui.clear();
         self.debug.clear();
+        self.imgui.clear();
+
+        // Packets stay so their geometry allocations survive frame recycling;
+        // `Draw::canvas` re-syncs them from the user's handle each frame and
+        // marks them touched again.
+        for canvas in &mut self.canvases {
+            canvas.layer.clear();
+            canvas.touched = false;
+        }
+    }
+
+    /// The layer draw commands should currently be pushed into: a canvas'
+    /// geometry while one is active, one of the screen layers otherwise.
+    pub(crate) fn target(&mut self, canvas: Option<usize>, layer: Layer) -> &mut RenderLayer {
+        match canvas {
+            Some(i) => &mut self.canvases[i].layer,
+            None => &mut self[layer],
+        }
     }
 }
 

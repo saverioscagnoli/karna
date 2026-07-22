@@ -25,7 +25,7 @@ impl Scene for TextDemo {
     fn load(&mut self, ctx: &mut Context, scene: &mut SceneView) {
         ctx.assets.write_scope(|w| {
             self.jbmono = w.load_font(include_bytes!("assets/jbmono.ttf"), 16.0);
-        })
+        });
     }
 
     fn update(&mut self, ctx: &mut Context, scene: &mut SceneView) {

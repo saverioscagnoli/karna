@@ -15,11 +15,13 @@ use std::sync::mpsc;
 use std::thread;
 
 use gpu::Gpu;
+use imgui::SharedImgui;
 use logging::debug;
 use logging::error;
 use logging::info;
 use logging::warn;
 use parking_lot::Mutex;
+use sdl3::clipboard::ClipboardUtil;
 use sdl3::event::Event;
 use sdl3::event::WindowEvent;
 use utils::FastHashMap;
@@ -41,6 +43,8 @@ use crate::window::scene::Cameras;
 use crate::window::state::WindowState;
 use crate::window::time::Time;
 
+pub use imgui;
+
 pub use crate::builder::AppBuilder;
 pub use crate::builder::WindowBuilder;
 pub use crate::logs::init_logging;
@@ -52,6 +56,7 @@ pub use crate::window::input;
 pub use crate::window::scene::SceneView;
 
 const IMMEDIATE_SHADER: usize = 0;
+const IMGUI_SHADER: usize = 1;
 
 /// Everything that should be shared across windows,
 /// e.g. the asset servers, should live in the app and be cloned around
@@ -60,6 +65,10 @@ const IMMEDIATE_SHADER: usize = 0;
 struct AppOwned {
     /// The asset server uses arc internally, safe to clone
     assets: AssetServer,
+    /// ?
+    clipboard: Arc<ClipboardUtil>,
+    /// Uses Arc internally, safe to clone
+    imgui: SharedImgui,
 }
 
 pub struct App {
@@ -94,12 +103,29 @@ impl App {
             },
         );
 
+        gpu.load_shader(
+            IMGUI_SHADER,
+            gpu::ShaderDesc {
+                vertex_spirv: include_bytes!(concat!(env!("OUT_DIR"), "/imgui.vert.spv")),
+                fragment_spirv: include_bytes!(concat!(env!("OUT_DIR"), "/imgui.frag.spv")),
+                vertex_uniform_buffers: 1,
+                fragment_samplers: 1,
+            },
+        );
+
         debug!("GPU initialized.");
+        gpu.log_info();
+
         info!("Video driver: {:?}", video.current_video_driver());
-        info!("GPU driver: {:?}", gpu.device().get_shader_formats());
 
         let assets = AssetServer::new();
         debug!("Asset Server initialized.");
+
+        let clipboard = Arc::new(video.clipboard());
+        debug!("Clipboard initialized.");
+
+        let imgui = SharedImgui::new();
+        debug!("Imgui context manager initialized.");
 
         Self {
             windows: FastHashMap::default(),
@@ -108,7 +134,11 @@ impl App {
             video,
             sdl,
             queued_windows: Vec::new(),
-            owned: AppOwned { assets },
+            owned: AppOwned {
+                assets,
+                clipboard,
+                imgui,
+            },
         }
     }
 
@@ -135,6 +165,10 @@ impl App {
         let window_title = window.title().to_owned();
         let window_size = window.size().into();
 
+        self.owned
+            .imgui
+            .register_window(window_id, window_size, self.owned.clipboard.clone());
+
         // Channels
         let (event_tx, event_rx) = mpsc::channel::<Event>();
         let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>();
@@ -145,11 +179,19 @@ impl App {
         let thread_pending = present_pending.clone();
         let proxy = self.events.event_sender();
         let assets = self.owned.assets.clone();
+        let imgui = self.owned.imgui.clone();
 
         let thread = thread::spawn(move || {
             WindowState {
+                should_exit: false,
                 context: WindowContext {
-                    window: Window::new(window_id, window_title, window_size, proxy, thread_pending),
+                    window: Window::new(
+                        window_id,
+                        window_title,
+                        window_size,
+                        proxy,
+                        thread_pending,
+                    ),
                     input: Input::new(),
                     time: Time::new(),
                     scenes: SceneManager::new(),
@@ -160,6 +202,7 @@ impl App {
                         debug: Camera::new(Projection::standard_2d(window_size)),
                     },
                     layers: Default::default(),
+                    imgui,
                 },
                 scenes: b.scenes,
                 active_scenes: b.initial_active,
@@ -196,6 +239,8 @@ impl App {
 
         let _ = handle.shutdown.send(());
         let _ = handle.thread.join();
+
+        self.owned.imgui.unregister_window(window_id);
     }
 
     pub fn run(mut self) {

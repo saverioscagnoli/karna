@@ -42,6 +42,36 @@ impl Texture {
         Self { inner, size }
     }
 
+    /// Creates a texture that can be rendered to and then sampled, e.g. an
+    /// offscreen canvas. The format must match the pipeline drawing into it.
+    pub fn new_target<L>(gpu: &Gpu, label: L, size: math::Size<u32>, format: TextureFormat) -> Self
+    where
+        L: AsRef<str>,
+    {
+        let inner = gpu
+            .device()
+            .create_texture(
+                TextureCreateInfo::new()
+                    .with_type(TextureType::_2D)
+                    .with_format(format)
+                    .with_width(size.width)
+                    .with_height(size.height)
+                    .with_layer_count_or_depth(1)
+                    .with_num_levels(1)
+                    .with_sample_count(SampleCount::NoMultiSampling)
+                    .with_usage(TextureUsage::SAMPLER | TextureUsage::COLOR_TARGET),
+            )
+            .expect("Failed to create render target texture");
+
+        debug!(
+            "Creating new render target '{}' {:?}",
+            label.as_ref(),
+            size
+        );
+
+        Self { inner, size }
+    }
+
     /// Records an upload of RGBA pixels into a region of the texture.
     pub fn write(
         &self,
@@ -63,6 +93,11 @@ impl Texture {
         map.mem_mut()[..data.len()].copy_from_slice(data);
         map.unmap();
 
+        // Cycling swaps in a fresh backing texture when the current one is
+        // still in flight, which discards every texel outside the written
+        // region. Only safe when the write covers the whole texture.
+        let cycle = origin.x == 0 && origin.y == 0 && size == self.size;
+
         copy_pass.upload_to_gpu_texture(
             TextureTransferInfo::new()
                 .with_transfer_buffer(&transfer)
@@ -76,7 +111,7 @@ impl Texture {
                 .with_width(size.width)
                 .with_height(size.height)
                 .with_depth(1),
-            true,
+            cycle,
         );
     }
 

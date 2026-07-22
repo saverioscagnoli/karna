@@ -1,3 +1,5 @@
+use imgui::SharedImgui;
+
 use crate::assets::AssetServer;
 use crate::assets::AssetsView;
 use crate::render::Color;
@@ -20,6 +22,8 @@ pub struct WindowContext {
     pub assets: AssetServer,
     pub cameras: Cameras,
     pub layers: RenderLayers,
+
+    pub imgui: SharedImgui,
 }
 
 pub struct Context<'a> {
@@ -52,6 +56,8 @@ impl WindowContext {
     }
 
     pub fn split_draw<'a>(&'a mut self, packet: &'a mut FramePacket) -> (Context<'a>, Draw<'a>) {
+        let window_id = self.window.id;
+
         (
             Context {
                 window: &mut self.window,
@@ -63,9 +69,11 @@ impl WindowContext {
             Draw {
                 r: &mut self.layers,
                 active_layer: Layer::default(),
+                active_canvas: None,
                 color: Color::White.into(),
                 assets: AssetsView::new(&self.assets),
                 packet,
+                imgui: self.imgui.active(window_id),
             },
         )
     }
