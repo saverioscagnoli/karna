@@ -1,4 +1,4 @@
-mod input;
+pub mod input;
 
 use std::ops::Deref;
 use std::ops::DerefMut;

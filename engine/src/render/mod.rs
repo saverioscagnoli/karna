@@ -4,7 +4,7 @@ mod draw;
 mod imgui;
 mod immediate;
 mod layer;
-mod transform;
+mod mesh;
 mod vertex;
 
 use std::ops::Index;
@@ -13,6 +13,7 @@ use std::ops::IndexMut;
 use gpu::Gpu;
 use logging::warn;
 use sdl3::gpu::ColorTargetInfo;
+use sdl3::gpu::DepthStencilTargetInfo;
 use sdl3::gpu::LoadOp;
 use sdl3::gpu::StoreOp;
 use utils::FastHashMap;
@@ -31,7 +32,16 @@ pub use crate::render::imgui::ImguiVertex;
 pub use crate::render::layer::Layer;
 pub use crate::render::layer::RenderLayer;
 pub use crate::render::layer::RenderLayers;
+use crate::render::mesh::geometry::GeometryBuffers;
+pub use crate::render::mesh::Mesh;
+pub use crate::render::mesh::MeshDraw;
+pub use crate::render::mesh::MeshStorage;
+pub use crate::render::mesh::geometry::Geometry;
+pub use crate::render::mesh::material::Material;
+pub use crate::render::mesh::material::MaterialUniforms;
+pub use crate::render::mesh::transform::Transform;
 pub use crate::render::vertex::LayoutDesc;
+pub use crate::render::vertex::MeshVertex;
 pub use crate::render::vertex::Vertex;
 
 #[derive(Default)]
@@ -174,11 +184,22 @@ struct ImguiTransform {
     translate: [f32; 2],
 }
 
+const GEOMETRY_TTL_FRAMES: u64 = 300;
+
+#[repr(C)]
+struct ModelData {
+    model: math::Matrix4<f32>,
+    normal: math::Matrix4<f32>,
+}
+
 pub struct Renderer {
     format: gpu::TextureFormat,
     pipelines: gpu::PipelineCache,
     assets: AssetReader,
     buffers: [LayerBuffers; 3],
+    geometries: FastHashMap<u64, GeometryBuffers>,
+    depth: gpu::DepthTexture,
+    frame: u64,
     pages: Vec<PageTexture>,
     imgui: ImguiResources,
 }
@@ -198,6 +219,9 @@ impl Renderer {
                 LayerBuffers::new(gpu),
                 LayerBuffers::new(gpu),
             ],
+            geometries: FastHashMap::default(),
+            depth: gpu::DepthTexture::new(gpu, math::Size::new(1, 1)),
+            frame: 0,
             pages: Vec::new(),
             imgui: ImguiResources::new(gpu),
         }
@@ -210,6 +234,7 @@ impl Renderer {
             blend: gpu::BlendState::ALPHA_BLENDING,
             topology: gpu::PrimitiveTopology::TriangleList,
             cull: None,
+            depth: gpu::DepthState::Disabled,
             format,
         }
     }
@@ -221,7 +246,20 @@ impl Renderer {
             blend: gpu::BlendState::ALPHA_BLENDING,
             topology: gpu::PrimitiveTopology::TriangleList,
             cull: None,
+            depth: gpu::DepthState::Disabled,
             format,
+        }
+    }
+
+    fn mesh_desc(&self, material: &Material) -> gpu::PipelineDesc {
+        gpu::PipelineDesc {
+            shader: material.shader,
+            vertex_layout: MeshVertex::desc(),
+            blend: material.blend,
+            topology: gpu::PrimitiveTopology::TriangleList,
+            cull: material.cull,
+            depth: gpu::DepthState::ReadWrite,
+            format: self.format,
         }
     }
 
@@ -331,6 +369,127 @@ impl Renderer {
         pass.set_scissor(sdl3::rect::Rect::new(0, 0, viewport.width, viewport.height));
     }
 
+    fn sync_meshes(&mut self, gpu: &Gpu, copy_pass: &gpu::CopyPass, layers: &RenderLayers) {
+        self.frame += 1;
+        let frame = self.frame;
+
+        for l in Layer::ALL {
+            for draw in &layers[l].meshes {
+                let g = &draw.geometry;
+
+                let entry = self.geometries.entry(g.id()).or_insert_with(|| {
+                    GeometryBuffers {
+                        vertex: gpu::Buffer::new(
+                            gpu,
+                            format!("geometry {} vertices", g.id()),
+                            gpu::BufferUsages::VERTEX,
+                            g.vertices().len(),
+                        ),
+                        index: gpu::Buffer::new(
+                            gpu,
+                            format!("geometry {} indices", g.id()),
+                            gpu::BufferUsages::INDEX,
+                            g.indices().len(),
+                        ),
+                        version: g.version().wrapping_sub(1),
+                        last_seen: frame,
+                    }
+                });
+
+                entry.last_seen = frame;
+
+                if entry.version != g.version() {
+                    entry.vertex.write_all(gpu, copy_pass, g.vertices());
+                    entry.index.write_all(gpu, copy_pass, g.indices());
+                    entry.version = g.version();
+                }
+            }
+        }
+
+        self.geometries
+            .retain(|_, b| frame - b.last_seen < GEOMETRY_TTL_FRAMES);
+    }
+
+    fn draw_meshes(
+        &mut self,
+        gpu: &Gpu,
+        cmd: &gpu::CommandBuffer,
+        pass: &gpu::RenderPass,
+        layer: &RenderLayer,
+        camera: &CameraData,
+        assets: &crate::assets::Assets,
+    ) {
+        if layer.meshes.is_empty() {
+            return;
+        }
+
+        let mut order: Vec<usize> = (0..layer.meshes.len()).collect();
+
+        order.sort_unstable_by(|&a, &b| {
+            let (ma, mb) = (&layer.meshes[a].material, &layer.meshes[b].material);
+
+            ma.sort_key()
+                .cmp(&mb.sort_key())
+                .then_with(|| ma.uniforms.cmp(&mb.uniforms))
+        });
+
+        cmd.push_vertex_uniform_data(0, camera);
+
+        let mut current: Option<&Material> = None;
+
+        for &i in &order {
+            let draw = &layer.meshes[i];
+
+            if current != Some(&draw.material) {
+                let desc = self.mesh_desc(&draw.material);
+                pass.bind_graphics_pipeline(self.pipelines.get_or_create(gpu, &desc));
+
+                let (page, rect) = match draw.material.texture {
+                    Some(handle) => {
+                        let img = assets.get_image(handle);
+
+                        (img.page as usize, [
+                            img.uv_min.x,
+                            img.uv_min.y,
+                            img.uv_max.x - img.uv_min.x,
+                            img.uv_max.y - img.uv_min.y,
+                        ])
+                    }
+
+                    None => {
+                        let white = assets.white_pixel();
+
+                        (white.page as usize, [
+                            (white.uv_min.x + white.uv_max.x) * 0.5,
+                            (white.uv_min.y + white.uv_max.y) * 0.5,
+                            0.0,
+                            0.0,
+                        ])
+                    }
+                };
+
+                pass.bind_fragment_samplers(0, &[self.pages[page].texture.binding(gpu)]);
+                gpu::push_fragment_uniform_bytes(cmd, 0, &draw.material.uniforms);
+                cmd.push_fragment_uniform_data(1, &rect);
+
+                current = Some(&draw.material);
+            }
+
+            let Some(buffers) = self.geometries.get(&draw.geometry.id()) else {
+                continue;
+            };
+
+            cmd.push_vertex_uniform_data(1, &ModelData {
+                model: draw.model,
+                normal: draw.normal,
+            });
+
+            pass.bind_vertex_buffers(0, &[buffers.vertex.binding()]);
+            pass.bind_index_buffer(&buffers.index.binding(), gpu::IndexElementSize::_32BIT);
+            pass.draw_indexed_primitives(draw.geometry.indices().len() as u32, 1, 0, 0, 0);
+        }
+    }
+
     /// Re-uploads atlas pages whose CPU pixels changed since the last frame
     fn sync_atlas(&mut self, gpu: &Gpu, copy_pass: &gpu::CopyPass, assets: &crate::assets::Assets) {
         for (i, page) in assets.atlas_pages().enumerate() {
@@ -372,6 +531,7 @@ impl Renderer {
         let copy_pass = gpu.begin_copy_pass(&cmd);
 
         self.sync_atlas(gpu, &copy_pass, &assets);
+        self.sync_meshes(gpu, &copy_pass, &frame.layers);
 
         for l in Layer::ALL {
             let layer = &frame.layers[l];
@@ -412,15 +572,31 @@ impl Renderer {
             .with_store_op(StoreOp::STORE)
             .with_clear_color(clear)];
 
+        let swapchain_size = math::Size::new(swapchain.width(), swapchain.height());
+
+        if self.depth.size != swapchain_size {
+            self.depth = gpu::DepthTexture::new(gpu, swapchain_size);
+        }
+
+        let depth_target = DepthStencilTargetInfo::new()
+            .with_texture(self.depth.inner_mut())
+            .with_clear_depth(1.0)
+            .with_load_op(LoadOp::CLEAR)
+            .with_store_op(StoreOp::DONT_CARE)
+            .with_stencil_load_op(LoadOp::DONT_CARE)
+            .with_stencil_store_op(StoreOp::DONT_CARE)
+            .with_cycle(true);
+
         let pass = gpu
             .device()
-            .begin_render_pass(&cmd, &targets, None)
+            .begin_render_pass(&cmd, &targets, Some(&depth_target))
             .expect("Failed to begin render pass");
-
-        let pip = self.pipelines.get(&Self::immediate_desc(self.format));
 
         for l in Layer::ALL {
             let layer = &frame.layers[l];
+            let camera = frame.packet[l].camera;
+
+            self.draw_meshes(gpu, &cmd, &pass, layer, &camera, &assets);
 
             if layer.indices.is_empty() {
                 continue;
@@ -428,8 +604,8 @@ impl Renderer {
 
             let buffers = &self.buffers[l as usize];
 
-            pass.bind_graphics_pipeline(pip);
-            cmd.push_vertex_uniform_data(0, &frame.packet[l].camera);
+            pass.bind_graphics_pipeline(self.pipelines.get(&Self::immediate_desc(self.format)));
+            cmd.push_vertex_uniform_data(0, &camera);
             pass.bind_vertex_buffers(0, &[buffers.vertex.binding()]);
             pass.bind_index_buffer(&buffers.index.binding(), gpu::IndexElementSize::_32BIT);
 

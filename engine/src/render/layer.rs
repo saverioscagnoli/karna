@@ -4,6 +4,7 @@ use std::ops::IndexMut;
 use crate::render::Vertex;
 use crate::render::imgui::ImguiPacket;
 use crate::render::immediate::Batch;
+use crate::render::mesh::MeshDraw;
 
 /// Nominative of each render layer,
 /// Used for ease of access
@@ -27,6 +28,7 @@ pub struct RenderLayer {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub batches: Vec<Batch>,
+    pub meshes: Vec<MeshDraw>,
 }
 
 impl RenderLayer {
@@ -68,6 +70,7 @@ impl RenderLayer {
         self.vertices.clear();
         self.indices.clear();
         self.batches.clear();
+        self.meshes.clear();
     }
 }
 

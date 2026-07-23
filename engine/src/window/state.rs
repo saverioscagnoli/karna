@@ -237,10 +237,6 @@ impl WindowState {
                 layers: mem::take(&mut self.context.layers),
             });
 
-            // A replaced frame was never rendered, but imgui was already told
-            // its texture requests were serviced. Move those uploads onto the
-            // submission that replaced it (ahead of its own) so they still
-            // reach the GPU, in order.
             if let (Some(stale), Some(current)) = (stale.as_mut(), slot.as_mut()) {
                 if !stale.layers.imgui.textures.is_empty() {
                     let carried = mem::take(&mut stale.layers.imgui.textures);
@@ -252,9 +248,6 @@ impl WindowState {
             stale
         };
 
-        // Refill the layers for the next frame with already-allocated buffers:
-        // either a stale frame the main thread never rendered, or one it sent
-        // back after rendering.
         let mut next = match stale {
             Some(stale) => stale.layers,
             None => self.recycled.try_recv().unwrap_or_default(),

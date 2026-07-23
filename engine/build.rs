@@ -15,6 +15,8 @@ fn main() {
         "immediate.frag",
         "imgui.vert",
         "imgui.frag",
+        "mesh.vert",
+        "mesh.frag",
     ] {
         let src = shaders.join(name);
         let dst = Path::new(&out).join(format!("{name}.spv"));

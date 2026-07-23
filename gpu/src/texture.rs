@@ -97,3 +97,39 @@ impl Texture {
             .with_sampler(gpu.sampler())
     }
 }
+
+pub struct DepthTexture {
+    inner: sdl3::gpu::Texture<'static>,
+    pub size: math::Size<u32>,
+}
+
+impl DepthTexture {
+    pub const FORMAT: TextureFormat = TextureFormat::D32Float;
+
+    pub fn new(gpu: &Gpu, size: math::Size<u32>) -> Self {
+        let size = math::Size::new(size.width.max(1), size.height.max(1));
+
+        let inner = gpu
+            .device()
+            .create_texture(
+                TextureCreateInfo::new()
+                    .with_type(TextureType::_2D)
+                    .with_format(Self::FORMAT)
+                    .with_width(size.width)
+                    .with_height(size.height)
+                    .with_layer_count_or_depth(1)
+                    .with_num_levels(1)
+                    .with_sample_count(SampleCount::NoMultiSampling)
+                    .with_usage(TextureUsage::DEPTH_STENCIL_TARGET),
+            )
+            .expect("Failed to create depth texture");
+
+        debug!("Creating depth texture {:?}", size);
+
+        Self { inner, size }
+    }
+
+    pub fn inner_mut(&mut self) -> &mut sdl3::gpu::Texture<'static> {
+        &mut self.inner
+    }
+}

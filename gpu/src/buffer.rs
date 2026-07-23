@@ -16,6 +16,7 @@ pub use sdl3::gpu::IndexElementSize;
 ///
 /// Uploads are recorded into a copy pass, so writes only happen while the
 /// renderer has one open (at the start of a frame, before the render pass).
+#[derive(Clone)]
 pub struct Buffer<T> {
     label: String,
     inner: sdl3::gpu::Buffer,

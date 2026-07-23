@@ -9,6 +9,9 @@ use crate::render::Vertex;
 use crate::render::color::Color;
 use crate::render::layer::Layer;
 use crate::render::layer::RenderLayers;
+use crate::render::mesh::Mesh;
+use crate::render::mesh::MeshDraw;
+use crate::render::mesh::MeshStorage;
 
 pub struct Draw<'ctx> {
     pub(crate) r: &'ctx mut RenderLayers,
@@ -150,6 +153,17 @@ impl<'ctx> Draw<'ctx> {
             ],
             Some(img.page as usize),
         );
+    }
+
+    pub fn mesh(&mut self, meshes: &MeshStorage, mesh: &Mesh) {
+        let transform = mesh.transform();
+
+        self.r[self.active_layer].meshes.push(MeshDraw {
+            geometry: meshes.geometry(mesh.geometry()).clone(),
+            material: meshes.material(mesh.material()).clone(),
+            model: transform.matrix(),
+            normal: transform.rotation_matrix(),
+        });
     }
 
     /// Begins a new imgui frame.

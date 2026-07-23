@@ -57,6 +57,7 @@ pub use crate::window::scene::SceneView;
 
 const IMMEDIATE_SHADER: usize = 0;
 const IMGUI_SHADER: usize = 1;
+pub(crate) const MESH_SHADER: usize = 2;
 
 /// Everything that should be shared across windows,
 /// e.g. the asset servers, should live in the app and be cloned around
@@ -100,6 +101,7 @@ impl App {
                 fragment_spirv: include_bytes!(concat!(env!("OUT_DIR"), "/immediate.frag.spv")),
                 vertex_uniform_buffers: 1,
                 fragment_samplers: 1,
+                fragment_uniform_buffers: 0,
             },
         );
 
@@ -110,6 +112,18 @@ impl App {
                 fragment_spirv: include_bytes!(concat!(env!("OUT_DIR"), "/imgui.frag.spv")),
                 vertex_uniform_buffers: 1,
                 fragment_samplers: 1,
+                fragment_uniform_buffers: 0,
+            },
+        );
+
+        gpu.load_shader(
+            MESH_SHADER,
+            gpu::ShaderDesc {
+                vertex_spirv: include_bytes!(concat!(env!("OUT_DIR"), "/mesh.vert.spv")),
+                fragment_spirv: include_bytes!(concat!(env!("OUT_DIR"), "/mesh.frag.spv")),
+                vertex_uniform_buffers: 2,
+                fragment_samplers: 1,
+                fragment_uniform_buffers: 2,
             },
         );
 

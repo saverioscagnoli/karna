@@ -18,6 +18,7 @@ pub struct ShaderDesc<'a> {
     pub fragment_spirv: &'a [u8],
     pub vertex_uniform_buffers: u32,
     pub fragment_samplers: u32,
+    pub fragment_uniform_buffers: u32,
 }
 
 pub struct ShaderPair {
@@ -52,6 +53,7 @@ impl ShaderRegistry {
                 ShaderStage::Fragment,
             )
             .with_samplers(desc.fragment_samplers)
+            .with_uniform_buffers(desc.fragment_uniform_buffers)
             .with_entrypoint(c"main")
             .build()
             .expect("Failed to create fragment shader");

@@ -47,10 +47,16 @@ impl BlendState {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Cull {
     Front,
     Back,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DepthState {
+    Disabled,
+    ReadWrite,
 }
 
 fn build_pipeline(gpu: &Gpu, desc: &PipelineDesc) -> RenderPipeline {
@@ -100,8 +106,18 @@ fn build_pipeline(gpu: &Gpu, desc: &PipelineDesc) -> RenderPipeline {
                     None => CullMode::None,
                 }),
         )
+        .with_depth_stencil_state(match desc.depth {
+            DepthState::Disabled => sdl3::gpu::DepthStencilState::new(),
+            DepthState::ReadWrite => sdl3::gpu::DepthStencilState::new()
+                .with_enable_depth_test(true)
+                .with_enable_depth_write(true)
+                .with_compare_op(sdl3::gpu::CompareOp::LessOrEqual),
+        })
         .with_target_info(
-            GraphicsPipelineTargetInfo::new().with_color_target_descriptions(&color_targets),
+            GraphicsPipelineTargetInfo::new()
+                .with_color_target_descriptions(&color_targets)
+                .with_has_depth_stencil_target(true)
+                .with_depth_stencil_format(crate::texture::DepthTexture::FORMAT),
         )
         .build()
         .expect("Failed to create render pipeline")
@@ -114,6 +130,7 @@ pub struct PipelineDesc {
     pub blend: BlendState,
     pub topology: PrimitiveTopology,
     pub cull: Option<Cull>,
+    pub depth: DepthState,
     pub format: TextureFormat,
 }
 
@@ -126,6 +143,8 @@ pub struct PipelineKey {
     pub vertex_attributes: Vec<(u32, u32, u32)>,
     pub blend: BlendState,
     pub topology: u32,
+    pub cull: Option<Cull>,
+    pub depth: DepthState,
     pub format: u32,
 }
 
@@ -142,6 +161,8 @@ impl PipelineKey {
                 .collect(),
             blend: desc.blend,
             topology: desc.topology as u32,
+            cull: desc.cull,
+            depth: desc.depth,
             format: desc.format as u32,
         }
     }
@@ -169,5 +190,14 @@ impl PipelineCache {
     pub fn get(&self, desc: &PipelineDesc) -> &RenderPipeline {
         let key = PipelineKey::new(desc);
         self.pip.get(&key).expect("Failed to get render pipeline")
+    }
+
+    pub fn get_or_create(&mut self, gpu: &Gpu, desc: &PipelineDesc) -> &RenderPipeline {
+        let key = PipelineKey::new(desc);
+
+        self.pip.entry(key).or_insert_with(|| {
+            debug!("Created new render pipeline {:?}", desc);
+            build_pipeline(gpu, desc)
+        })
     }
 }

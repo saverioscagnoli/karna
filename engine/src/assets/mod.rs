@@ -95,6 +95,10 @@ impl Assets {
     pub fn get_font(&self, h: Handle<Font>) -> &Font {
         &self.fonts[h]
     }
+
+    pub fn get_image(&self, h: Handle<Image>) -> &Image {
+        self.atlas.get(h)
+    }
 }
 
 struct SharedAssets {

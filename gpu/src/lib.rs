@@ -5,6 +5,7 @@ mod texture;
 mod vertex;
 
 use std::ffi::CStr;
+use std::sync::Arc;
 
 use logging::debug;
 use logging::info;
@@ -32,6 +33,7 @@ pub use crate::pipeline::*;
 pub use crate::shaders::ShaderDesc;
 pub use crate::shaders::ShaderRef;
 pub use crate::shaders::ShaderRegistry;
+pub use crate::texture::DepthTexture;
 pub use crate::texture::Texture;
 pub use crate::vertex::VertexAttribute;
 pub use crate::vertex::VertexLayout;
@@ -166,5 +168,20 @@ impl Gpu {
 
     pub fn end_copy_pass(&self, pass: CopyPass) {
         self.device.end_copy_pass(pass);
+    }
+}
+
+pub fn push_fragment_uniform_bytes(cmd: &CommandBuffer, slot: u32, data: &[u8]) {
+    if data.is_empty() {
+        return;
+    }
+
+    unsafe {
+        sdl3::sys::gpu::SDL_PushGPUFragmentUniformData(
+            cmd.raw(),
+            slot,
+            data.as_ptr().cast(),
+            data.len() as u32,
+        );
     }
 }
