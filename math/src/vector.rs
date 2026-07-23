@@ -28,60 +28,6 @@ use crate::point::Point4;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Vector<const N: usize, T: Num + Copy>([T; N]);
 
-#[cfg(feature = "serde")]
-mod vector_serde {
-    use core::fmt;
-    use core::marker::PhantomData;
-
-    use serde::de::Deserialize;
-    use serde::de::Deserializer;
-    use serde::de::SeqAccess;
-    use serde::de::Visitor;
-    use serde::de::{self};
-    use serde::ser::Serialize;
-    use serde::ser::SerializeTuple;
-    use serde::ser::Serializer;
-
-    use super::Vector;
-    use crate::Num;
-
-    impl<const N: usize, T: Num + Copy + Serialize> Serialize for Vector<N, T> {
-        fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-            let mut tup = s.serialize_tuple(N)?;
-            for e in &self.0 {
-                tup.serialize_element(e)?;
-            }
-            tup.end()
-        }
-    }
-
-    impl<'de, const N: usize, T: Num + Copy + Deserialize<'de>> Deserialize<'de> for Vector<N, T> {
-        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-            struct VecVisitor<const N: usize, T>(PhantomData<T>);
-
-            impl<'de, const N: usize, T: Num + Copy + Deserialize<'de>> Visitor<'de> for VecVisitor<N, T> {
-                type Value = Vector<N, T>;
-
-                fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                    write!(f, "{N} numbers (vector)")
-                }
-
-                fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-                    let mut arr = [T::zero(); N];
-                    for i in 0..N {
-                        arr[i] = seq
-                            .next_element()?
-                            .ok_or_else(|| de::Error::invalid_length(i, &self))?;
-                    }
-                    Ok(Vector(arr))
-                }
-            }
-
-            d.deserialize_tuple(N, VecVisitor(PhantomData))
-        }
-    }
-}
-
 pub type Vector2<T> = Vector<2, T>;
 pub type Vector3<T> = Vector<3, T>;
 pub type Vector4<T> = Vector<4, T>;

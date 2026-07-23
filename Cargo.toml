@@ -4,28 +4,24 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["engine", "gpu", "imgui", "logging", "math", "packer", "utils"]
+members = ["math", "logging", "utils", "engine"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 
 [workspace.dependencies]
-gpu = { path = "gpu" }
 logging = { path = "logging" }
-imgui = { path = "imgui" }
 math = { path = "math" }
 utils = { path = "utils" }
 
-sdl3 = { version = "0.18.4", features = ["raw-window-handle", "image", "ttf", "build-from-source-static"] }
+sdl3 = { version = "0.18.4", features = ["raw-window-handle", "image", "ttf"] }
 parking_lot = "0.12.5"
 
 [dependencies]
-engine = { path = "engine" }
 
 logging.workspace = true
 math.workspace = true
 utils.workspace = true
 
 [dev-dependencies]
-image = { version = "0.25.10", default-features = false, features = ["png"] }

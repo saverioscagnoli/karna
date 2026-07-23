@@ -1,79 +1,11 @@
-use imgui::SharedImgui;
+use sdl3::video::Window;
 
-use crate::assets::AssetServer;
-use crate::assets::AssetsView;
-use crate::render::Color;
-use crate::render::Draw;
-use crate::render::FramePacket;
-use crate::render::Layer;
-use crate::render::RenderLayers;
-use crate::scene::SceneManager;
-use crate::window::Window;
-use crate::window::input::Input;
-use crate::window::scene::Cameras;
-use crate::window::scene::SceneView;
-use crate::window::time::Time;
+use crate::window::WindowHandle;
 
 pub struct WindowContext {
-    pub window: Window,
-    pub input: Input,
-    pub time: Time,
-    pub scenes: SceneManager,
-    pub assets: AssetServer,
-    pub cameras: Cameras,
-    pub layers: RenderLayers,
-
-    pub imgui: SharedImgui,
+    pub window: WindowHandle,
 }
 
-pub struct Context<'a> {
+pub struct ContextRef<'a> {
     pub window: &'a mut Window,
-    pub input: &'a mut Input,
-    pub time: &'a mut Time,
-    pub assets: AssetsView<'a>,
-    pub scenes: &'a mut SceneManager,
-}
-
-impl WindowContext {
-    pub fn split_scene<'a>(
-        &'a mut self,
-        packet: &'a mut FramePacket,
-    ) -> (Context<'a>, SceneView<'a>) {
-        (
-            Context {
-                window: &mut self.window,
-                input: &mut self.input,
-                time: &mut self.time,
-                assets: AssetsView::new(&self.assets),
-                scenes: &mut self.scenes,
-            },
-            SceneView {
-                cameras: &mut self.cameras,
-                active_layer: Layer::default(),
-                packet,
-            },
-        )
-    }
-
-    pub fn split_draw<'a>(&'a mut self, packet: &'a mut FramePacket) -> (Context<'a>, Draw<'a>) {
-        let window_id = self.window.id;
-
-        (
-            Context {
-                window: &mut self.window,
-                input: &mut self.input,
-                time: &mut self.time,
-                assets: AssetsView::new(&self.assets),
-                scenes: &mut self.scenes,
-            },
-            Draw {
-                r: &mut self.layers,
-                active_layer: Layer::default(),
-                color: Color::White.into(),
-                assets: AssetsView::new(&self.assets),
-                packet,
-                imgui: self.imgui.active(window_id),
-            },
-        )
-    }
 }
