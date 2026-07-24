@@ -1,5 +1,6 @@
 use crate::render::target::RenderTarget;
 
+#[derive(Debug, Clone, Copy)]
 pub struct Viewport {
     pub position: math::Vector2<u32>,
     pub size: math::Size<u32>,
@@ -18,6 +19,7 @@ impl Viewport {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct View {
     pub target: RenderTarget,
     pub viewport: Viewport,

@@ -1,9 +1,10 @@
 use std::ops::{Deref, DerefMut};
 
-use crate::window::context::WindowContext;
+use crate::{scene::SceneRegistry, window::context::WindowContext};
 
 pub struct WindowState {
     pub context: WindowContext,
+    pub scenes: SceneRegistry,
 }
 
 impl Deref for WindowState {
@@ -18,8 +19,4 @@ impl DerefMut for WindowState {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.context
     }
-}
-
-impl WindowState {
-    pub fn run_loop(self) {}
 }

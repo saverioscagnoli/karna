@@ -1,17 +1,30 @@
 pub mod context;
 pub mod state;
 
-use std::rc::Rc;
-use std::sync::mpsc::Sender;
+use std::sync::Arc;
+use std::sync::mpsc::{Receiver, Sender};
 
 use logging::error;
+use sdl3::event::Event;
 use utils::WindowId;
 
 pub type SdlWindow = sdl3::video::Window;
 pub type SdlEvent = sdl3::event::Event;
+pub type SdlWindowEvent = sdl3::event::WindowEvent;
+
+/// Window wrapper over sdl windows.
+///
+/// The user never interacts with an instance
+/// of this struct. Its purpose is to be stored
+/// onto the main thread, because sdl windows must
+/// be created and destroyed there
+pub struct WindowSlot {
+    pub inner: SdlWindow,
+    pub events: Sender<Event>,
+}
 
 pub enum WindowAction {
-    SetWindowTitle(WindowId, Rc<str>),
+    SetWindowTitle(WindowId, Arc<str>),
     SetWindowSize(WindowId, math::Size<u32>),
     Present(WindowId),
 }
@@ -24,10 +37,11 @@ pub enum WindowAction {
 /// The actual game loop in the engine lives
 /// in a secondary thread, and this is what
 /// permits communication for dispatching window events
+#[derive(Debug)]
 pub struct WindowHandle {
     pub(crate) action_sender: Sender<WindowAction>,
     pub(crate) id: WindowId,
-    pub(crate) cached_title: Rc<str>,
+    pub(crate) cached_title: Arc<str>,
     pub(crate) cached_size: math::Size<u32>,
 }
 
@@ -50,9 +64,9 @@ impl WindowHandle {
     where
         T: AsRef<str>,
     {
-        let title: Rc<str> = Rc::from(title.as_ref());
+        let title: Arc<str> = Arc::from(title.as_ref());
 
-        self.send(WindowAction::SetWindowTitle(self.id, Rc::clone(&title)));
+        self.send(WindowAction::SetWindowTitle(self.id, Arc::clone(&title)));
         self.cached_title = title;
     }
 

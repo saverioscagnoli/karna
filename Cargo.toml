@@ -4,13 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["math", "logging", "utils", "engine"]
+members = ["math", "logging", "utils", "engine", "gpu"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 
 [workspace.dependencies]
+gpu = { path = "gpu" }
 logging = { path = "logging" }
 math = { path = "math" }
 utils = { path = "utils" }
@@ -19,7 +20,7 @@ sdl3 = { version = "0.18.4", features = ["raw-window-handle", "image", "ttf"] }
 parking_lot = "0.12.5"
 
 [dependencies]
-
+engine = { path = "engine" }
 logging.workspace = true
 math.workspace = true
 utils.workspace = true
