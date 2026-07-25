@@ -1,77 +1,94 @@
+mod builder;
 mod logs;
 mod render;
 mod scene;
 mod simulation;
 mod window;
 
+use std::mem;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread::{self, JoinHandle};
 
 use gpu::Gpu;
-use logging::warn;
-use logging::{error, info};
-use utils::{FastHashMap, WindowId};
+use logging::{debug, error, info};
+use sdl3::sys::video::SDL_SetWindowResizable;
+use sdl3::video::WindowPos;
+use utils::{FastHashMap, Lazy, WindowId};
 
+use crate::render::Renderer;
+use crate::render::packet::FramePacket;
 use crate::simulation::SimulationRunner;
-use crate::window::{SdlEvent, SdlWindowEvent, WindowSlot};
+use crate::window::{FrameSubmission, SdlEvent, SdlWindowEvent, WindowRequest, WindowSlot};
 use crate::window::{WindowAction, WindowHandle};
 
+pub use crate::builder::WindowBuilder;
 pub use crate::logs::init_logging;
-
-struct Senders {
-    shutdown: Sender<()>,
-}
-
-struct Receivers {
-    action: Receiver<WindowAction>,
-}
+pub use crate::render::color::Color;
+pub use crate::render::immediate::Draw;
+pub use crate::render::retained::SceneRef;
+pub use crate::scene::Scene;
+pub use crate::window::context::ContextRef;
+pub use crate::window::input;
 
 // Drop order matters
 pub struct App {
+    /// The window queued at creation
+    queued_windows: Vec<WindowBuilder>,
+
     windows: FastHashMap<WindowId, WindowSlot>,
     sims: Option<JoinHandle<()>>,
-    action_sender: Sender<WindowAction>,
-    action_receiver: Receiver<WindowAction>,
+    action_sender: Sender<WindowRequest>,
+    action_receiver: Receiver<WindowRequest>,
+    frame_sender: Sender<FrameSubmission>,
+    frame_receiver: Receiver<FrameSubmission>,
+    event_sender: Lazy<Sender<SdlEvent>>,
     gpu: Gpu,
-    events: sdl3::EventSubsystem,
     video: sdl3::VideoSubsystem,
     sdl: sdl3::Sdl,
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let sdl = sdl3::init().expect("Failed to init sdl3");
         let video = sdl.video().expect("Failed to init video subsystem");
-        let events = sdl.event().expect("Failed to init event subsystem");
-        let gpu = Gpu::init();
+        let mut gpu = Gpu::init();
 
-        let (action_tx, action_rx) = channel::<WindowAction>();
+        let (action_tx, action_rx) = channel::<WindowRequest>();
+        let (frame_tx, frame_rx) = channel::<FrameSubmission>();
 
         gpu.log_shader_formats();
         gpu.log_info();
 
+        render::load_builtin_shaders(&mut gpu);
+
         Self {
+            queued_windows: Vec::new(),
             windows: FastHashMap::default(),
             sims: None,
             action_sender: action_tx,
             action_receiver: action_rx,
+            frame_sender: frame_tx,
+            frame_receiver: frame_rx,
+            event_sender: Lazy::unset(),
             gpu,
-            events,
             video,
             sdl,
         }
     }
 
-    fn spawn_sims(&mut self, specs: Vec<(String, math::Size<u32>)>) {
+    fn spawn_sims(&mut self) {
         let (event_tx, event_rx) = channel::<SdlEvent>();
         let action_tx = self.action_sender.clone();
+        let frame_tx = self.frame_sender.clone();
+        let mut builders = mem::take(&mut self.queued_windows);
+        let mut ids = Vec::new();
 
-        let mut handles = Vec::new();
+        self.event_sender.set(event_tx);
 
-        for (title, size) in specs {
+        for b in &builders {
             let window = self
                 .video
-                .window(&title, size.width, size.height)
+                .window(&b.title, b.size.width, b.size.height)
                 .build()
                 .expect("Failed to create window");
 
@@ -80,14 +97,16 @@ impl App {
                 .expect("Failed to claim window");
 
             let id = window.id();
+            ids.push(id);
 
-            handles.push((id, title.clone(), size));
+            let renderer = Renderer::new(&self.gpu, self.gpu.swapchain_format(&window));
 
             self.windows.insert(
                 id,
                 WindowSlot {
                     inner: window,
-                    events: event_tx.clone(),
+                    renderer,
+                    packet: FramePacket::default(),
                 },
             );
         }
@@ -95,13 +114,19 @@ impl App {
         self.sims = Some(thread::spawn(move || {
             let mut runner = SimulationRunner::new(event_rx);
 
-            for (id, title, size) in handles {
-                runner.insert_window(WindowHandle {
-                    action_sender: action_tx.clone(),
-                    id,
-                    cached_title: title.into(),
-                    cached_size: size,
-                });
+            for (b, id) in builders.drain(..).zip(ids) {
+                runner.insert_window(
+                    WindowHandle {
+                        action_sender: action_tx.clone(),
+                        frame_sender: frame_tx.clone(),
+                        id,
+                        position: math::Vector2::zero(),
+                        resizable: false,
+                        cached_size: b.size,
+                        cached_title: b.title.clone().into(),
+                    },
+                    b,
+                );
             }
 
             runner.run();
@@ -116,7 +141,8 @@ impl App {
     }
 
     pub fn run(mut self) {
-        self.spawn_sims(vec![(String::from("Demo"), math::Size::new(800, 600))]);
+        self.spawn_sims();
+
         let mut pump = self.sdl.event_pump().expect("Failed to get event pump");
 
         'main: loop {
@@ -128,18 +154,13 @@ impl App {
                         window_id,
                         win_event,
                     } => {
-                        let Some(slot) = self.windows.get(&window_id) else {
-                            warn!("Received an event for a removed window");
-                            continue;
-                        };
-
                         let forwarded = SdlEvent::Window {
                             timestamp,
                             window_id,
                             win_event,
                         };
 
-                        if let Err(e) = slot.events.send(forwarded) {
+                        if let Err(e) = self.event_sender.send(forwarded) {
                             error!("Failed to send window event: {}", e);
                         }
 
@@ -152,35 +173,61 @@ impl App {
                         }
                     }
 
-                    SdlEvent::KeyDown { window_id, .. }
-                    | SdlEvent::KeyUp { window_id, .. }
-                    | SdlEvent::MouseMotion { window_id, .. }
-                    | SdlEvent::MouseButtonDown { window_id, .. }
-                    | SdlEvent::MouseButtonUp { window_id, .. }
-                    | SdlEvent::MouseWheel { window_id, .. }
-                    | SdlEvent::TextInput { window_id, .. } => {
-                        if let Some(slot) = self.windows.get(&window_id) {
-                            let _ = slot.events.send(event);
+                    event => {
+                        if let Err(e) = self.event_sender.send(event) {
+                            error!("Failed to send window event: {}", e);
                         }
                     }
-
-                    _ => {}
                 }
             }
 
-            while let Ok(action) = self.action_receiver.try_recv() {
-                match action {
-                    WindowAction::SetWindowTitle(id, title) => {
-                        if let Some(slot) = self.windows.get_mut(&id) {
-                            let _ = slot.inner.set_title(&title);
-                        }
+            while let Ok(request) = self.action_receiver.try_recv() {
+                let Some(slot) = self.windows.get_mut(&request.window_id) else {
+                    continue;
+                };
+
+                match request.action {
+                    WindowAction::Center => {
+                        slot.inner
+                            .set_position(WindowPos::Centered, WindowPos::Centered);
+                        debug!("Centering window");
                     }
-                    _ => {}
+
+                    WindowAction::SetPosition(pos) => {
+                        slot.inner.set_position(
+                            WindowPos::Positioned(pos.x),
+                            WindowPos::Positioned(pos.y),
+                        );
+
+                        debug!("Setting window position to ({}, {})", pos.x, pos.y);
+                    }
+
+                    WindowAction::SetResizable(r) => unsafe {
+                        // idk why sdl3 bindings dont expose this
+                        SDL_SetWindowResizable(slot.inner.raw(), r);
+                        debug!("Setting window resizable: {}", r);
+                    },
+
+                    WindowAction::SetSize(size) => {
+                        let _ = slot.inner.set_size(size.width, size.height);
+                        debug!("Setting window size to {:?}", size);
+                    }
+
+                    WindowAction::SetTitle(title) => {
+                        let _ = slot.inner.set_title(&title);
+                        debug!("Setting window title to '{}'", title);
+                    }
                 }
             }
 
-            for slot in self.windows.values() {
-                draw(&self.gpu, &slot.inner);
+            while let Ok(submission) = self.frame_receiver.try_recv() {
+                if let Some(slot) = self.windows.get_mut(&submission.window_id) {
+                    slot.packet = submission.packet;
+                }
+            }
+
+            for slot in self.windows.values_mut() {
+                slot.renderer.present(&self.gpu, &slot.inner, &slot.packet);
             }
         }
 
@@ -190,38 +237,4 @@ impl App {
             let _ = t.join();
         }
     }
-}
-
-use sdl3::gpu::{ColorTargetInfo, LoadOp, StoreOp};
-use sdl3::pixels::Color;
-
-fn draw(gpu: &Gpu, window: &sdl3::video::Window) {
-    let mut cmd = match gpu.device.acquire_command_buffer() {
-        Ok(cmd) => cmd,
-        Err(e) => {
-            error!("Failed to acquire command buffer: {e}");
-            return;
-        }
-    };
-
-    // Can legitimately fail when the window is minimized — not an error.
-    let Ok(swapchain) = cmd.wait_and_acquire_swapchain_texture(window) else {
-        cmd.cancel();
-        return;
-    };
-
-    let targets = [ColorTargetInfo::default()
-        .with_texture(&swapchain)
-        .with_load_op(LoadOp::CLEAR)
-        .with_store_op(StoreOp::STORE)
-        .with_clear_color(Color::RGB(30, 30, 46))];
-
-    // An empty pass still clears — LoadOp::CLEAR runs regardless.
-    let pass = gpu
-        .device
-        .begin_render_pass(&cmd, &targets, None)
-        .expect("begin pass");
-    gpu.device.end_render_pass(pass);
-
-    cmd.submit().expect("Failed to submit");
 }

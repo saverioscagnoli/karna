@@ -1,3 +1,8 @@
+mod buffer;
+mod pipeline;
+mod shaders;
+mod vertex;
+
 use std::ffi::CStr;
 
 use logging::{debug, info};
@@ -14,9 +19,23 @@ use sdl3::{
     video::Window,
 };
 
+pub use sdl3::gpu::CommandBuffer;
+pub use sdl3::gpu::CopyPass;
+pub use sdl3::gpu::IndexElementSize;
+pub use sdl3::gpu::PrimitiveType as PrimitiveTopology;
+pub use sdl3::gpu::RenderPass;
+pub use sdl3::gpu::TextureFormat;
+pub use sdl3::gpu::TextureSamplerBinding;
+
+pub use crate::buffer::*;
+pub use crate::pipeline::*;
+pub use crate::shaders::*;
+pub use crate::vertex::*;
+
 pub struct Gpu {
     pub device: Device,
     pub sampler: Sampler,
+    pub shaders: ShaderRegistry,
 }
 
 impl Gpu {
@@ -36,7 +55,23 @@ impl Gpu {
             )
             .expect("Failed to create sampler");
 
-        Self { device, sampler }
+        Self {
+            device,
+            sampler,
+            shaders: ShaderRegistry::new(),
+        }
+    }
+
+    pub fn swapchain_format(&self, window: &Window) -> TextureFormat {
+        self.device.get_swapchain_texture_format(window)
+    }
+
+    pub fn load_shader(&mut self, index: usize, desc: ShaderDesc) {
+        let Self {
+            device, shaders, ..
+        } = self;
+
+        shaders.load(device, index, desc);
     }
 
     pub fn log_shader_formats(&self) {

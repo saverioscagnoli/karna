@@ -6,3 +6,4 @@ edition.workspace = true
 [dependencies]
 logging.workspace = true
 sdl3.workspace = true
+utils.workspace = true

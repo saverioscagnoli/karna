@@ -1,16 +1,26 @@
 use utils::FastHashMap;
 
-use crate::window::context::ContextRef;
+use crate::{
+    render::{immediate::Draw, retained::SceneRef},
+    window::context::ContextRef,
+};
 
-pub trait Scene {
-    fn load(&mut self, ctx: ContextRef);
-    fn update(&mut self, ctx: ContextRef);
-    fn draw(&mut self, ctx: ContextRef);
+pub trait Scene: Send {
+    fn load(&mut self, ctx: ContextRef, scene: &mut SceneRef);
+    fn update(&mut self, ctx: ContextRef, scene: &mut SceneRef);
+    fn draw(&mut self, ctx: ContextRef, draw: &mut Draw);
 }
 
-#[derive(Default)]
 pub struct SceneRegistry {
-    scenes: Vec<Box<dyn Scene>>,
+    pub(crate) scenes: FastHashMap<String, Box<dyn Scene>>,
 }
 
-impl SceneRegistry {}
+impl SceneRegistry {
+    pub fn new(scenes: FastHashMap<String, Box<dyn Scene>>) -> Self {
+        Self { scenes }
+    }
+
+    pub fn get_mut(&mut self, label: &str) -> &mut Box<dyn Scene> {
+        self.scenes.get_mut(label).expect("Failed to get scene")
+    }
+}
