@@ -1,3 +1,4 @@
+mod assets;
 mod builder;
 mod logs;
 mod render;

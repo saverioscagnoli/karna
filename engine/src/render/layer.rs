@@ -22,17 +22,17 @@ impl Layer {
 
 #[derive(Default)]
 #[derive(Debug, Clone)]
-pub struct LayerCPU {
+pub struct LayerData {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
 }
 
-pub struct LayerGPU {
+pub struct LayerBuffers {
     pub(crate) vertex: gpu::Buffer<Vertex>,
     pub(crate) index: gpu::Buffer<u32>,
 }
 
-impl LayerGPU {
+impl LayerBuffers {
     pub fn new(gpu: &Gpu) -> Self {
         let vertex = gpu::Buffer::new(
             gpu,

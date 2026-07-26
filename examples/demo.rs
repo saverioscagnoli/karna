@@ -12,6 +12,7 @@ use karna::math::Vector2;
 use karna::render::Color;
 use karna::render::Draw;
 use karna::render::SceneRef;
+use math::Vector3;
 
 struct Demo {
     pos: Vector2<f32>,
@@ -59,6 +60,13 @@ impl Scene for Demo {
         self.vel.x += (target_x - self.vel.x) * t;
         self.vel.y += (target_y - self.vel.y) * t;
         self.pos += self.vel * dt;
+
+        let camera = scene.camera_mut();
+        let view = ctx.window.size().as_f32();
+        let target = Vector3::new(self.pos.x + 25.0, self.pos.y + 25.0, 0.0)
+            - Vector3::new(view.width / 2.0, view.height / 2.0, 0.0);
+        let cam_t = 1.0 - (-2.5 * ctx.time.fixed_delta()).exp();
+        camera.position = camera.position.lerp(&target, cam_t);
     }
 
     fn draw(&mut self, ctx: ContextRef, draw: &mut Draw) {

@@ -13,12 +13,12 @@ use crate::render::layer::{Layer, LayerCameras};
 use crate::render::packet::FramePacket;
 use crate::render::view::View;
 use crate::scene::SceneRegistry;
-use crate::window;
 use crate::window::SdlEvent;
 use crate::window::SdlWindowEvent;
 use crate::window::WindowHandle;
 use crate::window::context::WindowContext;
 use crate::window::input::Input;
+use crate::window::resources::Resources;
 use crate::window::time::Time;
 
 pub struct Simulation {
@@ -97,6 +97,7 @@ impl SimulationRunner {
                 window,
                 time: Time::new(),
                 input: Input::default(),
+                resources: Resources::default(),
                 packet: FramePacket::default(),
                 cameras: LayerCameras::new(b.size),
             },

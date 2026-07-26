@@ -12,7 +12,7 @@ use gpu::Gpu;
 use logging::warn;
 use sdl3::gpu::{ColorTargetInfo, LoadOp, StoreOp};
 
-use crate::render::layer::{Layer, LayerGPU};
+use crate::render::layer::{Layer, LayerBuffers};
 use crate::render::packet::FramePacket;
 use crate::render::vertex::{Vertex, VertexLayoutDescriptor};
 use crate::window::SdlWindow;
@@ -38,7 +38,7 @@ pub(crate) fn load_builtin_shaders(gpu: &mut Gpu) {
 pub struct Renderer {
     format: gpu::TextureFormat,
     pipelines: gpu::PipelineCache,
-    layers: [LayerGPU; 3],
+    layer_buffers: [LayerBuffers; 3],
 }
 
 impl Renderer {
@@ -49,7 +49,11 @@ impl Renderer {
         Self {
             format,
             pipelines,
-            layers: [LayerGPU::new(gpu), LayerGPU::new(gpu), LayerGPU::new(gpu)],
+            layer_buffers: [
+                LayerBuffers::new(gpu),
+                LayerBuffers::new(gpu),
+                LayerBuffers::new(gpu),
+            ],
         }
     }
 
@@ -59,7 +63,7 @@ impl Renderer {
             vertex_layout: Vertex::desc(),
             blend: gpu::BlendState::ALPHA_BLENDING,
             topology: gpu::PrimitiveTopology::TriangleList,
-            cull: None,
+            cull: Some(gpu::Cull::Front),
             format,
         }
     }
@@ -83,7 +87,7 @@ impl Renderer {
                 continue;
             }
 
-            let buffers = &mut self.layers[l as usize];
+            let buffers = &mut self.layer_buffers[l as usize];
             buffers.vertex.write_all(gpu, &copy_pass, &data.vertices);
             buffers.index.write_all(gpu, &copy_pass, &data.indices);
         }
@@ -113,10 +117,11 @@ impl Renderer {
                 continue;
             }
 
-            let buffers = &self.layers[l as usize];
+            let buffers = &self.layer_buffers[l as usize];
+
+            cmd.push_vertex_uniform_data(0, &packet[l].camera);
 
             pass.bind_graphics_pipeline(self.pipelines.get(&Self::immediate_desc(self.format)));
-            cmd.push_vertex_uniform_data(0, &packet[l].camera);
             pass.bind_vertex_buffers(0, &[buffers.vertex.binding()]);
             pass.bind_index_buffer(&buffers.index.binding(), gpu::IndexElementSize::_32BIT);
             pass.draw_indexed_primitives(data.indices.len() as u32, 1, 0, 0, 0);
@@ -125,7 +130,7 @@ impl Renderer {
         gpu.device.end_render_pass(pass);
 
         if let Err(e) = cmd.submit() {
-            warn!("Failed to submit frame: {e}");
+            warn!("Failed to submit frame: {}", e);
         }
     }
 }

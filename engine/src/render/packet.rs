@@ -1,16 +1,21 @@
+//! A 'packet' is essentially just cpu data that comes
+//! from the scene simulation, draw calls, buffer commands, etc.
+//!
+//! Gpu data lives in the renderer
+
 use std::ops::{Index, IndexMut};
 
 use crate::render::{
     camera::CameraPacket,
     color::Color,
-    layer::{Layer, LayerCPU},
+    layer::{Layer, LayerData},
 };
 
 #[derive(Default)]
 #[derive(Debug, Clone)]
 pub struct LayerPacket {
     pub(crate) camera: CameraPacket,
-    pub(crate) data: LayerCPU,
+    pub(crate) data: LayerData,
 }
 
 #[derive(Debug, Clone)]

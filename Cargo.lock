@@ -27,6 +27,7 @@ dependencies = [
  "gpu",
  "logging",
  "math",
+ "parking_lot",
  "sdl3",
  "utils",
 ]
