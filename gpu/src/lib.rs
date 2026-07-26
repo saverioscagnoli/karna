@@ -1,23 +1,28 @@
 mod buffer;
 mod pipeline;
 mod shaders;
+mod texture;
 mod vertex;
 
 use std::ffi::CStr;
 
-use logging::{debug, info};
-use sdl3::{
-    gpu::{Device, Sampler, ShaderFormat},
-    sys::{
-        gpu::{
-            SDL_ClaimWindowForGPUDevice, SDL_GetGPUDeviceDriver, SDL_GetGPUDeviceProperties,
-            SDL_PROP_GPU_DEVICE_DRIVER_INFO_STRING, SDL_PROP_GPU_DEVICE_NAME_STRING,
-            SDL_ReleaseWindowFromGPUDevice,
-        },
-        properties::SDL_GetStringProperty,
-    },
-    video::Window,
-};
+use logging::debug;
+use logging::info;
+use sdl3::gpu::ColorTargetInfo;
+use sdl3::gpu::Device;
+use sdl3::gpu::LoadOp;
+use sdl3::gpu::Sampler;
+use sdl3::gpu::ShaderFormat;
+use sdl3::gpu::StoreOp;
+use sdl3::pixels::Color;
+use sdl3::sys::gpu::SDL_ClaimWindowForGPUDevice;
+use sdl3::sys::gpu::SDL_GetGPUDeviceDriver;
+use sdl3::sys::gpu::SDL_GetGPUDeviceProperties;
+use sdl3::sys::gpu::SDL_PROP_GPU_DEVICE_DRIVER_INFO_STRING;
+use sdl3::sys::gpu::SDL_PROP_GPU_DEVICE_NAME_STRING;
+use sdl3::sys::gpu::SDL_ReleaseWindowFromGPUDevice;
+use sdl3::sys::properties::SDL_GetStringProperty;
+use sdl3::video::Window;
 
 pub use sdl3::gpu::CommandBuffer;
 pub use sdl3::gpu::CopyPass;
@@ -30,6 +35,7 @@ pub use sdl3::gpu::TextureSamplerBinding;
 pub use crate::buffer::*;
 pub use crate::pipeline::*;
 pub use crate::shaders::*;
+pub use crate::texture::*;
 pub use crate::vertex::*;
 
 pub struct Gpu {
@@ -39,9 +45,9 @@ pub struct Gpu {
 }
 
 impl Gpu {
-    pub fn init() -> Self {
+    pub fn init() -> Result<Self, String> {
         let device =
-            Device::new(ShaderFormat::SPIRV, cfg!(debug_assertions)).expect("Failed to init gpu");
+            Device::new(ShaderFormat::SPIRV, cfg!(debug_assertions)).map_err(|e| e.to_string())?;
 
         let sampler = device
             .create_sampler(
@@ -53,13 +59,13 @@ impl Gpu {
                     .with_address_mode_v(sdl3::gpu::SamplerAddressMode::ClampToEdge)
                     .with_address_mode_w(sdl3::gpu::SamplerAddressMode::ClampToEdge),
             )
-            .expect("Failed to create sampler");
+            .map_err(|e| e.to_string())?;
 
-        Self {
+        Ok(Self {
             device,
             sampler,
             shaders: ShaderRegistry::new(),
-        }
+        })
     }
 
     pub fn swapchain_format(&self, window: &Window) -> TextureFormat {
@@ -117,5 +123,28 @@ impl Gpu {
 
     pub fn release_window(&self, window: &Window) {
         unsafe { SDL_ReleaseWindowFromGPUDevice(self.device.raw(), window.raw()) };
+    }
+
+    pub fn clear(&self, window: &Window, color: Color) -> Result<(), sdl3::Error> {
+        let mut cmd = self.device.acquire_command_buffer()?;
+
+        // Returns an error / null texture when the window is minimized or
+        // the swapchain isn't ready. Don't treat that as fatal.
+        let Ok(swapchain) = cmd.wait_and_acquire_swapchain_texture(window) else {
+            cmd.cancel();
+            return Ok(());
+        };
+
+        let targets = [ColorTargetInfo::default()
+            .with_texture(&swapchain)
+            .with_load_op(LoadOp::CLEAR)
+            .with_store_op(StoreOp::STORE)
+            .with_clear_color(color)];
+
+        let pass = self.device.begin_render_pass(&cmd, &targets, None)?;
+        self.device.end_render_pass(pass);
+
+        cmd.submit()?;
+        Ok(())
     }
 }

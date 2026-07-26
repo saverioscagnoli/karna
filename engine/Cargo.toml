@@ -6,7 +6,5 @@ edition.workspace = true
 [dependencies]
 gpu.workspace = true
 logging.workspace = true
-math.workspace = true
-parking_lot.workspace = true
 sdl3.workspace = true
 utils.workspace = true

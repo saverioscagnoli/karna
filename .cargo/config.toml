@@ -1,11 +1,2 @@
-[target.wasm32-unknown-emscripten]
- rustflags = [
-   "-C", "link-arg=-sUSE_SDL=3",
-   "-C", "link-arg=-sUSE_SDL_IMAGE=3",
-   "-C", "link-arg=-sUSE_SDL_TTF=3",
-   "-C", "link-arg=-sALLOW_MEMORY_GROWTH=1",
-   "-C", "link-arg=-sMAX_WEBGL_VERSION=2",
- ]
-
  [env]
  CMAKE_POLICY_VERSION_MINIMUM = "3.5"

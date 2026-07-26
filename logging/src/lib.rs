@@ -34,6 +34,16 @@ pub struct Logger {
     module_filters: Vec<(String, LevelFilter)>,
 }
 
+impl Logger {
+    fn emit(&self, record: &log::Record) {
+        let message = self.formatter.format(record);
+
+        for t in &self.targets {
+            _ = t.write(record.level(), &message);
+        }
+    }
+}
+
 impl log::Log for Logger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         let target = metadata.target();
@@ -53,11 +63,7 @@ impl log::Log for Logger {
             return;
         }
 
-        let message = self.formatter.format(record);
-
-        for t in &self.targets {
-            _ = t.write(record.level(), &message);
-        }
+        self.emit(record);
     }
 
     fn flush(&self) {
@@ -130,4 +136,40 @@ pub fn init(config: Config) -> Result<(), log::SetLoggerError> {
     log::set_max_level(logger.min_level);
 
     Ok(())
+}
+
+#[doc(hidden)]
+pub fn __fatal(args: std::fmt::Arguments, target: &str, file: &str, line: u32, code: i32) -> ! {
+    match LOGGER.get() {
+        Some(logger) => {
+            logger.emit(
+                &log::Record::builder()
+                    .args(args)
+                    .level(Level::Error)
+                    .target(target)
+                    .module_path(Some(target))
+                    .file(Some(file))
+                    .line(Some(line))
+                    .build(),
+            );
+            log::Log::flush(logger);
+        }
+        None => eprintln!("fatal: {args}"),
+    }
+
+    std::process::exit(code)
+}
+
+#[macro_export]
+macro_rules! fatal {
+    (code: $code:expr, $($arg:tt)*) => {
+        $crate::__fatal(
+            ::core::format_args!($($arg)*),
+            ::core::module_path!(),
+            ::core::file!(),
+            ::core::line!(),
+            $code,
+        )
+    };
+    ($($arg:tt)*) => { $crate::fatal!(code: 1, $($arg)*) };
 }

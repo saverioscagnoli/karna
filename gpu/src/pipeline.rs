@@ -75,10 +75,9 @@ fn build_pipeline(gpu: &Gpu, desc: &PipelineDesc) -> RenderPipeline {
         })
         .collect();
 
-    let color_targets =
-        [desc
-            .blend
-            .apply(ColorTargetDescription::new().with_format(desc.format))];
+    let color_targets = [desc
+        .blend
+        .apply(ColorTargetDescription::new().with_format(desc.format))];
 
     gpu.device
         .create_graphics_pipeline()

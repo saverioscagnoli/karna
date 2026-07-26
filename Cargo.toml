@@ -16,7 +16,7 @@ logging = { path = "logging" }
 math = { path = "math" }
 utils = { path = "utils" }
 
-sdl3 = { version = "0.18.4", features = ["raw-window-handle", "image", "ttf"] }
+sdl3 = { version = "0.18.4", features = ["image", "ttf"] }
 parking_lot = "0.12.5"
 
 [dependencies]
