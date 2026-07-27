@@ -1,6 +1,8 @@
 pub mod clock;
 pub mod context;
+pub mod input;
 pub mod pacer;
+pub mod resources;
 pub mod state;
 pub mod time;
 

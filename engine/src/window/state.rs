@@ -91,6 +91,8 @@ impl WindowState {
     }
 
     pub fn flush(&mut self) {
+        self.input.flush();
+
         for event in self.event_queue.drain(..) {
             match event {
                 AppEvent::Time(tc) => match tc {

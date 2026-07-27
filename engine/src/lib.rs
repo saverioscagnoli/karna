@@ -25,6 +25,8 @@ use crate::event::SdlWindowEvent;
 use crate::render::packet::FramePacket;
 use crate::scene::World;
 use crate::window::context::WindowContext;
+use crate::window::input::Input;
+use crate::window::resources::Resources;
 use crate::window::state::WindowState;
 
 pub use crate::builder::AppBuilder;
@@ -111,6 +113,8 @@ impl App {
         let state = WindowState::new(
             WindowContext {
                 window: Window::wrap(sdl_window),
+                input: Input::default(),
+                resources: Resources::default(),
                 packet: FramePacket::default(),
             },
             World::new(b.scenes, b.active_scenes),
@@ -150,6 +154,87 @@ impl App {
                 match win_event {
                     _ => {}
                 }
+            }
+
+            SdlEvent::KeyDown {
+                window_id,
+                scancode: Some(c),
+                repeat,
+                ..
+            } => {
+                let Some(state) = self.windows.get_mut(&window_id) else {
+                    error!("Received an event for a closed window.");
+                    return;
+                };
+
+                state.input.k_down.insert(c);
+
+                if !repeat {
+                    state.input.k_pressed.insert(c);
+                }
+            }
+
+            SdlEvent::KeyUp {
+                window_id,
+                scancode: Some(c),
+                ..
+            } => {
+                let Some(state) = self.windows.get_mut(&window_id) else {
+                    error!("Received an event for a closed window.");
+                    return;
+                };
+
+                state.input.k_down.remove(&c);
+                state.input.k_released.insert(c);
+            }
+
+            SdlEvent::MouseButtonDown {
+                window_id,
+                mouse_btn,
+                clicks,
+                ..
+            } => {
+                let Some(state) = self.windows.get_mut(&window_id) else {
+                    error!("Received an event for a closed window.");
+                    return;
+                };
+
+                state.input.m_down.insert(mouse_btn);
+
+                if clicks == 1 {
+                    state.input.m_pressed.insert(mouse_btn);
+                }
+            }
+
+            SdlEvent::MouseButtonUp {
+                window_id,
+                mouse_btn,
+                ..
+            } => {
+                let Some(state) = self.windows.get_mut(&window_id) else {
+                    error!("Received an event for a closed window.");
+                    return;
+                };
+
+                state.input.m_down.remove(&mouse_btn);
+                state.input.m_released.insert(mouse_btn);
+            }
+
+            SdlEvent::MouseMotion {
+                window_id,
+                x,
+                y,
+                xrel,
+                yrel,
+                ..
+            } => {
+                let Some(state) = self.windows.get_mut(&window_id) else {
+                    error!("Received an event for a closed window.");
+                    return;
+                };
+
+                state.input.m_pos.set([x, y]);
+                state.input.m_delta.set([xrel, yrel]);
             }
 
             _ => {}
