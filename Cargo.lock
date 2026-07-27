@@ -26,6 +26,7 @@ version = "0.1.0"
 dependencies = [
  "gpu",
  "logging",
+ "math",
  "sdl3",
  "utils",
 ]

@@ -1,5 +1,10 @@
+mod builder;
+mod event;
+mod render;
+mod scene;
 mod window;
 
+use std::mem;
 use std::time::Instant;
 
 use gpu::Gpu;
@@ -15,15 +20,25 @@ use utils::FastHashMap;
 use utils::SleepTimer;
 use utils::WindowId;
 
-use crate::window::SdlEvent;
-use crate::window::SdlWindowEvent;
+use crate::event::SdlEvent;
+use crate::event::SdlWindowEvent;
+use crate::render::packet::FramePacket;
+use crate::scene::World;
 use crate::window::context::WindowContext;
 use crate::window::state::WindowState;
 
+pub use crate::builder::AppBuilder;
+pub use crate::builder::WindowBuilder;
+pub use crate::render::immediate::Draw;
+pub use crate::render::retained::SceneRef;
+pub use crate::scene::Scene;
 pub use crate::window::Window;
-use crate::window::time::Time;
+pub use crate::window::context::ContextRef;
+pub use crate::window::time::Time;
 
 pub struct App {
+    queued_windows: Vec<WindowBuilder>,
+
     windows: FastHashMap<WindowId, WindowState>,
     should_quit: bool,
     sleeper: SleepTimer,
@@ -33,7 +48,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let sdl = match sdl3::init() {
             Ok(sdl) => sdl,
             Err(e) => fatal!("Failed to initialize sdl: {}", e),
@@ -55,6 +70,7 @@ impl App {
         gpu.log_info();
 
         Self {
+            queued_windows: Vec::new(),
             windows: FastHashMap::default(),
             should_quit: false,
             sleeper,
@@ -64,8 +80,16 @@ impl App {
         }
     }
 
-    fn spawn_window(&mut self, title: &str, width: u32, height: u32) {
-        let sdl_window = match self.video.window(title, width, height).build() {
+    pub fn builder() -> AppBuilder {
+        AppBuilder::default()
+    }
+
+    fn spawn_window(&mut self, b: WindowBuilder) {
+        let sdl_window = match self
+            .video
+            .window(&b.title, b.size.width, b.size.height)
+            .build()
+        {
             Ok(w) => w,
             Err(e) => {
                 error!("Failed to create window: {}", e);
@@ -84,12 +108,13 @@ impl App {
             SwapchainComposition::default(),
         );
 
-        let state = WindowState {
-            context: WindowContext {
+        let state = WindowState::new(
+            WindowContext {
                 window: Window::wrap(sdl_window),
-                time: Time::default(),
+                packet: FramePacket::default(),
             },
-        };
+            World::new(b.scenes, b.active_scenes),
+        );
 
         self.windows.insert(state.window.id(), state);
     }
@@ -132,12 +157,18 @@ impl App {
     }
 
     pub fn run(mut self) {
-        self.spawn_window("demo", 800, 600);
+        for b in mem::take(&mut self.queued_windows) {
+            self.spawn_window(b);
+        }
 
         let mut pump = match self.sdl.event_pump() {
             Ok(p) => p,
             Err(e) => fatal!("Failed to initialize SDL event pump: {}", e),
         };
+
+        for state in self.windows.values_mut() {
+            state.load();
+        }
 
         while !self.should_quit {
             for event in pump.poll_iter() {
@@ -147,25 +178,38 @@ impl App {
             let now = Instant::now();
 
             for state in self.windows.values_mut() {
-                if !state.time.frame_due(now) {
+                state.clock.advance(now);
+
+                while state.clock.should_tick() {
+                    state.tick();
+                    state.clock.consume(now);
+                }
+
+                if !state.pacer.due(now) {
                     continue;
                 }
 
-                state.time.advance();
+                state.update();
+                state.draw();
 
-                while state.time.should_tick() {
-                    let start = Instant::now();
-                    state.time.consume(start);
-                }
+                let _ = self.gpu.clear(&state.window.inner, Color::CYAN);
 
-                let _ = self.gpu.clear(&state.window.inner, Color::BLACK);
-                state.time.schedule_next_frame();
+                state.pacer.record(now);
+                state.pacer.schedule(now);
+
+                state.flush();
             }
 
-            match self.windows.values().map(|s| s.time.next_frame()).min() {
-                Some(deadline) => self.sleeper.sleep_until(deadline),
-                None => break,
-            }
+            let deadline = self
+                .windows
+                .values()
+                .map(|s| s.pacer.next_frame.min(s.clock.next_tick()))
+                .min();
+
+            match deadline {
+                Some(d) => self.sleeper.sleep_until(d),
+                None => self.should_quit = true,
+            };
         }
 
         info!("All windows were closed. Exiting.");
