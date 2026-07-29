@@ -8,25 +8,30 @@ use std::ffi::CStr;
 
 use logging::debug;
 use logging::info;
+use logging::warn;
 use sdl3::gpu::ColorTargetInfo;
 use sdl3::gpu::Device;
 use sdl3::gpu::LoadOp;
 use sdl3::gpu::Sampler;
 use sdl3::gpu::ShaderFormat;
 use sdl3::gpu::StoreOp;
+use sdl3::gpu::SwapchainComposition;
 use sdl3::pixels::Color;
 use sdl3::sys::gpu::SDL_ClaimWindowForGPUDevice;
+use sdl3::sys::gpu::SDL_GPUPresentMode;
 use sdl3::sys::gpu::SDL_GetGPUDeviceDriver;
 use sdl3::sys::gpu::SDL_GetGPUDeviceProperties;
 use sdl3::sys::gpu::SDL_PROP_GPU_DEVICE_DRIVER_INFO_STRING;
 use sdl3::sys::gpu::SDL_PROP_GPU_DEVICE_NAME_STRING;
 use sdl3::sys::gpu::SDL_ReleaseWindowFromGPUDevice;
+use sdl3::sys::gpu::SDL_WindowSupportsGPUPresentMode;
 use sdl3::sys::properties::SDL_GetStringProperty;
 use sdl3::video::Window;
 
 pub use sdl3::gpu::CommandBuffer;
 pub use sdl3::gpu::CopyPass;
 pub use sdl3::gpu::IndexElementSize;
+pub use sdl3::gpu::PresentMode;
 pub use sdl3::gpu::PrimitiveType as PrimitiveTopology;
 pub use sdl3::gpu::RenderPass;
 pub use sdl3::gpu::TextureFormat;
@@ -42,6 +47,7 @@ pub struct Gpu {
     pub device: Device,
     pub sampler: Sampler,
     pub shaders: ShaderRegistry,
+    present_mode: PresentMode,
 }
 
 impl Gpu {
@@ -65,7 +71,35 @@ impl Gpu {
             device,
             sampler,
             shaders: ShaderRegistry::new(),
+            present_mode: PresentMode::Vsync,
         })
+    }
+
+    pub fn supports_present_mode(&self, window: &Window, mode: PresentMode) -> bool {
+        let mode = match mode {
+            PresentMode::Immediate => SDL_GPUPresentMode::IMMEDIATE,
+            PresentMode::Vsync => SDL_GPUPresentMode::VSYNC,
+            PresentMode::Mailbox => SDL_GPUPresentMode::MAILBOX,
+        };
+
+        unsafe { SDL_WindowSupportsGPUPresentMode(self.device.raw(), window.raw(), mode) }
+    }
+
+    pub fn present_mode(&self) -> PresentMode {
+        self.present_mode
+    }
+
+    pub fn set_present_mode(&mut self, window: &Window, mode: PresentMode) {
+        if let Err(e) =
+            self.device
+                .set_swapchain_parameters(window, mode, SwapchainComposition::default())
+        {
+            warn!("Failed to set present mode: {}", e);
+            return;
+        }
+
+        debug!("Present mode set to {:?}", mode);
+        self.present_mode = mode;
     }
 
     pub fn swapchain_format(&self, window: &Window) -> TextureFormat {
@@ -108,7 +142,7 @@ impl Gpu {
             ))
             .to_string_lossy();
 
-            info!("GPU: {} (backend {}, driver {})", name, backend, driver);
+            info!("GPU: {} (backend: {}, driver: {})", name, backend, driver);
         }
     }
 

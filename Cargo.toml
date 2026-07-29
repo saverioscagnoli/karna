@@ -16,11 +16,14 @@ logging = { path = "logging" }
 math = { path = "math" }
 utils = { path = "utils" }
 
-sdl3 = { version = "0.18.4", features = ["image", "ttf"] }
+crossbeam-channel = "0.5.16"
+sdl3 = { version = "0.18.4", features = ["image", "ttf", "mixer"] }
+sdl3-mixer-sys = { version = "0.6.3", features = ["build-static-vendored"] }
 parking_lot = "0.12.5"
 
 [dependencies]
 engine = { path = "engine" }
+gpu.workspace = true
 logging.workspace = true
 math.workspace = true
 utils.workspace = true

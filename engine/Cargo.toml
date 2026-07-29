@@ -4,8 +4,10 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+crossbeam-channel.workspace = true
 gpu.workspace = true
 logging.workspace = true
 math.workspace = true
 sdl3.workspace = true
+sdl3-mixer-sys.workspace = true
 utils.workspace = true

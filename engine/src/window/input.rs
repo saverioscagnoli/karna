@@ -58,5 +58,6 @@ impl Input {
         self.k_released.clear();
         self.m_pressed.clear();
         self.m_released.clear();
+        self.m_wheel.set([0.0, 0.0]);
     }
 }

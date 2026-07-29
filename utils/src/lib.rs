@@ -7,6 +7,7 @@ mod sleep;
 mod slotmap;
 mod types;
 
+pub use crate::bytes::ByteSize;
 pub use crate::bytes::as_u8_slice;
 pub use crate::bytes::hash_bytes;
 pub use crate::lazy::Lazy;

@@ -1,4 +1,5 @@
 use std::mem;
+use std::path::PathBuf;
 
 use crate::App;
 use crate::scene::Scene;
@@ -56,9 +57,20 @@ impl WindowBuilder {
     }
 }
 
-#[derive(Default)]
 pub struct AppBuilder {
     windows: Vec<WindowBuilder>,
+    asset_workers: usize,
+    asset_root: Option<PathBuf>,
+}
+
+impl Default for AppBuilder {
+    fn default() -> Self {
+        Self {
+            windows: Vec::new(),
+            asset_workers: 4,
+            asset_root: None,
+        }
+    }
 }
 
 impl AppBuilder {
@@ -71,8 +83,21 @@ impl AppBuilder {
         self
     }
 
+    pub fn with_asset_workers(mut self, n: usize) -> Self {
+        self.asset_workers = n;
+        self
+    }
+
+    pub fn with_asset_root<P>(mut self, path: P) -> Self
+    where
+        P: Into<PathBuf>,
+    {
+        self.asset_root = Some(path.into());
+        self
+    }
+
     pub fn build(mut self) -> App {
-        let mut app = App::new();
+        let mut app = App::new(self.asset_workers, self.asset_root);
 
         for b in mem::take(&mut self.windows) {
             app.queued_windows.push(b);

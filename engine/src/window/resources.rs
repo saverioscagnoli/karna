@@ -1,4 +1,5 @@
-use std::any::{Any, TypeId};
+use std::any::Any;
+use std::any::TypeId;
 
 use logging::fatal;
 use utils::FastHashMap;

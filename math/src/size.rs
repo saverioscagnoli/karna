@@ -23,6 +23,14 @@ impl<T: Num + Copy> Size<T> {
         Self { width, height }
     }
 
+    pub fn zero() -> Self {
+        Self::new(T::zero(), T::zero())
+    }
+
+    pub fn square(size: T) -> Self {
+        Self::new(size, size)
+    }
+
     pub fn w(&self) -> T {
         self.width
     }

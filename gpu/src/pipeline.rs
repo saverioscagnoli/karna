@@ -160,7 +160,7 @@ impl PipelineCache {
         let key = PipelineKey::new(desc);
         let pip = build_pipeline(gpu, desc);
 
-        debug!("Created new render pipeline {:?}", desc);
+        debug!("Created new render pipeline with shader {:?}", desc.shader);
 
         self.pip.insert(key, pip);
     }
@@ -174,7 +174,7 @@ impl PipelineCache {
         let key = PipelineKey::new(desc);
 
         self.pip.entry(key).or_insert_with(|| {
-            debug!("Created new render pipeline {:?}", desc);
+            debug!("Created new render pipeline with shader {:?}", desc.shader);
             build_pipeline(gpu, desc)
         })
     }

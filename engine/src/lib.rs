@@ -1,69 +1,104 @@
+mod assets;
 mod builder;
 mod event;
 mod render;
 mod scene;
+mod sound;
 mod window;
 
 use std::mem;
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Instant;
 
 use gpu::Gpu;
+use logging::debug;
 use logging::error;
 use logging::fatal;
 use logging::info;
+use logging::trace;
 use sdl3::Sdl;
 use sdl3::VideoSubsystem;
 use sdl3::gpu::PresentMode;
 use sdl3::gpu::SwapchainComposition;
-use sdl3::pixels::Color;
 use utils::FastHashMap;
 use utils::SleepTimer;
 use utils::WindowId;
 
+use crate::assets::AssetServer;
+use crate::event::AppEvent;
+use crate::event::EventQueue;
 use crate::event::SdlEvent;
 use crate::event::SdlWindowEvent;
+use crate::render::Renderer;
 use crate::render::packet::FramePacket;
+use crate::scene::ScenePhase;
 use crate::scene::World;
+use crate::sound::SharedMixer;
+use crate::window::audio::AudioHandle;
 use crate::window::context::WindowContext;
-use crate::window::input::Input;
+use crate::window::platform::PlatformWindow;
 use crate::window::resources::Resources;
+use crate::window::state::Frame;
 use crate::window::state::WindowState;
+use crate::window::time::TimeCommand;
 
+pub use crate::assets::Assets;
+pub use crate::assets::audio::Audio;
+pub use crate::assets::audio::AudioLength;
+pub use crate::assets::image::Image;
 pub use crate::builder::AppBuilder;
 pub use crate::builder::WindowBuilder;
+pub use crate::render::color::Color;
 pub use crate::render::immediate::Draw;
 pub use crate::render::retained::SceneRef;
 pub use crate::scene::Scene;
-pub use crate::window::Window;
+pub use crate::window::WindowHandle;
 pub use crate::window::context::ContextRef;
+pub use crate::window::context::DrawContext;
+pub use crate::window::input::Input;
+pub use crate::window::input::Key;
+pub use crate::window::input::MouseButton;
 pub use crate::window::time::Time;
+
+struct WindowEntry {
+    platform: PlatformWindow,
+    state: WindowState,
+}
 
 pub struct App {
     queued_windows: Vec<WindowBuilder>,
 
-    windows: FastHashMap<WindowId, WindowState>,
+    windows: FastHashMap<WindowId, WindowEntry>,
     should_quit: bool,
     sleeper: SleepTimer,
+    events: EventQueue<AppEvent>,
+    asset_server: AssetServer,
+    assets: Assets,
+    mixer: Arc<SharedMixer>,
+    renderer: Renderer,
     gpu: Gpu,
     video: VideoSubsystem,
     sdl: Sdl,
 }
 
 impl App {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(asset_workers: usize, asset_root: Option<PathBuf>) -> Self {
         let sdl = match sdl3::init() {
             Ok(sdl) => sdl,
             Err(e) => fatal!("Failed to initialize sdl: {}", e),
         };
+        debug!("SDL3 initialized.");
 
         let sleeper = SleepTimer::calibrated();
 
         let video = match sdl.video() {
             Ok(v) => v,
-            Err(e) => fatal!("Failed to initialized video subsystem: {}", e),
+            Err(e) => fatal!("Failed to initialize video subsystem: {}", e),
         };
+        debug!("Video subsystem initialized.");
 
-        let gpu = match Gpu::init() {
+        let mut gpu = match Gpu::init() {
             Ok(gpu) => gpu,
             Err(e) => fatal!("Failed to initialize gpu: {}", e),
         };
@@ -71,11 +106,35 @@ impl App {
         gpu.log_shader_formats();
         gpu.log_info();
 
+        render::load_builtin_shaders(&mut gpu);
+        debug!("Loaded built-in shaders.");
+
+        let mixer = match SharedMixer::open() {
+            Ok(m) => Arc::new(m),
+            Err(e) => fatal!("Failed to initialize audio: {}", e),
+        };
+
+        debug!("Audio mixer initialized.");
+
+        let root = match asset_root {
+            Some(r) => r,
+            None => assets::resolve_base_path(),
+        };
+
+        let (asset_server, assets) = assets::spawn(root, asset_workers, Arc::clone(&mixer));
+
+        info!("Application initialized.");
+
         Self {
             queued_windows: Vec::new(),
             windows: FastHashMap::default(),
             should_quit: false,
             sleeper,
+            events: EventQueue::new(),
+            asset_server,
+            assets,
+            mixer,
+            renderer: Renderer::new(),
             gpu,
             video,
             sdl,
@@ -87,7 +146,7 @@ impl App {
     }
 
     fn spawn_window(&mut self, b: WindowBuilder) {
-        let sdl_window = match self
+        let window = match self
             .video
             .window(&b.title, b.size.width, b.size.height)
             .build()
@@ -99,146 +158,123 @@ impl App {
             }
         };
 
-        if let Err(e) = self.gpu.claim_window(&sdl_window) {
+        if let Err(e) = self.gpu.claim_window(&window) {
             error!("The GPU failed to claim the window: {}", e);
             return;
         }
 
         let _ = self.gpu.device.set_swapchain_parameters(
-            &sdl_window,
+            &window,
             PresentMode::Immediate,
             SwapchainComposition::default(),
         );
 
+        let platform = PlatformWindow::new(window);
+
+        let handle = WindowHandle::new(
+            platform.id(),
+            platform.size(),
+            platform.pixel_size(),
+            platform.title(),
+            platform.is_resizable(),
+            self.events.dispatcher(),
+        );
+
         let state = WindowState::new(
             WindowContext {
-                window: Window::wrap(sdl_window),
+                window: handle,
                 input: Input::default(),
+                audio: AudioHandle::new(Arc::clone(&self.mixer)),
                 resources: Resources::default(),
                 packet: FramePacket::default(),
             },
             World::new(b.scenes, b.active_scenes),
         );
 
-        self.windows.insert(state.window.id(), state);
+        self.windows
+            .insert(state.window.id(), WindowEntry { platform, state });
     }
 
-    fn handle_event(&mut self, event: SdlEvent) {
+    fn close_window(&mut self, id: WindowId) {
+        let Some(entry) = self.windows.remove(&id) else {
+            error!("Received an event for a closed window.");
+            return;
+        };
+
+        self.gpu.release_window(&entry.platform.inner());
+        info!("Closing window '{}'", entry.platform.title());
+
+        if self.windows.is_empty() {
+            self.should_quit = true;
+        }
+    }
+
+    fn quit(&mut self) {
+        debug!("Quit signal received.");
+
+        for (_, entry) in self.windows.drain() {
+            self.gpu.release_window(&entry.platform.inner());
+        }
+
+        self.should_quit = true;
+    }
+
+    fn handle_sdl_event(&mut self, event: SdlEvent) {
         match event {
+            SdlEvent::Quit { .. } => return self.quit(),
+
             SdlEvent::Window {
                 window_id,
-                win_event,
+                win_event: SdlWindowEvent::CloseRequested,
                 ..
-            } => {
-                if let SdlWindowEvent::CloseRequested = win_event {
-                    let Some(state) = self.windows.remove(&window_id) else {
-                        error!("Received an event for a closed window.");
-                        return;
+            } => return self.close_window(window_id),
+
+            event => {
+                if let Some(id) = event.get_window_id()
+                    && let Some(entry) = self.windows.get_mut(&id)
+                {
+                    entry.state.handle_window_event(event, &mut entry.platform);
+                }
+            }
+        }
+    }
+
+    fn drain_app_events(&mut self) {
+        let mut batch = self.events.take();
+
+        for event in batch.drain(..) {
+            trace!("Received app event: {:?}", event);
+
+            match event {
+                AppEvent::Time(req) => {
+                    let Some(entry) = self.windows.get_mut(&req.window) else {
+                        error!("Received a command for a closed window.");
+                        continue;
                     };
 
-                    self.gpu.release_window(&state.window.inner);
-                    info!("Closing window '{}'", state.window.title());
-
-                    if self.windows.is_empty() {
-                        self.should_quit = true;
+                    match req.command {
+                        TimeCommand::SetTargetFps(t) => entry.state.pacer.set_fps(t),
+                        TimeCommand::SetTargetTps(t) => entry.state.clock.set_tps(t),
+                        TimeCommand::SetPresentMode(mode) => {
+                            if self.gpu.supports_present_mode(entry.platform.inner(), mode) {
+                                self.gpu.set_present_mode(&entry.platform.inner(), mode);
+                            }
+                        }
                     }
-
-                    return;
                 }
 
-                let Some(state) = self.windows.get(&window_id) else {
-                    error!("Received an event for a closed window.");
-                    return;
-                };
+                AppEvent::Window(req) => {
+                    let Some(entry) = self.windows.get_mut(&req.window) else {
+                        error!("Received a command for a closed window.");
+                        continue;
+                    };
 
-                match win_event {
-                    _ => {}
+                    entry.platform.apply(req.command);
                 }
             }
-
-            SdlEvent::KeyDown {
-                window_id,
-                scancode: Some(c),
-                repeat,
-                ..
-            } => {
-                let Some(state) = self.windows.get_mut(&window_id) else {
-                    error!("Received an event for a closed window.");
-                    return;
-                };
-
-                state.input.k_down.insert(c);
-
-                if !repeat {
-                    state.input.k_pressed.insert(c);
-                }
-            }
-
-            SdlEvent::KeyUp {
-                window_id,
-                scancode: Some(c),
-                ..
-            } => {
-                let Some(state) = self.windows.get_mut(&window_id) else {
-                    error!("Received an event for a closed window.");
-                    return;
-                };
-
-                state.input.k_down.remove(&c);
-                state.input.k_released.insert(c);
-            }
-
-            SdlEvent::MouseButtonDown {
-                window_id,
-                mouse_btn,
-                clicks,
-                ..
-            } => {
-                let Some(state) = self.windows.get_mut(&window_id) else {
-                    error!("Received an event for a closed window.");
-                    return;
-                };
-
-                state.input.m_down.insert(mouse_btn);
-
-                if clicks == 1 {
-                    state.input.m_pressed.insert(mouse_btn);
-                }
-            }
-
-            SdlEvent::MouseButtonUp {
-                window_id,
-                mouse_btn,
-                ..
-            } => {
-                let Some(state) = self.windows.get_mut(&window_id) else {
-                    error!("Received an event for a closed window.");
-                    return;
-                };
-
-                state.input.m_down.remove(&mouse_btn);
-                state.input.m_released.insert(mouse_btn);
-            }
-
-            SdlEvent::MouseMotion {
-                window_id,
-                x,
-                y,
-                xrel,
-                yrel,
-                ..
-            } => {
-                let Some(state) = self.windows.get_mut(&window_id) else {
-                    error!("Received an event for a closed window.");
-                    return;
-                };
-
-                state.input.m_pos.set([x, y]);
-                state.input.m_delta.set([xrel, yrel]);
-            }
-
-            _ => {}
         }
+
+        self.events.restore(batch);
     }
 
     pub fn run(mut self) {
@@ -251,52 +287,94 @@ impl App {
             Err(e) => fatal!("Failed to initialize SDL event pump: {}", e),
         };
 
-        for state in self.windows.values_mut() {
-            state.load();
+        for e in self.windows.values_mut() {
+            e.state.run(
+                ScenePhase::Load,
+                Frame {
+                    assets: &mut self.assets,
+                    mode: self.gpu.present_mode(),
+                    events: self.events.dispatcher(),
+                },
+            );
         }
 
         while !self.should_quit {
             for event in pump.poll_iter() {
-                self.handle_event(event);
+                self.handle_sdl_event(event);
             }
+
+            self.drain_app_events();
+            self.assets.poll(&self.gpu);
 
             let now = Instant::now();
 
-            for state in self.windows.values_mut() {
-                state.clock.advance(now);
+            for e in self.windows.values_mut() {
+                e.state.window.sync(&e.platform);
+                e.state.clock.advance(now);
 
-                while state.clock.should_tick() {
-                    state.tick();
-                    state.clock.consume(now);
+                while e.state.clock.should_tick() {
+                    e.state.run(
+                        ScenePhase::FixedUpdate,
+                        Frame {
+                            assets: &mut self.assets,
+                            mode: self.gpu.present_mode(),
+                            events: self.events.dispatcher(),
+                        },
+                    );
+                    e.state.clock.consume(now);
                 }
 
-                if !state.pacer.due(now) {
+                if !e.state.pacer.due(now) {
                     continue;
                 }
 
-                state.update();
-                state.draw();
+                e.state.run(
+                    ScenePhase::Update,
+                    Frame {
+                        assets: &mut self.assets,
+                        mode: self.gpu.present_mode(),
+                        events: self.events.dispatcher(),
+                    },
+                );
 
-                let _ = self.gpu.clear(&state.window.inner, Color::CYAN);
+                e.state.draw(Frame {
+                    assets: &mut self.assets,
+                    mode: self.gpu.present_mode(),
+                    events: self.events.dispatcher(),
+                });
 
-                state.pacer.record(now);
-                state.pacer.schedule(now);
+                self.renderer.present(
+                    &self.gpu,
+                    &e.platform,
+                    &self.assets,
+                    &e.state.context.packet,
+                );
 
-                state.flush();
+                e.state.pacer.record(now);
+                e.state.pacer.schedule(now);
+
+                e.state.flush();
             }
 
             let deadline = self
                 .windows
                 .values()
-                .map(|s| s.pacer.next_frame.min(s.clock.next_tick()))
+                .map(|e| e.state.pacer.next_frame.min(e.state.clock.next_tick()))
                 .min();
 
-            match deadline {
-                Some(d) => self.sleeper.sleep_until(d),
-                None => self.should_quit = true,
-            };
+            if self.gpu.present_mode() == PresentMode::Vsync {
+                if deadline.is_none() {
+                    self.should_quit = true;
+                }
+            } else {
+                match deadline {
+                    Some(d) => self.sleeper.sleep_until(d),
+                    None => self.should_quit = true,
+                };
+            }
         }
 
         info!("All windows were closed. Exiting.");
+        self.asset_server.shutdown(self.assets);
     }
 }
