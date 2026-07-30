@@ -1,6 +1,8 @@
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+use imgui::Imgui;
+
 use crate::Time;
 use crate::assets::Assets;
 use crate::event::AppEvent;
@@ -70,7 +72,7 @@ impl WindowState {
             .run(phase, &mut self.context, &mut time, frame.assets);
     }
 
-    pub fn draw(&mut self, frame: Frame<'_>) {
+    pub fn draw(&mut self, frame: Frame<'_>, imgui: &mut Imgui) {
         let mut time = self.time(frame.mode, frame.events);
 
         self.context.packet.clear();
@@ -85,7 +87,8 @@ impl WindowState {
             self.context.packet[layer].camera = camera;
         }
 
-        self.world.draw(&mut self.context, &mut time, frame.assets);
+        self.world
+            .draw(&mut self.context, &mut time, frame.assets, imgui);
     }
 
     pub fn handle_window_event(&mut self, event: SdlEvent, platform: &mut PlatformWindow) {

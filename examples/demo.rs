@@ -8,6 +8,7 @@ use karna::DrawContext;
 use karna::Scene;
 use karna::WindowBuilder;
 use karna::gpu::PresentMode;
+use karna::imgui::Condition;
 use karna::input::Key;
 use karna::logging::Config;
 use karna::logging::LevelFilter;
@@ -18,6 +19,7 @@ use karna::render::SceneRef;
 struct Demo {
     position: math::Vector2<f32>,
     velocity: math::Vector2<f32>,
+    show_demo: bool,
 }
 
 impl Demo {
@@ -29,6 +31,7 @@ impl Demo {
         Self {
             position: math::Vector2::new(100.0, 100.0),
             velocity: math::Vector2::zero(),
+            show_demo: true,
         }
     }
 }
@@ -36,6 +39,7 @@ impl Demo {
 impl Scene for Demo {
     fn load(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
         ctx.window.set_resizable(true);
+        ctx.time.set_target_fps(175);
     }
 
     fn update(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
@@ -89,6 +93,26 @@ impl Scene for Demo {
 
         draw.set_color(Color::Cyan);
         draw.rect(self.position.x, self.position.y, Self::SIZE, Self::SIZE);
+
+        draw.imgui(|ui| {
+            ui.window("Demo")
+                .size([300.0, 160.0], Condition::FirstUseEver)
+                .build(|ui| {
+                    ui.text(format!("fps    {:.0}", ctx.time.fps()));
+                    ui.text(format!(
+                        "pos    {:.1}, {:.1}",
+                        self.position.x, self.position.y
+                    ));
+                    ui.separator();
+
+                    if ui.button("Reset", [80.0, 0.0]) {
+                        self.position = math::Vector2::new(100.0, 100.0);
+                        self.velocity = math::Vector2::zero();
+                    }
+                });
+
+            ui.show_demo_window(&mut self.show_demo);
+        });
     }
 }
 

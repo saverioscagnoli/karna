@@ -7,6 +7,17 @@ use sdl3::mixer::MIX_DURATION_INFINITE;
 
 use crate::sound::SharedMixer;
 
+pub fn decode_audio(mixer: &SharedMixer, path: &Path) -> Result<Audio, String> {
+    fs::read(path)
+        .map_err(|e| e.to_string())
+        .and_then(|b| mixer.load(&b).map_err(|e| e.to_string()))
+        .map(Audio)
+}
+
+pub fn decode_audio_bytes(mixer: &SharedMixer, bytes: &[u8]) -> Result<Audio, String> {
+    mixer.load(bytes).map_err(|e| e.to_string()).map(Audio)
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum AudioLength {
     Finite(Duration),
@@ -40,11 +51,4 @@ impl Audio {
 
         AudioLength::Finite(Duration::from_secs_f64(frames as f64 / spec.freq as f64))
     }
-}
-
-pub fn decode_audio(mixer: &SharedMixer, path: &Path) -> Result<Audio, String> {
-    fs::read(path)
-        .map_err(|e| e.to_string())
-        .and_then(|b| mixer.load(&b).map_err(|e| e.to_string()))
-        .map(Audio)
 }

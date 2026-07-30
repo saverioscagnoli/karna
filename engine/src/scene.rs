@@ -1,5 +1,6 @@
 use std::mem;
 
+use imgui::Imgui;
 use logging::fatal;
 use utils::FastHashMap;
 
@@ -82,10 +83,16 @@ impl World {
         }
     }
 
-    pub fn draw(&mut self, context: &mut WindowContext, time: &mut Time, assets: &mut Assets) {
+    pub fn draw(
+        &mut self,
+        context: &mut WindowContext,
+        time: &mut Time,
+        assets: &mut Assets,
+        imgui: &mut Imgui,
+    ) {
         for id in &self.active_scenes {
             let scene = self.scenes.get_mut(id);
-            let (ctx, mut d) = context.split_draw(time, assets);
+            let (ctx, mut d) = context.split_draw(time, assets, imgui);
 
             scene.draw(ctx, &mut d);
         }

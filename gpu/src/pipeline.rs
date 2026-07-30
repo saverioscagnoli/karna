@@ -165,6 +165,16 @@ impl PipelineCache {
         self.pip.insert(key, pip);
     }
 
+    /// Build the pipeline if the cache doesn't have it yet
+    pub fn ensure(&mut self, gpu: &Gpu, desc: &PipelineDesc) {
+        let key = PipelineKey::new(desc);
+
+        self.pip.entry(key).or_insert_with(|| {
+            debug!("Created new render pipeline with shader {:?}", desc.shader);
+            build_pipeline(gpu, desc)
+        });
+    }
+
     pub fn get(&self, desc: &PipelineDesc) -> &RenderPipeline {
         let key = PipelineKey::new(desc);
         self.pip.get(&key).expect("Failed to get render pipeline")
