@@ -47,7 +47,12 @@ impl Scene for S {
         draw.image(self.pcb, 700.0, 100.0);
 
         draw.set_color(Color::Cyan);
-        draw.text(self.jbmono, "Hello world!", 10.0, 10.0);
+        draw.text(
+            self.jbmono,
+            format!("Hello world!\ndelta time: {}", ctx.time.delta()),
+            10.0,
+            10.0,
+        );
     }
 }
 

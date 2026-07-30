@@ -1,5 +1,7 @@
+use imgui::Imgui;
+
 use crate::assets::Assets;
-use crate::render::immediate::Draw;
+use crate::render::immediate::{Draw, ImguiFrame};
 use crate::render::packet::FramePacket;
 use crate::render::retained::SceneRef;
 use crate::window::WindowHandle;
@@ -52,7 +54,14 @@ impl WindowContext {
         &'a mut self,
         time: &'a mut Time,
         assets: &'a mut Assets,
+        imgui: &'a mut Imgui,
     ) -> (DrawContext<'a>, Draw<'a>) {
+        let frame = ImguiFrame {
+            logical: self.window.size(),
+            pixel: self.window.pixel_size(),
+            delta: time.delta(),
+        };
+
         (
             ContextRef {
                 window: &mut self.window,
@@ -62,7 +71,7 @@ impl WindowContext {
                 assets,
                 resources: &mut self.resources,
             },
-            Draw::new(&mut self.packet, assets),
+            Draw::new(&mut self.packet, assets, imgui, frame),
         )
     }
 }

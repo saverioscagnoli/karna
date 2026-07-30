@@ -145,8 +145,6 @@ impl TextureAtlas {
         Self { pages: Vec::new() }
     }
 
-    /// The page's texture, or `None` when the page exists on the CPU but has
-    /// not been uploaded yet.
     pub fn page_texture(&self, index: usize) -> Option<&Texture> {
         self.pages.get(index)?.texture.as_ref()
     }
@@ -227,11 +225,6 @@ impl TextureAtlas {
         self.insert_rgba(&dec.pixels, dec.size, owner, filter)
     }
 
-    /// Pack an image into a page sampled with `filter`.
-    ///
-    /// Pages are keyed by filter: an image only shares a page with images that
-    /// want the same filtering, and each distinct filter costs one extra page
-    /// at most, not one page per image.
     pub fn insert_rgba(
         &mut self,
         pixels: &[u8],

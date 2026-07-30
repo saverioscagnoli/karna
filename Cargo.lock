@@ -55,11 +55,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61803da095bee82a81bb1a452ecc25d3b2f1416d1897eb86430c6159ef717c17"
 
 [[package]]
+name = "dear-imgui-build-support"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da45ea4739530b7ff801e45f9b82adfefd0a2c0e5f22dcefaac6e1d3439d251e"
+
+[[package]]
+name = "dear-imgui-sys"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4491520c1aee546146ffbe6f56ad073008dfff7f59a4ef1e951e266b2444d156"
+dependencies = [
+ "cc",
+ "cfg-if",
+ "dear-imgui-build-support",
+ "mint",
+]
+
+[[package]]
 name = "engine"
 version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
  "gpu",
+ "imgui",
  "logging",
  "math",
  "sdl3",
@@ -78,6 +97,18 @@ name = "gpu"
 version = "0.1.0"
 dependencies = [
  "logging",
+ "sdl3",
+ "utils",
+]
+
+[[package]]
+name = "imgui"
+version = "0.1.0"
+dependencies = [
+ "dear-imgui-sys",
+ "gpu",
+ "logging",
+ "math",
  "sdl3",
  "utils",
 ]
@@ -129,6 +160,12 @@ dependencies = [
  "num-traits",
  "utils",
 ]
+
+[[package]]
+name = "mint"
+version = "0.5.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e53debba6bda7a793e5f99b8dacf19e626084f525f7829104ba9898f367d85ff"
 
 [[package]]
 name = "num-traits"

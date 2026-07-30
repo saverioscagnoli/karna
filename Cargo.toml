@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["math", "logging", "utils", "engine", "gpu"]
+members = ["math", "logging", "utils", "engine", "gpu", "imgui"]
 
 [workspace.package]
 version = "0.1.0"

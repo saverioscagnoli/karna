@@ -1,16 +1,4 @@
-use std::mem;
-
-/// Describes how a vertex struct maps to shader inputs.
-pub trait LayoutDesc: Sized {
-    const ATTRIBUTES: &'static [gpu::VertexAttribute];
-
-    fn desc() -> gpu::VertexLayout {
-        gpu::VertexLayout {
-            pitch: mem::size_of::<Self>() as u32,
-            attributes: Self::ATTRIBUTES,
-        }
-    }
-}
+use gpu::LayoutDesc;
 
 #[repr(C)]
 #[derive(Default)]

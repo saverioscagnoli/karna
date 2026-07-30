@@ -36,17 +36,24 @@ impl Scene for AudioDemo {
         if ctx.input.key_pressed(Key::Up) {
             self.vol += 0.1;
             ctx.audio.set_master_volume(self.vol);
-            println!("Setting volume to {}", self.vol);
         }
 
         if ctx.input.key_pressed(Key::Down) {
             self.vol -= 0.1;
             ctx.audio.set_master_volume(self.vol);
-            println!("Setting volume to {}", self.vol);
         }
     }
 
-    fn draw(&mut self, ctx: DrawContext, draw: &mut Draw) {}
+    fn draw(&mut self, ctx: DrawContext, draw: &mut Draw) {
+        draw.debug_text(
+            format!(
+                "Press 'Space' to play the sound.\nArrowUp for increasing volume\nArrowDown for decreasing volume\nVolume: {:.1}",
+                self.vol,
+        ),
+        10.0,
+        10.0
+        );
+    }
 }
 
 fn main() {

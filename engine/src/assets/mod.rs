@@ -3,6 +3,7 @@ pub mod audio;
 pub mod font;
 pub mod image;
 
+use std::cell::RefCell;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -23,12 +24,14 @@ use sdl3::pixels::PixelFormat;
 use sdl3::surface::Surface;
 use utils::ByteSize;
 use utils::FastHashMap;
+use utils::FastHashSet;
 use utils::Handle;
 use utils::SlotMap;
 
 use crate::assets::atlas::TextureAtlas;
 use crate::assets::audio::Audio;
 use crate::assets::audio::decode_audio;
+use crate::assets::audio::decode_audio_bytes;
 use crate::assets::font::DecodedFont;
 use crate::assets::font::Font;
 use crate::assets::font::Rasterize;
@@ -44,6 +47,7 @@ const WHITE_PIXEL_BYTES: [u8; 4] = [255, 255, 255, 255];
 const PLACEHOLDER_IMAGE_BYTES: &'static [u8] = include_bytes!("../../../assets/placeholder.png");
 const DEBUG_FONT_BYTES: &'static [u8] = include_bytes!("../../../assets/ProggyClean.ttf");
 const DEBUG_FONT_SIZE: f32 = 32.0;
+const SILENCE_AUDIO_BYTES: &'static [u8] = include_bytes!("../../../assets/silence.wav");
 
 pub enum AssetKind {
     Image(Filter),
@@ -57,9 +61,14 @@ pub enum AssetData {
     Audio(Audio),
 }
 
+pub enum AssetSource {
+    Path(PathBuf),
+    Bytes(Vec<u8>),
+}
+
 pub struct AssetRequest {
     slot: Handle<()>,
-    path: PathBuf,
+    source: AssetSource,
     kind: AssetKind,
 }
 
@@ -85,14 +94,21 @@ pub struct Assets {
     fonts: SlotMap<AssetSlot<Font>>,
     font_paths: FastHashMap<(PathBuf, u32, Rasterize), Handle<Font>>,
     debug_font: Handle<Font>,
+    mixer: Arc<SharedMixer>,
     audios: SlotMap<AssetSlot<Audio>>,
     audio_paths: FastHashMap<PathBuf, Handle<Audio>>,
+    silence: Handle<Audio>,
+    warned: RefCell<FastHashSet<Handle<()>>>,
     requests: Sender<AssetRequest>,
     responses: Receiver<AssetResponse>,
 }
 
 impl Assets {
-    fn new(requests: Sender<AssetRequest>, responses: Receiver<AssetResponse>) -> Self {
+    fn new(
+        requests: Sender<AssetRequest>,
+        responses: Receiver<AssetResponse>,
+        mixer: Arc<SharedMixer>,
+    ) -> Self {
         let mut this = Self {
             images: SlotMap::new(),
             image_paths: FastHashMap::default(),
@@ -102,22 +118,109 @@ impl Assets {
             fonts: SlotMap::new(),
             font_paths: FastHashMap::default(),
             debug_font: Handle::INVALID,
+            mixer,
             audios: SlotMap::new(),
             audio_paths: FastHashMap::default(),
+            silence: Handle::INVALID,
+            warned: RefCell::new(FastHashSet::default()),
             requests,
             responses,
         };
 
         let white = this.load_image_raw(&WHITE_PIXEL_BYTES, math::Size::new(1, 1));
-        let placeholder = this.load_image_bytes(PLACEHOLDER_IMAGE_BYTES);
-        let debug_font =
-            this.load_font_bytes_with(DEBUG_FONT_BYTES, DEBUG_FONT_SIZE, Rasterize::Crisp);
+        let placeholder = this.bake_image_bytes(PLACEHOLDER_IMAGE_BYTES, Filter::default());
+        let debug_font = this.bake_font_bytes(DEBUG_FONT_BYTES, DEBUG_FONT_SIZE, Rasterize::Crisp);
+        let silence = this.bake_audio_bytes(SILENCE_AUDIO_BYTES);
 
         this.white = white;
         this.placeholder = placeholder;
         this.debug_font = debug_font;
+        this.silence = silence;
 
         this
+    }
+
+    // Decodes image bytes directly on the calling thread instead of going through
+    // the workers. Useful because the fallback assets such as the default font and
+    // the placeholder image must be loaded before the user calls a function that uses
+    // asset fallbacks, and decoding them on worker threads is not deterministic
+    fn bake_image_bytes(&mut self, bytes: &[u8], filter: Filter) -> Handle<Image> {
+        let handle: Handle<Image> = self.images.insert(AssetSlot::Pending).cast();
+
+        match decode_image_bytes(bytes) {
+            Ok(dec) => {
+                let image = self.atlas.insert(&dec, handle, filter);
+                self.images[handle.cast()] = AssetSlot::Ready(image);
+            }
+            Err(e) => {
+                error!("Failed to bake image: {}", e);
+                self.images[handle.cast()] = AssetSlot::Failed;
+            }
+        }
+
+        handle
+    }
+
+    /// See [`Assets::bake_image_bytes`].
+    fn bake_font_bytes(&mut self, bytes: &[u8], point_size: f32, mode: Rasterize) -> Handle<Font> {
+        let handle: Handle<Font> = self.fonts.insert(AssetSlot::Pending).cast();
+
+        match decode_font_bytes(bytes, point_size, mode) {
+            Ok(dec) => {
+                let font = Font::bake(&mut self.atlas, &mut self.images, dec);
+                self.fonts[handle.cast()] = AssetSlot::Ready(font);
+            }
+            Err(e) => {
+                error!("Failed to bake font: {}", e);
+                self.fonts[handle.cast()] = AssetSlot::Failed;
+            }
+        }
+
+        handle
+    }
+
+    /// See [`Assets::bake_image_bytes`].
+    fn bake_audio_bytes(&mut self, bytes: &[u8]) -> Handle<Audio> {
+        let handle: Handle<Audio> = self.audios.insert(AssetSlot::Pending).cast();
+
+        match decode_audio_bytes(&self.mixer, bytes) {
+            Ok(dec) => self.audios[handle.cast()] = AssetSlot::Ready(dec),
+            Err(e) => {
+                error!("Failed to bake audio: {}", e);
+                self.audios[handle.cast()] = AssetSlot::Failed;
+            }
+        }
+
+        handle
+    }
+
+    fn get_or_fallback<'a, T>(
+        slots: &'a SlotMap<AssetSlot<T>>,
+        handle: Handle<T>,
+        fallback: Handle<T>,
+        warned: &RefCell<FastHashSet<Handle<()>>>,
+        what: &str,
+    ) -> &'a T {
+        match slots.get(handle.cast()) {
+            Some(AssetSlot::Ready(v)) => return v,
+            state => {
+                if warned.borrow_mut().insert(handle.cast()) {
+                    let reason = match state {
+                        Some(AssetSlot::Pending) => "pending",
+                        Some(AssetSlot::Failed) => "failed to load",
+                        None => "invalid handle",
+                        _ => unreachable!(),
+                    };
+
+                    warn!("{what} is not ready ({reason}), using fallback");
+                }
+            }
+        }
+
+        match slots.get(fallback.cast()) {
+            Some(AssetSlot::Ready(v)) => v,
+            _ => fatal!("{what} fallback is missing"),
+        }
     }
 
     pub fn load_image<P>(&mut self, path: P) -> Handle<Image>
@@ -144,7 +247,7 @@ impl Assets {
 
         let request = AssetRequest {
             slot: handle.cast(),
-            path: path.to_path_buf(),
+            source: AssetSource::Path(path.to_path_buf()),
             kind: AssetKind::Image(filter),
         };
 
@@ -156,7 +259,6 @@ impl Assets {
         handle
     }
 
-    // TODO: Maybe make something like an AssetSource(File, Bytes) and send that to worker
     pub fn load_image_bytes(&mut self, bytes: &[u8]) -> Handle<Image> {
         self.load_image_bytes_with(bytes, Filter::default())
     }
@@ -164,15 +266,15 @@ impl Assets {
     pub fn load_image_bytes_with(&mut self, bytes: &[u8], filter: Filter) -> Handle<Image> {
         let handle: Handle<Image> = self.images.insert(AssetSlot::Pending).cast();
 
-        match decode_image_bytes(bytes) {
-            Ok(dec) => {
-                let image = self.atlas.insert(&dec, handle, filter);
-                self.images[handle.cast()] = AssetSlot::Ready(image);
-            }
-            Err(e) => {
-                error!("Failed to decode image bytes: {e}");
-                self.images[handle.cast()] = AssetSlot::Failed;
-            }
+        let request = AssetRequest {
+            slot: handle.cast(),
+            source: AssetSource::Bytes(bytes.to_vec()),
+            kind: AssetKind::Image(filter),
+        };
+
+        if self.requests.send(request).is_err() {
+            warn!("Asset workers are gone, cannot load image bytes.");
+            self.images[handle.cast()] = AssetSlot::Failed;
         }
 
         handle
@@ -197,14 +299,13 @@ impl Assets {
     }
 
     pub fn get_image(&self, handle: Handle<Image>) -> &Image {
-        if let Some(AssetSlot::Ready(image)) = self.images.get(handle.cast()) {
-            return image;
-        }
-
-        match self.images.get(self.placeholder.cast()) {
-            Some(AssetSlot::Ready(image)) => image,
-            _ => fatal!("Placeholder image is missing from the atlas"),
-        }
+        Self::get_or_fallback(
+            &self.images,
+            handle,
+            self.placeholder,
+            &self.warned,
+            "image",
+        )
     }
 
     pub fn atlas_page_count(&self) -> usize {
@@ -230,7 +331,6 @@ impl Assets {
         self.load_font_with(path, point_size, Rasterize::default())
     }
 
-    /// Load a font rasterized with `mode` instead of the default.
     pub fn load_font_with<P>(&mut self, path: P, point_size: f32, mode: Rasterize) -> Handle<Font>
     where
         P: AsRef<Path>,
@@ -247,19 +347,18 @@ impl Assets {
 
         let request = AssetRequest {
             slot: handle.cast(),
-            path: path.to_path_buf(),
+            source: AssetSource::Path(path.to_path_buf()),
             kind: AssetKind::Font(point_size, mode),
         };
 
         if self.requests.send(request).is_err() {
             warn!("Asset workers are gone, cannot load '{}'", path.display());
-            self.images[handle.cast()] = AssetSlot::Failed;
+            self.fonts[handle.cast()] = AssetSlot::Failed;
         }
 
         handle
     }
 
-    // TODO: Maybe make something like an AssetSource(File, Bytes) and send that to worker
     pub fn load_font_bytes(&mut self, bytes: &[u8], point_size: f32) -> Handle<Font> {
         self.load_font_bytes_with(bytes, point_size, Rasterize::default())
     }
@@ -272,28 +371,22 @@ impl Assets {
     ) -> Handle<Font> {
         let handle: Handle<Font> = self.fonts.insert(AssetSlot::Pending).cast();
 
-        match decode_font_bytes(bytes, point_size, mode) {
-            Ok(dec) => {
-                let font = Font::bake(&mut self.atlas, &mut self.images, dec);
-                self.fonts[handle.cast()] = AssetSlot::Ready(font);
-            }
-            Err(e) => {
-                error!("Failed to decode font bytes: {e}");
-                self.fonts[handle.cast()] = AssetSlot::Failed;
-            }
+        let request = AssetRequest {
+            slot: handle.cast(),
+            source: AssetSource::Bytes(bytes.to_vec()),
+            kind: AssetKind::Font(point_size, mode),
+        };
+
+        if self.requests.send(request).is_err() {
+            warn!("Asset workers are gone, cannot load font bytes");
+            self.fonts[handle.cast()] = AssetSlot::Failed;
         }
 
         handle
     }
 
     pub fn get_font(&self, handle: Handle<Font>) -> &Font {
-        match self.fonts.get(handle.cast()) {
-            Some(AssetSlot::Ready(f)) => f,
-            _ => match self.fonts.get(self.debug_font.cast()) {
-                Some(AssetSlot::Ready(f)) => f,
-                _ => fatal!("No debug font is set"),
-            },
-        }
+        Self::get_or_fallback(&self.fonts, handle, self.debug_font, &self.warned, "font")
     }
 
     pub fn debug_font(&self) -> Handle<Font> {
@@ -312,7 +405,7 @@ impl Assets {
 
         let request = AssetRequest {
             slot: handle.cast(),
-            path: path.to_path_buf(),
+            source: AssetSource::Path(path.to_path_buf()),
             kind: AssetKind::Audio,
         };
 
@@ -324,11 +417,25 @@ impl Assets {
         handle
     }
 
-    pub fn get_audio(&self, handle: Handle<Audio>) -> &Audio {
-        match self.audios.get(handle.cast()) {
-            Some(AssetSlot::Ready(a)) => a,
-            _ => fatal!("Cannot get audio"),
+    pub fn load_audio_bytes(&mut self, bytes: &[u8]) -> Handle<Audio> {
+        let handle: Handle<Audio> = self.audios.insert(AssetSlot::Pending).cast();
+
+        let request = AssetRequest {
+            slot: handle.cast(),
+            source: AssetSource::Bytes(bytes.to_vec()),
+            kind: AssetKind::Audio,
+        };
+
+        if self.requests.send(request).is_err() {
+            warn!("Asset workers are gone, cannot load font bytes.");
+            self.audios[handle.cast()] = AssetSlot::Failed;
         }
+
+        handle
+    }
+
+    pub fn get_audio(&self, handle: Handle<Audio>) -> &Audio {
+        Self::get_or_fallback(&self.audios, handle, self.silence, &self.warned, "audio")
     }
 
     pub(crate) fn poll(&mut self, gpu: &Gpu) {
@@ -428,12 +535,29 @@ fn worker(
     mixer: Arc<SharedMixer>,
 ) {
     for req in requests {
-        let path = root.join(&req.path);
-        let data = match req.kind {
-            AssetKind::Image(_) => decode_image(&path).map(AssetData::Image),
-            AssetKind::Font(pt, mode) => decode_font(&path, pt, mode).map(AssetData::Font),
-            AssetKind::Audio => decode_audio(&mixer, &path).map(AssetData::Audio),
-        };
+        let data: Result<AssetData, String>;
+
+        match req.source {
+            AssetSource::Path(path) => {
+                let path = root.join(&path);
+
+                data = match req.kind {
+                    AssetKind::Image(_) => decode_image(&path).map(AssetData::Image),
+                    AssetKind::Font(pt, mode) => decode_font(&path, pt, mode).map(AssetData::Font),
+                    AssetKind::Audio => decode_audio(&mixer, &path).map(AssetData::Audio),
+                };
+            }
+
+            AssetSource::Bytes(bytes) => {
+                data = match req.kind {
+                    AssetKind::Image(_) => decode_image_bytes(&bytes).map(AssetData::Image),
+                    AssetKind::Font(pt, mode) => {
+                        decode_font_bytes(&bytes, pt, mode).map(AssetData::Font)
+                    }
+                    AssetKind::Audio => todo!("Audio bytes decoding"),
+                };
+            }
+        }
 
         if responses
             .send(AssetResponse {
@@ -476,7 +600,7 @@ where
     info!("Spawned {} worker thread(s) for decoding assets.", workers);
 
     let server = AssetServer::new(handles);
-    let assets = Assets::new(req_tx, res_rx);
+    let assets = Assets::new(req_tx, res_rx, mixer.clone());
 
     drop(req_rx);
     drop(res_tx);

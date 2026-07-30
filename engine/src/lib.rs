@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use gpu::Gpu;
+use imgui::Imgui;
 use logging::debug;
 use logging::error;
 use logging::fatal;
@@ -20,7 +21,6 @@ use logging::trace;
 use sdl3::Sdl;
 use sdl3::VideoSubsystem;
 use sdl3::gpu::PresentMode;
-use sdl3::gpu::SwapchainComposition;
 use utils::FastHashMap;
 use utils::SleepTimer;
 use utils::WindowId;
@@ -62,10 +62,15 @@ pub use crate::window::input::Input;
 pub use crate::window::input::Key;
 pub use crate::window::input::MouseButton;
 pub use crate::window::time::Time;
+pub use imgui::Condition;
+pub use imgui::Ui;
+pub use imgui::WindowFlags;
+pub use imgui::WindowToken;
 
 struct WindowEntry {
     platform: PlatformWindow,
     state: WindowState,
+    imgui: Imgui,
 }
 
 pub struct App {
@@ -165,11 +170,7 @@ impl App {
             return;
         }
 
-        let _ = self.gpu.device.set_swapchain_parameters(
-            &window,
-            PresentMode::Immediate,
-            SwapchainComposition::default(),
-        );
+        self.gpu.set_present_mode(&window, PresentMode::Immediate);
 
         let platform = PlatformWindow::new(window);
 
@@ -201,8 +202,14 @@ impl App {
             World::new(b.scenes, b.active_scenes),
         );
 
-        self.windows
-            .insert(state.window.id(), WindowEntry { platform, state });
+        self.windows.insert(
+            state.window.id(),
+            WindowEntry {
+                platform,
+                state,
+                imgui: Imgui::new(),
+            },
+        );
     }
 
     fn close_window(&mut self, id: WindowId) {
@@ -243,7 +250,27 @@ impl App {
                 if let Some(id) = event.get_window_id()
                     && let Some(entry) = self.windows.get_mut(&id)
                 {
-                    entry.state.handle_window_event(event, &mut entry.platform);
+                    entry.imgui.handle_event(&event);
+
+                    // Whatever the ui swallowed must not also reach the game,
+                    // or clicking a slider fires the scene's click handler too.
+                    let capture = entry.imgui.capture();
+                    let for_game = match event {
+                        SdlEvent::MouseMotion { .. }
+                        | SdlEvent::MouseButtonDown { .. }
+                        | SdlEvent::MouseButtonUp { .. }
+                        | SdlEvent::MouseWheel { .. } => !capture.mouse,
+
+                        SdlEvent::KeyDown { .. }
+                        | SdlEvent::KeyUp { .. }
+                        | SdlEvent::TextInput { .. } => !capture.keyboard,
+
+                        _ => true,
+                    };
+
+                    if for_game {
+                        entry.state.handle_window_event(event, &mut entry.platform);
+                    }
                 }
             }
         }
@@ -347,17 +374,23 @@ impl App {
                     },
                 );
 
-                e.state.draw(Frame {
-                    assets: &mut self.assets,
-                    mode: self.gpu.present_mode(),
-                    events: self.events.dispatcher(),
-                });
+                e.state.draw(
+                    Frame {
+                        assets: &mut self.assets,
+                        mode: self.gpu.present_mode(),
+                        events: self.events.dispatcher(),
+                    },
+                    &mut e.imgui,
+                );
+
+                let draw_data = e.imgui.end_frame();
 
                 self.renderer.present(
                     &self.gpu,
                     &e.platform,
                     &self.assets,
                     &e.state.context.packet,
+                    Some((&mut e.imgui.renderer, draw_data)),
                 );
 
                 e.state.pacer.record(now);

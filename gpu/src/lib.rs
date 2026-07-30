@@ -37,6 +37,7 @@ pub use sdl3::gpu::PrimitiveType as PrimitiveTopology;
 pub use sdl3::gpu::RenderPass;
 pub use sdl3::gpu::TextureFormat;
 pub use sdl3::gpu::TextureSamplerBinding;
+pub use sdl3::gpu::VertexElementFormat;
 
 pub use crate::buffer::*;
 pub use crate::pipeline::*;

@@ -1,8 +1,6 @@
 use gpu::Gpu;
-use logging::warn;
-use sdl3::gpu::ColorTargetInfo;
-use sdl3::gpu::LoadOp;
-use sdl3::gpu::StoreOp;
+use imgui::Imgui;
+use imgui::Ui;
 use utils::FastHashMap;
 use utils::Handle;
 use utils::WindowId;
@@ -11,7 +9,7 @@ use crate::Image;
 use crate::assets::Assets;
 use crate::assets::atlas::TextureAtlas;
 use crate::assets::font::Font;
-use crate::render::Pipelines;
+
 use crate::render::color::Color;
 use crate::render::layer::Layer;
 use crate::render::layer::LayerGpuData;
@@ -57,56 +55,42 @@ impl ImmediateRenderer {
         }
     }
 
-    pub fn present(
+    /// Stream this frame's geometry into the GPU buffers.
+    ///
+    /// Records into the caller's copy pass so the whole frame — immediate
+    /// geometry and ui alike — travels in one command buffer.
+    pub fn upload(
         &mut self,
         gpu: &Gpu,
-        pips: &mut gpu::PipelineCache,
+        copy_pass: &gpu::CopyPass,
         window: &PlatformWindow,
-        assets: &Assets,
         packet: &FramePacket,
     ) {
-        let Self { targets } = self;
-        let desc = Pipelines::immediate_desc(gpu.swapchain_format(window.inner()));
-        let pip = pips.get_or_create(gpu, &desc);
-
-        let target = targets
+        let target = self
+            .targets
             .entry(window.id())
             .or_insert_with(|| ImmediateTarget::new(gpu, window.id()));
-
-        let Ok(mut cmd) = gpu.device.acquire_command_buffer() else {
-            warn!("Failed to acquire command buffer for {:?}", window.id());
-            return;
-        };
-
-        let Ok(swapchain) = cmd.wait_and_acquire_swapchain_texture(window.inner()) else {
-            cmd.cancel();
-            return;
-        };
-
-        let color_targets = [ColorTargetInfo::default()
-            .with_texture(&swapchain)
-            .with_load_op(LoadOp::CLEAR)
-            .with_store_op(StoreOp::STORE)
-            .with_clear_color(packet.clear_color.into())];
-
-        let Ok(copy_pass) = gpu.device.begin_copy_pass(&cmd) else {
-            warn!("Failed to begin a copy pass for {}", window.id());
-            cmd.cancel();
-            return;
-        };
 
         for (&layer, data) in Layer::ALL.iter().zip(&mut target.layers) {
             let cpu = &packet[layer].data;
 
-            data.vertex_buffer.write_all(gpu, &copy_pass, &cpu.vertices);
-            data.index_buffer.write_all(gpu, &copy_pass, &cpu.indices);
+            data.vertex_buffer.write_all(gpu, copy_pass, &cpu.vertices);
+            data.index_buffer.write_all(gpu, copy_pass, &cpu.indices);
         }
+    }
 
-        gpu.device.end_copy_pass(copy_pass);
-
-        let Ok(rpass) = gpu.device.begin_render_pass(&cmd, &color_targets, None) else {
-            warn!("Failed to begin a render pass for {}", window.id());
-            cmd.cancel();
+    /// Record the draw calls into an already-open render pass.
+    pub fn record(
+        &self,
+        gpu: &Gpu,
+        pip: &gpu::RenderPipeline,
+        cmd: &gpu::CommandBuffer,
+        rpass: &gpu::RenderPass,
+        window: &PlatformWindow,
+        assets: &Assets,
+        packet: &FramePacket,
+    ) {
+        let Some(target) = self.targets.get(&window.id()) else {
             return;
         };
 
@@ -133,12 +117,6 @@ impl ImmediateRenderer {
                 rpass.draw_indexed_primitives(batch.count, 1, batch.start, 0, 0);
             }
         }
-
-        gpu.device.end_render_pass(rpass);
-
-        if let Err(e) = cmd.submit() {
-            warn!("Failed to submit the frame for {:?}: {}", window.id(), e);
-        }
     }
 }
 
@@ -151,18 +129,34 @@ fn corners(x: f32, y: f32, w: f32, h: f32) -> [math::Vector2<f32>; 4] {
     ]
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ImguiFrame {
+    pub logical: math::Size<u32>,
+    pub pixel: math::Size<u32>,
+    pub delta: f32,
+}
+
 pub struct Draw<'a> {
     pub(crate) packet: &'a mut FramePacket,
     pub(crate) assets: &'a Assets,
+    imgui: &'a mut Imgui,
+    imgui_frame: ImguiFrame,
     layer: Layer,
     color: Color,
 }
 
 impl<'a> Draw<'a> {
-    pub(crate) fn new(packet: &'a mut FramePacket, assets: &'a Assets) -> Self {
+    pub(crate) fn new(
+        packet: &'a mut FramePacket,
+        assets: &'a Assets,
+        imgui: &'a mut Imgui,
+        imgui_frame: ImguiFrame,
+    ) -> Self {
         Self {
             packet,
             assets,
+            imgui,
+            imgui_frame,
             layer: Layer::World,
             color: Color::White,
         }
@@ -237,7 +231,11 @@ impl<'a> Draw<'a> {
         );
     }
 
-    pub fn text(&mut self, font: Handle<Font>, text: &str, x: f32, y: f32) {
+    pub fn text<T>(&mut self, font: Handle<Font>, text: T, x: f32, y: f32)
+    where
+        T: AsRef<str>,
+    {
+        let text = text.as_ref();
         let font = self.assets.get_font(font);
         let line_height = font.line_height().round();
         let tab = font.glyph(' ').map(|g| g.advance.round()).unwrap_or(0.0) * TAB_WIDTH as f32;
@@ -322,5 +320,14 @@ impl<'a> Draw<'a> {
             uvs,
             self.color.into(),
         );
+    }
+
+    pub fn imgui<R>(&mut self, f: impl FnOnce(&Ui) -> R) -> R {
+        let frame = self.imgui_frame;
+        let ui = self
+            .imgui
+            .begin_frame(frame.logical, frame.pixel, frame.delta);
+
+        f(&ui)
     }
 }

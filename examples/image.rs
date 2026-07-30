@@ -38,6 +38,10 @@ impl Scene for S {
 
         draw.set_color(Color::rgba(1.0, 0.0, 0.0, 0.7));
         draw.image(self.pcb, 700.0, 100.0);
+
+        draw.set_color(Color::White);
+        draw.debug_text("Invalid image", 300.0, 500.0);
+        draw.image(Handle::INVALID, 300.0, 530.0);
     }
 }
 
