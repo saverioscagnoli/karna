@@ -18,6 +18,9 @@ use crate::render::layer::LayerGpuData;
 use crate::render::packet::FramePacket;
 use crate::window::platform::PlatformWindow;
 
+/// Spaces a `\t` advances by.
+const TAB_WIDTH: u32 = 4;
+
 struct ImmediateTarget {
     layers: [LayerGpuData; 3],
 }
@@ -236,41 +239,60 @@ impl<'a> Draw<'a> {
 
     pub fn text(&mut self, font: Handle<Font>, text: &str, x: f32, y: f32) {
         let font = self.assets.get_font(font);
-        let mut pen_x = x.round();
-        let pen_y = y.round();
+        let line_height = font.line_height().round();
+        let tab = font.glyph(' ').map(|g| g.advance.round()).unwrap_or(0.0) * TAB_WIDTH as f32;
+
+        let left = x.round();
+        let mut pen_x = left;
+        let mut pen_y = y.round();
 
         for ch in text.chars() {
-            if ch == '\n' {
-                continue;
+            match ch {
+                '\n' => {
+                    pen_x = left;
+                    pen_y += line_height;
+                    continue;
+                }
+
+                '\t' => {
+                    pen_x += tab;
+                    continue;
+                }
+
+                _ if ch.is_control() => continue,
+
+                _ => {}
             }
 
             let Some(glyph) = font.glyph(ch) else {
                 continue;
             };
 
-            let image = self.assets.get_image(glyph.image);
-            let (min, max) = (image.uv_min, image.uv_max);
+            if let Some(handle) = glyph.image {
+                let image = self.assets.get_image(handle);
+                let (min, max) = (image.uv_min, image.uv_max);
 
-            let uvs = [
-                math::Vector2::new(min.x, min.y),
-                math::Vector2::new(max.x, min.y),
-                math::Vector2::new(max.x, max.y),
-                math::Vector2::new(min.x, max.y),
-            ];
+                let uvs = [
+                    math::Vector2::new(min.x, min.y),
+                    math::Vector2::new(max.x, min.y),
+                    math::Vector2::new(max.x, max.y),
+                    math::Vector2::new(min.x, max.y),
+                ];
 
-            self.packet[self.layer].data.quad(
-                image.page,
-                corners(
-                    pen_x,
-                    pen_y,
-                    image.size.width as f32,
-                    image.size.height as f32,
-                ),
-                uvs,
-                self.color.into(),
-            );
+                self.packet[self.layer].data.quad(
+                    image.page,
+                    corners(
+                        pen_x + glyph.bearing.x,
+                        pen_y + glyph.bearing.y,
+                        image.size.width as f32,
+                        image.size.height as f32,
+                    ),
+                    uvs,
+                    self.color.into(),
+                );
+            }
 
-            pen_x += glyph.advance.round();
+            pen_x += glyph.advance.round()
         }
     }
 

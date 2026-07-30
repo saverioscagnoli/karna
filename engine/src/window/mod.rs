@@ -82,6 +82,10 @@ impl WindowHandle {
         self.push(WindowCommand::SetWindowSize(size));
     }
 
+    pub fn pixel_size(&self) -> math::Size<u32> {
+        self.pixel_size
+    }
+
     pub fn title(&self) -> &str {
         &self.title
     }

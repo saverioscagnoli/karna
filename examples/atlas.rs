@@ -1,10 +1,15 @@
 #![allow(unused)]
 
+use std::collections::HashMap;
+
+use engine::Key::H;
+use engine::Rasterize;
 use karna::App;
 use karna::ContextRef;
 use karna::DrawContext;
 use karna::Scene;
 use karna::WindowBuilder;
+use karna::assets::Font;
 use karna::assets::Handle;
 use karna::assets::Image;
 use karna::logging::Config;
@@ -17,12 +22,13 @@ use logging::info;
 
 struct S {
     pcb: Handle<Image>,
+    jbmono: Handle<Font>,
 }
 
 impl Scene for S {
     fn load(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
         self.pcb = ctx.assets.load_image("assets/pcb.png");
-        ctx.assets.load_font("assets/jbmono.ttf", 26.0);
+        self.jbmono = ctx.assets.load_font("assets/jbmono.ttf", 21.0);
 
         ctx.window.set_resizable(true);
     }
@@ -39,13 +45,18 @@ impl Scene for S {
 
         draw.set_color(Color::rgba(1.0, 0.0, 0.0, 0.7));
         draw.image(self.pcb, 700.0, 100.0);
+
+        draw.set_color(Color::Cyan);
+        draw.text(self.jbmono, "Hello world!", 10.0, 10.0);
     }
 }
 
 struct AtlasDemo;
 
 impl Scene for AtlasDemo {
-    fn load(&mut self, ctx: ContextRef, scene: &mut SceneRef) {}
+    fn load(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
+        ctx.window.set_resizable(true);
+    }
 
     fn update(&mut self, ctx: ContextRef, scene: &mut SceneRef) {}
 
@@ -66,6 +77,7 @@ fn main() {
                     0,
                     S {
                         pcb: Handle::INVALID,
+                        jbmono: Handle::INVALID,
                     },
                     true,
                 ),

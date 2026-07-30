@@ -75,7 +75,7 @@ impl WindowState {
 
         self.context.packet.clear();
 
-        let size = self.context.window.size();
+        let size = self.context.window.pixel_size();
         let camera = CameraPacket {
             view_projection: Projection::standard_2d(math::Size::new(size.width, size.height))
                 .matrix(),
@@ -93,6 +93,10 @@ impl WindowState {
             SdlEvent::Window { win_event, .. } => match win_event {
                 SdlWindowEvent::Resized(w, h) => {
                     platform.on_resized(w as u32, h as u32);
+                }
+
+                SdlWindowEvent::PixelSizeChanged(w, h) => {
+                    platform.on_pixel_resized(w as u32, h as u32);
                 }
 
                 _ => {}

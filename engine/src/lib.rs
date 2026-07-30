@@ -46,6 +46,8 @@ use crate::window::time::TimeCommand;
 pub use crate::assets::Assets;
 pub use crate::assets::audio::Audio;
 pub use crate::assets::audio::AudioLength;
+pub use crate::assets::font::Font;
+pub use crate::assets::font::Rasterize;
 pub use crate::assets::image::Image;
 pub use crate::builder::AppBuilder;
 pub use crate::builder::WindowBuilder;
@@ -170,6 +172,14 @@ impl App {
         );
 
         let platform = PlatformWindow::new(window);
+
+        debug!(
+            "window {:?} logical {:?} pixels {:?} density {}",
+            platform.id(),
+            platform.size(),
+            platform.pixel_size(),
+            platform.inner().pixel_density() / platform.inner().display_scale() // SDL_GetWindowPixelDensity / SDL_GetWindowDisplayScale
+        );
 
         let handle = WindowHandle::new(
             platform.id(),

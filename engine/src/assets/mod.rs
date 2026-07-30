@@ -12,6 +12,7 @@ use std::thread::{self};
 use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
 use crossbeam_channel::unbounded;
+use gpu::Filter;
 use gpu::Gpu;
 use logging::debug;
 use logging::error;
@@ -30,6 +31,7 @@ use crate::assets::audio::Audio;
 use crate::assets::audio::decode_audio;
 use crate::assets::font::DecodedFont;
 use crate::assets::font::Font;
+use crate::assets::font::Rasterize;
 use crate::assets::font::decode_font;
 use crate::assets::font::decode_font_bytes;
 use crate::assets::image::DecodedImage;
@@ -41,12 +43,12 @@ use crate::sound::SharedMixer;
 const WHITE_PIXEL_BYTES: [u8; 4] = [255, 255, 255, 255];
 const PLACEHOLDER_IMAGE_BYTES: &'static [u8] = include_bytes!("../../../assets/placeholder.png");
 const DEBUG_FONT_BYTES: &'static [u8] = include_bytes!("../../../assets/ProggyClean.ttf");
-const DEBUG_FONT_SIZE: f32 = 26.0;
+const DEBUG_FONT_SIZE: f32 = 32.0;
 
 pub enum AssetKind {
-    Image,
+    Image(Filter),
     Audio,
-    Font(f32),
+    Font(f32, Rasterize),
 }
 
 pub enum AssetData {
@@ -76,12 +78,12 @@ pub enum AssetSlot<T> {
 
 pub struct Assets {
     images: SlotMap<AssetSlot<Image>>,
-    image_paths: FastHashMap<PathBuf, Handle<Image>>,
+    image_paths: FastHashMap<(PathBuf, Filter), Handle<Image>>,
     atlas: TextureAtlas,
     white: Handle<Image>,
     placeholder: Handle<Image>,
     fonts: SlotMap<AssetSlot<Font>>,
-    font_paths: FastHashMap<PathBuf, Handle<Font>>,
+    font_paths: FastHashMap<(PathBuf, u32, Rasterize), Handle<Font>>,
     debug_font: Handle<Font>,
     audios: SlotMap<AssetSlot<Audio>>,
     audio_paths: FastHashMap<PathBuf, Handle<Audio>>,
@@ -108,7 +110,8 @@ impl Assets {
 
         let white = this.load_image_raw(&WHITE_PIXEL_BYTES, math::Size::new(1, 1));
         let placeholder = this.load_image_bytes(PLACEHOLDER_IMAGE_BYTES);
-        let debug_font = this.load_font_bytes(DEBUG_FONT_BYTES, DEBUG_FONT_SIZE);
+        let debug_font =
+            this.load_font_bytes_with(DEBUG_FONT_BYTES, DEBUG_FONT_SIZE, Rasterize::Crisp);
 
         this.white = white;
         this.placeholder = placeholder;
@@ -121,19 +124,28 @@ impl Assets {
     where
         P: AsRef<Path>,
     {
-        let path = path.as_ref();
+        self.load_image_with(path, Filter::default())
+    }
 
-        if let Some(handle) = self.image_paths.get(path) {
+    /// Load an image sampled with `filter` instead of the default.
+    pub fn load_image_with<P>(&mut self, path: P, filter: Filter) -> Handle<Image>
+    where
+        P: AsRef<Path>,
+    {
+        let path = path.as_ref();
+        let key = (path.to_path_buf(), filter);
+
+        if let Some(handle) = self.image_paths.get(&key) {
             return *handle;
         }
 
         let handle: Handle<Image> = self.images.insert(AssetSlot::Pending).cast();
-        self.image_paths.insert(path.to_path_buf(), handle);
+        self.image_paths.insert(key, handle);
 
         let request = AssetRequest {
             slot: handle.cast(),
             path: path.to_path_buf(),
-            kind: AssetKind::Image,
+            kind: AssetKind::Image(filter),
         };
 
         if self.requests.send(request).is_err() {
@@ -146,11 +158,15 @@ impl Assets {
 
     // TODO: Maybe make something like an AssetSource(File, Bytes) and send that to worker
     pub fn load_image_bytes(&mut self, bytes: &[u8]) -> Handle<Image> {
+        self.load_image_bytes_with(bytes, Filter::default())
+    }
+
+    pub fn load_image_bytes_with(&mut self, bytes: &[u8], filter: Filter) -> Handle<Image> {
         let handle: Handle<Image> = self.images.insert(AssetSlot::Pending).cast();
 
         match decode_image_bytes(bytes) {
             Ok(dec) => {
-                let image = self.atlas.insert(&dec, handle);
+                let image = self.atlas.insert(&dec, handle, filter);
                 self.images[handle.cast()] = AssetSlot::Ready(image);
             }
             Err(e) => {
@@ -163,8 +179,17 @@ impl Assets {
     }
 
     pub fn load_image_raw(&mut self, pixels: &[u8], size: math::Size<u32>) -> Handle<Image> {
+        self.load_image_raw_with(pixels, size, Filter::default())
+    }
+
+    pub fn load_image_raw_with(
+        &mut self,
+        pixels: &[u8],
+        size: math::Size<u32>,
+        filter: Filter,
+    ) -> Handle<Image> {
         let handle: Handle<Image> = self.images.insert(AssetSlot::Pending).cast();
-        let image = self.atlas.insert_rgba(pixels, size, handle);
+        let image = self.atlas.insert_rgba(pixels, size, handle, filter);
 
         self.images[handle.cast()] = AssetSlot::Ready(image);
 
@@ -202,19 +227,28 @@ impl Assets {
     where
         P: AsRef<Path>,
     {
-        let path = path.as_ref();
+        self.load_font_with(path, point_size, Rasterize::default())
+    }
 
-        if let Some(handle) = self.font_paths.get(path) {
+    /// Load a font rasterized with `mode` instead of the default.
+    pub fn load_font_with<P>(&mut self, path: P, point_size: f32, mode: Rasterize) -> Handle<Font>
+    where
+        P: AsRef<Path>,
+    {
+        let path = path.as_ref();
+        let key = (path.to_path_buf(), point_size.to_bits(), mode);
+
+        if let Some(handle) = self.font_paths.get(&key) {
             return *handle;
         }
 
         let handle: Handle<Font> = self.fonts.insert(AssetSlot::Pending).cast();
-        self.font_paths.insert(path.to_path_buf(), handle);
+        self.font_paths.insert(key, handle);
 
         let request = AssetRequest {
             slot: handle.cast(),
             path: path.to_path_buf(),
-            kind: AssetKind::Font(point_size),
+            kind: AssetKind::Font(point_size, mode),
         };
 
         if self.requests.send(request).is_err() {
@@ -227,9 +261,18 @@ impl Assets {
 
     // TODO: Maybe make something like an AssetSource(File, Bytes) and send that to worker
     pub fn load_font_bytes(&mut self, bytes: &[u8], point_size: f32) -> Handle<Font> {
+        self.load_font_bytes_with(bytes, point_size, Rasterize::default())
+    }
+
+    pub fn load_font_bytes_with(
+        &mut self,
+        bytes: &[u8],
+        point_size: f32,
+        mode: Rasterize,
+    ) -> Handle<Font> {
         let handle: Handle<Font> = self.fonts.insert(AssetSlot::Pending).cast();
 
-        match decode_font_bytes(bytes, point_size) {
+        match decode_font_bytes(bytes, point_size, mode) {
             Ok(dec) => {
                 let font = Font::bake(&mut self.atlas, &mut self.images, dec);
                 self.fonts[handle.cast()] = AssetSlot::Ready(font);
@@ -246,7 +289,10 @@ impl Assets {
     pub fn get_font(&self, handle: Handle<Font>) -> &Font {
         match self.fonts.get(handle.cast()) {
             Some(AssetSlot::Ready(f)) => f,
-            _ => fatal!("Cannot get font"),
+            _ => match self.fonts.get(self.debug_font.cast()) {
+                Some(AssetSlot::Ready(f)) => f,
+                _ => fatal!("No debug font is set"),
+            },
         }
     }
 
@@ -290,8 +336,8 @@ impl Assets {
             let slot: Handle<Image> = res.slot.cast();
 
             match (res.kind, res.data) {
-                (AssetKind::Image, Ok(AssetData::Image(dec))) => {
-                    let image = self.atlas.insert(&dec, slot);
+                (AssetKind::Image(filter), Ok(AssetData::Image(dec))) => {
+                    let image = self.atlas.insert(&dec, slot, filter);
 
                     debug!(
                         "Loaded image ({:?}, {})",
@@ -304,7 +350,7 @@ impl Assets {
                     }
                 }
 
-                (AssetKind::Image, Err(e)) => {
+                (AssetKind::Image(_), Err(e)) => {
                     error!("Failed to decode image: {e}");
 
                     if let Some(entry) = self.images.get_mut(slot.cast()) {
@@ -328,7 +374,7 @@ impl Assets {
                     }
                 }
 
-                (AssetKind::Font(_), Ok(AssetData::Font(dec))) => {
+                (AssetKind::Font(..), Ok(AssetData::Font(dec))) => {
                     debug!(
                         "Loaded font ({}, rasterized in {:?})",
                         dec.name, dec.duration
@@ -341,7 +387,7 @@ impl Assets {
                     }
                 }
 
-                (AssetKind::Font(_), Err(e)) => {
+                (AssetKind::Font(..), Err(e)) => {
                     error!("Failed to decode font: {}", e);
 
                     if let Some(entry) = self.fonts.get_mut(slot.cast()) {
@@ -384,8 +430,8 @@ fn worker(
     for req in requests {
         let path = root.join(&req.path);
         let data = match req.kind {
-            AssetKind::Image => decode_image(&path).map(AssetData::Image),
-            AssetKind::Font(pt) => decode_font(&path, pt).map(AssetData::Font),
+            AssetKind::Image(_) => decode_image(&path).map(AssetData::Image),
+            AssetKind::Font(pt, mode) => decode_font(&path, pt, mode).map(AssetData::Font),
             AssetKind::Audio => decode_audio(&mixer, &path).map(AssetData::Audio),
         };
 

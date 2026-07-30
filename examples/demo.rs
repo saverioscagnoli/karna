@@ -38,10 +38,6 @@ impl Scene for Demo {
         ctx.window.set_resizable(true);
     }
 
-    fn fixed_update(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
-        println!("fps {} dt {}", ctx.time.fps(), ctx.time.delta());
-    }
-
     fn update(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
         let dt = ctx.time.delta();
 

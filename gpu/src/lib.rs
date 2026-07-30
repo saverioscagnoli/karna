@@ -1,5 +1,6 @@
 mod buffer;
 mod pipeline;
+mod sampler;
 mod shaders;
 mod texture;
 mod vertex;
@@ -39,14 +40,15 @@ pub use sdl3::gpu::TextureSamplerBinding;
 
 pub use crate::buffer::*;
 pub use crate::pipeline::*;
+pub use crate::sampler::*;
 pub use crate::shaders::*;
 pub use crate::texture::*;
 pub use crate::vertex::*;
 
 pub struct Gpu {
     pub device: Device,
-    pub sampler: Sampler,
     pub shaders: ShaderRegistry,
+    samplers: SamplerCache,
     present_mode: PresentMode,
 }
 
@@ -55,24 +57,17 @@ impl Gpu {
         let device =
             Device::new(ShaderFormat::SPIRV, cfg!(debug_assertions)).map_err(|e| e.to_string())?;
 
-        let sampler = device
-            .create_sampler(
-                sdl3::gpu::SamplerCreateInfo::new()
-                    .with_min_filter(sdl3::gpu::Filter::Nearest)
-                    .with_mag_filter(sdl3::gpu::Filter::Nearest)
-                    .with_mipmap_mode(sdl3::gpu::SamplerMipmapMode::Nearest)
-                    .with_address_mode_u(sdl3::gpu::SamplerAddressMode::ClampToEdge)
-                    .with_address_mode_v(sdl3::gpu::SamplerAddressMode::ClampToEdge)
-                    .with_address_mode_w(sdl3::gpu::SamplerAddressMode::ClampToEdge),
-            )
-            .map_err(|e| e.to_string())?;
-
         Ok(Self {
             device,
-            sampler,
             shaders: ShaderRegistry::new(),
+            samplers: SamplerCache::new(),
             present_mode: PresentMode::Vsync,
         })
+    }
+
+    /// The device sampler for `filter`, created on first use.
+    pub fn sampler(&self, filter: Filter) -> &Sampler {
+        self.samplers.get(&self.device, filter)
     }
 
     pub fn supports_present_mode(&self, window: &Window, mode: PresentMode) -> bool {

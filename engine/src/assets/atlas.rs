@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use gpu::Filter;
 use gpu::Gpu;
 use gpu::Texture;
 use gpu::TextureBatch;
@@ -32,7 +33,7 @@ impl PageData {
 
         for row in 0..size.height {
             let src = (row * size.width * 4) as usize;
-            let dst = (((origin.y + row) * TextureAtlas::PAGE_SIZE as u32 + origin.x) * 4) as usize;
+            let dst = (((origin.y + row) * self.extent as u32 + origin.x) * 4) as usize;
 
             pixels[dst..dst + row_bytes].copy_from_slice(&data[src..src + row_bytes]);
         }
@@ -101,27 +102,29 @@ pub struct Page {
     data: PageData,
     packer: PagePacker,
     kind: PageKind,
+    filter: Filter,
     texture: Option<gpu::Texture>,
     uploaded: u64,
 }
 
 impl Page {
-    fn new(extent: u32, kind: PageKind) -> Self {
+    fn new(extent: u32, kind: PageKind, filter: Filter) -> Self {
         Self {
             data: PageData::new(extent),
             packer: PagePacker::new(extent, TextureAtlas::PADDING),
             kind,
+            filter,
             texture: None,
             uploaded: 0,
         }
     }
 
-    fn shared(extent: u32) -> Self {
-        Self::new(extent, PageKind::Shared)
+    fn shared(extent: u32, filter: Filter) -> Self {
+        Self::new(extent, PageKind::Shared, filter)
     }
 
-    fn dedicated(extent: u32, owner: Handle<Image>) -> Self {
-        Self::new(extent, PageKind::Dedicated(owner))
+    fn dedicated(extent: u32, owner: Handle<Image>, filter: Filter) -> Self {
+        Self::new(extent, PageKind::Dedicated(owner), filter)
     }
 
     fn dirty(&self) -> bool {
@@ -164,9 +167,10 @@ impl TextureAtlas {
         for &i in &dirty {
             let page = &mut self.pages[i];
             let extent = page.data.extent;
+            let filter = page.filter;
 
             page.texture.get_or_insert_with(|| {
-                Texture::new(gpu, format!("atlas-page-{i}"), extent, extent)
+                Texture::new(gpu, format!("atlas-page-{i}"), extent, extent).with_filter(filter)
             });
         }
 
@@ -219,15 +223,21 @@ impl TextureAtlas {
         }
     }
 
-    pub fn insert(&mut self, dec: &DecodedImage, owner: Handle<Image>) -> Image {
-        self.insert_rgba(&dec.pixels, dec.size, owner)
+    pub fn insert(&mut self, dec: &DecodedImage, owner: Handle<Image>, filter: Filter) -> Image {
+        self.insert_rgba(&dec.pixels, dec.size, owner, filter)
     }
 
+    /// Pack an image into a page sampled with `filter`.
+    ///
+    /// Pages are keyed by filter: an image only shares a page with images that
+    /// want the same filtering, and each distinct filter costs one extra page
+    /// at most, not one page per image.
     pub fn insert_rgba(
         &mut self,
         pixels: &[u8],
         size: math::Size<u32>,
         owner: Handle<Image>,
+        filter: Filter,
     ) -> Image {
         let expected = (size.width * size.height * 4) as usize;
 
@@ -245,7 +255,7 @@ impl TextureAtlas {
         if size.width > Self::SHARED_CAPACITY || size.height > Self::SHARED_CAPACITY {
             let extent = size.width.max(size.height) + Self::PADDING * 2;
             let index = self.pages.len();
-            let mut page = Page::dedicated(extent, owner);
+            let mut page = Page::dedicated(extent, owner, filter);
 
             let origin = page
                 .packer
@@ -262,7 +272,7 @@ impl TextureAtlas {
         for index in 0..self.pages.len() {
             let page = &mut self.pages[index];
 
-            if !matches!(page.kind, PageKind::Shared) {
+            if !matches!(page.kind, PageKind::Shared) || page.filter != filter {
                 continue;
             }
 
@@ -273,7 +283,7 @@ impl TextureAtlas {
         }
 
         let index = self.pages.len();
-        let mut page = Page::shared(Self::PAGE_SIZE);
+        let mut page = Page::shared(Self::PAGE_SIZE, filter);
 
         let origin = page
             .packer

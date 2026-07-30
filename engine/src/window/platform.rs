@@ -84,6 +84,10 @@ impl PlatformWindow {
         self.pending_resize = 0;
     }
 
+    pub fn on_pixel_resized(&mut self, width: u32, height: u32) {
+        self.pixel_size = math::Size::new(width, height);
+    }
+
     pub fn apply(&mut self, command: WindowCommand) {
         match command {
             WindowCommand::SetWindowSize(size) => {

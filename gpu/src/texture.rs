@@ -3,6 +3,7 @@ use sdl3::gpu::TextureRegion;
 use sdl3::gpu::TextureTransferInfo;
 use sdl3::gpu::TransferBufferUsage;
 
+use crate::Filter;
 use crate::Gpu;
 use crate::TextureFormat;
 
@@ -36,6 +37,7 @@ pub struct Texture {
     inner: sdl3::gpu::Texture<'static>,
     width: u32,
     height: u32,
+    filter: Filter,
 }
 
 impl Texture {
@@ -71,7 +73,23 @@ impl Texture {
             inner,
             width,
             height,
+            filter: Filter::default(),
         }
+    }
+
+    /// Pick the filter this texture is sampled with. The sampler behind it is
+    /// only created once something actually binds the texture.
+    pub fn with_filter(mut self, filter: Filter) -> Self {
+        self.filter = filter;
+        self
+    }
+
+    pub fn set_filter(&mut self, filter: Filter) {
+        self.filter = filter;
+    }
+
+    pub fn filter(&self) -> Filter {
+        self.filter
     }
 
     /// Create a texture and fill it with `pixels`, which must be
@@ -141,11 +159,12 @@ impl Texture {
         &self.inner
     }
 
-    /// Pair this texture with the device's shared sampler for binding.
+    /// Pair this texture with the sampler for its filter, creating that sampler
+    /// if this is the first texture to ask for it.
     pub fn binding<'a>(&'a self, gpu: &'a Gpu) -> TextureSamplerBinding<'a> {
         TextureSamplerBinding::new()
             .with_texture(&self.inner)
-            .with_sampler(&gpu.sampler)
+            .with_sampler(gpu.sampler(self.filter))
     }
 
     pub fn label(&self) -> &str {

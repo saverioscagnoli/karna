@@ -19,6 +19,7 @@ pub mod input {
 pub mod render {
     pub use engine::Color;
     pub use engine::Draw;
+    pub use engine::Rasterize;
     pub use engine::SceneRef;
 }
 
@@ -26,10 +27,14 @@ pub mod assets {
     pub use engine::Assets;
     pub use engine::Audio;
     pub use engine::AudioLength;
+    pub use engine::Font;
     pub use engine::Image;
+    pub use engine::Rasterize;
+    pub use gpu::Filter;
     pub use utils::Handle;
 }
 
 pub mod gpu {
+    pub use gpu::Filter;
     pub use gpu::PresentMode;
 }
