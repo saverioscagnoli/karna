@@ -72,6 +72,15 @@ impl<T> Handle<T> {
         self.generation != 0
     }
 
+    /// The dense slot index, without the generation.
+    ///
+    /// Only useful for packing a handle into a sort key or a dense side table.
+    /// It is not a handle: two handles with the same index but different
+    /// generations refer to different values.
+    pub fn index(&self) -> u32 {
+        self.index
+    }
+
     pub fn cast<U>(self) -> Handle<U> {
         Handle {
             index: self.index,

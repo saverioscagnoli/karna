@@ -21,6 +21,7 @@ use logging::trace;
 use sdl3::Sdl;
 use sdl3::VideoSubsystem;
 use sdl3::gpu::PresentMode;
+use sdl3::keyboard::Scancode::P;
 use utils::FastHashMap;
 use utils::SleepTimer;
 use utils::WindowId;
@@ -32,6 +33,7 @@ use crate::event::SdlEvent;
 use crate::event::SdlWindowEvent;
 use crate::render::Renderer;
 use crate::render::packet::FramePacket;
+use crate::render::retained::RenderWorld;
 use crate::scene::ScenePhase;
 use crate::scene::World;
 use crate::sound::SharedMixer;
@@ -51,9 +53,20 @@ pub use crate::assets::font::Rasterize;
 pub use crate::assets::image::Image;
 pub use crate::builder::AppBuilder;
 pub use crate::builder::WindowBuilder;
+pub use crate::render::MESH_SHADER;
+pub use crate::render::camera::Camera;
+pub use crate::render::camera::Fit;
+pub use crate::render::camera::Projection;
 pub use crate::render::color::Color;
+pub use crate::render::geometry::Geometry;
+pub use crate::render::geometry::cube;
 pub use crate::render::immediate::Draw;
+pub use crate::render::layer::Layer;
+pub use crate::render::material::MaterialDesc;
+pub use crate::render::material::PassState;
+pub use crate::render::mesh::Mesh;
 pub use crate::render::retained::SceneRef;
+pub use crate::render::vertex::MeshVertex;
 pub use crate::scene::Scene;
 pub use crate::window::WindowHandle;
 pub use crate::window::context::ContextRef;
@@ -197,6 +210,7 @@ impl App {
                 input: Input::default(),
                 audio: AudioHandle::new(Arc::clone(&self.mixer)),
                 resources: Resources::default(),
+                render: RenderWorld::default(),
                 packet: FramePacket::default(),
             },
             World::new(b.scenes, b.active_scenes),
@@ -325,14 +339,11 @@ impl App {
         };
 
         for e in self.windows.values_mut() {
-            e.state.run(
-                ScenePhase::Load,
-                Frame {
-                    assets: &mut self.assets,
-                    mode: self.gpu.present_mode(),
-                    events: self.events.dispatcher(),
-                },
-            );
+            e.state.load(Frame {
+                assets: &mut self.assets,
+                mode: self.gpu.present_mode(),
+                events: self.events.dispatcher(),
+            });
         }
 
         while !self.should_quit {
@@ -350,14 +361,11 @@ impl App {
                 e.state.clock.advance(now);
 
                 while e.state.clock.should_tick() {
-                    e.state.run(
-                        ScenePhase::FixedUpdate,
-                        Frame {
-                            assets: &mut self.assets,
-                            mode: self.gpu.present_mode(),
-                            events: self.events.dispatcher(),
-                        },
-                    );
+                    e.state.fixed_update(Frame {
+                        assets: &mut self.assets,
+                        mode: self.gpu.present_mode(),
+                        events: self.events.dispatcher(),
+                    });
                     e.state.clock.consume(now);
                 }
 
@@ -365,14 +373,11 @@ impl App {
                     continue;
                 }
 
-                e.state.run(
-                    ScenePhase::Update,
-                    Frame {
-                        assets: &mut self.assets,
-                        mode: self.gpu.present_mode(),
-                        events: self.events.dispatcher(),
-                    },
-                );
+                e.state.update(Frame {
+                    assets: &mut self.assets,
+                    mode: self.gpu.present_mode(),
+                    events: self.events.dispatcher(),
+                });
 
                 e.state.draw(
                     Frame {
@@ -390,6 +395,7 @@ impl App {
                     &e.platform,
                     &self.assets,
                     &e.state.context.packet,
+                    &mut e.state.context.render,
                     Some((&mut e.imgui.renderer, draw_data)),
                 );
 

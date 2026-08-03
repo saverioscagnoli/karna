@@ -162,21 +162,6 @@ impl<'a> Draw<'a> {
         }
     }
 
-    pub fn clear_color(&self) -> Color {
-        self.packet.clear_color
-    }
-
-    pub fn clear_color_mut(&mut self) -> &mut Color {
-        &mut self.packet.clear_color
-    }
-
-    pub fn set_clear_color<C>(&mut self, color: C)
-    where
-        C: Into<Color>,
-    {
-        self.packet.clear_color = color.into();
-    }
-
     pub fn layer(&self) -> Layer {
         self.layer
     }

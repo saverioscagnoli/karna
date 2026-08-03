@@ -1,13 +1,16 @@
 use std::mem;
 use std::path::PathBuf;
 
+use logging::fatal;
+
 use crate::App;
-use crate::scene::Scene;
+use crate::scene::{Scene, SceneFactory};
 
 pub struct WindowBuilder {
     pub(crate) title: String,
     pub(crate) size: math::Size<u32>,
-    pub(crate) scenes: Vec<(u32, Box<dyn Scene>)>,
+    pub(crate) resizable: bool,
+    pub(crate) scenes: Vec<(u32, SceneFactory)>,
     pub(crate) active_scenes: Vec<u32>,
 }
 
@@ -16,6 +19,7 @@ impl Default for WindowBuilder {
         Self {
             title: String::from("My Window"),
             size: math::Size::new(800, 600),
+            resizable: false,
             scenes: Vec::new(),
             active_scenes: Vec::new(),
         }
@@ -43,13 +47,22 @@ impl WindowBuilder {
         self
     }
 
-    pub fn with_scene<S>(mut self, id: u32, scene: S, active: bool) -> Self
-    where
-        S: Scene + 'static,
-    {
-        self.scenes.push((id, Box::new(scene)));
+    pub fn with_scene<S: Scene>(mut self, id: u32) -> Self {
+        let id = id.into();
 
-        if active {
+        if self.scenes.iter().any(|(existing, _)| *existing == id) {
+            fatal!("scene id {id:?} registered twice");
+        }
+
+        self.scenes
+            .push((id, Box::new(|ctx, s| Box::new(S::load(ctx, s)))));
+        self
+    }
+
+    pub fn with_active_scene(mut self, id: u32) -> Self {
+        let id = id.into();
+
+        if !self.active_scenes.contains(&id) {
             self.active_scenes.push(id);
         }
 

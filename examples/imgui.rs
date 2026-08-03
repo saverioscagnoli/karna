@@ -58,11 +58,10 @@ impl Scene for S {
     }
 
     fn update(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
-        let _ = ctx;
+        scene.set_clear_color(self.clear_color);
     }
 
     fn draw(&mut self, ctx: DrawContext, draw: &mut Draw) {
-        draw.set_clear_color(self.clear_color);
         draw.set_color(Color::Cyan);
 
         for i in 0..10 {

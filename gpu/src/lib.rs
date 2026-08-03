@@ -24,13 +24,16 @@ use sdl3::sys::gpu::SDL_GetGPUDeviceDriver;
 use sdl3::sys::gpu::SDL_GetGPUDeviceProperties;
 use sdl3::sys::gpu::SDL_PROP_GPU_DEVICE_DRIVER_INFO_STRING;
 use sdl3::sys::gpu::SDL_PROP_GPU_DEVICE_NAME_STRING;
+use sdl3::sys::gpu::SDL_PushGPUFragmentUniformData;
 use sdl3::sys::gpu::SDL_ReleaseWindowFromGPUDevice;
 use sdl3::sys::gpu::SDL_WindowSupportsGPUPresentMode;
 use sdl3::sys::properties::SDL_GetStringProperty;
 use sdl3::video::Window;
 
 pub use sdl3::gpu::CommandBuffer;
+pub use sdl3::gpu::CompareOp;
 pub use sdl3::gpu::CopyPass;
+pub use sdl3::gpu::DepthStencilTargetInfo;
 pub use sdl3::gpu::IndexElementSize;
 pub use sdl3::gpu::PresentMode;
 pub use sdl3::gpu::PrimitiveType as PrimitiveTopology;
@@ -45,6 +48,28 @@ pub use crate::sampler::*;
 pub use crate::shaders::*;
 pub use crate::texture::*;
 pub use crate::vertex::*;
+
+/// Push an already-laid-out byte blob as a fragment uniform block.
+///
+/// [`CommandBuffer::push_fragment_uniform_data`] is generic over `T` and sends
+/// `size_of::<T>()` bytes from `&T`, so handing it a `&Vec<u8>` uploads the
+/// vec's pointer/len/cap header instead of its contents — the shader then reads
+/// a garbage uniform block. Materials carry their uniforms as an opaque blob
+/// rather than a typed struct, so they need this path.
+pub fn push_fragment_uniform_bytes(cmd: &CommandBuffer, slot: u32, bytes: &[u8]) {
+    if bytes.is_empty() {
+        return;
+    }
+
+    unsafe {
+        SDL_PushGPUFragmentUniformData(
+            cmd.raw(),
+            slot,
+            bytes.as_ptr() as *const std::ffi::c_void,
+            bytes.len() as u32,
+        )
+    }
+}
 
 pub struct Gpu {
     pub device: Device,

@@ -17,8 +17,7 @@ math = { path = "math" }
 utils = { path = "utils" }
 
 crossbeam-channel = "0.5.16"
-sdl3 = { version = "0.18.4", features = ["image", "ttf", "mixer"] }
-sdl3-mixer-sys = { version = "0.6.3", features = ["build-static-vendored"] }
+sdl3 = { version = "0.18.4", features = ["image", "ttf", "mixer", "build-from-source-static"] }
 parking_lot = "0.12.5"
 
 [dependencies]

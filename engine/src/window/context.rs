@@ -1,8 +1,10 @@
 use imgui::Imgui;
 
 use crate::assets::Assets;
-use crate::render::immediate::{Draw, ImguiFrame};
+use crate::render::immediate::Draw;
+use crate::render::immediate::ImguiFrame;
 use crate::render::packet::FramePacket;
+use crate::render::retained::RenderWorld;
 use crate::render::retained::SceneRef;
 use crate::window::WindowHandle;
 use crate::window::audio::AudioHandle;
@@ -15,6 +17,7 @@ pub struct WindowContext {
     pub input: Input,
     pub audio: AudioHandle,
     pub resources: Resources,
+    pub render: RenderWorld,
     pub packet: FramePacket,
 }
 
@@ -45,7 +48,7 @@ impl WindowContext {
                 resources: &mut self.resources,
             },
             SceneRef {
-                packet: &mut self.packet,
+                render: &mut self.render,
             },
         )
     }

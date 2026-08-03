@@ -75,6 +75,34 @@ impl<const R: usize, const C: usize, T: Num + Copy> Matrix<R, C, T> {
         unsafe { slice::from_raw_parts(self.0.as_ptr() as *const u8, std::mem::size_of::<Self>()) }
     }
 
+    pub fn from_cols(cols: [[T; R]; C]) -> Self {
+        Self(cols)
+    }
+
+    pub fn from_cols_slice(data: &[T]) -> Self {
+        assert_eq!(data.len(), R * C, "expected {} elements", R * C);
+
+        let mut m = Self::zero();
+        for col in 0..C {
+            for row in 0..R {
+                m[col][row] = data[col * R + row];
+            }
+        }
+        m
+    }
+
+    pub fn from_rows_slice(data: &[T]) -> Self {
+        assert_eq!(data.len(), R * C, "expected {} elements", R * C);
+
+        let mut m = Self::zero();
+        for col in 0..C {
+            for row in 0..R {
+                m[col][row] = data[row * C + col];
+            }
+        }
+        m
+    }
+
     pub fn transpose(&self) -> Matrix<C, R, T> {
         let mut result = Matrix::<C, R, T>::zero();
 
@@ -154,18 +182,6 @@ impl<T: Num + Copy> Matrix2<T> {
 
     pub fn det(&self) -> T {
         self[0][0] * self[1][1] - self[1][0] * self[0][1]
-    }
-
-    pub fn inverse(&self) -> Option<Self>
-    where
-        T: PartialEq,
-    {
-        let d = self.det();
-        if d == T::zero() {
-            return None;
-        }
-        // adjugate / det — needs Div
-        todo!()
     }
 }
 

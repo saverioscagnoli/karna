@@ -99,6 +99,7 @@ pub struct Assets {
     audio_paths: FastHashMap<PathBuf, Handle<Audio>>,
     silence: Handle<Audio>,
     warned: RefCell<FastHashSet<Handle<()>>>,
+    image_epoch: u64,
     requests: Sender<AssetRequest>,
     responses: Receiver<AssetResponse>,
 }
@@ -123,6 +124,7 @@ impl Assets {
             audio_paths: FastHashMap::default(),
             silence: Handle::INVALID,
             warned: RefCell::new(FastHashSet::default()),
+            image_epoch: 0,
             requests,
             responses,
         };
@@ -312,8 +314,23 @@ impl Assets {
         self.atlas.page_count()
     }
 
+    /// Counter for "some image now resolves differently than it used to".
+    ///
+    /// A handle handed out by [`Assets::load_image`] resolves to the
+    /// placeholder until the decode finishes, so anything that snapshots the
+    /// resolved image has to notice that transition.
+    pub fn image_epoch(&self) -> u64 {
+        self.image_epoch
+    }
+
     pub fn white_pixel(&self) -> &Image {
         self.get_image(self.white)
+    }
+
+    /// Handle to the atlas' white pixel, for materials that want to sample
+    /// something neutral rather than branch on having no texture.
+    pub fn white_pixel_handle(&self) -> Handle<Image> {
+        self.white
     }
 
     pub fn placeholder(&self) -> &Image {
@@ -454,6 +471,7 @@ impl Assets {
 
                     if let Some(entry) = self.images.get_mut(slot.cast()) {
                         *entry = AssetSlot::Ready(image);
+                        self.image_epoch += 1;
                     }
                 }
 
@@ -462,6 +480,7 @@ impl Assets {
 
                     if let Some(entry) = self.images.get_mut(slot.cast()) {
                         *entry = AssetSlot::Failed;
+                        self.image_epoch += 1;
                     }
                 }
 

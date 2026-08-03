@@ -26,11 +26,16 @@ struct S {
 }
 
 impl Scene for S {
-    fn load(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
-        self.pcb = ctx.assets.load_image("assets/pcb.png");
-        self.jbmono = ctx.assets.load_font("assets/jbmono.ttf", 21.0);
+    fn load(ctx: ContextRef, scene: &mut SceneRef) -> Self
+    where
+        Self: Sized,
+    {
+        let pcb = ctx.assets.load_image("assets/pcb.png");
+        let jbmono = ctx.assets.load_font("assets/jbmono.ttf", 21.0);
 
         ctx.window.set_resizable(true);
+
+        Self { pcb, jbmono }
     }
 
     fn fixed_update(&mut self, ctx: ContextRef, scene: &mut SceneRef) {}
@@ -59,8 +64,12 @@ impl Scene for S {
 struct AtlasDemo;
 
 impl Scene for AtlasDemo {
-    fn load(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
+    fn load(ctx: ContextRef, scene: &mut SceneRef) -> Self
+    where
+        Self: Sized,
+    {
         ctx.window.set_resizable(true);
+        Self
     }
 
     fn update(&mut self, ctx: ContextRef, scene: &mut SceneRef) {}
@@ -78,20 +87,15 @@ fn main() {
             WindowBuilder::new()
                 .with_title("Texture Atlas Demo")
                 .with_size((1280, 720))
-                .with_scene(
-                    0,
-                    S {
-                        pcb: Handle::INVALID,
-                        jbmono: Handle::INVALID,
-                    },
-                    true,
-                ),
+                .with_scene::<S>(0)
+                .with_active_scene(0),
         )
         .with_window(
             WindowBuilder::new()
                 .with_title("Texture Atlas")
                 .with_size((1024, 1024))
-                .with_scene(1, AtlasDemo, true),
+                .with_scene::<AtlasDemo>(0)
+                .with_active_scene(0),
         )
         .with_asset_root("examples/")
         .build()

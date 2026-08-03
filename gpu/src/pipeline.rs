@@ -3,7 +3,9 @@ use sdl3::gpu::BlendFactor;
 use sdl3::gpu::BlendOp;
 use sdl3::gpu::ColorTargetBlendState;
 use sdl3::gpu::ColorTargetDescription;
+use sdl3::gpu::CompareOp;
 use sdl3::gpu::CullMode;
+use sdl3::gpu::DepthStencilState;
 use sdl3::gpu::FillMode;
 use sdl3::gpu::FrontFace;
 use sdl3::gpu::GraphicsPipelineTargetInfo;
@@ -53,6 +55,65 @@ pub enum Cull {
     Back,
 }
 
+/// Depth testing for a pipeline. `None` on [`PipelineDesc`] means the pass has
+/// no depth attachment at all — 2d and ui passes.
+///
+/// A pipeline built with depth must be recorded into a render pass that
+/// actually has a depth target, and the formats must agree. [`DEPTH_FORMAT`] is
+/// the one both sides use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DepthState {
+    pub test: bool,
+    pub write: bool,
+    pub compare: CompareOp,
+}
+
+/// sdl3 derives `Eq` on `CompareOp` but not `Hash`, so the discriminant stands
+/// in for it — the same substitution `PipelineKey` makes for `PrimitiveType`.
+impl std::hash::Hash for DepthState {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.test.hash(state);
+        self.write.hash(state);
+        (self.compare as u32).hash(state);
+    }
+}
+
+impl Default for DepthState {
+    fn default() -> Self {
+        Self::OPAQUE
+    }
+}
+
+impl DepthState {
+    /// Test and write. What opaque geometry wants.
+    pub const OPAQUE: Self = Self {
+        test: true,
+        write: true,
+        compare: CompareOp::Less,
+    };
+
+    /// Test but don't write, so blended surfaces are occluded by opaque
+    /// geometry without occluding each other.
+    pub const TRANSPARENT: Self = Self {
+        test: true,
+        write: false,
+        compare: CompareOp::Less,
+    };
+
+    fn apply(&self, state: DepthStencilState) -> DepthStencilState {
+        state
+            .with_enable_depth_test(self.test)
+            .with_enable_depth_write(self.write)
+            .with_compare_op(self.compare)
+    }
+}
+
+/// Format shared by every depth texture and every depth-enabled pipeline.
+///
+/// D24 rather than D32F because it is the widely supported depth-only format;
+/// SDL guarantees one of D24/D16 on all backends.
+pub const DEPTH_FORMAT: TextureFormat = TextureFormat::D24Unorm;
+
 fn build_pipeline(gpu: &Gpu, desc: &PipelineDesc) -> RenderPipeline {
     let shader = gpu.shaders.get(&desc.shader);
 
@@ -79,7 +140,17 @@ fn build_pipeline(gpu: &Gpu, desc: &PipelineDesc) -> RenderPipeline {
         .blend
         .apply(ColorTargetDescription::new().with_format(desc.format))];
 
-    gpu.device
+    let mut target_info =
+        GraphicsPipelineTargetInfo::new().with_color_target_descriptions(&color_targets);
+
+    if desc.depth.is_some() {
+        target_info = target_info
+            .with_has_depth_stencil_target(true)
+            .with_depth_stencil_format(DEPTH_FORMAT);
+    }
+
+    let mut builder = gpu
+        .device
         .create_graphics_pipeline()
         .with_vertex_shader(&shader.vertex)
         .with_fragment_shader(&shader.fragment)
@@ -99,11 +170,13 @@ fn build_pipeline(gpu: &Gpu, desc: &PipelineDesc) -> RenderPipeline {
                     None => CullMode::None,
                 }),
         )
-        .with_target_info(
-            GraphicsPipelineTargetInfo::new().with_color_target_descriptions(&color_targets),
-        )
-        .build()
-        .expect("Failed to create render pipeline")
+        .with_target_info(target_info);
+
+    if let Some(depth) = desc.depth {
+        builder = builder.with_depth_stencil_state(depth.apply(DepthStencilState::new()));
+    }
+
+    builder.build().expect("Failed to create render pipeline")
 }
 
 #[derive(Debug, Clone)]
@@ -114,6 +187,8 @@ pub struct PipelineDesc {
     pub topology: PrimitiveTopology,
     pub cull: Option<Cull>,
     pub format: TextureFormat,
+    /// `None` for passes with no depth attachment.
+    pub depth: Option<DepthState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -125,6 +200,7 @@ pub struct PipelineKey {
     pub topology: u32,
     pub cull: Option<Cull>,
     pub format: u32,
+    pub depth: Option<DepthState>,
 }
 
 impl PipelineKey {
@@ -142,6 +218,7 @@ impl PipelineKey {
             topology: desc.topology as u32,
             cull: desc.cull,
             format: desc.format as u32,
+            depth: desc.depth,
         }
     }
 }

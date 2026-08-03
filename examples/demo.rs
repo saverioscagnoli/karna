@@ -15,6 +15,7 @@ use karna::logging::LevelFilter;
 use karna::render::Color;
 use karna::render::Draw;
 use karna::render::SceneRef;
+use math::Vector2;
 
 struct Demo {
     position: math::Vector2<f32>,
@@ -26,20 +27,18 @@ impl Demo {
     const SIZE: f32 = 64.0;
     const SPEED: f32 = 400.0;
     const SMOOTHING: f32 = 0.999;
-
-    fn new() -> Self {
-        Self {
-            position: math::Vector2::new(100.0, 100.0),
-            velocity: math::Vector2::zero(),
-            show_demo: true,
-        }
-    }
 }
 
 impl Scene for Demo {
-    fn load(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
-        ctx.window.set_resizable(true);
-        ctx.time.set_target_fps(175);
+    fn load(ctx: ContextRef, scene: &mut SceneRef) -> Self
+    where
+        Self: Sized,
+    {
+        Self {
+            position: Vector2::new(100.0, 100.0),
+            velocity: Vector2::zero(),
+            show_demo: true,
+        }
     }
 
     fn update(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
@@ -124,8 +123,10 @@ fn main() {
             WindowBuilder::new()
                 .with_title("demo")
                 .with_size((1280, 720))
-                .with_scene(0, Demo::new(), true),
+                .with_scene::<Demo>(0)
+                .with_active_scene(0),
         )
+        .with_asset_root("examples/")
         .build()
         .run();
 }

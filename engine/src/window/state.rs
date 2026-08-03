@@ -9,8 +9,6 @@ use crate::event::AppEvent;
 use crate::event::EventDispatcher;
 use crate::event::SdlEvent;
 use crate::event::SdlWindowEvent;
-use crate::render::camera::CameraPacket;
-use crate::render::camera::Projection;
 use crate::render::layer::Layer;
 use crate::scene::ScenePhase;
 use crate::scene::World;
@@ -66,27 +64,54 @@ impl WindowState {
         )
     }
 
-    pub fn run(&mut self, phase: ScenePhase, frame: Frame<'_>) {
+    pub fn load(&mut self, frame: Frame<'_>) {
         let mut time = self.time(frame.mode, frame.events);
         self.world
-            .run(phase, &mut self.context, &mut time, frame.assets);
+            .load_active(&mut self.context, &mut time, frame.assets);
+    }
+
+    pub fn fixed_update(&mut self, frame: Frame<'_>) {
+        let mut time = self.time(frame.mode, frame.events);
+        self.world
+            .fixed_update(&mut self.context, &mut time, frame.assets);
+    }
+
+    pub fn update(&mut self, frame: Frame<'_>) {
+        let mut time = self.time(frame.mode, frame.events);
+        self.world
+            .update(&mut self.context, &mut time, frame.assets);
+    }
+
+    fn extract(&mut self, assets: &Assets) {
+        let viewport = self.context.window.pixel_size();
+        let ctx = &mut self.context;
+
+        ctx.render.refresh_materials(assets);
+        ctx.render.update_cameras(viewport);
+        ctx.packet.clear();
+
+        for layer in Layer::ALL {
+            let camera = ctx.render.camera_packet(layer, viewport);
+            let depth = ctx.render.view_needs_depth(layer);
+            let enabled = ctx.render.view_enabled(layer);
+
+            let view = &mut ctx.packet[layer];
+
+            view.camera = camera;
+            view.depth = depth;
+            view.enabled = enabled;
+        }
+
+        // Meshes are a world-space concept, so they all land on the world view
+        let meshes = &mut ctx.packet[Layer::World].meshes;
+
+        ctx.render.extract_meshes(meshes);
     }
 
     pub fn draw(&mut self, frame: Frame<'_>, imgui: &mut Imgui) {
         let mut time = self.time(frame.mode, frame.events);
 
-        self.context.packet.clear();
-
-        let size = self.context.window.pixel_size();
-        let camera = CameraPacket {
-            view_projection: Projection::standard_2d(math::Size::new(size.width, size.height))
-                .matrix(),
-        };
-
-        for layer in Layer::ALL {
-            self.context.packet[layer].camera = camera;
-        }
-
+        self.extract(frame.assets);
         self.world
             .draw(&mut self.context, &mut time, frame.assets, imgui);
     }

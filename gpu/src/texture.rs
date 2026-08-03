@@ -37,6 +37,7 @@ pub struct Texture {
     inner: sdl3::gpu::Texture<'static>,
     width: u32,
     height: u32,
+    format: TextureFormat,
     filter: Filter,
 }
 
@@ -73,8 +74,51 @@ impl Texture {
             inner,
             width,
             height,
+            format: TextureFormat::R8g8b8a8Unorm,
             filter: Filter::default(),
         }
+    }
+
+    /// Create a depth target sized to a render pass.
+    ///
+    /// Never sampled, so it carries no useful filter, and never written from
+    /// the CPU — the driver clears and fills it during the pass. Recreate it
+    /// whenever the target it pairs with resizes; a depth attachment smaller
+    /// than its color attachment is a validation error.
+    pub fn depth<L: AsRef<str>>(gpu: &Gpu, label: L, width: u32, height: u32) -> Self {
+        let label: &str = label.as_ref();
+        let width = width.max(1);
+        let height = height.max(1);
+        let format = TextureFormat::D24Unorm;
+
+        let inner = gpu
+            .device
+            .create_texture(
+                sdl3::gpu::TextureCreateInfo::new()
+                    .with_type(TextureType::_2D)
+                    .with_format(format)
+                    .with_usage(TextureUsages::DEPTH_STENCIL_TARGET)
+                    .with_width(width)
+                    .with_height(height)
+                    .with_layer_count_or_depth(1)
+                    .with_num_levels(1),
+            )
+            .expect("Failed to create depth texture");
+
+        debug!("Created depth texture '{}' ({}x{})", label, width, height);
+
+        Self {
+            label: label.to_owned(),
+            inner,
+            width,
+            height,
+            format,
+            filter: Filter::default(),
+        }
+    }
+
+    pub fn format(&self) -> TextureFormat {
+        self.format
     }
 
     /// Pick the filter this texture is sampled with. The sampler behind it is
@@ -157,6 +201,14 @@ impl Texture {
 
     pub fn raw(&self) -> &sdl3::gpu::Texture<'static> {
         &self.inner
+    }
+
+    /// Mutable access to the underlying texture.
+    ///
+    /// Only needed because `DepthStencilTargetInfo::with_texture` takes `&mut`
+    /// — nothing about attaching a depth target actually mutates it.
+    pub fn raw_mut(&mut self) -> &mut sdl3::gpu::Texture<'static> {
+        &mut self.inner
     }
 
     /// Pair this texture with the sampler for its filter, creating that sampler
