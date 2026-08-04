@@ -1,16 +1,15 @@
-use std::mem;
-use std::path::PathBuf;
-
-use logging::fatal;
+use utils::FastHashMap;
 
 use crate::App;
-use crate::scene::{Scene, SceneFactory};
+use crate::scene::Scene;
+use crate::scene::SceneBuilder;
+use crate::scene::SceneId;
 
 pub struct WindowBuilder {
-    pub(crate) title: String,
-    pub(crate) size: math::Size<u32>,
-    pub(crate) scenes: Vec<(u32, SceneFactory)>,
-    pub(crate) active_scenes: Vec<u32>,
+    pub title: String,
+    pub size: math::Size<u32>,
+    pub scenes: FastHashMap<SceneId, SceneBuilder>,
+    pub active_scenes: Vec<SceneId>,
 }
 
 impl Default for WindowBuilder {
@@ -18,7 +17,7 @@ impl Default for WindowBuilder {
         Self {
             title: String::from("My Window"),
             size: math::Size::new(800, 600),
-            scenes: Vec::new(),
+            scenes: FastHashMap::default(),
             active_scenes: Vec::new(),
         }
     }
@@ -45,43 +44,24 @@ impl WindowBuilder {
         self
     }
 
-    pub fn with_scene<S: Scene>(mut self, id: u32) -> Self {
-        let id = id.into();
-
-        if self.scenes.iter().any(|(existing, _)| *existing == id) {
-            fatal!("scene id {id:?} registered twice");
-        }
-
+    pub fn with_scene<S>(mut self, id: SceneId) -> Self
+    where
+        S: Scene,
+    {
         self.scenes
-            .push((id, Box::new(|ctx, s| Box::new(S::load(ctx, s)))));
+            .insert(id, Box::new(|ctx, scene| Box::new(S::load(ctx, scene))));
         self
     }
 
-    pub fn with_active_scene(mut self, id: u32) -> Self {
-        let id = id.into();
-
-        if !self.active_scenes.contains(&id) {
-            self.active_scenes.push(id);
-        }
-
+    pub fn with_active_scene(mut self, id: SceneId) -> Self {
+        self.active_scenes.push(id);
         self
     }
 }
 
+#[derive(Default)]
 pub struct AppBuilder {
     windows: Vec<WindowBuilder>,
-    asset_workers: usize,
-    asset_root: Option<PathBuf>,
-}
-
-impl Default for AppBuilder {
-    fn default() -> Self {
-        Self {
-            windows: Vec::new(),
-            asset_workers: 4,
-            asset_root: None,
-        }
-    }
 }
 
 impl AppBuilder {
@@ -89,29 +69,16 @@ impl AppBuilder {
         Self::default()
     }
 
-    pub fn with_window(mut self, b: WindowBuilder) -> Self {
-        self.windows.push(b);
+    pub fn with_window(mut self, builder: WindowBuilder) -> Self {
+        self.windows.push(builder);
         self
     }
 
-    pub fn with_asset_workers(mut self, n: usize) -> Self {
-        self.asset_workers = n;
-        self
-    }
+    pub fn build(self) -> App {
+        let mut app = App::new();
 
-    pub fn with_asset_root<P>(mut self, path: P) -> Self
-    where
-        P: Into<PathBuf>,
-    {
-        self.asset_root = Some(path.into());
-        self
-    }
-
-    pub fn build(mut self) -> App {
-        let mut app = App::new(self.asset_workers, self.asset_root);
-
-        for b in mem::take(&mut self.windows) {
-            app.queued_windows.push(b);
+        for w in self.windows {
+            app.requested_at_creation.push(w);
         }
 
         app

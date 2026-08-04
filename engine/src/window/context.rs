@@ -1,80 +1,32 @@
-use imgui::Imgui;
-
-use crate::assets::Assets;
-use crate::render::immediate::Draw;
-use crate::render::immediate::ImguiFrame;
-use crate::render::packet::FramePacket;
-use crate::render::retained::RenderWorld;
-use crate::render::retained::SceneRef;
+use crate::render::scene_ref::SceneRef;
 use crate::window::WindowHandle;
-use crate::window::audio::AudioHandle;
-use crate::window::input::Input;
-use crate::window::resources::Resources;
-use crate::window::time::Time;
 
-pub struct WindowContext {
+pub struct UserContext {
     pub window: WindowHandle,
-    pub input: Input,
-    pub audio: AudioHandle,
-    pub resources: Resources,
-    pub render: RenderWorld,
-    pub packet: FramePacket,
 }
 
-pub struct ContextRef<'a, A = &'a mut Assets> {
-    pub window: &'a mut WindowHandle,
-    pub time: &'a mut Time,
-    pub input: &'a mut Input,
-    pub audio: &'a AudioHandle,
-    pub assets: A,
-    pub resources: &'a mut Resources,
+pub struct LoadContext<'a> {
+    window: &'a mut WindowHandle,
 }
 
-pub type DrawContext<'a> = ContextRef<'a, &'a Assets>;
+pub struct UpdateContext<'a> {
+    window: &'a mut WindowHandle,
+}
 
-impl WindowContext {
-    pub fn split_scene<'a>(
+pub struct DrawContext<'a> {
+    window: &'a mut WindowHandle,
+}
+
+impl UserContext {
+    pub fn split_load<'a>(
         &'a mut self,
-        time: &'a mut Time,
-        assets: &'a mut Assets,
-    ) -> (ContextRef<'a>, SceneRef<'a>) {
+        scene: &'a mut SceneRef,
+    ) -> (LoadContext<'a>, &'a mut SceneRef) {
         (
-            ContextRef {
+            LoadContext {
                 window: &mut self.window,
-                time,
-                input: &mut self.input,
-                audio: &self.audio,
-                assets,
-                resources: &mut self.resources,
             },
-            SceneRef {
-                render: &mut self.render,
-            },
-        )
-    }
-
-    pub fn split_draw<'a>(
-        &'a mut self,
-        time: &'a mut Time,
-        assets: &'a mut Assets,
-        imgui: &'a mut Imgui,
-    ) -> (DrawContext<'a>, Draw<'a>) {
-        let frame = ImguiFrame {
-            logical: self.window.size(),
-            pixel: self.window.pixel_size(),
-            delta: time.delta(),
-        };
-
-        (
-            ContextRef {
-                window: &mut self.window,
-                time,
-                input: &mut self.input,
-                audio: &self.audio,
-                assets,
-                resources: &mut self.resources,
-            },
-            Draw::new(&mut self.packet, assets, imgui, frame),
+            scene,
         )
     }
 }

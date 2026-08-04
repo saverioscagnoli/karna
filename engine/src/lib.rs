@@ -1,160 +1,91 @@
-mod assets;
 mod builder;
+mod conf;
 mod event;
+mod log;
 mod render;
 mod scene;
-mod sound;
 mod window;
 
 use std::mem;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Instant;
 
 use gpu::Gpu;
-use imgui::Imgui;
 use logging::debug;
 use logging::error;
 use logging::fatal;
 use logging::info;
-use logging::trace;
 use sdl3::Sdl;
 use sdl3::VideoSubsystem;
-use sdl3::gpu::PresentMode;
 use utils::FastHashMap;
-use utils::SleepTimer;
-use utils::WindowId;
 
-use crate::assets::AssetServer;
+use crate::conf::config;
 use crate::event::AppEvent;
 use crate::event::EventQueue;
-use crate::event::SdlEvent;
-use crate::event::SdlWindowEvent;
-use crate::render::Renderer;
-use crate::render::packet::FramePacket;
-use crate::render::retained::RenderWorld;
-use crate::scene::World;
-use crate::sound::SharedMixer;
-use crate::window::audio::AudioHandle;
-use crate::window::context::WindowContext;
+use crate::window::WindowEntry;
+use crate::window::WindowId;
+use crate::window::context::UserContext;
 use crate::window::platform::PlatformWindow;
-use crate::window::resources::Resources;
-use crate::window::state::Frame;
+use crate::window::state::SceneSlot;
 use crate::window::state::WindowState;
-use crate::window::time::TimeCommand;
 
-pub use crate::assets::Assets;
-pub use crate::assets::audio::Audio;
-pub use crate::assets::audio::AudioLength;
-pub use crate::assets::font::Font;
-pub use crate::assets::font::Rasterize;
-pub use crate::assets::image::Image;
 pub use crate::builder::AppBuilder;
 pub use crate::builder::WindowBuilder;
-pub use crate::render::MESH_SHADER;
-pub use crate::render::camera::Camera;
-pub use crate::render::camera::Fit;
-pub use crate::render::camera::Projection;
-pub use crate::render::color::Color;
-pub use crate::render::geometry::Geometry;
-pub use crate::render::geometry::cube;
-pub use crate::render::immediate::Draw;
-pub use crate::render::layer::Layer;
-pub use crate::render::material::AlphaMode;
-pub use crate::render::material::Material;
-pub use crate::render::material::MaterialDesc;
-pub use crate::render::material::PassState;
-pub use crate::render::mesh::Mesh;
-pub use crate::render::retained::SceneRef;
-pub use crate::render::vertex::MeshVertex;
+pub use crate::log::init_logging;
+pub use crate::render::draw::Draw;
+pub use crate::render::scene_ref::SceneRef;
 pub use crate::scene::Scene;
+pub use crate::scene::SceneId;
 pub use crate::window::WindowHandle;
-pub use crate::window::context::ContextRef;
 pub use crate::window::context::DrawContext;
-pub use crate::window::input::Input;
-pub use crate::window::input::Key;
-pub use crate::window::input::MouseButton;
-pub use crate::window::time::Time;
-pub use imgui::Condition;
-pub use imgui::Ui;
-pub use imgui::WindowFlags;
-pub use imgui::WindowToken;
-
-struct WindowEntry {
-    platform: PlatformWindow,
-    state: WindowState,
-    imgui: Imgui,
-}
+pub use crate::window::context::LoadContext;
+pub use crate::window::context::UpdateContext;
 
 pub struct App {
-    queued_windows: Vec<WindowBuilder>,
-
+    requested_at_creation: Vec<WindowBuilder>,
     windows: FastHashMap<WindowId, WindowEntry>,
     should_quit: bool,
-    sleeper: SleepTimer,
-    events: EventQueue<AppEvent>,
-    asset_server: AssetServer,
-    assets: Assets,
-    mixer: Arc<SharedMixer>,
-    renderer: Renderer,
+    app_events: EventQueue<AppEvent>,
+
+    // SDL / SDL wrappers
     gpu: Gpu,
     video: VideoSubsystem,
     sdl: Sdl,
 }
 
 impl App {
-    pub(crate) fn new(asset_workers: usize, asset_root: Option<PathBuf>) -> Self {
-        let sdl = match sdl3::init() {
-            Ok(sdl) => sdl,
-            Err(e) => fatal!("Failed to initialize sdl: {}", e),
-        };
-        debug!("SDL3 initialized.");
+    pub(crate) fn new() -> Self {
+        let conf = config();
 
-        let sleeper = SleepTimer::calibrated();
+        let sdl = match sdl3::init() {
+            Ok(s) => s,
+            Err(e) => fatal!("Failed to initialize SDL{}: {}", conf.sdl_version, e),
+        };
+
+        info!("SDL{} Initialized.", conf.sdl_version);
 
         let video = match sdl.video() {
             Ok(v) => v,
             Err(e) => fatal!("Failed to initialize video subsystem: {}", e),
         };
+
         debug!("Video subsystem initialized.");
 
-        let mut gpu = match Gpu::init() {
-            Ok(gpu) => gpu,
-            Err(e) => fatal!("Failed to initialize gpu: {}", e),
+        let gpu = match Gpu::init() {
+            Ok(g) => g,
+            Err(e) => fatal!("Failed to initialize GPU: {}", e),
         };
 
-        gpu.log_shader_formats();
         gpu.log_info();
 
-        render::load_builtin_shaders(&mut gpu);
+        // Load shaders...
         debug!("Loaded built-in shaders.");
 
-        let mixer = match SharedMixer::open() {
-            Ok(m) => Arc::new(m),
-            Err(e) => fatal!("Failed to initialize audio: {}", e),
-        };
-
-        debug!("Audio mixer initialized.");
-
-        let root = match asset_root {
-            Some(r) => r,
-            None => assets::resolve_base_path(),
-        };
-
-        let (asset_server, assets) = assets::spawn(root, asset_workers, Arc::clone(&mixer));
-
-        info!("Application initialized.");
+        info!("Application initialized. (karna v{})", conf.karna_verson);
 
         Self {
-            queued_windows: Vec::new(),
+            requested_at_creation: Vec::new(),
             windows: FastHashMap::default(),
             should_quit: false,
-            sleeper,
-            events: EventQueue::new(),
-            asset_server,
-            assets,
-            mixer,
-            renderer: Renderer::new(),
+            app_events: EventQueue::new(),
             gpu,
             video,
             sdl,
@@ -166,64 +97,40 @@ impl App {
     }
 
     fn spawn_window(&mut self, b: WindowBuilder) {
-        let window = match self
+        let conf = config();
+        let sdl_window = match self
             .video
             .window(&b.title, b.size.width, b.size.height)
             .build()
         {
             Ok(w) => w,
-            Err(e) => {
-                error!("Failed to create window: {}", e);
-                return;
-            }
+            Err(e) => return error!("Failed to create window: {}", e),
         };
 
-        if let Err(e) = self.gpu.claim_window(&window) {
-            error!("The GPU failed to claim the window: {}", e);
+        if let Err(e) = self.gpu.claim_window(&sdl_window) {
+            error!("GPU failed to claim the window: {}", e);
             return;
+        };
+
+        self.gpu.set_present_mode(&sdl_window, conf.present_mode);
+
+        let mut scenes = FastHashMap::default();
+
+        for (id, builder) in b.scenes {
+            scenes.insert(id, SceneSlot::Unloaded(builder));
         }
 
-        self.gpu.set_present_mode(&window, PresentMode::Immediate);
-
-        let platform = PlatformWindow::new(window);
-
-        debug!(
-            "window {:?} logical {:?} pixels {:?} density {}",
-            platform.id(),
-            platform.size(),
-            platform.pixel_size(),
-            platform.inner().pixel_density() / platform.inner().display_scale() // SDL_GetWindowPixelDensity / SDL_GetWindowDisplayScale
-        );
-
-        let handle = WindowHandle::new(
-            platform.id(),
-            platform.size(),
-            platform.pixel_size(),
-            platform.title(),
-            platform.is_resizable(),
-            self.events.dispatcher(),
-        );
-
-        let state = WindowState::new(
-            WindowContext {
-                window: handle,
-                input: Input::default(),
-                audio: AudioHandle::new(Arc::clone(&self.mixer)),
-                resources: Resources::default(),
-                render: RenderWorld::default(),
-                packet: FramePacket::default(),
+        let window = PlatformWindow::new(sdl_window);
+        let state = WindowState {
+            ctx: UserContext {
+                window: WindowHandle::new(&window, self.app_events.dispatcher()),
             },
-            World::new(b.scenes, b.active_scenes),
-        );
+            scenes,
+            active_scenes: b.active_scenes,
+        };
 
-        self.windows.insert(
-            state.window.id(),
-            WindowEntry {
-                platform,
-                state,
-                imgui: Imgui::new(),
-            },
-        );
+        self.windows
+            .insert(window.id(), WindowEntry { window, state });
     }
 
     fn close_window(&mut self, id: WindowId) {
@@ -232,105 +139,31 @@ impl App {
             return;
         };
 
-        self.gpu.release_window(&entry.platform.inner());
-        info!("Closing window '{}'", entry.platform.title());
+        self.gpu.release_window(&entry.window);
 
         if self.windows.is_empty() {
             self.should_quit = true;
         }
+
+        info!(
+            "Closing window (id: {}, title: {})",
+            entry.window.id(),
+            entry.window.title()
+        )
     }
 
     fn quit(&mut self) {
         debug!("Quit signal received.");
+        let ids = self.windows.iter().map(|(id, _)| *id).collect::<Vec<_>>();
 
-        for (_, entry) in self.windows.drain() {
-            self.gpu.release_window(&entry.platform.inner());
+        for id in ids {
+            self.close_window(id);
         }
-
-        self.should_quit = true;
-    }
-
-    fn handle_sdl_event(&mut self, event: SdlEvent) {
-        match event {
-            SdlEvent::Quit { .. } => return self.quit(),
-
-            SdlEvent::Window {
-                window_id,
-                win_event: SdlWindowEvent::CloseRequested,
-                ..
-            } => return self.close_window(window_id),
-
-            event => {
-                if let Some(id) = event.get_window_id()
-                    && let Some(entry) = self.windows.get_mut(&id)
-                {
-                    entry.imgui.handle_event(&event);
-
-                    // Whatever the ui swallowed must not also reach the game,
-                    // or clicking a slider fires the scene's click handler too.
-                    let capture = entry.imgui.capture();
-                    let for_game = match event {
-                        SdlEvent::MouseMotion { .. }
-                        | SdlEvent::MouseButtonDown { .. }
-                        | SdlEvent::MouseButtonUp { .. }
-                        | SdlEvent::MouseWheel { .. } => !capture.mouse,
-
-                        SdlEvent::KeyDown { .. }
-                        | SdlEvent::KeyUp { .. }
-                        | SdlEvent::TextInput { .. } => !capture.keyboard,
-
-                        _ => true,
-                    };
-
-                    if for_game {
-                        entry.state.handle_window_event(event, &mut entry.platform);
-                    }
-                }
-            }
-        }
-    }
-
-    fn drain_app_events(&mut self) {
-        let mut batch = self.events.take();
-
-        for event in batch.drain(..) {
-            trace!("Received app event: {:?}", event);
-
-            match event {
-                AppEvent::Time(req) => {
-                    let Some(entry) = self.windows.get_mut(&req.window) else {
-                        error!("Received a command for a closed window.");
-                        continue;
-                    };
-
-                    match req.command {
-                        TimeCommand::SetTargetFps(t) => entry.state.pacer.set_fps(t),
-                        TimeCommand::SetTargetTps(t) => entry.state.clock.set_tps(t),
-                        TimeCommand::SetPresentMode(mode) => {
-                            if self.gpu.supports_present_mode(entry.platform.inner(), mode) {
-                                self.gpu.set_present_mode(&entry.platform.inner(), mode);
-                            }
-                        }
-                    }
-                }
-
-                AppEvent::Window(req) => {
-                    let Some(entry) = self.windows.get_mut(&req.window) else {
-                        error!("Received a command for a closed window.");
-                        continue;
-                    };
-
-                    entry.platform.apply(req.command);
-                }
-            }
-        }
-
-        self.events.restore(batch);
     }
 
     pub fn run(mut self) {
-        for b in mem::take(&mut self.queued_windows) {
-            self.spawn_window(b);
+        for builder in mem::take(&mut self.requested_at_creation) {
+            self.spawn_window(builder);
         }
 
         let mut pump = match self.sdl.event_pump() {
@@ -338,92 +171,14 @@ impl App {
             Err(e) => fatal!("Failed to initialize SDL event pump: {}", e),
         };
 
-        for e in self.windows.values_mut() {
-            e.state.load(Frame {
-                assets: &mut self.assets,
-                mode: self.gpu.present_mode(),
-                events: self.events.dispatcher(),
-            });
+        debug!("SDL event pump initialized.");
+
+        for entry in self.windows.values_mut() {
+            entry.state.load_active();
         }
 
-        while !self.should_quit {
-            for event in pump.poll_iter() {
-                self.handle_sdl_event(event);
-            }
+        debug!("Loaded initially active scenes.");
 
-            self.drain_app_events();
-            self.assets.poll(&self.gpu);
-
-            let now = Instant::now();
-
-            for e in self.windows.values_mut() {
-                e.state.window.sync(&e.platform);
-                e.state.clock.advance(now);
-
-                while e.state.clock.should_tick() {
-                    e.state.fixed_update(Frame {
-                        assets: &mut self.assets,
-                        mode: self.gpu.present_mode(),
-                        events: self.events.dispatcher(),
-                    });
-                    e.state.clock.consume(now);
-                }
-
-                if !e.state.pacer.due(now) {
-                    continue;
-                }
-
-                e.state.update(Frame {
-                    assets: &mut self.assets,
-                    mode: self.gpu.present_mode(),
-                    events: self.events.dispatcher(),
-                });
-
-                e.state.draw(
-                    Frame {
-                        assets: &mut self.assets,
-                        mode: self.gpu.present_mode(),
-                        events: self.events.dispatcher(),
-                    },
-                    &mut e.imgui,
-                );
-
-                let draw_data = e.imgui.end_frame();
-
-                self.renderer.present(
-                    &self.gpu,
-                    &e.platform,
-                    &self.assets,
-                    &e.state.context.packet,
-                    &mut e.state.context.render,
-                    Some((&mut e.imgui.renderer, draw_data)),
-                );
-
-                e.state.pacer.record(now);
-                e.state.pacer.schedule(now);
-
-                e.state.flush();
-            }
-
-            let deadline = self
-                .windows
-                .values()
-                .map(|e| e.state.pacer.next_frame.min(e.state.clock.next_tick()))
-                .min();
-
-            if self.gpu.present_mode() == PresentMode::Vsync {
-                if deadline.is_none() {
-                    self.should_quit = true;
-                }
-            } else {
-                match deadline {
-                    Some(d) => self.sleeper.sleep_until(d),
-                    None => self.should_quit = true,
-                };
-            }
-        }
-
-        info!("All windows were closed. Exiting.");
-        self.asset_server.shutdown(self.assets);
+        self.quit();
     }
 }
