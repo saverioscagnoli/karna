@@ -15,7 +15,7 @@ use karna::render::SceneRef;
 use logging::Config;
 use logging::LevelFilter;
 
-struct S {
+struct ImguiDemo {
     pos: Vector2<f32>,
     prev_pos: Vector2<f32>,
     vel: Vector2<f32>,
@@ -23,9 +23,20 @@ struct S {
     clear_color: Vector4<f32>,
 }
 
-impl Scene for S {
-    fn load(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
+impl Scene for ImguiDemo {
+    fn load(ctx: ContextRef, scene: &mut SceneRef) -> Self
+    where
+        Self: Sized,
+    {
         ctx.time.set_target_fps(175);
+
+        Self {
+            pos: Vector2::new(10.0, 10.0),
+            prev_pos: Vector2::new(10.0, 10.0),
+            vel: Vector2::zero(),
+            fps_history: vec![0.0; 120],
+            clear_color: Color::Black.into(),
+        }
     }
 
     fn fixed_update(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
@@ -111,11 +122,15 @@ impl Scene for S {
     }
 }
 
-struct AtlasScene;
+struct ImguiAtlasDemo;
 
-impl Scene for AtlasScene {
-    fn load(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
+impl Scene for ImguiAtlasDemo {
+    fn load(ctx: ContextRef, scene: &mut SceneRef) -> Self
+    where
+        Self: Sized,
+    {
         ctx.time.set_target_fps(175);
+        Self
     }
 
     fn update(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
@@ -135,21 +150,17 @@ fn main() {
     karna::logging::init(Config::default().with_min_level(LevelFilter::Debug)).unwrap();
 
     App::builder()
-        .with_window(WindowBuilder::new().with_size((1280, 720)).with_scene(
-            0,
-            S {
-                pos: Vector2::new(10.0, 10.0),
-                prev_pos: Vector2::new(10.0, 10.0),
-                vel: Vector2::zero(),
-                fps_history: vec![0.0; 120],
-                clear_color: Color::Black.into(),
-            },
-            true,
-        ))
+        .with_window(
+            WindowBuilder::new()
+                .with_size((1280, 720))
+                .with_scene::<ImguiDemo>(0)
+                .with_active_scene(0),
+        )
         .with_window(
             WindowBuilder::new()
                 .with_size((1024, 1024))
-                .with_scene(1, AtlasScene, true),
+                .with_scene::<ImguiAtlasDemo>(0)
+                .with_active_scene(0),
         )
         .build()
         .run();

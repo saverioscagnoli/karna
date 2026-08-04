@@ -1,6 +1,3 @@
-use std::ops::Deref;
-use std::ops::DerefMut;
-
 use utils::Handle;
 
 use crate::assets::Assets;
@@ -27,10 +24,10 @@ impl From<&Transform> for ModelPacket {
 }
 
 pub struct Mesh {
-    pub geometry: Handle<Geometry>,
-    pub material: Handle<Material>,
-    pub transform: Transform,
-    pub visible: bool,
+    geometry: Handle<Geometry>,
+    material: Handle<Material>,
+    transform: Transform,
+    visible: bool,
 }
 
 impl Mesh {
@@ -48,6 +45,26 @@ impl Mesh {
         self
     }
 
+    pub fn geometry(&self) -> Handle<Geometry> {
+        self.geometry
+    }
+
+    pub fn set_geometry(&mut self, geometry: Handle<Geometry>) {
+        self.geometry = geometry;
+    }
+
+    pub fn material(&self) -> Handle<Material> {
+        self.material
+    }
+
+    pub(crate) fn transform(&self) -> &Transform {
+        &self.transform
+    }
+
+    pub fn set_material(&mut self, material: Handle<Material>) {
+        self.material = material;
+    }
+
     pub fn position(&self) -> &math::Vector3<f32> {
         &self.transform.position
     }
@@ -61,6 +78,61 @@ impl Mesh {
         P: Into<math::Vector3<f32>>,
     {
         self.transform.position = position.into();
+    }
+
+    pub fn position_x(&self) -> f32 {
+        self.transform.position.x
+    }
+
+    pub fn position_x_mut(&mut self) -> &mut f32 {
+        &mut self.transform.position.x
+    }
+
+    pub fn set_position_x(&mut self, x: f32) {
+        self.transform.position.x = x;
+    }
+
+    pub fn move_x(&mut self, x: f32) {
+        self.transform.position.x += x;
+    }
+
+    pub fn position_y(&self) -> f32 {
+        self.transform.position.y
+    }
+
+    pub fn position_y_mut(&mut self) -> &mut f32 {
+        &mut self.transform.position.y
+    }
+
+    pub fn set_position_y(&mut self, y: f32) {
+        self.transform.position.y = y;
+    }
+
+    pub fn move_y(&mut self, y: f32) {
+        self.transform.position.y += y;
+    }
+
+    pub fn position_z(&self) -> f32 {
+        self.transform.position.z
+    }
+
+    pub fn position_z_mut(&mut self) -> &mut f32 {
+        &mut self.transform.position.z
+    }
+
+    pub fn set_position_z(&mut self, z: f32) {
+        self.transform.position.z = z;
+    }
+
+    pub fn move_z(&mut self, z: f32) {
+        self.transform.position.z += z;
+    }
+
+    pub fn r#move<P>(&mut self, position: P)
+    where
+        P: Into<math::Vector3<f32>>,
+    {
+        self.transform.position += position.into()
     }
 
     pub fn scale(&self) -> &math::Vector3<f32> {
@@ -78,6 +150,61 @@ impl Mesh {
         self.transform.scale = scale.into();
     }
 
+    pub fn scale_x(&self) -> f32 {
+        self.transform.scale.x
+    }
+
+    pub fn scale_x_mut(&mut self) -> &mut f32 {
+        &mut self.transform.scale.x
+    }
+
+    pub fn set_scale_x(&mut self, x: f32) {
+        self.transform.scale.x = x;
+    }
+
+    pub fn scaled_x(&mut self, x: f32) {
+        self.transform.scale.x += x;
+    }
+
+    pub fn scale_y(&self) -> f32 {
+        self.transform.scale.y
+    }
+
+    pub fn scale_y_mut(&mut self) -> &mut f32 {
+        &mut self.transform.scale.y
+    }
+
+    pub fn set_scale_y(&mut self, y: f32) {
+        self.transform.scale.y = y;
+    }
+
+    pub fn scaled_y(&mut self, y: f32) {
+        self.transform.scale.y += y;
+    }
+
+    pub fn scale_z(&self) -> f32 {
+        self.transform.scale.z
+    }
+
+    pub fn scale_z_mut(&mut self) -> &mut f32 {
+        &mut self.transform.scale.z
+    }
+
+    pub fn set_scale_z(&mut self, z: f32) {
+        self.transform.scale.z = z;
+    }
+
+    pub fn scaled_z(&mut self, z: f32) {
+        self.transform.scale.z += z;
+    }
+
+    pub fn scaled<S>(&mut self, scale: S)
+    where
+        S: Into<math::Vector3<f32>>,
+    {
+        self.transform.scale += scale.into()
+    }
+
     pub fn rotation(&self) -> &math::Vector3<f32> {
         &self.transform.rotation
     }
@@ -93,12 +220,48 @@ impl Mesh {
         self.transform.rotation = rotation.into();
     }
 
+    pub fn rotation_x(&self) -> f32 {
+        self.transform.rotation.x
+    }
+
+    pub fn rotation_x_mut(&mut self) -> &mut f32 {
+        &mut self.transform.rotation.x
+    }
+
+    pub fn set_rotation_x(&mut self, x: f32) {
+        self.transform.rotation.x = x;
+    }
+
     pub fn rotate_x(&mut self, x: f32) {
         self.transform.rotation.x += x;
     }
 
+    pub fn rotation_y(&self) -> f32 {
+        self.transform.rotation.y
+    }
+
+    pub fn rotation_y_mut(&mut self) -> &mut f32 {
+        &mut self.transform.rotation.y
+    }
+
+    pub fn set_rotation_y(&mut self, y: f32) {
+        self.transform.rotation.y = y;
+    }
+
     pub fn rotate_y(&mut self, y: f32) {
         self.transform.rotation.y += y;
+    }
+
+    pub fn rotation_z(&self) -> f32 {
+        self.transform.rotation.z
+    }
+
+    pub fn rotation_z_mut(&mut self) -> &mut f32 {
+        &mut self.transform.rotation.z
+    }
+
+    pub fn set_rotation_z(&mut self, z: f32) {
+        self.transform.rotation.z = z;
     }
 
     pub fn rotate_z(&mut self, z: f32) {
@@ -110,6 +273,26 @@ impl Mesh {
         R: Into<math::Vector3<f32>>,
     {
         self.transform.rotation += rotation.into();
+    }
+
+    pub fn is_visible(&self) -> bool {
+        self.visible
+    }
+
+    pub fn set_visible(&mut self, v: bool) {
+        self.visible = v;
+    }
+
+    pub fn toggle_visible(&mut self) {
+        self.visible = !self.visible
+    }
+
+    pub fn show(&mut self) {
+        self.visible = true;
+    }
+
+    pub fn hide(&mut self) {
+        self.visible = false;
     }
 }
 

@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use karna::App;
 use karna::ContextRef;
 use karna::DrawContext;
@@ -9,13 +11,18 @@ use karna::render::Color;
 use karna::render::Draw;
 use karna::render::SceneRef;
 
-struct S {
+struct TextNewlineDemo {
     jbmono: Handle<Font>,
 }
 
-impl Scene for S {
-    fn load(&mut self, ctx: ContextRef, _s: &mut SceneRef) {
-        self.jbmono = ctx.assets.load_font("assets/jbmono.ttf", 21.5);
+impl Scene for TextNewlineDemo {
+    fn load(ctx: ContextRef, scene: &mut SceneRef) -> Self
+    where
+        Self: Sized,
+    {
+        let jbmono = ctx.assets.load_font("assets/jbmono.ttf", 21.5);
+
+        Self { jbmono }
     }
 
     fn update(&mut self, _c: ContextRef, _s: &mut SceneRef) {}
@@ -43,13 +50,8 @@ fn main() {
             WindowBuilder::new()
                 .with_title("nlcheck")
                 .with_size((800, 800))
-                .with_scene(
-                    0,
-                    S {
-                        jbmono: Handle::INVALID,
-                    },
-                    true,
-                ),
+                .with_scene::<TextNewlineDemo>(0)
+                .with_active_scene(0),
         )
         .with_asset_root("examples/")
         .build()

@@ -24,6 +24,7 @@ pub mod imgui {
 }
 
 pub mod render {
+    pub use engine::AlphaMode;
     pub use engine::Camera;
     pub use engine::Color;
     pub use engine::Draw;
@@ -31,6 +32,7 @@ pub mod render {
     pub use engine::Geometry;
     pub use engine::Layer;
     pub use engine::MESH_SHADER;
+    pub use engine::Material;
     pub use engine::MaterialDesc;
     pub use engine::Mesh;
     pub use engine::MeshVertex;

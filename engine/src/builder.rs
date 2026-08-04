@@ -9,7 +9,6 @@ use crate::scene::{Scene, SceneFactory};
 pub struct WindowBuilder {
     pub(crate) title: String,
     pub(crate) size: math::Size<u32>,
-    pub(crate) resizable: bool,
     pub(crate) scenes: Vec<(u32, SceneFactory)>,
     pub(crate) active_scenes: Vec<u32>,
 }
@@ -19,7 +18,6 @@ impl Default for WindowBuilder {
         Self {
             title: String::from("My Window"),
             size: math::Size::new(800, 600),
-            resizable: false,
             scenes: Vec::new(),
             active_scenes: Vec::new(),
         }

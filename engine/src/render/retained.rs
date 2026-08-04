@@ -35,7 +35,7 @@ impl ViewConfig {
 }
 
 pub struct RenderWorld {
-    pub clear_color: Color,
+    pub(crate) clear_color: Color,
     cameras: SlotMap<Camera>,
     views: [ViewConfig; 3],
     pub(crate) geometries: GeometryRegistry,
@@ -103,6 +103,7 @@ impl RenderWorld {
             Some(camera) => camera.packet(),
             None => CameraPacket {
                 view_projection: Projection::standard_2d(viewport).matrix(),
+                position: math::Vector4::zero(),
             },
         }
     }
@@ -112,25 +113,22 @@ impl RenderWorld {
         items.clear();
 
         for mesh in self.meshes.values() {
-            if !mesh.visible {
+            if !mesh.is_visible() {
                 continue;
             }
 
-            let material = self.materials.get(mesh.material);
+            let material = self.materials.get(mesh.material());
 
             items.push(DrawItem {
                 key: sort_key(
                     material.pass_id,
                     material.bind_id,
-                    mesh.material,
-                    mesh.geometry,
+                    mesh.material(),
+                    mesh.geometry(),
                 ),
-                geometry: mesh.geometry,
-                material: mesh.material,
-                model: ModelPacket {
-                    model: mesh.transform.matrix(),
-                    normal_matrix: mesh.transform.normal_matrix(),
-                },
+                geometry: mesh.geometry(),
+                material: mesh.material(),
+                model: ModelPacket::from(mesh.transform()),
             });
         }
 
@@ -206,6 +204,26 @@ impl<'a> SceneRef<'a> {
         self.render.materials.intern(assets, desc)
     }
 
+    pub fn get_material(&self, handle: Handle<Material>) -> &Material {
+        self.render.materials.get(handle)
+    }
+
+    pub fn get_material_mut(&mut self, handle: Handle<Material>) -> &mut Material {
+        self.render.materials.get_mut(handle)
+    }
+
+    /// The way to actually change a live material's appearance: mutates its
+    /// [`MaterialDesc`] and recomputes the pipeline pass, texture binding,
+    /// and packed uniforms from it. Mutating through [`Self::get_material_mut`]
+    /// changes `Material::desc` but leaves the cached GPU uniforms stale, so
+    /// nothing on screen moves.
+    pub fn edit_material<F>(&mut self, assets: &Assets, handle: Handle<Material>, edit: F)
+    where
+        F: FnOnce(&mut MaterialDesc),
+    {
+        self.render.materials.update(assets, handle, edit);
+    }
+
     pub fn create_textured_material(
         &mut self,
         assets: &Assets,
@@ -222,11 +240,9 @@ impl<'a> SceneRef<'a> {
     }
 
     pub fn tinted(image: Handle<Image>, color: Color) -> MaterialDesc {
-        let tint: math::Vector4<f32> = color.into();
-
         MaterialDesc::new()
-            .with_uniform([tint.x, tint.y, tint.z, tint.w])
-            .with_image(image)
+            .with_base_color(color)
+            .with_base_color_map(image)
     }
 
     pub fn add_mesh(&mut self, mesh: Mesh) -> Handle<Mesh> {

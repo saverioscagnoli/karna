@@ -1,4 +1,3 @@
-use core::panic;
 use std::mem;
 
 use imgui::Imgui;
@@ -39,13 +38,6 @@ pub struct SceneRegistry {
 }
 
 impl SceneRegistry {
-    pub fn register<S: Scene>(&mut self, id: u32) {
-        self.scenes.insert(
-            id,
-            SceneSlot::Unloaded(Box::new(|ctx, scene| Box::new(S::load(ctx, scene)))),
-        );
-    }
-
     pub fn insert(&mut self, id: u32, factory: SceneFactory) {
         if self.scenes.contains_key(&id) {
             fatal!("scene id {:?} registered twice", id);
@@ -60,19 +52,6 @@ impl SceneRegistry {
             _ => None,
         }
     }
-
-    fn get_mut(&mut self, id: u32) -> &mut Box<dyn Scene> {
-        match self.scenes.get_mut(&id).expect("Failed to get scene") {
-            SceneSlot::Loaded(scene) => scene,
-            _ => panic!("df"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum ScenePhase {
-    FixedUpdate,
-    Update,
 }
 
 fn load_one(
@@ -87,11 +66,11 @@ fn load_one(
         None => fatal!("no scene registered with id {:?}", id),
     };
 
-    // The factory is FnOnce, so it must be moved out of the map to be called.
+    // The factory is FnOnce, so it must be moved out of the map to be called
     let factory = match mem::replace(slot, SceneSlot::Poisoned) {
         SceneSlot::Unloaded(f) => f,
 
-        // Loading twice is a no-op, not an error.
+        // Loading twice is a no-op, not an error
         loaded @ SceneSlot::Loaded(_) => {
             *slot = loaded;
             return;

@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+use std::alloc::handle_alloc_error;
 use std::u32;
 
 use karna::App;
@@ -23,8 +24,13 @@ struct AudioDemo {
 }
 
 impl Scene for AudioDemo {
-    fn load(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
-        self.mammamia = ctx.assets.load_audio("assets/mamma-mia.mp3");
+    fn load(ctx: ContextRef, scene: &mut SceneRef) -> Self
+    where
+        Self: Sized,
+    {
+        let mammamia = ctx.assets.load_audio("assets/mamma-mia.mp3");
+
+        Self { mammamia, vol: 0.5 }
     }
 
     fn update(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
@@ -64,14 +70,8 @@ fn main() {
             WindowBuilder::new()
                 .with_title("Audio Demo")
                 .with_size((1280, 720))
-                .with_scene(
-                    0,
-                    AudioDemo {
-                        mammamia: Handle::INVALID,
-                        vol: 0.5,
-                    },
-                    true,
-                ),
+                .with_scene::<AudioDemo>(0)
+                .with_active_scene(0),
         )
         .with_asset_root("examples/")
         .build()

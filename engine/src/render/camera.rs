@@ -7,6 +7,9 @@ use logging::warn;
 #[derive(Debug, Clone, Copy)]
 pub struct CameraPacket {
     pub view_projection: math::Matrix4<f32>,
+    /// World-space eye position, for view-dependent shading (specular).
+    /// `w` is unused padding, kept at 1.0.
+    pub position: math::Vector4<f32>,
 }
 
 #[derive(Debug)]
@@ -289,6 +292,7 @@ impl Camera {
     pub(crate) fn packet(&self) -> CameraPacket {
         CameraPacket {
             view_projection: self.projection.matrix().matmul(&self.view_matrix()),
+            position: math::Vector4::new(self.position.x, self.position.y, self.position.z, 1.0),
         }
     }
 }

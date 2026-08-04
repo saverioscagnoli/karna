@@ -15,15 +15,19 @@ use karna::render::Draw;
 use karna::render::SceneRef;
 use logging::info;
 
-struct S {
+struct ImageDemo {
     pcb: Handle<Image>,
 }
 
-impl Scene for S {
-    fn load(&mut self, ctx: ContextRef, scene: &mut SceneRef) {
-        self.pcb = ctx.assets.load_image("assets/pcb.png");
-
+impl Scene for ImageDemo {
+    fn load(ctx: ContextRef, scene: &mut SceneRef) -> Self
+    where
+        Self: Sized,
+    {
         ctx.window.set_resizable(true);
+        let pcb = ctx.assets.load_image("assets/pcb.png");
+
+        Self { pcb }
     }
 
     fn fixed_update(&mut self, ctx: ContextRef, scene: &mut SceneRef) {}
@@ -53,13 +57,8 @@ fn main() {
             WindowBuilder::new()
                 .with_title("Image Demo")
                 .with_size((1280, 720))
-                .with_scene(
-                    0,
-                    S {
-                        pcb: Handle::INVALID,
-                    },
-                    true,
-                ),
+                .with_scene::<ImageDemo>(0)
+                .with_active_scene(0),
         )
         .with_asset_root("examples/")
         .build()

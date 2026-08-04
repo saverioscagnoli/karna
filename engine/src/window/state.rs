@@ -10,7 +10,6 @@ use crate::event::EventDispatcher;
 use crate::event::SdlEvent;
 use crate::event::SdlWindowEvent;
 use crate::render::layer::Layer;
-use crate::scene::ScenePhase;
 use crate::scene::World;
 use crate::window::clock::Clock;
 use crate::window::context::WindowContext;
