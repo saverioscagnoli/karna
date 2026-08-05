@@ -1,9 +1,14 @@
+pub mod clock;
 pub mod context;
+pub mod pacer;
 pub mod platform;
 pub mod state;
+pub mod time;
 
 use std::rc::Rc;
 
+use crate::Color;
+use crate::conf::config;
 use crate::event::AppEvent;
 use crate::event::EventDispatcher;
 use crate::event::WindowEvent;
@@ -18,18 +23,20 @@ pub struct WindowHandle {
     title: Rc<str>,
     size: math::Size<u32>,
     pixel_size: math::Size<u32>,
-    resizable: bool,
+    clear_color: Color,
     dispatcher: EventDispatcher<AppEvent>,
 }
 
 impl WindowHandle {
     pub(crate) fn new(window: &PlatformWindow, dispatcher: EventDispatcher<AppEvent>) -> Self {
+        let conf = config();
+
         Self {
             id: window.id(),
             title: window.title().into(),
             size: window.size().into(),
             pixel_size: window.size_in_pixels().into(),
-            resizable: false,
+            clear_color: conf.clear_color,
             dispatcher,
         }
     }
@@ -89,6 +96,21 @@ impl WindowHandle {
 
     pub fn pixel_height(&self) -> u32 {
         self.pixel_size.height
+    }
+
+    pub fn clear_color(&self) -> Color {
+        self.clear_color
+    }
+
+    pub fn clear_color_mut(&mut self) -> &mut Color {
+        &mut self.clear_color
+    }
+
+    pub fn set_clear_color<C>(&mut self, color: C)
+    where
+        C: Into<Color>,
+    {
+        self.clear_color = color.into();
     }
 }
 

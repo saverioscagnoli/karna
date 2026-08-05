@@ -14,11 +14,11 @@ pub use log::trace;
 pub use log::warn;
 use parking_lot::RwLock;
 
-pub use crate::style::Color;
 pub use crate::style::Colorize;
 pub use crate::style::DefaultFormatter;
 pub use crate::style::Formatter;
 pub use crate::style::Style;
+pub use crate::style::TextColor;
 pub use crate::target::Console;
 pub use crate::target::File;
 pub use crate::target::Output;

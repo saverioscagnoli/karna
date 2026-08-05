@@ -32,8 +32,6 @@ impl ByteSize {
     /// The maximum representable byte size.
     pub const MAX: Self = Self(u64::MAX);
 
-    // Constructors
-
     /// Creates a new `ByteSize` from the specified number of bytes.
     pub const fn from_bytes(bytes: u64) -> Self {
         Self(bytes)

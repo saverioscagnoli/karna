@@ -10,8 +10,9 @@ pub use engine::WindowHandle;
 pub use engine::init_logging;
 
 pub mod render {
+    pub use engine::Color;
     pub use engine::Draw;
-    pub use engine::SceneRef;
+    pub use engine::SceneView;
 }
 
 pub use logging;

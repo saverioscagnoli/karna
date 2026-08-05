@@ -1,32 +1,44 @@
-use crate::render::scene_ref::SceneRef;
 use crate::window::WindowHandle;
+use crate::window::time::Time;
 
 pub struct UserContext {
     pub window: WindowHandle,
 }
 
 pub struct LoadContext<'a> {
-    window: &'a mut WindowHandle,
+    pub window: &'a mut WindowHandle,
+    pub time: &'a mut Time,
 }
 
 pub struct UpdateContext<'a> {
-    window: &'a mut WindowHandle,
+    pub window: &'a mut WindowHandle,
+    pub time: &'a mut Time,
 }
 
 pub struct DrawContext<'a> {
-    window: &'a mut WindowHandle,
+    pub window: &'a mut WindowHandle,
+    pub time: &'a mut Time,
 }
 
 impl UserContext {
-    pub fn split_load<'a>(
-        &'a mut self,
-        scene: &'a mut SceneRef,
-    ) -> (LoadContext<'a>, &'a mut SceneRef) {
-        (
-            LoadContext {
-                window: &mut self.window,
-            },
-            scene,
-        )
+    pub fn load<'a>(&'a mut self, time: &'a mut Time) -> LoadContext<'a> {
+        LoadContext {
+            window: &mut self.window,
+            time,
+        }
+    }
+
+    pub fn update<'a>(&'a mut self, time: &'a mut Time) -> UpdateContext<'a> {
+        UpdateContext {
+            window: &mut self.window,
+            time,
+        }
+    }
+
+    pub fn draw<'a>(&'a mut self, time: &'a mut Time) -> DrawContext<'a> {
+        DrawContext {
+            window: &mut self.window,
+            time,
+        }
     }
 }

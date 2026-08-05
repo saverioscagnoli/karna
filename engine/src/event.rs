@@ -14,8 +14,23 @@ pub enum WindowEvent {
 }
 
 #[derive(Debug, Clone)]
+pub enum TimeEvent {
+    FpsTargetChangeRequested(u32),
+    TpsTargetChangeRequested(u32),
+}
+
+#[derive(Debug, Clone)]
 pub enum AppEvent {
     Window { id: WindowId, event: WindowEvent },
+    Time { id: WindowId, event: TimeEvent },
+}
+
+impl AppEvent {
+    pub fn get_window_id(&self) -> Option<WindowId> {
+        match self {
+            Self::Window { id, .. } | Self::Time { id, .. } => Some(*id),
+        }
+    }
 }
 
 #[derive(Debug)]

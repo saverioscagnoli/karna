@@ -1,18 +1,22 @@
+#![allow(unused)]
+
 use karna::prelude::*;
 
 struct Demo;
 
 impl Scene for Demo {
-    fn load(ctx: LoadContext, scene: &mut SceneRef) -> Self
+    fn load(ctx: LoadContext, scene: &mut SceneView) -> Self
     where
         Self: Sized,
     {
         Self
     }
 
-    fn update(&mut self, ctx: UpdateContext, scene: &mut SceneRef) {}
+    fn fixed_update(&mut self, ctx: UpdateContext, scene: &mut SceneView) {}
 
-    fn draw(&mut self, ctx: DrawContext, draw: &mut Draw) {}
+    fn update(&mut self, ctx: UpdateContext, scene: &mut SceneView) {}
+
+    fn draw(&mut self, ctx: DrawContext, scene: &mut SceneView, draw: &mut Draw) {}
 }
 
 fn main() {

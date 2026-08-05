@@ -180,14 +180,25 @@ impl Gpu {
         unsafe { SDL_ReleaseWindowFromGPUDevice(self.device.raw(), window.raw()) };
     }
 
-    pub fn clear(&self, window: &Window, color: Color) -> Result<(), sdl3::Error> {
+    pub fn clear(&self, window: &Window, color: Color, vsync: bool) -> Result<(), sdl3::Error> {
         let mut cmd = self.device.acquire_command_buffer()?;
 
         // Returns an error / null texture when the window is minimized or
         // the swapchain isn't ready. Don't treat that as fatal.
-        let Ok(swapchain) = cmd.wait_and_acquire_swapchain_texture(window) else {
-            cmd.cancel();
-            return Ok(());
+        let swapchain = if vsync {
+            let Ok(swapchain) = cmd.wait_and_acquire_swapchain_texture(window) else {
+                cmd.cancel();
+                return Ok(());
+            };
+
+            swapchain
+        } else {
+            let Ok(Some(swapchain)) = cmd.acquire_swapchain_texture(window) else {
+                cmd.cancel();
+                return Ok(());
+            };
+
+            swapchain
         };
 
         let targets = [ColorTargetInfo::default()

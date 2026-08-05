@@ -9,15 +9,15 @@ pub struct DefaultFormatter;
 impl Formatter for DefaultFormatter {
     fn format(&self, record: &log::Record) -> String {
         let (name, color) = match record.level() {
-            log::Level::Trace => ("TRCE", Color::Cyan),
-            log::Level::Debug => ("DEBG", Color::Magenta),
-            log::Level::Info => ("INFO", Color::Green),
-            log::Level::Warn => ("WARN", Color::Yellow),
-            log::Level::Error => ("ERRO", Color::Red),
+            log::Level::Trace => ("TRCE", TextColor::Cyan),
+            log::Level::Debug => ("DEBG", TextColor::Magenta),
+            log::Level::Info => ("INFO", TextColor::Green),
+            log::Level::Warn => ("WARN", TextColor::Yellow),
+            log::Level::Error => ("ERRO", TextColor::Red),
         };
 
         let level = format!("[{}]", name).color(color);
-        let target = format!("[{}]", record.target()).color(Color::BrightBlack);
+        let target = format!("[{}]", record.target()).color(TextColor::BrightBlack);
 
         format!("{} {} {}", level, record.args(), target)
     }
@@ -27,7 +27,7 @@ impl Formatter for DefaultFormatter {
 ///
 /// Represents the standard 8 ANSI colors available in most terminals.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Color {
+pub enum TextColor {
     /// Black color (ANSI code 30 - bg: 40)
     Black,
     /// Red color (ANSI code 31 - bg: 41)
@@ -79,7 +79,7 @@ pub enum Color {
     RGB(u8, u8, u8),
 }
 
-impl Color {
+impl TextColor {
     /// Returns the ANSI escape code for the color.
     ///
     /// # Returns
@@ -147,7 +147,7 @@ pub trait Colorize: fmt::Display {
     /// # Returns
     ///
     /// A new string with the color applied via ANSI escape codes
-    fn color(&self, color: Color) -> String {
+    fn color(&self, color: TextColor) -> String {
         format!("{}{}\x1b[0m", color.ansi_code_foreground(), self)
     }
 
@@ -160,7 +160,7 @@ pub trait Colorize: fmt::Display {
     /// # Returns
     ///
     /// A new string with the background color applied via ANSI escape codes
-    fn background(&self, color: Color) -> String {
+    fn background(&self, color: TextColor) -> String {
         format!("{}{}\x1b[0m", color.ansi_code_background(), self)
     }
 }

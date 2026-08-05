@@ -1,2 +1,3 @@
+pub mod color;
 pub mod draw;
-pub mod scene_ref;
+pub mod stage;

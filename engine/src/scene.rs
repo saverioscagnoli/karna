@@ -1,7 +1,7 @@
 use std::hash::Hash;
 
 use crate::render::draw::Draw;
-use crate::render::scene_ref::SceneRef;
+use crate::render::stage::SceneView;
 use crate::window::context::DrawContext;
 use crate::window::context::LoadContext;
 use crate::window::context::UpdateContext;
@@ -33,13 +33,13 @@ impl SceneId {
 
 #[allow(unused)]
 pub trait Scene: 'static {
-    fn load(ctx: LoadContext, scene: &mut SceneRef) -> Self
+    fn load(ctx: LoadContext, scene: &mut SceneView) -> Self
     where
         Self: Sized;
 
-    fn fixed_update(&mut self, ctx: UpdateContext, scene: &mut SceneRef) {}
-    fn update(&mut self, ctx: UpdateContext, scene: &mut SceneRef);
-    fn draw(&mut self, ctx: DrawContext, draw: &mut Draw);
+    fn fixed_update(&mut self, ctx: UpdateContext, scene: &mut SceneView) {}
+    fn update(&mut self, ctx: UpdateContext, scene: &mut SceneView);
+    fn draw(&mut self, ctx: DrawContext, scene: &mut SceneView, draw: &mut Draw);
 }
 
-pub type SceneBuilder = Box<dyn FnOnce(LoadContext, &mut SceneRef) -> Box<dyn Scene>>;
+pub type SceneBuilder = Box<dyn FnOnce(LoadContext, &mut SceneView) -> Box<dyn Scene>>;
