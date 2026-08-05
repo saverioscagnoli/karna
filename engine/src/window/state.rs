@@ -66,11 +66,11 @@ impl WindowState {
 
         let mut time = Time::snapshot(ctx.window.id, clock, pacer, dispatcher.clone());
         let mut stage = Stage::new();
-        let ctx = self.ctx.load(&mut time);
+        let ctx = ctx.load(&mut time);
         let mut view = stage.view();
         let scene = builder(ctx, &mut view);
 
-        self.scenes.insert(
+        scenes.insert(
             id,
             SceneSlot::Loaded {
                 scene,
@@ -125,7 +125,7 @@ impl WindowState {
                 continue;
             };
 
-            let (scene, stage, mut draw) = match scene {
+            let (scene, stage, draw) = match scene {
                 SceneSlot::Loaded { scene, stage, draw } => (scene, stage, draw),
                 _ => {
                     error!("Processing invalid or unloaded scene: {:?}", id);
@@ -137,7 +137,7 @@ impl WindowState {
             let ctx = ctx.draw(&mut time);
             let mut view = stage.view();
 
-            scene.draw(ctx, &mut view, &mut draw);
+            scene.draw(ctx, &mut view, draw);
         }
     }
 
