@@ -1,13 +1,11 @@
 [package]
-name = "imgui"
+name = "engine"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-dear-imgui-sys = "0.15.1"
-
-gpu.workspace = true
-logging.workspace = true
+#gpu.workspace = true
 math.workspace = true
+logging.workspace = true
 sdl3.workspace = true
 utils.workspace = true

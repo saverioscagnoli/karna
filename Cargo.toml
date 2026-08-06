@@ -4,25 +4,23 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["math", "logging", "utils", "engine", "gpu", "imgui"]
+members = ["crates/*"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 
 [workspace.dependencies]
-gpu = { path = "gpu" }
-logging = { path = "logging" }
-math = { path = "math" }
-utils = { path = "utils" }
+logging = { path = "crates/logging" }
+math = { path = "crates/math" }
+utils = { path = "crates/utils" }
+sdl3 = { path = "crates/sdl3" }
 
 crossbeam-channel = "0.5.16"
-sdl3 = { version = "0.18.4", features = ["image", "ttf", "mixer", "build-from-source-static"] }
 parking_lot = "0.12.5"
 
 [dependencies]
-engine = { path = "engine" }
-gpu.workspace = true
+engine = { path = "crates/engine" }
 logging.workspace = true
 math.workspace = true
 utils.workspace = true
