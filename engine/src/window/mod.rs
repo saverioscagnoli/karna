@@ -1,4 +1,3 @@
-pub mod clock;
 pub mod context;
 pub mod pacer;
 pub mod platform;
@@ -19,12 +18,14 @@ pub type SdlWindow = sdl3::video::Window;
 pub type WindowId = u32;
 
 pub struct WindowHandle {
-    id: WindowId,
-    title: Rc<str>,
-    size: math::Size<u32>,
-    pixel_size: math::Size<u32>,
-    clear_color: Color,
-    dispatcher: EventDispatcher<AppEvent>,
+    pub(crate) id: WindowId,
+    pub(crate) title: Rc<str>,
+    pub(crate) size: math::Size<u32>,
+    pub(crate) pixel_size: math::Size<u32>,
+    pub(crate) clear_color: Color,
+    pub(crate) mouse_position: math::Vector2<f32>,
+    pub(crate) mouse_delta: math::Vector2<f32>,
+    pub(crate) dispatcher: EventDispatcher<AppEvent>,
 }
 
 impl WindowHandle {
@@ -37,6 +38,8 @@ impl WindowHandle {
             size: window.size().into(),
             pixel_size: window.size_in_pixels().into(),
             clear_color: conf.clear_color,
+            mouse_position: math::Vector2::zero(),
+            mouse_delta: math::Vector2::zero(),
             dispatcher,
         }
     }
@@ -111,6 +114,18 @@ impl WindowHandle {
         C: Into<Color>,
     {
         self.clear_color = color.into();
+    }
+
+    pub fn mouse_position(&self) -> math::Vector2<f32> {
+        self.mouse_position
+    }
+
+    pub fn mouse_delta(&self) -> math::Vector2<f32> {
+        self.mouse_delta
+    }
+
+    pub(crate) fn roll_frame(&mut self) {
+        self.mouse_delta.set([0.0, 0.0]);
     }
 }
 

@@ -1,10 +1,10 @@
 use logging::warn;
 
+use crate::clock::Clock;
 use crate::event::AppEvent;
 use crate::event::EventDispatcher;
-use crate::event::TimeEvent;
+use crate::event::WindowEvent;
 use crate::window::WindowId;
-use crate::window::clock::Clock;
 use crate::window::pacer::FramePacer;
 
 pub struct Time {
@@ -31,13 +31,6 @@ impl Time {
         }
     }
 
-    fn send(&self, event: TimeEvent) {
-        self.dispatcher.send(AppEvent::Time {
-            id: self.window_id,
-            event,
-        });
-    }
-
     pub fn delta(&self) -> f32 {
         self.delta
     }
@@ -56,7 +49,10 @@ impl Time {
             return;
         }
 
-        self.send(TimeEvent::FpsTargetChangeRequested(t));
+        self.dispatcher.send(AppEvent::Window {
+            id: self.window_id,
+            event: WindowEvent::FpsTargetChangeRequested(t),
+        });
     }
 
     pub fn set_target_tps(&self, t: u32) {
@@ -65,6 +61,6 @@ impl Time {
             return;
         }
 
-        self.send(TimeEvent::TpsTargetChangeRequested(t))
+        self.dispatcher.send(AppEvent::TpsTargetChangeRequested(t));
     }
 }

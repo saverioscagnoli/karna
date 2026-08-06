@@ -1,6 +1,8 @@
 use crate::conf::config;
 use crate::render::color::Color;
 
+pub struct DrawPacket {}
+
 pub struct Draw {
     color: Color,
 }
@@ -28,4 +30,6 @@ impl Draw {
     {
         self.color = color.into();
     }
+
+    pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {}
 }

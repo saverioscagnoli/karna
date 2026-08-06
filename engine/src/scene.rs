@@ -10,24 +10,13 @@ use crate::window::context::UpdateContext;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SceneId(u64);
 
-pub const fn fnv1a(bytes: &[u8]) -> u64 {
-    let mut hash = 0xcbf29ce484222325;
-    let mut i = 0;
-    while i < bytes.len() {
-        hash ^= bytes[i] as u64;
-        hash = hash.wrapping_mul(0x100000001b3);
-        i += 1;
-    }
-    hash
-}
-
 impl SceneId {
     pub const fn new(id: u64) -> Self {
         Self(id)
     }
 
     pub const fn new_label(label: &'static str) -> Self {
-        Self(fnv1a(label.as_bytes()))
+        Self(utils::fnv1a(label.as_bytes()))
     }
 }
 

@@ -7,14 +7,15 @@ use std::ops::Mul;
 use std::ops::Sub;
 use std::ops::SubAssign;
 
-pub fn hash_bytes(data: &[u8]) -> u64 {
-    use std::hash::Hash;
-    use std::hash::Hasher;
-
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-
-    data.hash(&mut h);
-    h.finish()
+pub const fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325;
+    let mut i = 0;
+    while i < bytes.len() {
+        hash ^= bytes[i] as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+        i += 1;
+    }
+    hash
 }
 
 pub fn as_u8_slice<T: Sized>(slice: &[T]) -> &[u8] {

@@ -5,6 +5,7 @@ use logging::fatal;
 use utils::FastHashMap;
 
 use crate::Draw;
+use crate::clock::Clock;
 use crate::event::AppEvent;
 use crate::event::EventDispatcher;
 use crate::event::SdlEvent;
@@ -12,18 +13,13 @@ use crate::render::stage::Stage;
 use crate::scene::Scene;
 use crate::scene::SceneBuilder;
 use crate::scene::SceneId;
-use crate::window::clock::Clock;
 use crate::window::context::UserContext;
 use crate::window::pacer::FramePacer;
 use crate::window::time::Time;
 
 pub enum SceneSlot {
     Unloaded(SceneBuilder),
-    Loaded {
-        scene: Box<dyn Scene>,
-        stage: Stage,
-        draw: Draw,
-    },
+    Loaded { scene: Box<dyn Scene>, stage: Stage },
     Poisoned,
 }
 
@@ -34,10 +30,8 @@ pub enum UpdatePhase {
 
 pub struct WindowState {
     pub ctx: UserContext,
-
-    // Timing
-    pub clock: Clock,
     pub pacer: FramePacer,
+    pub draw: Draw,
 
     pub scenes: FastHashMap<SceneId, SceneSlot>,
     pub active_scenes: Vec<SceneId>,
@@ -45,9 +39,9 @@ pub struct WindowState {
 }
 
 impl WindowState {
-    pub fn load_one(&mut self, id: SceneId) {
+    pub fn load_one(&mut self, id: SceneId, clock: &Clock) {
         #[rustfmt::skip]
-        let Self { ctx, clock, pacer, scenes,  dispatcher, .. } = self;
+        let Self { ctx, pacer, scenes,  dispatcher, .. } = self;
 
         let Some(slot) = scenes.get_mut(&id) else {
             fatal!("No scene registered under id: {:?}", id);
@@ -70,25 +64,18 @@ impl WindowState {
         let mut view = stage.view();
         let scene = builder(ctx, &mut view);
 
-        self.scenes.insert(
-            id,
-            SceneSlot::Loaded {
-                scene,
-                stage,
-                draw: Draw::new(),
-            },
-        );
+        self.scenes.insert(id, SceneSlot::Loaded { scene, stage });
     }
 
-    pub fn load_active(&mut self) {
+    pub fn load_active(&mut self, clock: &Clock) {
         for id in self.active_scenes.clone() {
-            self.load_one(id);
+            self.load_one(id, clock);
         }
     }
 
-    pub fn update(&mut self, phase: UpdatePhase) {
+    pub fn update(&mut self, phase: UpdatePhase, clock: &Clock) {
         #[rustfmt::skip]
-        let Self { ctx, clock, pacer, scenes, active_scenes, dispatcher } = self;
+        let Self { ctx, pacer, scenes, active_scenes, dispatcher , .. } = self;
 
         for id in active_scenes {
             let Some(scene) = scenes.get_mut(id) else {
@@ -115,9 +102,9 @@ impl WindowState {
         }
     }
 
-    pub fn draw(&mut self) {
+    pub fn draw(&mut self, clock: &Clock) {
         #[rustfmt::skip]
-        let Self { ctx, clock, pacer, scenes, active_scenes, dispatcher } = self;
+        let Self { ctx, pacer, draw, scenes, active_scenes, dispatcher } = self;
 
         for id in active_scenes {
             let Some(scene) = scenes.get_mut(id) else {
@@ -125,8 +112,8 @@ impl WindowState {
                 continue;
             };
 
-            let (scene, stage, mut draw) = match scene {
-                SceneSlot::Loaded { scene, stage, draw } => (scene, stage, draw),
+            let (scene, stage) = match scene {
+                SceneSlot::Loaded { scene, stage } => (scene, stage),
                 _ => {
                     error!("Processing invalid or unloaded scene: {:?}", id);
                     continue;
@@ -137,9 +124,23 @@ impl WindowState {
             let ctx = ctx.draw(&mut time);
             let mut view = stage.view();
 
-            scene.draw(ctx, &mut view, &mut draw);
+            scene.draw(ctx, &mut view, draw);
         }
     }
 
-    pub fn handle_event(&mut self, event: SdlEvent) {}
+    /// Events contain logic relative to the window must be processed here.
+    /// For example, mouse motion. The mouse position is relative to the window,
+    /// not the entire desktop.
+    pub fn handle_event(&mut self, event: SdlEvent) {
+        match event {
+            SdlEvent::MouseMotion {
+                x, y, xrel, yrel, ..
+            } => {
+                self.ctx.window.mouse_position += math::Vector2::new(x, y);
+                self.ctx.window.mouse_delta += math::Vector2::new(xrel, yrel);
+            }
+
+            _ => {}
+        }
+    }
 }

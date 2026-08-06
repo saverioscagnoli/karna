@@ -5,6 +5,7 @@ use logging::warn;
 
 use crate::event::WindowEvent;
 use crate::window::SdlWindow;
+use crate::window::pacer::FramePacer;
 
 pub struct PlatformWindow {
     sdl: SdlWindow,
@@ -29,7 +30,7 @@ impl PlatformWindow {
         Self { sdl }
     }
 
-    pub fn handle_event(&mut self, event: WindowEvent) {
+    pub fn handle_event(&mut self, event: WindowEvent, pacer: &mut FramePacer) {
         match event {
             WindowEvent::TitleChangeRequested(t) => {
                 if let Err(e) = self.set_title(&t) {
@@ -41,6 +42,10 @@ impl PlatformWindow {
                 if let Err(e) = self.set_size(s.width, s.height) {
                     warn!("Failed to change window size: {}", e);
                 }
+            }
+
+            WindowEvent::FpsTargetChangeRequested(t) => {
+                pacer.set_target_fps(t);
             }
         };
     }

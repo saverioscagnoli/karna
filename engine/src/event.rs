@@ -11,24 +11,20 @@ pub type SdlWindowEvent = sdl3::event::WindowEvent;
 pub enum WindowEvent {
     TitleChangeRequested(Rc<str>),
     SizeChangeRequested(math::Size<u32>),
-}
-
-#[derive(Debug, Clone)]
-pub enum TimeEvent {
     FpsTargetChangeRequested(u32),
-    TpsTargetChangeRequested(u32),
 }
 
 #[derive(Debug, Clone)]
 pub enum AppEvent {
     Window { id: WindowId, event: WindowEvent },
-    Time { id: WindowId, event: TimeEvent },
+    TpsTargetChangeRequested(u32),
 }
 
 impl AppEvent {
     pub fn get_window_id(&self) -> Option<WindowId> {
         match self {
-            Self::Window { id, .. } | Self::Time { id, .. } => Some(*id),
+            Self::Window { id, .. } => Some(*id),
+            _ => None,
         }
     }
 }

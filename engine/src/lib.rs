@@ -1,6 +1,8 @@
 mod builder;
+mod clock;
 mod conf;
 mod event;
+mod input;
 mod log;
 mod render;
 mod scene;
@@ -15,20 +17,23 @@ use logging::error;
 use logging::fatal;
 use logging::info;
 use logging::trace;
+use sdl3::GamepadSubsystem;
 use sdl3::Sdl;
 use sdl3::VideoSubsystem;
+use sdl3::joystick::JoystickId;
 use utils::FastHashMap;
 use utils::SleepTimer;
 
+use crate::clock::Clock;
 use crate::conf::config;
 use crate::event::AppEvent;
 use crate::event::EventQueue;
 use crate::event::SdlEvent;
 use crate::event::SdlWindowEvent;
-use crate::event::TimeEvent;
+use crate::input::Input;
+use crate::window::SdlWindow;
 use crate::window::WindowEntry;
 use crate::window::WindowId;
-use crate::window::clock::Clock;
 use crate::window::context::UserContext;
 use crate::window::pacer::FramePacer;
 use crate::window::pacer::PaceMode;
@@ -56,10 +61,13 @@ pub struct App {
     should_quit: bool,
     app_events: EventQueue<AppEvent>,
 
+    clock: Clock,
+    input: Input,
     sleeper: SleepTimer,
 
     // SDL / SDL wrappers
     gpu: Gpu,
+    gamepad: GamepadSubsystem,
     video: VideoSubsystem,
     sdl: Sdl,
 }
@@ -82,6 +90,13 @@ impl App {
 
         debug!("Video subsystem initialized.");
 
+        let gamepad = match sdl.gamepad() {
+            Ok(j) => j,
+            Err(e) => fatal!("Failed to initialize gamepad subsystem: {}", e),
+        };
+
+        debug!("Joystick subsystem initialized.");
+
         let gpu = match Gpu::init() {
             Ok(g) => g,
             Err(e) => fatal!("Failed to initialize GPU: {}", e),
@@ -99,8 +114,11 @@ impl App {
             windows: FastHashMap::default(),
             should_quit: false,
             app_events: EventQueue::new(),
+            clock: Clock::default(),
+            input: Input::default(),
             sleeper: SleepTimer::calibrated(),
             gpu,
+            gamepad,
             video,
             sdl,
         }
@@ -139,8 +157,8 @@ impl App {
             ctx: UserContext {
                 window: WindowHandle::new(&window, self.app_events.dispatcher()),
             },
-            clock: Clock::default(),
-            pacer: FramePacer::new(PaceMode::Display),
+            pacer: FramePacer::new(PaceMode::Fixed),
+            draw: Draw::new(),
             scenes,
             active_scenes: b.active_scenes,
             dispatcher: self.app_events.dispatcher(),
@@ -155,6 +173,12 @@ impl App {
             error!("Received an event for a closed window.");
             return;
         };
+
+        if self.input.focused == Some(id) {
+            self.input.focused = None;
+            self.input.keys.clear_all();
+            self.input.mouse.clear_all();
+        }
 
         self.gpu.release_window(&entry.window);
 
@@ -187,6 +211,79 @@ impl App {
                 ..
             } => return self.close_window(window_id),
 
+            SdlEvent::Window {
+                window_id,
+                win_event: SdlWindowEvent::FocusGained,
+                ..
+            } => {
+                self.input.focused = Some(window_id);
+                debug!("Window '{}' gained focus.", window_id);
+            }
+
+            SdlEvent::Window {
+                window_id,
+                win_event: SdlWindowEvent::FocusLost,
+                ..
+            } => {
+                if self.input.focused == Some(window_id) {
+                    self.input.focused = None;
+                    self.input.keys.clear_all();
+                    self.input.mouse.clear_all();
+                    debug!("Window '{}' lost focus.", window_id);
+                }
+            }
+
+            SdlEvent::KeyDown {
+                window_id,
+                scancode: Some(k),
+                repeat: false,
+                ..
+            } => {
+                if self.input.focused == Some(window_id) {
+                    self.input.keys.press(k);
+                }
+            }
+
+            SdlEvent::KeyUp {
+                scancode: Some(k), ..
+            } => self.input.keys.release(k),
+
+            SdlEvent::MouseButtonDown {
+                window_id,
+                mouse_btn,
+                ..
+            } => {
+                if self.input.focused == Some(window_id) {
+                    self.input.mouse.press(mouse_btn);
+                }
+            }
+
+            SdlEvent::MouseButtonUp { mouse_btn, .. } => self.input.mouse.release(mouse_btn),
+
+            SdlEvent::MouseWheel { x, y, .. } => {
+                self.input.m_wheel += math::Vector2::new(x, y);
+            }
+
+            SdlEvent::ControllerDeviceAdded { which, .. } => {
+                let id = JoystickId::new(which);
+                match self.gamepad.open(id) {
+                    Ok(pad) => {
+                        info!(
+                            "Gamepad connected: {}",
+                            pad.name().unwrap_or(String::from("unnamed gamepad"))
+                        );
+                        self.input.gamepads.insert(id, pad);
+                    }
+
+                    Err(e) => error!("Failed to open gamepad: {}", e),
+                }
+            }
+
+            SdlEvent::ControllerDeviceRemoved { which, .. } => {
+                let id = JoystickId::new(which);
+                self.input.gamepads.remove(&id);
+            }
+
             event => {
                 if let Some(id) = event.get_window_id()
                     && let Some(entry) = self.windows.get_mut(&id)
@@ -213,11 +310,11 @@ impl App {
             };
 
             match event {
-                AppEvent::Window { event, .. } => entry.window.handle_event(event),
-                AppEvent::Time { event, .. } => match event {
-                    TimeEvent::FpsTargetChangeRequested(t) => entry.state.pacer.set_target_fps(t),
-                    TimeEvent::TpsTargetChangeRequested(t) => entry.state.clock.set_target_tps(t),
-                },
+                AppEvent::Window { event, .. } => {
+                    entry.window.handle_event(event, &mut entry.state.pacer)
+                }
+
+                AppEvent::TpsTargetChangeRequested(t) => self.clock.set_target_tps(t),
             }
         }
 
@@ -237,7 +334,7 @@ impl App {
         debug!("SDL event pump initialized.");
 
         for entry in self.windows.values_mut() {
-            entry.state.load_active();
+            entry.state.load_active(&self.clock);
         }
 
         while !self.should_quit {
@@ -251,50 +348,53 @@ impl App {
                 break;
             }
 
-            for entry in self.windows.values_mut() {
-                let frame_start = Instant::now();
+            let now = Instant::now();
+            self.clock.advance(now);
 
-                entry.state.clock.advance(frame_start);
-
-                while entry.state.clock.should_tick() {
-                    entry.state.update(UpdatePhase::FixedUpdate);
-                    entry.state.clock.consume();
+            while self.clock.should_tick() {
+                for entry in self.windows.values_mut() {
+                    entry.state.update(UpdatePhase::FixedUpdate, &self.clock);
                 }
 
-                if !entry.state.pacer.due(frame_start) {
+                self.input.roll_tick();
+                self.clock.consume();
+            }
+
+            for entry in self.windows.values_mut() {
+                if !entry.state.pacer.due(now) {
                     continue;
                 }
 
-                entry.state.update(UpdatePhase::Update);
-                entry.state.draw();
+                entry.state.pacer.record(now);
+                entry.state.update(UpdatePhase::Update, &self.clock);
+                entry.state.draw(&self.clock);
 
-                // Present, only clear for now
                 let _ = self.gpu.clear(
                     &entry.window,
                     entry.state.ctx.window.clear_color().into(),
                     self.gpu.present_mode() == gpu::PresentMode::Vsync,
                 );
 
-                // New timestamp, after update + draw
-                entry.state.pacer.record(Instant::now());
+                entry.state.ctx.window.roll_frame();
             }
 
-            let now = Instant::now();
+            self.input.roll_frame();
+
+            let after_draw = Instant::now();
+            let tick = self.clock.next_tick();
+
             let deadline = self
                 .windows
                 .values()
-                .map(|entry| {
-                    let tick = entry.state.clock.next_tick();
-                    match entry.state.pacer.deadline() {
-                        Some(frame) => frame.min(tick),
-                        None => tick.min(now + entry.state.pacer.idle_backoff()),
-                    }
+                .map(|e| {
+                    e.state
+                        .pacer
+                        .deadline()
+                        .unwrap_or(after_draw + e.state.pacer.idle_backoff())
                 })
-                .min();
+                .fold(tick, Instant::min);
 
-            if let Some(d) = deadline {
-                self.sleeper.sleep_until(d);
-            }
+            self.sleeper.sleep_until(deadline);
         }
     }
 }
