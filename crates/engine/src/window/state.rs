@@ -3,6 +3,9 @@ use std::mem;
 use logging::error;
 use utils::FastHashMap;
 
+use crate::clock::Clock;
+use crate::events::AppEvent;
+use crate::events::EventDispatcher;
 use crate::render::draw::Draw;
 use crate::render::stage::Stage;
 use crate::scene::BoxedScene;
@@ -10,6 +13,7 @@ use crate::scene::SceneBuilder;
 use crate::scene::SceneId;
 use crate::window::context::UserContext;
 use crate::window::pacer::FramePacer;
+use crate::window::time::Time;
 
 pub enum SceneSlot {
     Unloaded(SceneBuilder),
@@ -28,14 +32,20 @@ pub struct WindowState {
     pub draw: Draw,
 
     pub pacer: FramePacer,
+    pub time: Time,
 
     pub scenes: FastHashMap<SceneId, SceneSlot>,
     pub active_scenes: Vec<SceneId>,
 }
 
 impl WindowState {
+    pub fn sync_time(&mut self, clock: &Clock) {
+        self.time.sync(clock, &self.pacer);
+    }
+
     pub fn load_one(&mut self, id: SceneId) {
-        let Self { ctx, scenes, .. } = self;
+        #[rustfmt::skip]
+        let Self { ctx, time, scenes, .. } = self;
 
         let Some(slot) = scenes.get_mut(&id) else {
             error!("No scene registered under id: {:?}", id);
@@ -53,10 +63,10 @@ impl WindowState {
 
         let mut stage = Stage::new();
         let mut view = stage.view();
-        let ctx = ctx.for_load();
+        let ctx = ctx.for_load(time);
         let scene = builder(ctx, &mut view);
 
-        self.scenes.insert(id, SceneSlot::Loaded { scene, stage });
+        scenes.insert(id, SceneSlot::Loaded { scene, stage });
     }
 
     pub fn load_active(&mut self) {
@@ -67,7 +77,7 @@ impl WindowState {
 
     pub fn update(&mut self, phase: UpdatePhase) {
         #[rustfmt::skip]
-        let Self {ctx, scenes, active_scenes, .. }  = self;
+        let Self { ctx, time, scenes, active_scenes, .. }  = self;
 
         for id in active_scenes {
             let Some(scene) = scenes.get_mut(id) else {
@@ -84,18 +94,18 @@ impl WindowState {
             };
 
             let mut view = stage.view();
-            let ctx = ctx.for_update();
+            let ctx = ctx.for_update(time);
 
             match phase {
                 UpdatePhase::Fixed => scene.fixed_update(ctx, &mut view),
-                UpdatePhase::Unrestrained => scene.fixed_update(ctx, &mut view),
+                UpdatePhase::Unrestrained => scene.update(ctx, &mut view),
             }
         }
     }
 
     pub fn draw(&mut self) {
         #[rustfmt::skip]
-        let Self { ctx, draw, scenes, active_scenes, .. } = self;
+        let Self { ctx, draw, time, scenes, active_scenes, .. } = self;
 
         for id in active_scenes {
             let Some(scene) = scenes.get_mut(id) else {
@@ -112,7 +122,7 @@ impl WindowState {
             };
 
             let mut view = stage.view();
-            let ctx = ctx.for_draw();
+            let ctx = ctx.for_draw(time);
 
             scene.draw(ctx, &mut view, draw);
         }

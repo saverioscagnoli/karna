@@ -59,6 +59,7 @@ pub use crate::scene::SceneId;
 pub use crate::window::context::DrawContext;
 pub use crate::window::context::LoadContext;
 pub use crate::window::context::UpdateContext;
+use crate::window::time::Time;
 
 static SDL_ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -140,6 +141,7 @@ impl App {
             ctx: UserContext {},
             draw: Draw::new(),
             pacer: FramePacer::new(PaceMode::Fixed),
+            time: Time::new(window.id(), self.app_events.dispatcher()),
             scenes,
             active_scenes,
         };
@@ -302,6 +304,7 @@ impl App {
         }
 
         for entry in self.windows.values_mut() {
+            entry.state.sync_time(&self.clock);
             entry.state.load_active();
         }
 
@@ -324,6 +327,7 @@ impl App {
 
             while self.clock.should_tick() {
                 for entry in self.windows.values_mut() {
+                    entry.state.sync_time(&self.clock);
                     entry.state.update(UpdatePhase::Fixed);
                 }
 
@@ -337,6 +341,8 @@ impl App {
                 }
 
                 entry.state.pacer.record(now);
+                entry.state.sync_time(&self.clock);
+
                 entry.state.update(UpdatePhase::Unrestrained);
                 entry.state.draw();
 
