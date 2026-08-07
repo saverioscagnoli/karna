@@ -74,6 +74,10 @@ impl Color {
             _ => None,
         }
     }
+
+    pub fn tuple(&self) -> (f32, f32, f32, f32) {
+        (self.r, self.g, self.b, self.a)
+    }
 }
 
 impl From<Vector4<f32>> for Color {

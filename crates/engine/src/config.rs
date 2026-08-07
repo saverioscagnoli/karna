@@ -4,10 +4,11 @@ use logging::debug;
 
 #[derive(Debug, Clone)]
 pub struct DefaultConfig {
-    window_title: String,
-    window_size: math::Size<u32>,
-    target_fps: u32,
-    target_tps: u32,
+    pub window_title: String,
+    pub window_size: math::Size<u32>,
+    pub target_fps: u32,
+    pub target_tps: u32,
+    pub max_tick_catchup: u32,
 }
 
 impl Default for DefaultConfig {
@@ -17,6 +18,7 @@ impl Default for DefaultConfig {
             window_size: math::Size::new(800, 600),
             target_fps: 60,
             target_tps: 60,
+            max_tick_catchup: 5,
         }
     }
 }

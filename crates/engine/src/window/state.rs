@@ -9,6 +9,7 @@ use crate::scene::BoxedScene;
 use crate::scene::SceneBuilder;
 use crate::scene::SceneId;
 use crate::window::context::UserContext;
+use crate::window::pacer::FramePacer;
 
 pub enum SceneSlot {
     Unloaded(SceneBuilder),
@@ -25,6 +26,8 @@ pub enum UpdatePhase {
 pub struct WindowState {
     pub ctx: UserContext,
     pub draw: Draw,
+
+    pub pacer: FramePacer,
 
     pub scenes: FastHashMap<SceneId, SceneSlot>,
     pub active_scenes: Vec<SceneId>,

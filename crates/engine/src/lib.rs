@@ -1,21 +1,26 @@
 mod builder;
+mod clock;
 mod config;
 mod err;
+mod events;
+mod gpu;
 mod input;
 mod render;
 mod scene;
 mod window;
 
-use std::any::Any;
 use std::marker::PhantomData;
 use std::mem;
 use std::mem::MaybeUninit;
+use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::time::Instant;
 
 use logging::debug;
 use logging::error;
 use logging::info;
+use logging::trace;
 use sdl3::SDL_Event;
 use sdl3::SDL_EventType;
 use sdl3::SDL_INIT_VIDEO;
@@ -23,18 +28,37 @@ use sdl3::SDL_Init;
 use sdl3::SDL_PollEvent;
 use sdl3::SDL_Quit;
 use utils::FastHashMap;
+use utils::SleepTimer;
 
-use crate::builder::WindowBuilder;
+use crate::clock::Clock;
+use crate::config::init_config;
 use crate::err::SDL_LastError;
+use crate::events::AppEvent;
+use crate::events::EventQueue;
+use crate::events::WindowEvent;
+use crate::gpu::Gpu;
 use crate::input::Input;
 use crate::input::keys::Key;
 use crate::input::mouse::MouseButton;
-use crate::render::draw::Draw;
+use crate::render::color::Color;
 use crate::window::WindowId;
 use crate::window::context::UserContext;
+use crate::window::pacer::FramePacer;
+use crate::window::pacer::PaceMode;
 use crate::window::platform::PlatformWindow;
 use crate::window::state::SceneSlot;
+use crate::window::state::UpdatePhase;
 use crate::window::state::WindowState;
+
+pub use crate::builder::AppBuilder;
+pub use crate::builder::WindowBuilder;
+pub use crate::render::draw::Draw;
+pub use crate::render::stage::SceneView;
+pub use crate::scene::Scene;
+pub use crate::scene::SceneId;
+pub use crate::window::context::DrawContext;
+pub use crate::window::context::LoadContext;
+pub use crate::window::context::UpdateContext;
 
 static SDL_ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -43,20 +67,32 @@ struct WindowEntry {
     state: WindowState,
 }
 
+struct SdlGuard(PhantomData<*const ()>);
+
+impl Drop for SdlGuard {
+    fn drop(&mut self) {
+        unsafe { SDL_Quit() };
+        SDL_ACTIVE.store(false, Ordering::Release);
+    }
+}
+
 pub struct App {
     requested_at_creation: Vec<WindowBuilder>,
     windows: FastHashMap<WindowId, WindowEntry>,
     should_quit: bool,
 
+    app_events: EventQueue<AppEvent>,
     input: Input,
+    clock: Clock,
+    sleeper: SleepTimer,
 
-    /// Makes app !Send and !Sync, pinning SDL
-    /// to the thread that created it
-    _sdl: PhantomData<*const ()>,
+    gpu: Rc<Gpu>,
+
+    _sdl: SdlGuard,
 }
 
 impl App {
-    pub fn new() -> Result<Self, String> {
+    pub(crate) fn new() -> Result<Self, String> {
         if SDL_ACTIVE.swap(true, Ordering::AcqRel) {
             return Err("SDL is already initialized.".into());
         }
@@ -69,21 +105,32 @@ impl App {
         }
 
         debug!("SDL v{} initialized.", sdl3::compiled_version_string());
+        init_config(None);
+
+        let gpu = Gpu::init();
 
         Ok(Self {
             requested_at_creation: Vec::new(),
             windows: FastHashMap::default(),
             should_quit: false,
+            app_events: EventQueue::new(),
             input: Input::default(),
-            _sdl: PhantomData,
+            clock: Clock::default(),
+            sleeper: SleepTimer::new(),
+            gpu: Rc::new(gpu),
+            _sdl: SdlGuard(PhantomData),
         })
+    }
+
+    pub fn builder() -> AppBuilder {
+        AppBuilder::default()
     }
 
     fn spawn_window(&mut self, builder: WindowBuilder) {
         #[rustfmt::skip]
         let WindowBuilder { title, size, scenes, active_scenes } = builder;
 
-        let window = PlatformWindow::new(&title, size);
+        let window = PlatformWindow::new(&title, size, self.gpu.clone());
         let scenes = scenes
             .into_iter()
             .map(|(id, scene)| (id, SceneSlot::Unloaded(scene)))
@@ -92,6 +139,7 @@ impl App {
         let state = WindowState {
             ctx: UserContext {},
             draw: Draw::new(),
+            pacer: FramePacer::new(PaceMode::Fixed),
             scenes,
             active_scenes,
         };
@@ -208,9 +256,53 @@ impl App {
         }
     }
 
+    fn drain_app_events(&mut self) {
+        let mut buffer = self.app_events.take();
+
+        for event in buffer.drain(..) {
+            trace!("Received app event: {:?}", event);
+
+            match event {
+                AppEvent::Window {
+                    id,
+                    event: win_event,
+                } => {
+                    let Some(entry) = self.windows.get_mut(&id) else {
+                        trace!("Dropping event for closed window: {:?}", id);
+                        continue;
+                    };
+
+                    match win_event {
+                        WindowEvent::TitleChangeRequested(t) => {
+                            entry.platform.set_title(&t);
+                        }
+
+                        WindowEvent::SizeChangeRequested(s) => {
+                            entry.platform.set_size(s);
+                        }
+
+                        WindowEvent::FpsTargetChangeRequested(t) => {
+                            entry.state.pacer.set_target_fps(t);
+                        }
+                    }
+                }
+
+                AppEvent::TpsTargetChangeRequested(t) => {
+                    self.clock.set_target_tps(t);
+                }
+            }
+        }
+
+        self.app_events.restore(buffer);
+    }
+
     pub fn run(mut self) {
         for builder in mem::take(&mut self.requested_at_creation) {
             self.spawn_window(builder);
+        }
+
+        for entry in self.windows.values_mut() {
+            entry.state.load_active();
         }
 
         let mut event: MaybeUninit<SDL_Event> = MaybeUninit::uninit();
@@ -220,13 +312,55 @@ impl App {
                 let event = unsafe { event.assume_init() };
                 self.handle_sdl_event(event);
             }
-        }
-    }
-}
 
-impl Drop for App {
-    fn drop(&mut self) {
-        unsafe { SDL_Quit() };
-        SDL_ACTIVE.store(false, Ordering::Release);
+            self.drain_app_events();
+
+            if self.should_quit {
+                break;
+            }
+
+            let now = Instant::now();
+            self.clock.advance(now);
+
+            while self.clock.should_tick() {
+                for entry in self.windows.values_mut() {
+                    entry.state.update(UpdatePhase::Fixed);
+                }
+
+                self.input.roll_tick();
+                self.clock.consume();
+            }
+
+            for entry in self.windows.values_mut() {
+                if !entry.state.pacer.due(now) {
+                    continue;
+                }
+
+                entry.state.pacer.record(now);
+                entry.state.update(UpdatePhase::Unrestrained);
+                entry.state.draw();
+
+                self.gpu.clear(&entry.platform, Color::Cyan);
+            }
+
+            self.input.roll_frame();
+
+            let after_fraw = Instant::now();
+            let tick = self.clock.next_tick();
+
+            let deadline = self
+                .windows
+                .values()
+                .map(|entry| {
+                    entry
+                        .state
+                        .pacer
+                        .deadline()
+                        .unwrap_or(after_fraw + entry.state.pacer.idle_backoff())
+                })
+                .fold(tick, Instant::min);
+
+            self.sleeper.sleep_until(deadline);
+        }
     }
 }
