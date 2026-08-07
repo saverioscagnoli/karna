@@ -36,6 +36,6 @@
 use karna::prelude::*;
 
 fn main() {
-    logging::init(Config::default().with_min_level(LevelFilter::Debug)).unwrap();
+    init_logging(LogConfig::default().with_min_level(LevelFilter::Debug)).unwrap();
     App::new().unwrap();
 }

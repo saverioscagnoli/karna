@@ -3,7 +3,7 @@ use std::ffi::CStr;
 use sdl3::SDL_GetError;
 
 #[allow(non_snake_case)]
-pub fn SDL_last_error() -> String {
+pub fn SDL_LastError() -> String {
     unsafe {
         let ptr = SDL_GetError();
         if ptr.is_null() {

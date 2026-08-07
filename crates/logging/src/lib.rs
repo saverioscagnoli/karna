@@ -73,14 +73,14 @@ impl log::Log for Logger {
     }
 }
 
-pub struct Config {
+pub struct LogConfig {
     pub min_level: LevelFilter,
     pub targets: Vec<Box<dyn Target>>,
     pub formatter: Box<dyn Formatter>,
     pub module_filters: Vec<(String, LevelFilter)>,
 }
 
-impl Default for Config {
+impl Default for LogConfig {
     fn default() -> Self {
         Self {
             min_level: log::LevelFilter::Info,
@@ -91,7 +91,7 @@ impl Default for Config {
     }
 }
 
-impl Config {
+impl LogConfig {
     pub fn with_min_level(mut self, level: log::LevelFilter) -> Self {
         self.min_level = level;
         self
@@ -129,7 +129,7 @@ impl Config {
 
 static LOGGER: OnceLock<Logger> = OnceLock::new();
 
-pub fn init(config: Config) -> Result<(), log::SetLoggerError> {
+pub fn init_logging(config: LogConfig) -> Result<(), log::SetLoggerError> {
     let logger = LOGGER.get_or_init(|| config.build_logger());
 
     log::set_logger(logger)?;

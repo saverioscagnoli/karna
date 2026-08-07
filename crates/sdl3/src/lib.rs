@@ -1,8 +1,4 @@
 //! Raw FFI bindings to SDL3.
-//!
-//! Nothing here is safe. This crate exists only to expose the C API; all
-//! invariants (main-thread affinity, init ordering, pointer lifetimes) are
-//! the caller's problem. Build the safe layer in `engine`.
 
 #![no_std]
 #![allow(
@@ -19,6 +15,10 @@
 )]
 
 include!(concat!(env!("OUT_DIR"), "/sdl3.rs"));
+include!(concat!(env!("OUT_DIR"), "/flags.rs"));
 
 mod version;
-pub use version::{check_linked_version, compiled_version_string, version_num, COMPILED_VERSION};
+pub use version::COMPILED_VERSION;
+pub use version::check_linked_version;
+pub use version::compiled_version_string;
+pub use version::version_num;

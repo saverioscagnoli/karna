@@ -6,7 +6,6 @@ mod map;
 mod packer;
 mod sleep;
 mod slotmap;
-mod types;
 
 pub use crate::bits::BitSet;
 pub use crate::bytes::ByteSize;
@@ -19,4 +18,3 @@ pub use crate::packer::PagePacker;
 pub use crate::sleep::SleepTimer;
 pub use crate::slotmap::Handle;
 pub use crate::slotmap::SlotMap;
-pub use crate::types::WindowId;
