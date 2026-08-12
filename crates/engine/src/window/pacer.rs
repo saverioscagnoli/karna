@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -13,12 +14,95 @@ pub enum PaceMode {
     Fixed,
 }
 
+#[derive(Default)]
+#[derive(Debug, Clone, Copy)]
+pub enum FpsCountStrategy {
+    #[default]
+    Mean,
+    Smoothed,
+}
+
+pub struct FpsCounter {
+    pub strategy: FpsCountStrategy,
+    pub sample_size: usize,
+    pub samples: VecDeque<Duration>,
+    pub sum: Duration,
+    pub ema: Option<f32>,
+}
+
+impl Default for FpsCounter {
+    fn default() -> Self {
+        let config = config();
+
+        Self {
+            strategy: config.fps_count_strategy,
+            sample_size: config.fps_sample_size,
+            samples: VecDeque::with_capacity(config.fps_sample_size),
+            sum: Duration::ZERO,
+            ema: None,
+        }
+    }
+}
+
+impl FpsCounter {
+    pub fn push(&mut self, delta: Duration) {
+        match self.strategy {
+            FpsCountStrategy::Mean => {
+                self.samples.push_back(delta);
+                self.sum += delta;
+
+                while self.samples.len() > self.sample_size {
+                    if let Some(old) = self.samples.pop_front() {
+                        self.sum -= old;
+                    }
+                }
+            }
+
+            FpsCountStrategy::Smoothed => {
+                let config = config();
+                let dt = delta.as_secs_f32();
+                let alpha = 1.0 - (-dt / config.fps_smoothing_tau).exp();
+
+                self.ema = Some(match self.ema {
+                    Some(prev) => prev + alpha * (dt - prev),
+                    None => dt,
+                });
+            }
+        }
+    }
+
+    pub fn avg_frame_time(&self) -> Option<Duration> {
+        match self.strategy {
+            FpsCountStrategy::Mean => {
+                (!self.samples.is_empty()).then(|| self.sum / self.samples.len() as u32)
+            }
+
+            FpsCountStrategy::Smoothed { .. } => self.ema.map(Duration::from_secs_f32),
+        }
+    }
+
+    pub fn fps(&self) -> f32 {
+        match self.avg_frame_time() {
+            Some(d) if !d.is_zero() => 1.0 / d.as_secs_f32(),
+            _ => 0.0,
+        }
+    }
+
+    pub fn set_strategy(&mut self, strategy: FpsCountStrategy) {
+        self.strategy = strategy;
+        self.samples.clear();
+        self.sum = Duration::ZERO;
+        self.ema = None;
+    }
+}
+
 pub struct FramePacer {
     pub mode: PaceMode,
     pub frame_rate: Duration,
     pub last_frame: Instant,
     pub next_frame: Instant,
     pub delta: Duration,
+    pub counter: FpsCounter,
 }
 
 impl FramePacer {
@@ -32,6 +116,7 @@ impl FramePacer {
             last_frame: Instant::now(),
             next_frame: Instant::now(),
             delta: rate,
+            counter: FpsCounter::default(),
         }
     }
 
@@ -60,6 +145,7 @@ impl FramePacer {
 
     pub fn record(&mut self, now: Instant) {
         self.delta = now.duration_since(self.last_frame);
+        self.counter.push(self.delta);
         self.last_frame = now;
 
         if self.mode == PaceMode::Fixed {

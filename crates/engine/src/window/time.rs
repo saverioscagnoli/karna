@@ -5,12 +5,17 @@ use crate::events::AppEvent;
 use crate::events::EventDispatcher;
 use crate::events::WindowEvent;
 use crate::window::WindowId;
+use crate::window::pacer::FpsCountStrategy;
 use crate::window::pacer::FramePacer;
 
 pub struct Time {
     pub(crate) window_id: WindowId,
     pub(crate) delta: f32,
     pub(crate) fixed_delta: f32,
+    pub(crate) fps: f32,
+    pub(crate) frame: Duration,
+    pub(crate) fps_count_strategy: FpsCountStrategy,
+    pub(crate) alpha: f32,
     pub(crate) dispatcher: EventDispatcher<AppEvent>,
 }
 
@@ -20,6 +25,10 @@ impl Time {
             window_id,
             delta: 0.0,
             fixed_delta: 0.0,
+            fps: 0.0,
+            frame: Duration::ZERO,
+            fps_count_strategy: FpsCountStrategy::default(),
+            alpha: 0.0,
             dispatcher,
         }
     }
@@ -27,6 +36,10 @@ impl Time {
     pub(crate) fn sync(&mut self, clock: &Clock, pacer: &FramePacer) {
         self.delta = pacer.delta.as_secs_f32();
         self.fixed_delta = clock.tick_rate.as_secs_f32();
+        self.fps = pacer.counter.fps();
+        self.frame = pacer.counter.avg_frame_time().unwrap_or(Duration::ZERO);
+        self.fps_count_strategy = pacer.counter.strategy;
+        self.alpha = clock.alpha();
     }
 
     pub fn delta(&self) -> f32 {
@@ -37,10 +50,33 @@ impl Time {
         self.fixed_delta
     }
 
+    pub fn fps(&self) -> f32 {
+        self.fps
+    }
+
+    pub fn frame(&self) -> Duration {
+        self.frame
+    }
+
+    pub fn alpha(&self) -> f32 {
+        self.alpha
+    }
+
     pub fn set_target_fps(&self, t: u32) {
         self.dispatcher.send(AppEvent::Window {
             id: self.window_id,
             event: WindowEvent::FpsTargetChangeRequested(t),
         });
+    }
+
+    pub fn set_fps_count_strategy(&self, strategy: FpsCountStrategy) {
+        self.dispatcher.send(AppEvent::Window {
+            id: self.window_id,
+            event: WindowEvent::FpsCountStrategyChangeRequested(strategy),
+        });
+    }
+
+    pub fn set_target_tps(&self, t: u32) {
+        self.dispatcher.send(AppEvent::TpsTargetChangeRequested(t));
     }
 }

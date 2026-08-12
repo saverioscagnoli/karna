@@ -1,11 +1,12 @@
 use std::mem;
 
 use logging::error;
+use sdl3::SDL_Event;
+use sdl3::SDL_EventType;
 use utils::FastHashMap;
 
 use crate::clock::Clock;
-use crate::events::AppEvent;
-use crate::events::EventDispatcher;
+use crate::input::Input;
 use crate::render::draw::Draw;
 use crate::render::stage::Stage;
 use crate::scene::BoxedScene;
@@ -13,6 +14,7 @@ use crate::scene::SceneBuilder;
 use crate::scene::SceneId;
 use crate::window::context::UserContext;
 use crate::window::pacer::FramePacer;
+use crate::window::platform::PlatformWindow;
 use crate::window::time::Time;
 
 pub enum SceneSlot {
@@ -43,7 +45,16 @@ impl WindowState {
         self.time.sync(clock, &self.pacer);
     }
 
-    pub fn load_one(&mut self, id: SceneId) {
+    pub fn sync_window(&mut self, window: &PlatformWindow) {
+        self.ctx.window_handle.sync(window);
+        self.ctx.window_handle.roll_mouse();
+    }
+
+    pub fn handle_window_event(&mut self, event: &SDL_Event) {
+        self.ctx.window_handle.handle_event(event);
+    }
+
+    pub fn load_one(&mut self, id: SceneId, input: &Input) {
         #[rustfmt::skip]
         let Self { ctx, time, scenes, .. } = self;
 
@@ -63,19 +74,19 @@ impl WindowState {
 
         let mut stage = Stage::new();
         let mut view = stage.view();
-        let ctx = ctx.for_load(time);
+        let ctx = ctx.for_load(time, input);
         let scene = builder(ctx, &mut view);
 
         scenes.insert(id, SceneSlot::Loaded { scene, stage });
     }
 
-    pub fn load_active(&mut self) {
+    pub fn load_active(&mut self, input: &Input) {
         for id in self.active_scenes.clone() {
-            self.load_one(id);
+            self.load_one(id, input);
         }
     }
 
-    pub fn update(&mut self, phase: UpdatePhase) {
+    pub fn update(&mut self, phase: UpdatePhase, input: &Input) {
         #[rustfmt::skip]
         let Self { ctx, time, scenes, active_scenes, .. }  = self;
 
@@ -94,7 +105,7 @@ impl WindowState {
             };
 
             let mut view = stage.view();
-            let ctx = ctx.for_update(time);
+            let ctx = ctx.for_update(time, input);
 
             match phase {
                 UpdatePhase::Fixed => scene.fixed_update(ctx, &mut view),
@@ -103,7 +114,7 @@ impl WindowState {
         }
     }
 
-    pub fn draw(&mut self) {
+    pub fn draw(&mut self, input: &Input) {
         #[rustfmt::skip]
         let Self { ctx, draw, time, scenes, active_scenes, .. } = self;
 
@@ -122,7 +133,7 @@ impl WindowState {
             };
 
             let mut view = stage.view();
-            let ctx = ctx.for_draw(time);
+            let ctx = ctx.for_draw(time, input);
 
             scene.draw(ctx, &mut view, draw);
         }

@@ -31,16 +31,15 @@ use utils::FastHashMap;
 use utils::SleepTimer;
 
 use crate::clock::Clock;
-use crate::config::init_config;
+use crate::config::config;
 use crate::err::SDL_LastError;
 use crate::events::AppEvent;
 use crate::events::EventQueue;
 use crate::events::WindowEvent;
 use crate::gpu::Gpu;
 use crate::input::Input;
-use crate::input::keys::Key;
-use crate::input::mouse::MouseButton;
-use crate::render::color::Color;
+use crate::input::edges::InputScope;
+use crate::window::WindowHandle;
 use crate::window::WindowId;
 use crate::window::context::UserContext;
 use crate::window::pacer::FramePacer;
@@ -52,6 +51,11 @@ use crate::window::state::WindowState;
 
 pub use crate::builder::AppBuilder;
 pub use crate::builder::WindowBuilder;
+pub use crate::gpu::buffer::Buffer;
+pub use crate::gpu::buffer::BufferError;
+pub use crate::gpu::buffer::BufferUsage;
+pub use crate::input::keys::Key;
+pub use crate::input::mouse::MouseButton;
 pub use crate::render::draw::Draw;
 pub use crate::render::stage::SceneView;
 pub use crate::scene::Scene;
@@ -59,7 +63,8 @@ pub use crate::scene::SceneId;
 pub use crate::window::context::DrawContext;
 pub use crate::window::context::LoadContext;
 pub use crate::window::context::UpdateContext;
-use crate::window::time::Time;
+pub use crate::window::pacer::FpsCountStrategy;
+pub use crate::window::time::Time;
 
 static SDL_ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -106,9 +111,10 @@ impl App {
         }
 
         debug!("SDL v{} initialized.", sdl3::compiled_version_string());
-        init_config(None);
 
         let gpu = Gpu::init();
+
+        info!("Application initialized.");
 
         Ok(Self {
             requested_at_creation: Vec::new(),
@@ -131,14 +137,20 @@ impl App {
         #[rustfmt::skip]
         let WindowBuilder { title, size, scenes, active_scenes } = builder;
 
+        let config = config();
         let window = PlatformWindow::new(&title, size, self.gpu.clone());
+
+        self.gpu.set_present_mode(&window, config.present_mode);
+
         let scenes = scenes
             .into_iter()
             .map(|(id, scene)| (id, SceneSlot::Unloaded(scene)))
             .collect::<FastHashMap<_, _>>();
 
         let state = WindowState {
-            ctx: UserContext {},
+            ctx: UserContext {
+                window_handle: WindowHandle::new(&window, self.app_events.dispatcher()),
+            },
             draw: Draw::new(),
             pacer: FramePacer::new(PaceMode::Fixed),
             time: Time::new(window.id(), self.app_events.dispatcher()),
@@ -161,6 +173,12 @@ impl App {
             return;
         };
 
+        if self.input.focused == Some(id) {
+            self.input.focused = None;
+            self.input.keys.clear_all();
+            self.input.mouse.clear_all();
+        }
+
         if self.windows.is_empty() {
             self.should_quit = true;
         }
@@ -182,6 +200,8 @@ impl App {
     }
 
     fn handle_sdl_event(&mut self, event: SDL_Event) {
+        trace!("Received SDL event: {}", unsafe { event.type_ });
+
         match SDL_EventType(unsafe { event.type_ }) {
             SDL_EventType::SDL_EVENT_QUIT => self.quit(),
 
@@ -254,7 +274,13 @@ impl App {
                 self.input.m_wheel += math::Vector2::new(x, y);
             }
 
-            event => {}
+            _ => {
+                let window = unsafe { event.window };
+
+                if let Some(entry) = self.windows.get_mut(&window.windowID) {
+                    entry.state.handle_window_event(&event);
+                }
+            }
         }
     }
 
@@ -286,6 +312,10 @@ impl App {
                         WindowEvent::FpsTargetChangeRequested(t) => {
                             entry.state.pacer.set_target_fps(t);
                         }
+
+                        WindowEvent::FpsCountStrategyChangeRequested(s) => {
+                            entry.state.pacer.counter.set_strategy(s);
+                        }
                     }
                 }
 
@@ -305,7 +335,7 @@ impl App {
 
         for entry in self.windows.values_mut() {
             entry.state.sync_time(&self.clock);
-            entry.state.load_active();
+            entry.state.load_active(&self.input);
         }
 
         let mut event: MaybeUninit<SDL_Event> = MaybeUninit::uninit();
@@ -326,30 +356,41 @@ impl App {
             self.clock.advance(now);
 
             while self.clock.should_tick() {
+                self.input.change_scope(InputScope::Tick);
+
                 for entry in self.windows.values_mut() {
                     entry.state.sync_time(&self.clock);
-                    entry.state.update(UpdatePhase::Fixed);
+                    entry.state.update(UpdatePhase::Fixed, &self.input);
                 }
 
                 self.input.roll_tick();
                 self.clock.consume();
             }
 
+            self.input.change_scope(InputScope::Frame);
+            let mut rendered = false;
+
             for entry in self.windows.values_mut() {
                 if !entry.state.pacer.due(now) {
                     continue;
                 }
 
+                rendered = true;
                 entry.state.pacer.record(now);
                 entry.state.sync_time(&self.clock);
 
-                entry.state.update(UpdatePhase::Unrestrained);
-                entry.state.draw();
+                entry.state.update(UpdatePhase::Unrestrained, &self.input);
+                entry.state.draw(&self.input);
 
-                self.gpu.clear(&entry.platform, Color::Cyan);
+                self.gpu
+                    .clear(&entry.platform, entry.state.ctx.window_handle.clear_color);
+
+                entry.state.sync_window(&entry.platform);
             }
 
-            self.input.roll_frame();
+            if rendered {
+                self.input.roll_frame();
+            }
 
             let after_fraw = Instant::now();
             let tick = self.clock.next_tick();

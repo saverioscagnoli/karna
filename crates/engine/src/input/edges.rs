@@ -1,5 +1,13 @@
 use utils::BitSet;
 
+#[derive(Default)]
+#[derive(Debug, Clone, Copy)]
+pub enum InputScope {
+    Tick,
+    #[default]
+    Frame,
+}
+
 #[derive(Clone, Copy)]
 pub struct Edges<S> {
     down: S,
@@ -29,6 +37,10 @@ impl<S: BitSet> Edges<S> {
     }
 
     pub fn release(&mut self, t: S::Item) {
+        if !self.down.contains(t) {
+            return;
+        }
+
         self.down.remove(t);
         self.rel_frame.insert(t);
         self.rel_tick.insert(t);
@@ -38,20 +50,18 @@ impl<S: BitSet> Edges<S> {
         self.down.contains(t)
     }
 
-    pub fn just_pressed_frame(&self, t: S::Item) -> bool {
-        self.press_frame.contains(t)
+    pub fn just_pressed(&self, t: S::Item, scope: InputScope) -> bool {
+        match scope {
+            InputScope::Frame => self.press_frame.contains(t),
+            InputScope::Tick => self.press_tick.contains(t),
+        }
     }
 
-    pub fn just_pressed_tick(&self, t: S::Item) -> bool {
-        self.press_tick.contains(t)
-    }
-
-    pub fn just_released_frame(&self, t: S::Item) -> bool {
-        self.rel_frame.contains(t)
-    }
-
-    pub fn just_released_tick(&self, t: S::Item) -> bool {
-        self.rel_tick.contains(t)
+    pub fn just_released(&self, t: S::Item, scope: InputScope) -> bool {
+        match scope {
+            InputScope::Frame => self.rel_frame.contains(t),
+            InputScope::Tick => self.rel_tick.contains(t),
+        }
     }
 
     pub fn roll_frame(&mut self) {

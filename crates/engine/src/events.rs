@@ -3,12 +3,14 @@ use std::mem;
 use std::rc::Rc;
 
 use crate::window::WindowId;
+use crate::window::pacer::FpsCountStrategy;
 
 #[derive(Debug, Clone)]
 pub enum WindowEvent {
     TitleChangeRequested(Rc<str>),
     SizeChangeRequested(math::Size<u32>),
     FpsTargetChangeRequested(u32),
+    FpsCountStrategyChangeRequested(FpsCountStrategy),
 }
 
 #[derive(Debug, Clone)]

@@ -15,7 +15,6 @@ use sdl3::SDL_ReleaseWindowFromGPUDevice;
 use sdl3::SDL_SetWindowResizable;
 use sdl3::SDL_SetWindowSize;
 use sdl3::SDL_SetWindowTitle;
-use sdl3::SDL_WINDOW_BORDERLESS;
 use sdl3::SDL_WINDOW_RESIZABLE;
 use sdl3::SDL_Window;
 

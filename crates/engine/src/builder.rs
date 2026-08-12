@@ -1,6 +1,8 @@
 use utils::FastHashMap;
 
 use crate::App;
+use crate::config::config;
+use crate::config::init_config;
 use crate::scene::Scene;
 use crate::scene::SceneBuilder;
 use crate::scene::SceneId;
@@ -14,9 +16,11 @@ pub struct WindowBuilder {
 
 impl Default for WindowBuilder {
     fn default() -> Self {
+        let config = config();
+
         Self {
-            title: String::from("My Window"),
-            size: math::Size::new(800, 600),
+            title: config.window_title.clone(),
+            size: config.window_size,
             scenes: FastHashMap::default(),
             active_scenes: Vec::new(),
         }
@@ -59,9 +63,18 @@ impl WindowBuilder {
     }
 }
 
-#[derive(Default)]
 pub struct AppBuilder {
     windows: Vec<WindowBuilder>,
+}
+
+impl Default for AppBuilder {
+    fn default() -> Self {
+        init_config(None);
+
+        Self {
+            windows: Vec::new(),
+        }
+    }
 }
 
 impl AppBuilder {

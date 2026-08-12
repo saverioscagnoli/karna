@@ -1,3 +1,7 @@
+pub mod buffer;
+pub mod present_mode;
+
+use std::cell::RefCell;
 use std::mem;
 use std::ptr;
 
@@ -5,7 +9,6 @@ use logging::debug;
 use logging::fatal;
 use sdl3::SDL_AcquireGPUCommandBuffer;
 use sdl3::SDL_BeginGPURenderPass;
-use sdl3::SDL_ClaimWindowForGPUDevice;
 use sdl3::SDL_CreateGPUDevice;
 use sdl3::SDL_DestroyGPUDevice;
 use sdl3::SDL_EndGPURenderPass;
@@ -22,11 +25,13 @@ use sdl3::SDL_SubmitGPUCommandBuffer;
 use sdl3::SDL_WaitAndAcquireGPUSwapchainTexture;
 
 use crate::err::SDL_LastError;
+use crate::gpu::buffer::TransferBuffer;
 use crate::render::color::Color;
 use crate::window::platform::PlatformWindow;
 
 pub struct Gpu {
     device: *mut SDL_GPUDevice,
+    staging: RefCell<TransferBuffer>,
 }
 
 impl Gpu {
@@ -45,7 +50,10 @@ impl Gpu {
 
             debug!("GPU Device initialized.");
 
-            Self { device }
+            Self {
+                device,
+                staging: RefCell::new(TransferBuffer::new(device, 1024)),
+            }
         }
     }
 
