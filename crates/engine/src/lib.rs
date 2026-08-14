@@ -37,8 +37,11 @@ use crate::events::AppEvent;
 use crate::events::EventQueue;
 use crate::events::WindowEvent;
 use crate::gpu::Gpu;
+use crate::gpu::GpuInfo;
 use crate::input::Input;
 use crate::input::edges::InputScope;
+use crate::render::Renderer;
+use crate::render::draw::DrawState;
 use crate::window::WindowHandle;
 use crate::window::WindowId;
 use crate::window::context::UserContext;
@@ -51,11 +54,13 @@ use crate::window::state::WindowState;
 
 pub use crate::builder::AppBuilder;
 pub use crate::builder::WindowBuilder;
-pub use crate::gpu::buffer::Buffer;
 pub use crate::gpu::buffer::BufferError;
 pub use crate::gpu::buffer::BufferUsage;
+pub use crate::gpu::buffer::GpuBuffer;
 pub use crate::input::keys::Key;
 pub use crate::input::mouse::MouseButton;
+pub use crate::render::camera::Camera;
+pub use crate::render::camera::Projection;
 pub use crate::render::draw::Draw;
 pub use crate::render::stage::SceneView;
 pub use crate::scene::Scene;
@@ -113,7 +118,12 @@ impl App {
         debug!("SDL v{} initialized.", sdl3::compiled_version_string());
 
         let gpu = Gpu::init();
+        let info = gpu.info();
 
+        #[rustfmt::skip]
+        let GpuInfo { name, backend, driver } = info;
+
+        info!("GPU: {} (backend: {}, driver: {})", name, backend, driver);
         info!("Application initialized.");
 
         Ok(Self {
@@ -151,7 +161,8 @@ impl App {
             ctx: UserContext {
                 window_handle: WindowHandle::new(&window, self.app_events.dispatcher()),
             },
-            draw: Draw::new(),
+            draw_state: DrawState::new(),
+            renderer: Renderer::new(self.gpu.clone()),
             pacer: FramePacer::new(PaceMode::Fixed),
             time: Time::new(window.id(), self.app_events.dispatcher()),
             scenes,

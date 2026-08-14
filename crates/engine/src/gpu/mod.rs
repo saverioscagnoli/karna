@@ -1,7 +1,10 @@
 pub mod buffer;
 pub mod present_mode;
+pub mod vertex;
 
 use std::cell::RefCell;
+use std::ffi::CStr;
+use std::ffi::c_char;
 use std::mem;
 use std::ptr;
 
@@ -21,17 +24,49 @@ use sdl3::SDL_GPUDevice;
 use sdl3::SDL_GPULoadOp;
 use sdl3::SDL_GPUStoreOp;
 use sdl3::SDL_GPUTexture;
+use sdl3::SDL_GetGPUDeviceDriver;
+use sdl3::SDL_GetGPUDeviceProperties;
+use sdl3::SDL_GetStringProperty;
+use sdl3::SDL_PropertiesID;
 use sdl3::SDL_SubmitGPUCommandBuffer;
 use sdl3::SDL_WaitAndAcquireGPUSwapchainTexture;
 
 use crate::err::SDL_LastError;
-use crate::gpu::buffer::TransferBuffer;
+use crate::gpu::buffer::GpuTransferBuffer;
 use crate::render::color::Color;
 use crate::window::platform::PlatformWindow;
 
+#[derive(Debug, Clone)]
+pub struct GpuInfo {
+    pub name: String,
+    pub backend: String,
+    pub driver: String,
+}
+
+/// Copies a borrowed C string. SDL owns the memory, so this must not escape
+/// as a pointer — copy immediately.
+unsafe fn owned(ptr: *const c_char) -> Option<String> {
+    if ptr.is_null() {
+        return None;
+    }
+    unsafe { CStr::from_ptr(ptr) }
+        .to_str()
+        .ok()
+        .map(str::to_owned)
+}
+
+unsafe fn prop(props: SDL_PropertiesID, key: &CStr) -> Option<String> {
+    if props == 0 {
+        return None;
+    }
+
+    unsafe { owned(SDL_GetStringProperty(props, key.as_ptr(), ptr::null())) }
+}
+
 pub struct Gpu {
     device: *mut SDL_GPUDevice,
-    staging: RefCell<TransferBuffer>,
+    staging: RefCell<GpuTransferBuffer>,
+    info: GpuInfo,
 }
 
 impl Gpu {
@@ -50,15 +85,37 @@ impl Gpu {
 
             debug!("GPU Device initialized.");
 
+            let backend = owned(SDL_GetGPUDeviceDriver(device)).unwrap_or(String::from("unknown"));
+            let props = SDL_GetGPUDeviceProperties(device);
+            let name = prop(props, c"SDL.gpu.device.name").unwrap_or(String::from("unknown"));
+            let driver_name = prop(props, c"SDL.gpu.device.driver_name");
+            let driver_version = prop(props, c"SDL.gpu.device.driver_version");
+
+            let driver = match (driver_name, driver_version) {
+                (Some(n), Some(v)) => format!("{} {}", n, v),
+                (Some(n), None) => n,
+                (None, Some(v)) => v,
+                (None, None) => String::from("unknown"),
+            };
+
             Self {
                 device,
-                staging: RefCell::new(TransferBuffer::new(device, 1024)),
+                staging: RefCell::new(GpuTransferBuffer::new(device, 1024)),
+                info: GpuInfo {
+                    name,
+                    backend,
+                    driver,
+                },
             }
         }
     }
 
     pub fn raw(&self) -> *mut SDL_GPUDevice {
         self.device
+    }
+
+    pub fn info(&self) -> &GpuInfo {
+        &self.info
     }
 
     /// Function just to make the window visible while building the engine

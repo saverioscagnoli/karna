@@ -18,6 +18,7 @@ pub struct DefaultConfig {
     pub present_mode: PresentMode,
     pub target_tps: u32,
     pub max_tick_catchup: u32,
+    pub draw_color: Color,
 }
 
 impl Default for DefaultConfig {
@@ -33,6 +34,7 @@ impl Default for DefaultConfig {
             present_mode: PresentMode::Immediate,
             target_tps: 60,
             max_tick_catchup: 5,
+            draw_color: Color::White,
         }
     }
 }

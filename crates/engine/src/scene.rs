@@ -28,7 +28,7 @@ pub trait Scene: 'static {
 
     fn fixed_update(&mut self, ctx: UpdateContext, scene: &mut SceneView) {}
     fn update(&mut self, ctx: UpdateContext, scene: &mut SceneView);
-    fn draw(&mut self, ctx: DrawContext, scene: &mut SceneView, draw: &mut Draw);
+    fn draw(&mut self, ctx: DrawContext, draw: &mut Draw);
 }
 
 pub type SceneBuilder = Box<dyn FnOnce(LoadContext, &mut SceneView) -> Box<dyn Scene>>;

@@ -2,12 +2,12 @@ use std::mem;
 
 use logging::error;
 use sdl3::SDL_Event;
-use sdl3::SDL_EventType;
 use utils::FastHashMap;
 
 use crate::clock::Clock;
 use crate::input::Input;
-use crate::render::draw::Draw;
+use crate::render::Renderer;
+use crate::render::draw::DrawState;
 use crate::render::stage::Stage;
 use crate::scene::BoxedScene;
 use crate::scene::SceneBuilder;
@@ -31,7 +31,8 @@ pub enum UpdatePhase {
 
 pub struct WindowState {
     pub ctx: UserContext,
-    pub draw: Draw,
+    pub renderer: Renderer,
+    pub draw_state: DrawState,
 
     pub pacer: FramePacer,
     pub time: Time,
@@ -72,8 +73,8 @@ impl WindowState {
             }
         };
 
-        let mut stage = Stage::new();
-        let mut view = stage.view();
+        let mut stage = self.renderer.create_stage(ctx.window_handle.size());
+        let mut view = stage.scene_view();
         let ctx = ctx.for_load(time, input);
         let scene = builder(ctx, &mut view);
 
@@ -104,7 +105,7 @@ impl WindowState {
                 }
             };
 
-            let mut view = stage.view();
+            let mut view = stage.scene_view();
             let ctx = ctx.for_update(time, input);
 
             match phase {
@@ -116,7 +117,7 @@ impl WindowState {
 
     pub fn draw(&mut self, input: &Input) {
         #[rustfmt::skip]
-        let Self { ctx, draw, time, scenes, active_scenes, .. } = self;
+        let Self { ctx, draw_state, time, scenes, active_scenes, .. } = self;
 
         for id in active_scenes {
             let Some(scene) = scenes.get_mut(id) else {
@@ -132,10 +133,12 @@ impl WindowState {
                 }
             };
 
-            let mut view = stage.view();
+            draw_state.reset();
+
+            let mut draw = stage.draw(draw_state, ctx.window_handle.size());
             let ctx = ctx.for_draw(time, input);
 
-            scene.draw(ctx, &mut view, draw);
+            scene.draw(ctx, &mut draw);
         }
     }
 }

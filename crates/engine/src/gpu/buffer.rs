@@ -38,7 +38,7 @@ use sdl3::SDL_UploadToGPUBuffer;
 use crate::gpu::Gpu;
 
 pub struct Mapped<'a> {
-    owner: &'a mut TransferBuffer,
+    owner: &'a mut GpuTransferBuffer,
     ptr: NonNull<c_void>,
     cursor: u32,
 }
@@ -72,13 +72,13 @@ impl Drop for Mapped<'_> {
     }
 }
 
-pub struct TransferBuffer {
+pub struct GpuTransferBuffer {
     device: *mut SDL_GPUDevice,
     raw: NonNull<SDL_GPUTransferBuffer>,
     capacity: u32,
 }
 
-impl TransferBuffer {
+impl GpuTransferBuffer {
     pub fn new(device: *mut SDL_GPUDevice, capacity: u32) -> Self {
         let capacity = capacity.max(1);
         let raw = unsafe {
@@ -133,7 +133,7 @@ impl TransferBuffer {
     }
 }
 
-impl Drop for TransferBuffer {
+impl Drop for GpuTransferBuffer {
     fn drop(&mut self) {
         unsafe { SDL_ReleaseGPUTransferBuffer(self.device, self.raw.as_ptr()) }
     }
@@ -180,7 +180,7 @@ fn sdl_error() -> BufferError {
     }
 }
 
-pub struct Buffer<T> {
+pub struct GpuBuffer<T> {
     label: String,
     gpu: Rc<Gpu>,
     raw: NonNull<SDL_GPUBuffer>,
@@ -190,7 +190,7 @@ pub struct Buffer<T> {
     _marker: PhantomData<T>,
 }
 
-impl<T> Buffer<T> {
+impl<T> GpuBuffer<T> {
     pub fn new<L>(gpu: Rc<Gpu>, label: L, capacity: usize, usage: BufferUsage) -> Self
     where
         L: AsRef<str>,
@@ -267,7 +267,7 @@ impl<T> Buffer<T> {
     }
 }
 
-impl<T> Drop for Buffer<T> {
+impl<T> Drop for GpuBuffer<T> {
     fn drop(&mut self) {
         unsafe {
             SDL_ReleaseGPUBuffer(self.gpu.device, self.raw.as_ptr());
@@ -276,7 +276,7 @@ impl<T> Drop for Buffer<T> {
 }
 
 impl Gpu {
-    pub fn upload<T>(&self, dst: &mut Buffer<T>, data: &[T]) -> Result<(), BufferError>
+    pub fn upload<T>(&self, dst: &mut GpuBuffer<T>, data: &[T]) -> Result<(), BufferError>
     where
         T: Copy,
     {
