@@ -8,4 +8,6 @@ edition.workspace = true
 math.workspace = true
 logging.workspace = true
 sdl3.workspace = true
+sdl3-image.workspace = true
 utils.workspace = true
+crossbeam-channel.workspace = true

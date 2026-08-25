@@ -20,6 +20,12 @@ fn main() {
         probe_system()
     };
 
+    // Expose the include dir (and, for bundled builds, the cmake install
+    // root) to dependents via `links` metadata, so e.g. sdl3-image can
+    // compile/link against the exact same SDL3 this crate built. Visible to
+    // direct dependents' build scripts as DEP_SDL3_INCLUDE / DEP_SDL3_ROOT.
+    println!("cargo:include={}", include_dir.display());
+
     let (major, minor, micro) = read_header_version(&include_dir);
     println!("cargo:warning=karna-sys: building against SDL {major}.{minor}.{micro}");
     check_version(major, minor, micro);
@@ -81,6 +87,11 @@ fn build_bundled() -> PathBuf {
 
     println!("cargo:rustc-link-lib=static=SDL3");
     link_transitive_deps(&libdir);
+
+    // The cmake install prefix, so dependents can point their own cmake
+    // builds (e.g. SDL3_image's `find_package(SDL3)`) at it via
+    // CMAKE_PREFIX_PATH instead of building/finding a second copy of SDL3.
+    println!("cargo:root={}", dst.display());
 
     dst.join("include")
 }

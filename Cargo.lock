@@ -89,6 +89,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-channel"
+version = "0.5.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-utils"
+version = "0.8.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61803da095bee82a81bb1a452ecc25d3b2f1416d1897eb86430c6159ef717c17"
+
+[[package]]
 name = "either"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -98,9 +113,11 @@ checksum = "9e5e8f6c15a24b9a3ee5efec809ccd006d3b30e8b3bb63c39af737c7f87daa1d"
 name = "engine"
 version = "0.1.0"
 dependencies = [
+ "crossbeam-channel",
  "logging",
  "math",
  "sdl3",
+ "sdl3-image",
  "utils",
 ]
 
@@ -327,6 +344,16 @@ dependencies = [
  "bindgen",
  "cmake",
  "pkg-config",
+]
+
+[[package]]
+name = "sdl3-image"
+version = "0.1.0"
+dependencies = [
+ "bindgen",
+ "cmake",
+ "pkg-config",
+ "sdl3",
 ]
 
 [[package]]

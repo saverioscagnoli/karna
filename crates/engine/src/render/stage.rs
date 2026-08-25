@@ -1,9 +1,12 @@
 use std::rc::Rc;
 
+use logging::error;
+
 use crate::Camera;
 use crate::Draw;
 use crate::Projection;
 use crate::gpu::Gpu;
+use crate::gpu::pipeline::DrawCall;
 use crate::render::draw::DrawState;
 use crate::render::geometry::ImmediateGeometry;
 use crate::render::layer::Layer;
@@ -68,6 +71,42 @@ impl Stage {
             data: &mut self.data,
             viewport,
         }
+    }
+
+    pub(crate) fn flush(&mut self, gpu: &Gpu) -> Vec<DrawCall> {
+        let mut calls = Vec::new();
+
+        for &layer in &[Layer::WORLD, Layer::UI, Layer::DEBUG] {
+            let camera = self.cameras[layer];
+            let geometry = self.data[layer].immediate_mut();
+
+            if geometry.indices.is_empty() {
+                continue;
+            }
+
+            let uploaded = gpu
+                .upload(&mut geometry.vertex_buffer, &geometry.vertices)
+                .and_then(|_| gpu.upload(&mut geometry.index_buffer, &geometry.indices));
+
+            if let Err(err) = uploaded {
+                error!("Failed to upload immediate geometry: {:?}", err);
+                geometry.vertices.clear();
+                geometry.indices.clear();
+                continue;
+            }
+
+            calls.push(DrawCall {
+                mvp: camera.mvp(),
+                vertex_buffer: geometry.vertex_buffer.raw(),
+                index_buffer: geometry.index_buffer.raw(),
+                num_indices: geometry.indices.len() as u32,
+            });
+
+            geometry.vertices.clear();
+            geometry.indices.clear();
+        }
+
+        calls
     }
 }
 

@@ -87,8 +87,12 @@ impl Camera {
         }
     }
 
+    pub fn mvp(&self) -> math::Matrix4<f32> {
+        self.projection().matrix().matmul(&self.view_matrix())
+    }
+
     pub(crate) fn update(&mut self, viewport: math::Size<u32>) {
-        let viewport = viewport.as_f32();
+        let viewport = viewport.cast::<f32>();
 
         match &mut self.projection {
             Projection::Orthographic { right, bottom, .. } => {

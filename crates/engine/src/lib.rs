@@ -1,3 +1,4 @@
+mod assets;
 mod builder;
 mod clock;
 mod config;
@@ -30,6 +31,9 @@ use sdl3::SDL_Quit;
 use utils::FastHashMap;
 use utils::SleepTimer;
 
+use crate::assets::AssetServer;
+use crate::assets::workers::AssetWorkers;
+use crate::assets::workers::spawn_workers;
 use crate::clock::Clock;
 use crate::config::config;
 use crate::err::SDL_LastError;
@@ -61,6 +65,7 @@ pub use crate::input::keys::Key;
 pub use crate::input::mouse::MouseButton;
 pub use crate::render::camera::Camera;
 pub use crate::render::camera::Projection;
+pub use crate::render::color::Color;
 pub use crate::render::draw::Draw;
 pub use crate::render::stage::SceneView;
 pub use crate::scene::Scene;
@@ -97,6 +102,9 @@ pub struct App {
     clock: Clock,
     sleeper: SleepTimer,
 
+    asset_workers: AssetWorkers,
+    asset_server: AssetServer,
+
     gpu: Rc<Gpu>,
 
     _sdl: SdlGuard,
@@ -117,6 +125,7 @@ impl App {
 
         debug!("SDL v{} initialized.", sdl3::compiled_version_string());
 
+        let config = config();
         let gpu = Gpu::init();
         let info = gpu.info();
 
@@ -126,6 +135,9 @@ impl App {
         info!("GPU: {} (backend: {}, driver: {})", name, backend, driver);
         info!("Application initialized.");
 
+        let asset_root = assets::resolve_base_path();
+        let (asset_workers, asset_server) = spawn_workers(asset_root, config.asset_workers);
+
         Ok(Self {
             requested_at_creation: Vec::new(),
             windows: FastHashMap::default(),
@@ -134,6 +146,8 @@ impl App {
             input: Input::default(),
             clock: Clock::default(),
             sleeper: SleepTimer::new(),
+            asset_workers,
+            asset_server,
             gpu: Rc::new(gpu),
             _sdl: SdlGuard(PhantomData),
         })
@@ -393,8 +407,12 @@ impl App {
                 entry.state.update(UpdatePhase::Unrestrained, &self.input);
                 entry.state.draw(&self.input);
 
-                self.gpu
-                    .clear(&entry.platform, entry.state.ctx.window_handle.clear_color);
+                let calls = entry.state.flush(&self.gpu);
+                self.gpu.render(
+                    &entry.platform,
+                    entry.state.ctx.window_handle.clear_color,
+                    &calls,
+                );
 
                 entry.state.sync_window(&entry.platform);
             }
@@ -420,5 +438,7 @@ impl App {
 
             self.sleeper.sleep_until(deadline);
         }
+
+        self.asset_workers.shutdown(self.asset_server);
     }
 }

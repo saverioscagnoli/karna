@@ -1,0 +1,27 @@
+[package]
+name = "sdl3-image"
+version.workspace = true
+edition.workspace = true
+license = "Zlib"
+links = "SDL3_image"
+exclude = ["vendor/"]
+
+[lib]
+doctest = false
+
+[features]
+default = ["bundled"]
+bundled = []
+system = []
+# Regenerate crates/sdl3-image/generated/sdl3_image.rs from the SDL_image
+# headers via bindgen instead of using the checked-in copy. See sdl3's
+# `codegen` feature for why this is off by default.
+codegen = ["dep:bindgen"]
+
+[dependencies]
+sdl3.workspace = true
+
+[build-dependencies]
+bindgen = { version = "0.72.1", optional = true }
+cmake = "0.1.58"
+pkg-config = "0.3.33"

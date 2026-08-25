@@ -39,6 +39,10 @@ impl<T: Num + Copy> Size<T> {
         self.height
     }
 
+    pub fn tuple(&self) -> (T, T) {
+        (self.width, self.height)
+    }
+
     pub fn area(&self) -> T {
         self.width * self.height
     }
@@ -81,12 +85,6 @@ impl<T: Float> Size<T> {
 
     pub fn fit_scale(&self, other: &Self) -> T {
         (self.width / other.width).min(self.height / other.height)
-    }
-}
-
-impl Size<u32> {
-    pub fn as_f32(&self) -> Size<f32> {
-        Size::new(self.width as f32, self.height as f32)
     }
 }
 

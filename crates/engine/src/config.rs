@@ -19,10 +19,18 @@ pub struct DefaultConfig {
     pub target_tps: u32,
     pub max_tick_catchup: u32,
     pub draw_color: Color,
+    pub asset_workers: usize,
+    pub atlas_page_size: u32,
+    pub atlas_padding: u32,
+    pub atlas_shared_capacity: u32,
 }
 
 impl Default for DefaultConfig {
     fn default() -> Self {
+        let atlas_padding = 1;
+        let atlas_page_size = 1024;
+        let atlas_shared_capacity = atlas_page_size - atlas_padding * 2;
+
         Self {
             window_title: String::from("My Window"),
             window_size: math::Size::new(1280, 720),
@@ -34,7 +42,11 @@ impl Default for DefaultConfig {
             present_mode: PresentMode::Immediate,
             target_tps: 60,
             max_tick_catchup: 5,
-            draw_color: Color::White,
+            draw_color: Color::WHITE,
+            asset_workers: 4,
+            atlas_page_size,
+            atlas_padding,
+            atlas_shared_capacity,
         }
     }
 }

@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use std::ffi::CStr;
 use std::fmt;
 use std::mem;
 use std::ops::Add;
@@ -6,6 +8,10 @@ use std::ops::Div;
 use std::ops::Mul;
 use std::ops::Sub;
 use std::ops::SubAssign;
+#[cfg(unix)]
+use std::os::raw::c_char;
+#[cfg(unix)]
+use std::path::PathBuf;
 
 pub const fn fnv1a(bytes: &[u8]) -> u64 {
     let mut hash = 0xcbf29ce484222325;
@@ -223,4 +229,20 @@ impl fmt::Display for ByteSize {
             write!(f, "{} B", self.0)
         }
     }
+}
+
+#[cfg(unix)]
+pub unsafe fn cstr_to_pathbuf(raw: *const c_char) -> PathBuf {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    PathBuf::from(OsStr::from_bytes(unsafe { CStr::from_ptr(raw) }.to_bytes()))
+}
+
+#[cfg(not(unix))]
+pub unsafe fn cstr_to_pathbuf(raw: *const c_char) -> PathBuf {
+    PathBuf::from(
+        unsafe { CStr::from_ptr(raw) }
+            .to_string_lossy()
+            .into_owned(),
+    )
 }

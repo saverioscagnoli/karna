@@ -10,25 +10,24 @@ pub struct Color {
 
 impl Default for Color {
     fn default() -> Self {
-        Self::White
+        Self::WHITE
     }
 }
 
-#[allow(non_upper_case_globals)]
 impl Color {
-    pub const Red: Self = Self::rgb(1.0, 0.0, 0.0);
-    pub const Green: Self = Self::rgb(0.0, 1.0, 0.0);
-    pub const Blue: Self = Self::rgb(0.0, 0.0, 1.0);
-    pub const White: Self = Self::rgb(1.0, 1.0, 1.0);
-    pub const Black: Self = Self::rgb(0.0, 0.0, 0.0);
-    pub const Yellow: Self = Self::rgb(1.0, 1.0, 0.0);
-    pub const Cyan: Self = Self::rgb(0.0, 1.0, 1.0);
-    pub const Magenta: Self = Self::rgb(1.0, 0.0, 1.0);
-    pub const Gray: Self = Self::rgb(0.5, 0.5, 0.5);
-    pub const Orange: Self = Self::rgb(1.0, 0.65, 0.0);
-    pub const Purple: Self = Self::rgb(0.5, 0.0, 0.5);
-    pub const Brown: Self = Self::rgb(0.6, 0.3, 0.0);
-    pub const Pink: Self = Self::rgb(1.0, 0.75, 0.8);
+    pub const RED: Self = Self::rgb(1.0, 0.0, 0.0);
+    pub const GREEN: Self = Self::rgb(0.0, 1.0, 0.0);
+    pub const BLUE: Self = Self::rgb(0.0, 0.0, 1.0);
+    pub const WHITE: Self = Self::rgb(1.0, 1.0, 1.0);
+    pub const BLACK: Self = Self::rgb(0.0, 0.0, 0.0);
+    pub const YELLOW: Self = Self::rgb(1.0, 1.0, 0.0);
+    pub const CYAN: Self = Self::rgb(0.0, 1.0, 1.0);
+    pub const MAGENTA: Self = Self::rgb(1.0, 0.0, 1.0);
+    pub const GRAY: Self = Self::rgb(0.5, 0.5, 0.5);
+    pub const ORANGE: Self = Self::rgb(1.0, 0.65, 0.0);
+    pub const PURPLE: Self = Self::rgb(0.5, 0.0, 0.5);
+    pub const BROWN: Self = Self::rgb(0.6, 0.3, 0.0);
+    pub const PINK: Self = Self::rgb(1.0, 0.75, 0.8);
 
     pub const fn rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self { r, g, b, a }

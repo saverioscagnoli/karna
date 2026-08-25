@@ -5,6 +5,8 @@ use sdl3::SDL_Event;
 use utils::FastHashMap;
 
 use crate::clock::Clock;
+use crate::gpu::Gpu;
+use crate::gpu::pipeline::DrawCall;
 use crate::input::Input;
 use crate::render::Renderer;
 use crate::render::draw::DrawState;
@@ -140,5 +142,16 @@ impl WindowState {
 
             scene.draw(ctx, &mut draw);
         }
+    }
+
+    pub(crate) fn flush(&mut self, gpu: &Gpu) -> Vec<DrawCall> {
+        self.scenes
+            .values_mut()
+            .filter_map(|slot| match slot {
+                SceneSlot::Loaded { stage, .. } => Some(stage),
+                _ => None,
+            })
+            .flat_map(|stage| stage.flush(gpu))
+            .collect()
     }
 }

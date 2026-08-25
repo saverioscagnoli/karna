@@ -64,6 +64,29 @@ impl Mapped<'_> {
         self.cursor = end;
         Ok(offset)
     }
+
+    pub fn write_aligned<T>(&mut self, data: &[T], align: u32) -> Result<u32, BufferError> {
+        debug_assert!(align.is_power_of_two());
+
+        let bytes = u32::try_from(mem::size_of_val(data)).map_err(|_| BufferError::TooLarge)?;
+        let offset = (self.cursor + align - 1) & !(align - 1);
+        let end = offset.checked_add(bytes).ok_or(BufferError::TooLarge)?;
+
+        if end > self.owner.capacity {
+            return Err(BufferError::TooLarge);
+        }
+
+        unsafe {
+            ptr::copy_nonoverlapping(
+                data.as_ptr().cast::<u8>(),
+                self.ptr.as_ptr().cast::<u8>().add(offset as usize),
+                bytes as usize,
+            );
+        }
+
+        self.cursor = end;
+        Ok(offset)
+    }
 }
 
 impl Drop for Mapped<'_> {

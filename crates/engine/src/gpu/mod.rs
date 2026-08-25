@@ -1,38 +1,54 @@
 pub mod buffer;
+pub mod pipeline;
 pub mod present_mode;
+pub mod texture;
 pub mod vertex;
 
 use std::cell::RefCell;
 use std::ffi::CStr;
 use std::ffi::c_char;
+use std::ffi::c_void;
 use std::mem;
+use std::mem::ManuallyDrop;
 use std::ptr;
 
 use logging::debug;
 use logging::fatal;
 use sdl3::SDL_AcquireGPUCommandBuffer;
 use sdl3::SDL_BeginGPURenderPass;
+use sdl3::SDL_BindGPUFragmentSamplers;
+use sdl3::SDL_BindGPUGraphicsPipeline;
+use sdl3::SDL_BindGPUIndexBuffer;
+use sdl3::SDL_BindGPUVertexBuffers;
 use sdl3::SDL_CreateGPUDevice;
 use sdl3::SDL_DestroyGPUDevice;
+use sdl3::SDL_DrawGPUIndexedPrimitives;
 use sdl3::SDL_EndGPURenderPass;
 use sdl3::SDL_FColor;
 use sdl3::SDL_GPU_SHADERFORMAT_DXIL;
 use sdl3::SDL_GPU_SHADERFORMAT_MSL;
 use sdl3::SDL_GPU_SHADERFORMAT_SPIRV;
+use sdl3::SDL_GPUBufferBinding;
 use sdl3::SDL_GPUColorTargetInfo;
 use sdl3::SDL_GPUDevice;
+use sdl3::SDL_GPUIndexElementSize;
 use sdl3::SDL_GPULoadOp;
 use sdl3::SDL_GPUStoreOp;
 use sdl3::SDL_GPUTexture;
+use sdl3::SDL_GPUTextureSamplerBinding;
 use sdl3::SDL_GetGPUDeviceDriver;
 use sdl3::SDL_GetGPUDeviceProperties;
+use sdl3::SDL_GetGPUSwapchainTextureFormat;
 use sdl3::SDL_GetStringProperty;
 use sdl3::SDL_PropertiesID;
+use sdl3::SDL_PushGPUVertexUniformData;
 use sdl3::SDL_SubmitGPUCommandBuffer;
 use sdl3::SDL_WaitAndAcquireGPUSwapchainTexture;
 
 use crate::err::SDL_LastError;
 use crate::gpu::buffer::GpuTransferBuffer;
+use crate::gpu::pipeline::DrawCall;
+use crate::gpu::pipeline::Pipeline;
 use crate::render::color::Color;
 use crate::window::platform::PlatformWindow;
 
@@ -65,7 +81,8 @@ unsafe fn prop(props: SDL_PropertiesID, key: &CStr) -> Option<String> {
 
 pub struct Gpu {
     device: *mut SDL_GPUDevice,
-    staging: RefCell<GpuTransferBuffer>,
+    staging: ManuallyDrop<RefCell<GpuTransferBuffer>>,
+    pipeline: ManuallyDrop<RefCell<Option<Pipeline>>>,
     info: GpuInfo,
 }
 
@@ -100,7 +117,8 @@ impl Gpu {
 
             Self {
                 device,
-                staging: RefCell::new(GpuTransferBuffer::new(device, 1024)),
+                staging: ManuallyDrop::new(RefCell::new(GpuTransferBuffer::new(device, 1024))),
+                pipeline: ManuallyDrop::new(RefCell::new(None)),
                 info: GpuInfo {
                     name,
                     backend,
@@ -118,8 +136,20 @@ impl Gpu {
         &self.info
     }
 
-    /// Function just to make the window visible while building the engine
-    pub fn clear(&self, window: &PlatformWindow, color: Color) {
+    fn pipeline_for(&self, window: &PlatformWindow) {
+        let mut pipeline = self.pipeline.borrow_mut();
+
+        if pipeline.is_none() {
+            let format = unsafe { SDL_GetGPUSwapchainTextureFormat(self.device, window.raw()) };
+            *pipeline = Some(Pipeline::new(self.device, format));
+        }
+    }
+
+    pub(crate) fn render(&self, window: &PlatformWindow, color: Color, calls: &[DrawCall]) {
+        self.pipeline_for(window);
+        let pipeline = self.pipeline.borrow();
+        let pipeline = pipeline.as_ref().expect("pipeline initialized above");
+
         unsafe {
             let cmd = SDL_AcquireGPUCommandBuffer(self.device);
 
@@ -154,6 +184,47 @@ impl Gpu {
             target.store_op = SDL_GPUStoreOp::SDL_GPU_STOREOP_STORE;
 
             let pass = SDL_BeginGPURenderPass(cmd, &target, 1, ptr::null());
+
+            if !calls.is_empty() {
+                SDL_BindGPUGraphicsPipeline(pass, pipeline.raw());
+
+                let sampler_binding = SDL_GPUTextureSamplerBinding {
+                    texture: pipeline.white_texture(),
+                    sampler: pipeline.white_sampler(),
+                };
+                SDL_BindGPUFragmentSamplers(pass, 0, &sampler_binding, 1);
+
+                for call in calls {
+                    let mvp = call.mvp;
+                    let bytes = mvp.as_bytes();
+
+                    SDL_PushGPUVertexUniformData(
+                        cmd,
+                        0,
+                        bytes.as_ptr() as *const c_void,
+                        bytes.len() as u32,
+                    );
+
+                    let vertex_binding = SDL_GPUBufferBinding {
+                        buffer: call.vertex_buffer,
+                        offset: 0,
+                    };
+                    SDL_BindGPUVertexBuffers(pass, 0, &vertex_binding, 1);
+
+                    let index_binding = SDL_GPUBufferBinding {
+                        buffer: call.index_buffer,
+                        offset: 0,
+                    };
+                    SDL_BindGPUIndexBuffer(
+                        pass,
+                        &index_binding,
+                        SDL_GPUIndexElementSize::SDL_GPU_INDEXELEMENTSIZE_32BIT,
+                    );
+
+                    SDL_DrawGPUIndexedPrimitives(pass, call.num_indices, 1, 0, 0, 0);
+                }
+            }
+
             SDL_EndGPURenderPass(pass);
 
             if !SDL_SubmitGPUCommandBuffer(cmd) {
@@ -165,7 +236,12 @@ impl Gpu {
 
 impl Drop for Gpu {
     fn drop(&mut self) {
-        unsafe { SDL_DestroyGPUDevice(self.device) };
         debug!("Dropping GPU device.");
+
+        unsafe {
+            ManuallyDrop::drop(&mut self.pipeline);
+            ManuallyDrop::drop(&mut self.staging);
+            SDL_DestroyGPUDevice(self.device);
+        }
     }
 }

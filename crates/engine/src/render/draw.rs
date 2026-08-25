@@ -5,6 +5,7 @@ use crate::render::geometry::ImmediateGeometry;
 use crate::render::layer::Layer;
 use crate::render::layer::LayerKind;
 use crate::render::layer::LayerMap;
+use crate::render::vertex::Vertex;
 
 pub struct DrawState {
     pub color: Color,
@@ -60,7 +61,50 @@ impl<'a> Draw<'a> {
     }
 
     pub fn mvp(&self) -> math::Matrix4<f32> {
-        let c = self.camera();
-        c.projection().matrix().matmul(&c.view_matrix())
+        self.camera().mvp()
+    }
+
+    pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
+        let color = self.state.color.into();
+        let target = self.target();
+        let base = target.vertices.len() as u32;
+
+        target.vertices.extend_from_slice(&[
+            Vertex {
+                position: math::Vector3::new(x, y, 0.0),
+                color,
+                uv: math::Vector2::new(0.0, 0.0),
+            },
+            Vertex {
+                position: math::Vector3::new(x + w, y, 0.0),
+                color,
+                uv: math::Vector2::new(1.0, 0.0),
+            },
+            Vertex {
+                position: math::Vector3::new(x + w, y + h, 0.0),
+                color,
+                uv: math::Vector2::new(1.0, 1.0),
+            },
+            Vertex {
+                position: math::Vector3::new(x, y + h, 0.0),
+                color,
+                uv: math::Vector2::new(0.0, 1.0),
+            },
+        ]);
+
+        target
+            .indices
+            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+
+    pub fn rect_v<P, S>(&mut self, pos: P, size: S)
+    where
+        P: Into<math::Vector2<f32>>,
+        S: Into<math::Size<f32>>,
+    {
+        let pos: math::Vector2<f32> = pos.into();
+        let size: math::Size<f32> = size.into();
+
+        self.rect(pos.x, pos.y, size.width, size.height);
     }
 }
