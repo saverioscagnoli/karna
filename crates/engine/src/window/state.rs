@@ -2,8 +2,10 @@ use std::mem;
 
 use logging::error;
 use sdl3::SDL_Event;
+use sdl3::SDL_GPUTexture;
 use utils::FastHashMap;
 
+use crate::assets::AssetServer;
 use crate::clock::Clock;
 use crate::gpu::Gpu;
 use crate::gpu::pipeline::DrawCall;
@@ -57,7 +59,7 @@ impl WindowState {
         self.ctx.window_handle.handle_event(event);
     }
 
-    pub fn load_one(&mut self, id: SceneId, input: &Input) {
+    pub fn load_one(&mut self, id: SceneId, input: &Input, assets: &mut AssetServer) {
         #[rustfmt::skip]
         let Self { ctx, time, scenes, .. } = self;
 
@@ -77,19 +79,19 @@ impl WindowState {
 
         let mut stage = self.renderer.create_stage(ctx.window_handle.size());
         let mut view = stage.scene_view();
-        let ctx = ctx.for_load(time, input);
+        let ctx = ctx.for_load(time, input, assets);
         let scene = builder(ctx, &mut view);
 
         scenes.insert(id, SceneSlot::Loaded { scene, stage });
     }
 
-    pub fn load_active(&mut self, input: &Input) {
+    pub fn load_active(&mut self, input: &Input, assets: &mut AssetServer) {
         for id in self.active_scenes.clone() {
-            self.load_one(id, input);
+            self.load_one(id, input, assets);
         }
     }
 
-    pub fn update(&mut self, phase: UpdatePhase, input: &Input) {
+    pub fn update(&mut self, phase: UpdatePhase, input: &Input, assets: &mut AssetServer) {
         #[rustfmt::skip]
         let Self { ctx, time, scenes, active_scenes, .. }  = self;
 
@@ -108,7 +110,7 @@ impl WindowState {
             };
 
             let mut view = stage.scene_view();
-            let ctx = ctx.for_update(time, input);
+            let ctx = ctx.for_update(time, input, assets);
 
             match phase {
                 UpdatePhase::Fixed => scene.fixed_update(ctx, &mut view),
@@ -117,7 +119,7 @@ impl WindowState {
         }
     }
 
-    pub fn draw(&mut self, input: &Input) {
+    pub fn draw(&mut self, input: &Input, assets: &AssetServer) {
         #[rustfmt::skip]
         let Self { ctx, draw_state, time, scenes, active_scenes, .. } = self;
 
@@ -137,21 +139,26 @@ impl WindowState {
 
             draw_state.reset();
 
-            let mut draw = stage.draw(draw_state, ctx.window_handle.size());
-            let ctx = ctx.for_draw(time, input);
+            let mut draw = stage.draw(draw_state, ctx.window_handle.size(), assets);
+            let ctx = ctx.for_draw(time, input, assets);
 
             scene.draw(ctx, &mut draw);
         }
     }
 
-    pub(crate) fn flush(&mut self, gpu: &Gpu) -> Vec<DrawCall> {
+    pub(crate) fn flush(
+        &mut self,
+        gpu: &Gpu,
+        assets: &AssetServer,
+        white_texture: *mut SDL_GPUTexture,
+    ) -> Vec<DrawCall> {
         self.scenes
             .values_mut()
             .filter_map(|slot| match slot {
                 SceneSlot::Loaded { stage, .. } => Some(stage),
                 _ => None,
             })
-            .flat_map(|stage| stage.flush(gpu))
+            .flat_map(|stage| stage.flush(gpu, assets, white_texture))
             .collect()
     }
 }

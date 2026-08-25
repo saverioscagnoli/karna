@@ -1,21 +1,26 @@
 pub mod atlas;
+pub mod font;
 pub mod image;
 pub mod workers;
 
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
+use logging::debug;
+use logging::error;
 use logging::fatal;
 use logging::warn;
 use sdl3::SDL_GetBasePath;
+use utils::ByteSize;
 use utils::Handle;
-use utils::SlotMap;
 use utils::cstr_to_pathbuf;
 
 use crate::assets::image::DecodedImage;
-use crate::assets::image::Image;
+use crate::assets::image::ImageRegistry;
 use crate::err::SDL_LastError;
+use crate::gpu::Gpu;
 use crate::gpu::texture::Filter;
 
 pub enum AssetKind {
@@ -44,6 +49,7 @@ pub struct AssetResponse {
     data: Result<AssetData, String>,
 }
 
+#[derive(Debug)]
 pub enum AssetSlot<T> {
     Pending,
     Ready(T),
@@ -53,26 +59,51 @@ pub enum AssetSlot<T> {
 pub struct AssetServer {
     requests: Sender<AssetRequest>,
     responses: Receiver<AssetResponse>,
-    images: SlotMap<AssetSlot<Image>>,
+    images: ImageRegistry,
 }
 
 impl AssetServer {
     fn new(requests: Sender<AssetRequest>, responses: Receiver<AssetResponse>) -> Self {
-        let mut this = Self {
+        Self {
             requests,
             responses,
-            images: SlotMap::new(),
-        };
+            images: ImageRegistry::new(),
+        }
+    }
 
-        this
+    pub(crate) fn poll(&mut self, gpu: &Rc<Gpu>) {
+        for res in self.responses.try_iter() {
+            match (res.kind, res.data) {
+                (AssetKind::Image(filter), Ok(AssetData::Image(decoded))) => {
+                    let image = self.images.atlas.insert(&decoded, res.slot.cast(), filter);
+
+                    debug!(
+                        "Loaded image successfully ({:?} {})",
+                        decoded.size,
+                        ByteSize::from_bytes(decoded.pixels.len() as u64)
+                    );
+
+                    self.images.slots[res.slot.cast()] = AssetSlot::Ready(image);
+                }
+
+                (AssetKind::Image(_), Err(e)) => {
+                    error!("Failed to load image: {}", e);
+                    self.images.slots[res.slot.cast()] = AssetSlot::Failed;
+                }
+
+                _ => {}
+            }
+        }
     }
 }
 
 fn sdl_base_path() -> Result<PathBuf, String> {
     let raw = unsafe { SDL_GetBasePath() };
+
     if raw.is_null() {
         return Err(SDL_LastError());
     }
+
     Ok(unsafe { cstr_to_pathbuf(raw) })
 }
 

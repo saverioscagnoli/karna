@@ -1,6 +1,11 @@
+use utils::Handle;
+
 use crate::Camera;
+use crate::assets::AssetServer;
+use crate::assets::image::Image;
 use crate::config::config;
 use crate::render::color::Color;
+use crate::render::geometry::BatchTexture;
 use crate::render::geometry::ImmediateGeometry;
 use crate::render::layer::Layer;
 use crate::render::layer::LayerKind;
@@ -30,6 +35,7 @@ pub struct Draw<'a> {
     pub(crate) cameras: &'a LayerMap<Camera>,
     pub(crate) data: &'a mut LayerMap<LayerKind>,
     pub(crate) viewport: math::Size<u32>,
+    pub(crate) assets: &'a AssetServer,
 }
 
 impl<'a> Draw<'a> {
@@ -95,6 +101,8 @@ impl<'a> Draw<'a> {
         target
             .indices
             .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+
+        target.push_batch(BatchTexture::White, 6);
     }
 
     pub fn rect_v<P, S>(&mut self, pos: P, size: S)
@@ -106,5 +114,45 @@ impl<'a> Draw<'a> {
         let size: math::Size<f32> = size.into();
 
         self.rect(pos.x, pos.y, size.width, size.height);
+    }
+
+    pub fn image(&mut self, handle: Handle<Image>, x: f32, y: f32) {
+        let image = *self.assets.get_image(handle);
+        let color = self.state.color.into();
+
+        let w = image.size.width as f32;
+        let h = image.size.height as f32;
+
+        let target = self.target();
+        let base = target.vertices.len() as u32;
+
+        target.vertices.extend_from_slice(&[
+            Vertex {
+                position: math::Vector3::new(x, y, 0.0),
+                color,
+                uv: image.uv_min,
+            },
+            Vertex {
+                position: math::Vector3::new(x + w, y, 0.0),
+                color,
+                uv: math::Vector2::new(image.uv_max.x, image.uv_min.y),
+            },
+            Vertex {
+                position: math::Vector3::new(x + w, y + h, 0.0),
+                color,
+                uv: image.uv_max,
+            },
+            Vertex {
+                position: math::Vector3::new(x, y + h, 0.0),
+                color,
+                uv: math::Vector2::new(image.uv_min.x, image.uv_max.y),
+            },
+        ]);
+
+        target
+            .indices
+            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+
+        target.push_batch(BatchTexture::Atlas(image.page), 6);
     }
 }

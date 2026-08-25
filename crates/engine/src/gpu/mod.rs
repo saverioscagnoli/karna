@@ -145,6 +145,12 @@ impl Gpu {
         }
     }
 
+    pub(crate) fn white_texture(&self, window: &PlatformWindow) -> *mut SDL_GPUTexture {
+        self.pipeline_for(window);
+        let pipeline = self.pipeline.borrow();
+        pipeline.as_ref().expect("pipeline initialized above").white_texture()
+    }
+
     pub(crate) fn render(&self, window: &PlatformWindow, color: Color, calls: &[DrawCall]) {
         self.pipeline_for(window);
         let pipeline = self.pipeline.borrow();
@@ -188,12 +194,6 @@ impl Gpu {
             if !calls.is_empty() {
                 SDL_BindGPUGraphicsPipeline(pass, pipeline.raw());
 
-                let sampler_binding = SDL_GPUTextureSamplerBinding {
-                    texture: pipeline.white_texture(),
-                    sampler: pipeline.white_sampler(),
-                };
-                SDL_BindGPUFragmentSamplers(pass, 0, &sampler_binding, 1);
-
                 for call in calls {
                     let mvp = call.mvp;
                     let bytes = mvp.as_bytes();
@@ -204,6 +204,12 @@ impl Gpu {
                         bytes.as_ptr() as *const c_void,
                         bytes.len() as u32,
                     );
+
+                    let sampler_binding = SDL_GPUTextureSamplerBinding {
+                        texture: call.texture,
+                        sampler: pipeline.white_sampler(),
+                    };
+                    SDL_BindGPUFragmentSamplers(pass, 0, &sampler_binding, 1);
 
                     let vertex_binding = SDL_GPUBufferBinding {
                         buffer: call.vertex_buffer,
@@ -221,7 +227,7 @@ impl Gpu {
                         SDL_GPUIndexElementSize::SDL_GPU_INDEXELEMENTSIZE_32BIT,
                     );
 
-                    SDL_DrawGPUIndexedPrimitives(pass, call.num_indices, 1, 0, 0, 0);
+                    SDL_DrawGPUIndexedPrimitives(pass, call.num_indices, 1, call.first_index, 0, 0);
                 }
             }
 

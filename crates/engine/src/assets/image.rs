@@ -1,8 +1,14 @@
 use std::ffi::CString;
 use std::path::Path;
+use std::path::PathBuf;
 use std::ptr::NonNull;
+use std::rc::Rc;
 use std::slice;
 
+use crossbeam_channel::Sender;
+use logging::error;
+use logging::fatal;
+use logging::warn;
 use sdl3::SDL_ConvertSurface;
 use sdl3::SDL_DestroySurface;
 use sdl3::SDL_IOFromConstMem;
@@ -12,8 +18,21 @@ use sdl3::SDL_Surface;
 use sdl3::SDL_UnlockSurface;
 use sdl3_image::IMG_Load;
 use sdl3_image::IMG_Load_IO;
+use utils::FastHashMap;
+use utils::Handle;
+use utils::SlotMap;
 
+use crate::Key::H;
+use crate::assets::AssetKind;
+use crate::assets::AssetRequest;
+use crate::assets::AssetServer;
+use crate::assets::AssetSlot;
+use crate::assets::AssetSource;
+use crate::assets::atlas::TextureAtlas;
 use crate::err::SDL_LastError;
+use crate::gpu::Gpu;
+use crate::gpu::texture::Filter;
+use crate::gpu::texture::Texture;
 
 const TARGET_FORMAT: SDL_PixelFormat = SDL_PixelFormat::SDL_PIXELFORMAT_ABGR8888;
 
@@ -148,4 +167,151 @@ pub fn decode_image_bytes(bytes: &[u8]) -> Result<DecodedImage, String> {
     };
 
     to_decoded(surface)
+}
+
+pub struct ImageRegistry {
+    pub atlas: TextureAtlas,
+    pub slots: SlotMap<AssetSlot<Image>>,
+    pub paths: FastHashMap<PathBuf, Handle<Image>>,
+    pub white_texel: Handle<Image>,
+    pub placeholder: Handle<Image>,
+}
+
+impl ImageRegistry {
+    const WHITE_TEXEL_BYTES: &'static [u8] = include_bytes!("../../../../assets/white-texel.png");
+    const PLACEHOLDER_IMAGE_BYTES: &'static [u8] =
+        include_bytes!("../../../../assets/placeholder.png");
+
+    pub fn new() -> Self {
+        let mut this = Self {
+            atlas: TextureAtlas::new(),
+            slots: SlotMap::new(),
+            paths: FastHashMap::default(),
+            white_texel: Handle::INVALID,
+            placeholder: Handle::INVALID,
+        };
+
+        this.white_texel = this.bake(&Self::WHITE_TEXEL_BYTES);
+        this.placeholder = this.bake(Self::PLACEHOLDER_IMAGE_BYTES);
+
+        this
+    }
+
+    pub fn load_path<P>(&mut self, path: P, sender: &Sender<AssetRequest>) -> Handle<Image>
+    where
+        P: AsRef<Path>,
+    {
+        let path = path.as_ref().to_path_buf();
+
+        if let Some(handle) = self.paths.get(&path) {
+            return *handle;
+        }
+
+        let handle: Handle<Image> = self.slots.insert(AssetSlot::Pending).cast();
+
+        self.paths.insert(path.clone(), handle);
+
+        let request = AssetRequest {
+            slot: handle.cast(),
+            source: AssetSource::Path(path.clone()),
+            kind: AssetKind::Image(Filter::default()),
+        };
+
+        if sender.send(request).is_err() {
+            warn!(
+                "Asset workers are gone, cannot load image '{}'",
+                path.display()
+            );
+
+            self.slots[handle.cast()] = AssetSlot::Failed;
+        }
+
+        handle
+    }
+
+    pub fn load_bytes(&mut self, bytes: &[u8], sender: &Sender<AssetRequest>) -> Handle<Image> {
+        let handle: Handle<Image> = self.slots.insert(AssetSlot::Pending).cast();
+        let request = AssetRequest {
+            slot: handle.cast(),
+            source: AssetSource::Bytes(bytes.to_vec()),
+            kind: AssetKind::Image(Filter::default()),
+        };
+
+        if sender.send(request).is_err() {
+            warn!("Asset workers are gone, cannot load image bytes.");
+            self.slots[handle.cast()] = AssetSlot::Failed;
+        }
+
+        handle
+    }
+
+    pub fn bake(&mut self, bytes: &[u8]) -> Handle<Image> {
+        let handle: Handle<Image> = self.slots.insert(AssetSlot::Pending).cast();
+
+        match decode_image_bytes(bytes) {
+            Ok(decoded) => {
+                let image = self.atlas.insert(&decoded, handle, Filter::default());
+                self.slots[handle.cast()] = AssetSlot::Ready(image);
+            }
+
+            Err(e) => {
+                error!("Failed to load image bytes: {}", e);
+                self.slots[handle.cast()] = AssetSlot::Failed;
+            }
+        }
+
+        handle
+    }
+
+    pub fn get(&self, handle: Handle<Image>) -> &Image {
+        if let Some(AssetSlot::Ready(image)) = self.slots.get(handle.cast()) {
+            return image;
+        }
+
+        match self.slots.get(self.placeholder.cast()) {
+            Some(AssetSlot::Ready(p)) => p,
+            _ => fatal!("Image fallback is missing"),
+        }
+    }
+}
+
+impl AssetServer {
+    pub fn load_image<P>(&mut self, path: P) -> Handle<Image>
+    where
+        P: AsRef<Path>,
+    {
+        self.images.load_path(path, &self.requests)
+    }
+
+    pub fn load_image_bytes(&mut self, bytes: &[u8]) -> Handle<Image> {
+        self.images.load_bytes(bytes, &self.requests)
+    }
+
+    pub fn bake_image(&mut self, bytes: &[u8]) -> Handle<Image> {
+        self.images.bake(bytes)
+    }
+
+    pub fn get_image(&self, handle: Handle<Image>) -> &Image {
+        self.images.get(handle)
+    }
+
+    pub fn white_texel(&self) -> Handle<Image> {
+        self.images.white_texel
+    }
+
+    pub fn placeholder_image(&self) -> Handle<Image> {
+        self.images.placeholder
+    }
+
+    pub fn set_placeholder_image(&mut self, handle: Handle<Image>) {
+        self.images.placeholder = handle;
+    }
+
+    pub(crate) fn upload_dirty_images(&mut self, gpu: &Rc<Gpu>) {
+        self.images.atlas.upload_dirty(gpu);
+    }
+
+    pub(crate) fn atlas_page_texture(&self, page: usize) -> Option<&Texture> {
+        self.images.atlas.page_texture(page)
+    }
 }

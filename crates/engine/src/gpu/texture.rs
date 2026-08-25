@@ -44,8 +44,10 @@ use crate::gpu::buffer::BufferError;
 /// backends are looser, so this is the conservative common denominator.
 const TEXTURE_TRANSFER_ALIGN: u32 = 512;
 
+#[derive(Default)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Filter {
+    #[default]
     Nearest,
     Linear,
 }

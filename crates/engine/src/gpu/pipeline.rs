@@ -53,7 +53,9 @@ pub(crate) struct DrawCall {
     pub mvp: math::Matrix4<f32>,
     pub vertex_buffer: *mut SDL_GPUBuffer,
     pub index_buffer: *mut SDL_GPUBuffer,
+    pub first_index: u32,
     pub num_indices: u32,
+    pub texture: *mut SDL_GPUTexture,
 }
 
 pub(crate) struct Pipeline {

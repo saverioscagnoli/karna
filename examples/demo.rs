@@ -17,8 +17,6 @@ impl Scene for Demo {
     where
         Self: Sized,
     {
-        ctx.time.set_target_fps(120);
-
         Self {
             size: Size::new(50.0, 50.0),
             pos: Vector2::new(10.0, 10.0),

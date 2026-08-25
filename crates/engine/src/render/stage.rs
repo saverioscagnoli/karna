@@ -1,13 +1,17 @@
 use std::rc::Rc;
 
 use logging::error;
+use sdl3::SDL_GPUTexture;
 
 use crate::Camera;
 use crate::Draw;
 use crate::Projection;
+use crate::assets::AssetServer;
 use crate::gpu::Gpu;
 use crate::gpu::pipeline::DrawCall;
+use crate::gpu::texture::Texture;
 use crate::render::draw::DrawState;
+use crate::render::geometry::BatchTexture;
 use crate::render::geometry::ImmediateGeometry;
 use crate::render::layer::Layer;
 use crate::render::layer::LayerKind;
@@ -64,16 +68,27 @@ impl Stage {
         }
     }
 
-    pub fn draw<'a>(&'a mut self, state: &'a mut DrawState, viewport: math::Size<u32>) -> Draw<'a> {
+    pub fn draw<'a>(
+        &'a mut self,
+        state: &'a mut DrawState,
+        viewport: math::Size<u32>,
+        assets: &'a AssetServer,
+    ) -> Draw<'a> {
         Draw {
             state,
             cameras: &self.cameras,
             data: &mut self.data,
             viewport,
+            assets,
         }
     }
 
-    pub(crate) fn flush(&mut self, gpu: &Gpu) -> Vec<DrawCall> {
+    pub(crate) fn flush(
+        &mut self,
+        gpu: &Gpu,
+        assets: &AssetServer,
+        white_texture: *mut SDL_GPUTexture,
+    ) -> Vec<DrawCall> {
         let mut calls = Vec::new();
 
         for &layer in &[Layer::WORLD, Layer::UI, Layer::DEBUG] {
@@ -92,18 +107,32 @@ impl Stage {
                 error!("Failed to upload immediate geometry: {:?}", err);
                 geometry.vertices.clear();
                 geometry.indices.clear();
+                geometry.batches.clear();
                 continue;
             }
 
-            calls.push(DrawCall {
-                mvp: camera.mvp(),
-                vertex_buffer: geometry.vertex_buffer.raw(),
-                index_buffer: geometry.index_buffer.raw(),
-                num_indices: geometry.indices.len() as u32,
-            });
+            for batch in &geometry.batches {
+                let texture = match batch.texture {
+                    BatchTexture::White => white_texture,
+                    BatchTexture::Atlas(page) => assets
+                        .atlas_page_texture(page)
+                        .map(Texture::raw)
+                        .unwrap_or(white_texture),
+                };
+
+                calls.push(DrawCall {
+                    mvp: camera.mvp(),
+                    vertex_buffer: geometry.vertex_buffer.raw(),
+                    index_buffer: geometry.index_buffer.raw(),
+                    first_index: batch.index_start,
+                    num_indices: batch.index_count,
+                    texture,
+                });
+            }
 
             geometry.vertices.clear();
             geometry.indices.clear();
+            geometry.batches.clear();
         }
 
         calls

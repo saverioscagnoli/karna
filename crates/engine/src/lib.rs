@@ -13,6 +13,7 @@ mod window;
 use std::marker::PhantomData;
 use std::mem;
 use std::mem::MaybeUninit;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
@@ -56,6 +57,7 @@ use crate::window::state::SceneSlot;
 use crate::window::state::UpdatePhase;
 use crate::window::state::WindowState;
 
+pub use crate::assets::image::Image;
 pub use crate::builder::AppBuilder;
 pub use crate::builder::WindowBuilder;
 pub use crate::gpu::buffer::BufferError;
@@ -111,7 +113,7 @@ pub struct App {
 }
 
 impl App {
-    pub(crate) fn new() -> Result<Self, String> {
+    pub(crate) fn new(asset_root: PathBuf) -> Result<Self, String> {
         if SDL_ACTIVE.swap(true, Ordering::AcqRel) {
             return Err("SDL is already initialized.".into());
         }
@@ -135,7 +137,6 @@ impl App {
         info!("GPU: {} (backend: {}, driver: {})", name, backend, driver);
         info!("Application initialized.");
 
-        let asset_root = assets::resolve_base_path();
         let (asset_workers, asset_server) = spawn_workers(asset_root, config.asset_workers);
 
         Ok(Self {
@@ -360,7 +361,7 @@ impl App {
 
         for entry in self.windows.values_mut() {
             entry.state.sync_time(&self.clock);
-            entry.state.load_active(&self.input);
+            entry.state.load_active(&self.input, &mut self.asset_server);
         }
 
         let mut event: MaybeUninit<SDL_Event> = MaybeUninit::uninit();
@@ -372,6 +373,8 @@ impl App {
             }
 
             self.drain_app_events();
+            self.asset_server.poll(&self.gpu);
+            self.asset_server.upload_dirty_images(&self.gpu);
 
             if self.should_quit {
                 break;
@@ -385,7 +388,9 @@ impl App {
 
                 for entry in self.windows.values_mut() {
                     entry.state.sync_time(&self.clock);
-                    entry.state.update(UpdatePhase::Fixed, &self.input);
+                    entry
+                        .state
+                        .update(UpdatePhase::Fixed, &self.input, &mut self.asset_server);
                 }
 
                 self.input.roll_tick();
@@ -404,10 +409,18 @@ impl App {
                 entry.state.pacer.record(now);
                 entry.state.sync_time(&self.clock);
 
-                entry.state.update(UpdatePhase::Unrestrained, &self.input);
-                entry.state.draw(&self.input);
+                entry.state.update(
+                    UpdatePhase::Unrestrained,
+                    &self.input,
+                    &mut self.asset_server,
+                );
 
-                let calls = entry.state.flush(&self.gpu);
+                entry.state.draw(&self.input, &self.asset_server);
+
+                let white_texture = self.gpu.white_texture(&entry.platform);
+                let calls = entry
+                    .state
+                    .flush(&self.gpu, &self.asset_server, white_texture);
                 self.gpu.render(
                     &entry.platform,
                     entry.state.ctx.window_handle.clear_color,
