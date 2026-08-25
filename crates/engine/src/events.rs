@@ -2,6 +2,9 @@ use std::cell::RefCell;
 use std::mem;
 use std::rc::Rc;
 
+use utils::Handle;
+
+use crate::Image;
 use crate::window::WindowId;
 use crate::window::pacer::FpsCountStrategy;
 
@@ -11,6 +14,7 @@ pub enum WindowEvent {
     SizeChangeRequested(math::Size<u32>),
     FpsTargetChangeRequested(u32),
     FpsCountStrategyChangeRequested(FpsCountStrategy),
+    CustomCursorRequested(Handle<Image>, math::Vector2<u16>),
 }
 
 #[derive(Debug, Clone)]

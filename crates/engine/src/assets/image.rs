@@ -173,6 +173,7 @@ pub struct ImageRegistry {
     pub atlas: TextureAtlas,
     pub slots: SlotMap<AssetSlot<Image>>,
     pub paths: FastHashMap<PathBuf, Handle<Image>>,
+    pub pixels: FastHashMap<Handle<Image>, Vec<u8>>,
     pub white_texel: Handle<Image>,
     pub placeholder: Handle<Image>,
 }
@@ -187,6 +188,7 @@ impl ImageRegistry {
             atlas: TextureAtlas::new(),
             slots: SlotMap::new(),
             paths: FastHashMap::default(),
+            pixels: FastHashMap::default(),
             white_texel: Handle::INVALID,
             placeholder: Handle::INVALID,
         };
@@ -251,7 +253,9 @@ impl ImageRegistry {
         match decode_image_bytes(bytes) {
             Ok(decoded) => {
                 let image = self.atlas.insert(&decoded, handle, Filter::default());
+
                 self.slots[handle.cast()] = AssetSlot::Ready(image);
+                self.pixels.insert(handle, decoded.pixels);
             }
 
             Err(e) => {
@@ -273,6 +277,18 @@ impl ImageRegistry {
             _ => fatal!("Image fallback is missing"),
         }
     }
+
+    pub fn get_rgba8(&self, handle: Handle<Image>) -> &[u8] {
+        self.pixels.get(&handle).expect("Failed to get image data")
+    }
+
+    pub fn try_get_rgba8(&self, handle: Handle<Image>) -> Option<&[u8]> {
+        self.pixels.get(&handle).map(|p| p.as_slice())
+    }
+
+    pub fn is_pending(&self, handle: Handle<Image>) -> bool {
+        matches!(self.slots.get(handle.cast()), Some(AssetSlot::Pending))
+    }
 }
 
 impl AssetServer {
@@ -293,6 +309,18 @@ impl AssetServer {
 
     pub fn get_image(&self, handle: Handle<Image>) -> &Image {
         self.images.get(handle)
+    }
+
+    pub fn get_image_rgba8(&self, handle: Handle<Image>) -> &[u8] {
+        self.images.get_rgba8(handle)
+    }
+
+    pub fn try_get_image_rgba8(&self, handle: Handle<Image>) -> Option<&[u8]> {
+        self.images.try_get_rgba8(handle)
+    }
+
+    pub fn is_image_pending(&self, handle: Handle<Image>) -> bool {
+        self.images.is_pending(handle)
     }
 
     pub fn white_texel(&self) -> Handle<Image> {

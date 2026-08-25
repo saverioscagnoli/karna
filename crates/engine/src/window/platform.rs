@@ -1,29 +1,40 @@
 use std::ffi::CStr;
 use std::ffi::CString;
+use std::ffi::c_void;
 use std::rc::Rc;
 
 use logging::debug;
 use logging::error;
 use logging::fatal;
 use sdl3::SDL_ClaimWindowForGPUDevice;
+use sdl3::SDL_CreateColorCursor;
+use sdl3::SDL_CreateSurfaceFrom;
 use sdl3::SDL_CreateWindow;
+use sdl3::SDL_Cursor;
+use sdl3::SDL_DestroyCursor;
+use sdl3::SDL_DestroySurface;
 use sdl3::SDL_DestroyWindow;
 use sdl3::SDL_GetWindowID;
 use sdl3::SDL_GetWindowSize;
 use sdl3::SDL_GetWindowTitle;
+use sdl3::SDL_PixelFormat;
 use sdl3::SDL_ReleaseWindowFromGPUDevice;
+use sdl3::SDL_SetCursor;
 use sdl3::SDL_SetWindowResizable;
 use sdl3::SDL_SetWindowSize;
 use sdl3::SDL_SetWindowTitle;
 use sdl3::SDL_WINDOW_RESIZABLE;
 use sdl3::SDL_Window;
+use utils::Handle;
 
+use crate::Image;
 use crate::err::SDL_LastError;
 use crate::gpu::Gpu;
 use crate::window::WindowId;
 
 pub struct PlatformWindow {
     raw: *mut SDL_Window,
+    cursor: Option<*mut SDL_Cursor>,
     gpu: Rc<Gpu>,
 }
 
@@ -51,7 +62,11 @@ impl PlatformWindow {
             }
         }
 
-        Self { raw: window, gpu }
+        Self {
+            raw: window,
+            cursor: None,
+            gpu,
+        }
     }
 
     pub(crate) fn raw(&self) -> *mut SDL_Window {
@@ -112,12 +127,54 @@ impl PlatformWindow {
         }
     }
 
-    pub fn set_resizable(&self, v: bool) {
+    pub fn set_resizable(&mut self, v: bool) {
         unsafe {
             let success = SDL_SetWindowResizable(self.raw, v);
 
             if !success {
                 error!("Failed to set window resizable prop: {}", SDL_LastError());
+            }
+        }
+    }
+
+    pub fn set_custom_cursor(
+        &mut self,
+        rgba8: &[u8],
+        size: math::Size<u32>,
+        hotspot: math::Vector2<i32>,
+    ) {
+        let size = size.cast::<i32>();
+
+        unsafe {
+            let surface = SDL_CreateSurfaceFrom(
+                size.width,
+                size.height,
+                SDL_PixelFormat::SDL_PIXELFORMAT_RGBA32,
+                rgba8.as_ptr() as *mut c_void,
+                size.width * 4,
+            );
+
+            if surface.is_null() {
+                error!("Failed to create cursor surface: {}", SDL_LastError());
+                return;
+            }
+
+            let cursor = SDL_CreateColorCursor(surface, hotspot.x, hotspot.y);
+            SDL_DestroySurface(surface);
+
+            if cursor.is_null() {
+                error!("Failed to create cursor: {}", SDL_LastError());
+                return;
+            }
+
+            if !SDL_SetCursor(cursor) {
+                error!("Failed to set cursor: {}", SDL_LastError());
+                SDL_DestroyCursor(cursor);
+                return;
+            }
+
+            if let Some(old) = self.cursor.replace(cursor) {
+                SDL_DestroyCursor(old);
             }
         }
     }

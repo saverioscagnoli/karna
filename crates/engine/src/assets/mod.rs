@@ -84,6 +84,7 @@ impl AssetServer {
                     );
 
                     self.images.slots[res.slot.cast()] = AssetSlot::Ready(image);
+                    self.images.pixels.insert(res.slot.cast(), decoded.pixels);
                 }
 
                 (AssetKind::Image(_), Err(e)) => {

@@ -9,7 +9,9 @@ use std::rc::Rc;
 use sdl3::SDL_Event;
 use sdl3::SDL_EventType;
 use sdl3::SDL_WindowID;
+use utils::Handle;
 
+use crate::Image;
 use crate::config::config;
 use crate::events::AppEvent;
 use crate::events::EventDispatcher;
@@ -99,6 +101,16 @@ impl WindowHandle {
         C: Into<Color>,
     {
         self.clear_color = color.into();
+    }
+
+    pub fn set_custom_cursor<H>(&mut self, cursor: Handle<Image>, hotspot: H)
+    where
+        H: Into<math::Vector2<u16>>,
+    {
+        self.dispatcher.send(AppEvent::Window {
+            id: self.id,
+            event: WindowEvent::CustomCursorRequested(cursor, hotspot.into()),
+        });
     }
 
     pub(crate) fn handle_event(&mut self, event: &SDL_Event) {

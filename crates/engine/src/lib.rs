@@ -30,6 +30,7 @@ use sdl3::SDL_Init;
 use sdl3::SDL_PollEvent;
 use sdl3::SDL_Quit;
 use utils::FastHashMap;
+use utils::Handle;
 use utils::SleepTimer;
 
 use crate::assets::AssetServer;
@@ -83,6 +84,7 @@ static SDL_ACTIVE: AtomicBool = AtomicBool::new(false);
 struct WindowEntry {
     platform: PlatformWindow,
     state: WindowState,
+    pending_cursor: Option<(Handle<Image>, math::Vector2<i32>)>,
 }
 
 struct SdlGuard(PhantomData<*const ()>);
@@ -189,6 +191,7 @@ impl App {
             WindowEntry {
                 platform: window,
                 state,
+                pending_cursor: None,
             },
         );
     }
@@ -342,6 +345,10 @@ impl App {
                         WindowEvent::FpsCountStrategyChangeRequested(s) => {
                             entry.state.pacer.counter.set_strategy(s);
                         }
+
+                        WindowEvent::CustomCursorRequested(handle, hotspot) => {
+                            entry.pending_cursor = Some((handle, hotspot.cast::<i32>()));
+                        }
                     }
                 }
 
@@ -352,6 +359,34 @@ impl App {
         }
 
         self.app_events.restore(buffer);
+    }
+
+    /// Applies cursor requests whose image is not decoded yet.
+    ///
+    /// [`Window::set_custom_cursor`] can be called (typically from `load`) long
+    /// before the asset workers are done with the image, so the request is kept
+    /// around until its pixels are available.
+    fn apply_pending_cursors(&mut self) {
+        for entry in self.windows.values_mut() {
+            let Some((handle, hotspot)) = entry.pending_cursor else {
+                continue;
+            };
+
+            if self.asset_server.is_image_pending(handle) {
+                continue;
+            }
+
+            entry.pending_cursor = None;
+
+            let Some(rgba8) = self.asset_server.try_get_image_rgba8(handle) else {
+                error!("Cannot set custom cursor, image failed to load.");
+                continue;
+            };
+
+            let size = self.asset_server.get_image(handle).size;
+
+            entry.platform.set_custom_cursor(rgba8, size, hotspot);
+        }
     }
 
     pub fn run(mut self) {
@@ -375,6 +410,7 @@ impl App {
             self.drain_app_events();
             self.asset_server.poll(&self.gpu);
             self.asset_server.upload_dirty_images(&self.gpu);
+            self.apply_pending_cursors();
 
             if self.should_quit {
                 break;

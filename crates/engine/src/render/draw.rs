@@ -117,7 +117,7 @@ impl<'a> Draw<'a> {
     }
 
     pub fn image(&mut self, handle: Handle<Image>, x: f32, y: f32) {
-        let image = *self.assets.get_image(handle);
+        let image = self.assets.get_image(handle);
         let color = self.state.color.into();
 
         let w = image.size.width as f32;

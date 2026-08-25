@@ -1,5 +1,8 @@
 #![allow(unused)]
 
+use std::thread;
+use std::time::Duration;
+
 use karna::prelude::*;
 use utils::Handle;
 
@@ -12,9 +15,12 @@ impl Scene for ImageDemo {
     where
         Self: Sized,
     {
-        Self {
-            pcb: ctx.assets.load_image("assets/pcb.png"),
-        }
+        let pcb = ctx.assets.load_image("assets/pcb.png");
+        let cobb = ctx.assets.load_image("assets/cobblestone.png");
+
+        ctx.window.set_custom_cursor(cobb, [0, 0]);
+
+        Self { pcb }
     }
 
     fn update(&mut self, ctx: UpdateContext, scene: &mut SceneView) {}
