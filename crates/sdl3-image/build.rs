@@ -105,23 +105,63 @@ fn build_bundled() -> PathBuf {
             libdir = Some(path);
         }
     }
-    libdir.expect("cmake produced no lib directory");
+    let libdir = libdir.expect("cmake produced no lib directory");
 
-    println!("cargo:rustc-link-lib=static=SDL3_image");
-    link_transitive_deps();
+    // MSVC installs the static archive as `SDL3_image-static.lib` so it
+    // cannot collide with the import library of a shared build; GNU-style
+    // builds just produce `libSDL3_image.a`.
+    let sdl3_image =
+        resolve_lib(&libdir, &["SDL3_image-static", "SDL3_image"]).unwrap_or_else(|| {
+            panic!(
+                "cmake installed no SDL3_image static library in {}",
+                libdir.display()
+            )
+        });
+    println!("cargo:rustc-link-lib=static={sdl3_image}");
+    link_transitive_deps(&libdir);
 
     dst.join("include")
+}
+
+/// Static archive naming is not portable: MSVC installs `zlibstatic.lib` and
+/// `libpng16_static.lib` where a GNU-style build produces `libz.a` and
+/// `libpng16.a`. Given candidate link names, return the first one that
+/// actually exists in `libdir`.
+fn resolve_lib<'a>(libdir: &Path, candidates: &[&'a str]) -> Option<&'a str> {
+    let msvc = env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
+
+    candidates.iter().copied().find(|name| {
+        if msvc {
+            libdir.join(format!("{name}.lib")).exists()
+        } else {
+            libdir.join(format!("lib{name}.a")).exists()
+        }
+    })
 }
 
 /// SDL_image's vendored codec libraries (libpng, libwebp, libtiff, zlib, ...)
 /// each produce their own static archive that the final binary needs too.
 /// pkg-config doesn't know about them (they're private, unexported by
 /// sdl3-image.pc's `Requires`), so just link the set this build.rs enables.
-fn link_transitive_deps() {
+fn link_transitive_deps(libdir: &Path) {
     // Dependents before dependencies: webpmux/webpdemux need webp, webp
-    // needs sharpyuv, png16 and tiff need zlib.
-    for lib in ["webpmux", "webpdemux", "webp", "sharpyuv", "tiff", "png16", "z"] {
-        println!("cargo:rustc-link-lib=static={lib}");
+    // needs sharpyuv, png16 and tiff need zlib. Each entry lists the archive
+    // names the codec can install under; a codec that got disabled installs
+    // nothing and is skipped.
+    const DEPS: &[&[&str]] = &[
+        &["libwebpmux", "webpmux"],
+        &["libwebpdemux", "webpdemux"],
+        &["libwebp", "webp"],
+        &["libsharpyuv", "sharpyuv"],
+        &["tiff"],
+        &["libpng16_static", "png16"],
+        &["zlibstatic", "z"],
+    ];
+
+    for candidates in DEPS {
+        if let Some(lib) = resolve_lib(libdir, candidates) {
+            println!("cargo:rustc-link-lib=static={lib}");
+        }
     }
 }
 
