@@ -36,6 +36,7 @@ use sdl3::SDL_GPUVertexBufferDescription;
 use sdl3::SDL_GPUVertexInputRate;
 use sdl3::SDL_GPUVertexInputState;
 use sdl3::SDL_GPU_SHADERFORMAT_SPIRV;
+use sdl3::SDL_GetGPUShaderFormats;
 use sdl3::SDL_GPU_TEXTUREUSAGE_SAMPLER;
 use sdl3::SDL_ReleaseGPUShader;
 use sdl3::SDL_SubmitGPUCommandBuffer;
@@ -73,6 +74,14 @@ fn create_shader(
     num_uniform_buffers: u32,
 ) -> *mut SDL_GPUShader {
     unsafe {
+        // SDL only asserts on a format mismatch, which is a no-op in a
+        // release build of SDL and then fails somewhere far less obvious.
+        let supported = SDL_GetGPUShaderFormats(device);
+        assert!(
+            supported & SDL_GPU_SHADERFORMAT_SPIRV != 0,
+            "GPU backend does not accept SPIR-V (supported formats: {supported:#x})"
+        );
+
         let mut info: SDL_GPUShaderCreateInfo = mem::zeroed();
 
         info.code_size = code.len();

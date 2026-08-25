@@ -25,8 +25,6 @@ use sdl3::SDL_DestroyGPUDevice;
 use sdl3::SDL_DrawGPUIndexedPrimitives;
 use sdl3::SDL_EndGPURenderPass;
 use sdl3::SDL_FColor;
-use sdl3::SDL_GPU_SHADERFORMAT_DXIL;
-use sdl3::SDL_GPU_SHADERFORMAT_MSL;
 use sdl3::SDL_GPU_SHADERFORMAT_SPIRV;
 use sdl3::SDL_GPUBufferBinding;
 use sdl3::SDL_GPUColorTargetInfo;
@@ -90,14 +88,18 @@ impl Gpu {
     // Do not call before SDL_INIT
     pub fn init() -> Self {
         unsafe {
-            let device = SDL_CreateGPUDevice(
-                SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL,
-                true,
-                ptr::null(),
-            );
+            // Only claim the formats we can actually feed SDL. build.rs
+            // compiles the shaders with glslc, so SPIR-V is all we ship —
+            // advertising DXIL/MSL just lets SDL pick D3D12 or Metal and
+            // then trip an assert inside SDL_CreateGPUShader.
+            let device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, ptr::null());
 
             if device.is_null() {
-                fatal!("Failed to initalize gpu device: {}", SDL_LastError());
+                fatal!(
+                    "Failed to initalize gpu device: {}\n\
+                     The engine ships SPIR-V shaders, which requires the Vulkan backend.",
+                    SDL_LastError()
+                );
             }
 
             debug!("GPU Device initialized.");

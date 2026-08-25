@@ -85,7 +85,16 @@ fn build_bundled() -> PathBuf {
     }
     let libdir = libdir.expect("cmake produced no lib directory");
 
-    println!("cargo:rustc-link-lib=static=SDL3");
+    // MSVC installs the static archive as `SDL3-static.lib` so it cannot
+    // collide with the import library of a shared build; GNU-style builds
+    // just produce `libSDL3.a`.
+    let sdl3 = resolve_lib(&libdir, &["SDL3-static", "SDL3"]).unwrap_or_else(|| {
+        panic!(
+            "cmake installed no SDL3 static library in {}",
+            libdir.display()
+        )
+    });
+    println!("cargo:rustc-link-lib=static={sdl3}");
     link_transitive_deps(&libdir);
 
     // The cmake install prefix, so dependents can point their own cmake
@@ -96,6 +105,22 @@ fn build_bundled() -> PathBuf {
     dst.join("include")
 }
 
+/// Static archive naming is not portable: MSVC installs `SDL3-static.lib`
+/// and `zlibstatic.lib` where a GNU-style build produces `libSDL3.a` and
+/// `libz.a`. Given candidate link names, return the first one that actually
+/// exists in `libdir`.
+fn resolve_lib<'a>(libdir: &Path, candidates: &[&'a str]) -> Option<&'a str> {
+    let msvc = env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
+
+    candidates.iter().copied().find(|name| {
+        if msvc {
+            libdir.join(format!("{name}.lib")).exists()
+        } else {
+            libdir.join(format!("lib{name}.a")).exists()
+        }
+    })
+}
+
 /// SDL needs a pile of platform libraries alongside the static archive.
 /// Prefer reading them out of the installed `sdl3.pc`, since that reflects
 /// what this particular build actually enabled. Fall back to a hardcoded
@@ -103,7 +128,11 @@ fn build_bundled() -> PathBuf {
 fn link_transitive_deps(libdir: &Path) {
     let pc_dir = libdir.join("pkgconfig");
 
-    if pc_dir.join("sdl3.pc").exists() {
+    // pkg-config is not part of an MSVC toolchain, and the `-l` names in the
+    // .pc file are GNU-style anyway. Go straight to the hardcoded list there.
+    let msvc = env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
+
+    if !msvc && pc_dir.join("sdl3.pc").exists() {
         let existing = env::var("PKG_CONFIG_PATH").unwrap_or_default();
         let combined = if existing.is_empty() {
             pc_dir.display().to_string()
@@ -139,9 +168,10 @@ fn hardcoded_deps() {
             println!("cargo:rustc-link-lib=dylib={lib}");
         }
     } else if target.contains("windows") {
+        // Mirrors the `Libs` line SDL's own cmake writes into sdl3.pc.
         for lib in [
-            "user32", "gdi32", "winmm", "imm32", "ole32", "oleaut32", "shell32", "version", "uuid",
-            "advapi32", "setupapi", "cfgmgr32",
+            "kernel32", "user32", "gdi32", "winmm", "imm32", "ole32", "oleaut32", "shell32",
+            "version", "uuid", "advapi32", "setupapi", "cfgmgr32", "dinput8",
         ] {
             println!("cargo:rustc-link-lib=dylib={lib}");
         }
