@@ -18,7 +18,11 @@ fn compile(manifest_dir: &str, out_dir: &str, stage: &str) {
         .status()
         .expect("failed to run glslc (install the Vulkan SDK / shaderc)");
 
-    assert!(status.success(), "glslc failed to compile {}", src.display());
+    assert!(
+        status.success(),
+        "glslc failed to compile {}",
+        src.display()
+    );
 }
 
 fn main() {

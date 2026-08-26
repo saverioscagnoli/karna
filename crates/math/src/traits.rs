@@ -2,17 +2,6 @@ pub trait CastFrom<T> {
     fn cast_from(value: T) -> Self;
 }
 
-macro_rules! cast_from {
-    ($src:ty => $($dst:ty),+ $(,)?) => {$(
-        impl CastFrom<$src> for $dst {
-            #[inline]
-            fn cast_from(value: $src) -> Self {
-                value as Self
-            }
-        }
-    )+};
-}
-
 #[macro_export]
 macro_rules! cast_matrix {
     // Expand the destination list for a single source type.
