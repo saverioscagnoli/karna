@@ -62,6 +62,23 @@ impl<'a> Draw<'a> {
         self.state.color = color.into();
     }
 
+    pub fn layer(&self) -> Layer {
+        self.state.layer
+    }
+
+    /// Redirects subsequent draw calls to `layer`.
+    ///
+    /// Only layers present in the stage's [`LayerMap`] are valid; unknown
+    /// layers are ignored rather than panicking on the next draw call.
+    pub fn set_layer(&mut self, layer: Layer) {
+        if !self.data.contains(layer) {
+            logging::error!("Ignoring draw on unregistered layer: {:?}", layer);
+            return;
+        }
+
+        self.state.layer = layer;
+    }
+
     pub fn camera(&self) -> &Camera {
         &self.cameras[self.state.layer]
     }

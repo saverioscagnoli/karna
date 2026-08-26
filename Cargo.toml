@@ -16,12 +16,15 @@ math = { path = "crates/math" }
 utils = { path = "crates/utils" }
 sdl3 = { path = "crates/sdl3" }
 sdl3-image = { path = "crates/sdl3-image" }
+engine = { path = "crates/engine" }
+lua = { path = "crates/lua" }
 
 crossbeam-channel = "0.5.16"
 parking_lot = "0.12.5"
 
 [dependencies]
-engine = { path = "crates/engine" }
+engine.workspace = true
+lua.workspace = true
 logging.workspace = true
 math.workspace = true
 utils.workspace = true

@@ -70,6 +70,13 @@ impl<T> LayerMap<T> {
     }
 }
 
+impl<T> LayerMap<T> {
+    /// Whether `layer` resolves to a slot, i.e. whether indexing it is safe.
+    pub fn contains(&self, layer: Layer) -> bool {
+        matches!(layer, Layer::WORLD | Layer::UI | Layer::DEBUG) || self.other.contains_key(&layer)
+    }
+}
+
 impl<T> Index<Layer> for LayerMap<T> {
     type Output = T;
 

@@ -1,0 +1,13 @@
+[package]
+name = "lua"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+engine.workspace = true
+logging.workspace = true
+math.workspace = true
+utils.workspace = true
+
+mlua = { version = "0.12", features = ["lua54", "vendored"] }
+

@@ -51,8 +51,11 @@ local function outline(draw, e, thickness)
     draw:rect(x + w - thickness, y, thickness, h)
 end
 
+---@type karna.Scene
 local Arena = {}
 
+---@param ctx karna.Context
+---@param scene karna.SceneView
 function Arena:load(ctx, scene)
     ctx.time:set_target_fps(144)
     ctx.time:set_target_tps(60)
@@ -177,6 +180,8 @@ function Arena:fixed_update(ctx, scene)
     end
 end
 
+---@param ctx karna.Context
+---@param draw karna.Draw
 function Arena:draw(ctx, draw)
     local view = draw:viewport()
 
