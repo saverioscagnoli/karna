@@ -106,11 +106,11 @@ fn translate(raw: &SDL_Event) -> Option<SDLEvent> {
         _ if is_window(kind) => {
             // SAFETY: every SDL_EVENT_WINDOW_* writes the `window` member.
             let w = unsafe { raw.window };
-            let event = window_event(kind, w.data1, w.data2)?;
+            let wevent = window_event(kind, w.data1, w.data2)?;
 
             Some(SDLEvent::Window {
                 window: WindowId(w.windowID),
-                event,
+                wevent,
             })
         }
 
@@ -121,7 +121,7 @@ fn translate(raw: &SDL_Event) -> Option<SDLEvent> {
 
             Some(SDLEvent::Key {
                 window: WindowId(k.windowID),
-                event: KeyEvent {
+                kevent: KeyEvent {
                     scancode: Scancode(k.scancode.0),
                     keycode: Keycode(k.key),
                     modifiers: Modifiers(k.mod_),

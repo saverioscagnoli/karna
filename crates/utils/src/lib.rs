@@ -1,5 +1,6 @@
 mod bits;
 mod bytes;
+mod label;
 mod lazy;
 mod macros;
 mod map;
@@ -12,6 +13,7 @@ pub use crate::bytes::ByteSize;
 pub use crate::bytes::as_u8_slice;
 pub use crate::bytes::cstr_to_pathbuf;
 pub use crate::bytes::fnv1a;
+pub use crate::label::Label;
 pub use crate::lazy::Lazy;
 pub use crate::map::FastHashMap;
 pub use crate::map::FastHashSet;

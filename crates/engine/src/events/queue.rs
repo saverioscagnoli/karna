@@ -1,15 +1,13 @@
-//! A single-threaded queue for [`super::app`] events.
-//!
-//! `EventDispatcher` is a cheap clonable handle that scenes and window handles
-//! keep; `EventQueue` is drained once per iteration by the main loop. `Rc` and
-//! `RefCell` rather than a channel because the whole thing is main-thread only
-//! — SDL requires event handling on the thread that initialised video.
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[derive(Default)]
 pub struct EventDispatcher<T>(Rc<RefCell<Vec<T>>>);
+
+impl<T> Default for EventDispatcher<T> {
+    fn default() -> Self {
+        Self(Rc::new(RefCell::new(Vec::new())))
+    }
+}
 
 impl<T> Clone for EventDispatcher<T> {
     fn clone(&self) -> Self {
@@ -23,9 +21,16 @@ impl<T> EventDispatcher<T> {
     }
 }
 
-#[derive(Default)]
 pub struct EventQueue<T> {
     dispatcher: EventDispatcher<T>,
+}
+
+impl<T> Default for EventQueue<T> {
+    fn default() -> Self {
+        Self {
+            dispatcher: EventDispatcher::default(),
+        }
+    }
 }
 
 impl<T> EventQueue<T> {

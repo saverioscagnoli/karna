@@ -129,6 +129,7 @@ dependencies = [
 name = "karna"
 version = "0.1.0"
 dependencies = [
+ "engine",
  "logging",
  "math",
  "utils",

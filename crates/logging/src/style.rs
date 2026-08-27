@@ -19,7 +19,7 @@ impl Formatter for DefaultFormatter {
         let level = format!("[{}]", name).color(color);
         let target = format!("[{}]", record.target()).color(TextColor::BrightBlack);
 
-        format!("{} {} {}", level, record.args(), target)
+        format!("{} {} {}", level, target, record.args())
     }
 }
 

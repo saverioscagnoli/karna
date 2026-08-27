@@ -127,12 +127,12 @@ pub enum SDLEvent {
 
     Window {
         window: WindowId,
-        event: SDLWindowEvent,
+        wevent: SDLWindowEvent,
     },
 
     Key {
         window: WindowId,
-        event: KeyEvent,
+        kevent: KeyEvent,
     },
 
     /// Composed text. Distinct from [`Event::Key`]: one keystroke may produce
