@@ -93,7 +93,7 @@ impl AppBuilder {
         self
     }
 
-    pub fn with_root<P>(&mut self, root: P) -> &mut Self
+    pub fn with_root<P>(mut self, root: P) -> Self
     where
         P: Into<PathBuf>,
     {

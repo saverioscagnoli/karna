@@ -7,4 +7,6 @@ edition.workspace = true
 logging.workspace = true
 math.workspace = true
 sdl3.workspace = true
+sdl3-image.workspace = true
 utils.workspace = true
+rquickjs = "0.12.2"

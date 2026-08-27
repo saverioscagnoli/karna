@@ -11,12 +11,14 @@ use logging::debug;
 use logging::error;
 use logging::fatal;
 use math as m;
+use sdl3::SDL_ClaimWindowForGPUDevice;
 use sdl3::SDL_CreateWindow;
 use sdl3::SDL_DestroyWindow;
 use sdl3::SDL_GetWindowFlags;
 use sdl3::SDL_GetWindowID;
 use sdl3::SDL_GetWindowSize;
 use sdl3::SDL_GetWindowTitle;
+use sdl3::SDL_ReleaseWindowFromGPUDevice;
 use sdl3::SDL_SetWindowResizable;
 use sdl3::SDL_SetWindowSize;
 use sdl3::SDL_SetWindowTitle;
@@ -25,8 +27,11 @@ use sdl3::SDL_Window;
 
 use crate::err::sdl_last_error;
 use crate::events::WindowId;
+use crate::gpu::Device;
 
 pub use context::DrawContext;
+pub use context::ForContext;
+pub use context::ForContextMut;
 pub use context::LoadContext;
 pub use context::UpdateContext;
 pub use context::UserContext;
@@ -46,10 +51,11 @@ pub struct WindowEntry {
 
 pub struct Window {
     raw: *mut SDL_Window,
+    gpu: Device,
 }
 
 impl Window {
-    pub fn new(title: &str, size: m::Size<u32>, resizable: bool) -> Self {
+    pub fn new(title: &str, size: m::Size<u32>, resizable: bool, gpu: Device) -> Self {
         let title = CString::new(title).expect("Title already contains null-terminator");
         let size = size.cast::<i32>();
         let window = unsafe {
@@ -65,7 +71,22 @@ impl Window {
             fatal!("Failed to create window: {}", sdl_last_error());
         }
 
-        Self { raw: window }
+        let this = Self { raw: window, gpu };
+
+        unsafe {
+            let success = SDL_ClaimWindowForGPUDevice(this.gpu.raw(), window);
+
+            if !success {
+                fatal!(
+                    "Failed to claim window for gpu device: {}",
+                    sdl_last_error()
+                );
+            }
+
+            debug!("GPU device claimed {:?} (\"{}\")", this.id(), this.title());
+        }
+
+        this
     }
 
     pub(crate) fn raw(&self) -> *mut SDL_Window {
@@ -136,6 +157,7 @@ impl Drop for Window {
         debug!("Dropping '{}' (\"{}\")", self.id(), self.title());
 
         unsafe {
+            SDL_ReleaseWindowFromGPUDevice(self.gpu.raw(), self.raw);
             SDL_DestroyWindow(self.raw);
         }
     }

@@ -1,0 +1,153 @@
+mod atlas;
+mod image;
+mod workers;
+
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::mpmc;
+use std::sync::mpmc::Receiver;
+use std::sync::mpmc::Sender;
+use std::thread;
+
+use logging::error;
+use logging::info;
+use utils::ByteSize;
+use utils::Handle;
+
+use crate::assets::image::DecodedImage;
+use crate::assets::image::ImageRegistry;
+use crate::assets::workers::worker;
+use crate::gpu::Device;
+use crate::gpu::Filter;
+use crate::gpu::Texture;
+
+pub use crate::assets::image::Image;
+pub use crate::assets::workers::AssetWorkers;
+
+pub enum AssetKind {
+    Image,
+}
+
+pub enum DecodedAsset {
+    Image(DecodedImage),
+}
+
+pub enum AssetSource {
+    Path(PathBuf),
+    RawBytes(Vec<u8>),
+}
+
+pub struct AssetRequest {
+    slot: Handle<()>,
+    source: AssetSource,
+    kind: AssetKind,
+}
+
+pub struct AssetResponse {
+    slot: Handle<()>,
+    kind: AssetKind,
+    data: Result<DecodedAsset, String>,
+}
+
+#[derive(Debug)]
+pub enum AssetSlot<T> {
+    Pending,
+    Ready(T),
+    Failed(String),
+}
+
+pub struct AssetServer {
+    requests: Sender<AssetRequest>,
+    responses: Receiver<AssetResponse>,
+    images: ImageRegistry,
+}
+
+impl AssetServer {
+    pub fn new(requests: Sender<AssetRequest>, responses: Receiver<AssetResponse>) -> Self {
+        let mut this = Self {
+            requests,
+            responses,
+            images: ImageRegistry::new(),
+        };
+
+        this.images.white_texel = this.bake_image_bytes(ImageRegistry::WHITE_TEXEL_BYTES);
+        this.images.placeholder = this.bake_image_bytes(ImageRegistry::PLACEHOLDER_IMAGE_BYTES);
+
+        this
+    }
+
+    pub(crate) fn poll(&mut self, device: &Device) {
+        for res in self.responses.try_iter() {
+            match (res.kind, res.data) {
+                (AssetKind::Image, Ok(DecodedAsset::Image(dec))) => {
+                    let filter = Filter::default();
+                    let image = self.images.atlas.insert(&dec, res.slot.cast(), filter);
+
+                    info!(
+                        "Successfuly loaded image ({:?}, {})",
+                        dec.size,
+                        ByteSize::from_bytes(dec.rgba.len() as u64)
+                    );
+
+                    self.images.slots[res.slot.cast()] = AssetSlot::Ready(image);
+                    self.images.rgba.insert(res.slot.cast(), dec.rgba.into());
+                }
+
+                (AssetKind::Image, Err(e)) => {
+                    error!("Failed to load image: {}", e);
+                    self.images.slots[res.slot.cast()] = AssetSlot::Failed(e.to_string());
+                }
+            }
+        }
+
+        self.images.atlas.upload_dirty(device);
+    }
+
+    pub fn white_uv(&self) -> math::Vector2<f32> {
+        self.images.get(self.images.white_texel).uv_center()
+    }
+
+    pub(crate) fn white_page(&self) -> usize {
+        self.images.get(self.images.white_texel).page
+    }
+
+    pub(crate) fn page_texture(&self, page: usize) -> Option<&Texture> {
+        self.images.atlas.page_texture(page)
+    }
+
+    pub(crate) fn page_filter(&self, page: usize) -> Option<Filter> {
+        self.images.atlas.page_filter(page)
+    }
+}
+
+pub fn spawn(root: PathBuf, workers: usize) -> (AssetWorkers, AssetServer) {
+    let workers = workers.max(1);
+    let (req_tx, req_rx) = mpmc::channel();
+    let (res_tx, res_rx) = mpmc::channel();
+    let cancel = Arc::new(AtomicBool::new(false));
+
+    let threads = (0..workers)
+        .map(|i| {
+            let root = root.clone();
+            let cancel = cancel.clone();
+            let requests = req_rx.clone();
+            let responses = res_tx.clone();
+
+            thread::Builder::new()
+                .name(format!("asset-worker-{i}"))
+                .spawn(move || worker(root, cancel, requests, responses))
+                .expect("Failed to spawn asset worker")
+        })
+        .collect::<Vec<_>>();
+
+    info!("Spawned {} worker thread(s) for asset decoding.", workers);
+
+    drop(req_rx);
+    drop(res_tx);
+
+    let workers = AssetWorkers { threads, cancel };
+    let asset_server = AssetServer::new(req_tx, res_rx);
+
+    (workers, asset_server)
+}

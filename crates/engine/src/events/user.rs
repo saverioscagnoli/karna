@@ -4,6 +4,7 @@ use std::rc::Rc;
 use crate::events::WindowId;
 use crate::window::FpsCalcStrategy;
 
+#[derive(Debug)]
 pub enum UserEvent {
     Window {
         id: WindowId,

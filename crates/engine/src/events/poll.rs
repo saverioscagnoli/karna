@@ -149,7 +149,7 @@ fn translate(raw: &SDL_Event) -> Option<SDLEvent> {
 
             Some(SDLEvent::Mouse {
                 window: WindowId(m.windowID),
-                event: MouseEvent::Motion {
+                mevent: MouseEvent::Motion {
                     x: m.x,
                     y: m.y,
                     dx: m.xrel,
@@ -164,7 +164,7 @@ fn translate(raw: &SDL_Event) -> Option<SDLEvent> {
 
             Some(SDLEvent::Mouse {
                 window: WindowId(b.windowID),
-                event: MouseEvent::Button {
+                mevent: MouseEvent::Button {
                     button: MouseButton::from_raw(b.button),
                     pressed: b.down,
                     clicks: b.clicks,
@@ -185,7 +185,7 @@ fn translate(raw: &SDL_Event) -> Option<SDLEvent> {
 
             Some(SDLEvent::Mouse {
                 window: WindowId(w.windowID),
-                event: MouseEvent::Wheel {
+                mevent: MouseEvent::Wheel {
                     x: w.x * sign,
                     y: w.y * sign,
                     mouse_x: w.mouse_x,

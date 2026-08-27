@@ -10,6 +10,8 @@
 
 use std::path::PathBuf;
 
+use sdl3::SDL_Scancode;
+
 /// Identifies a window without leaking SDL's `SDL_WindowID`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct WindowId(pub(crate) u32);
@@ -34,8 +36,8 @@ impl std::fmt::Display for WindowId {
 pub struct Scancode(pub(crate) u32);
 
 impl Scancode {
-    pub const fn raw(self) -> u32 {
-        self.0
+    pub const fn raw(self) -> SDL_Scancode {
+        SDL_Scancode(self.0)
     }
 }
 
@@ -115,6 +117,17 @@ impl MouseButton {
             other => Self::Other(other),
         }
     }
+
+    pub(crate) const fn mask(self) -> u8 {
+        1u8 << match self {
+            Self::Left => 1,
+            Self::Middle => 2,
+            Self::Right => 3,
+            Self::X1 => 4,
+            Self::X2 => 5,
+            Self::Other(o) => o,
+        }
+    }
 }
 
 /// Top-level event, as produced by [`super::poll`].
@@ -144,7 +157,7 @@ pub enum SDLEvent {
 
     Mouse {
         window: WindowId,
-        event: MouseEvent,
+        mevent: MouseEvent,
     },
 
     Touch(TouchEvent),

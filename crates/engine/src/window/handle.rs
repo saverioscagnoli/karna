@@ -1,6 +1,7 @@
 use math as m;
 use std::rc::Rc;
 
+use crate::Color;
 use crate::events::UserEvent;
 use crate::events::WindowId;
 use crate::events::queue::EventDispatcher;
@@ -8,13 +9,14 @@ use crate::events::user::UserWindowEvent;
 use crate::window::Window;
 
 pub struct WindowHandle {
-    pub id: WindowId,
-    pub title: Rc<str>,
-    pub size: m::Size<u32>,
-    pub resizable: bool,
-    pub mouse_position: m::Vector2<f32>,
-    pub mouse_delta: m::Vector2<f32>,
-    pub dispatcher: EventDispatcher<UserEvent>,
+    pub(crate) id: WindowId,
+    pub(crate) title: Rc<str>,
+    pub(crate) size: m::Size<u32>,
+    pub(crate) resizable: bool,
+    pub(crate) mouse_position: m::Vector2<f32>,
+    pub(crate) mouse_delta: m::Vector2<f32>,
+    pub(crate) clear_color: Color,
+    pub(crate) dispatcher: EventDispatcher<UserEvent>,
 }
 
 impl WindowHandle {
