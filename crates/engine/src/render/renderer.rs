@@ -36,7 +36,7 @@ use crate::render::pipeline::PipelineCache;
 use crate::render::pipeline::SamplerCache;
 use crate::window::Window;
 
-pub struct World {
+pub struct Renderer {
     device: Device,
     cameras: LayerMap<Camera>,
     data: LayerMap<LayerData>,
@@ -44,7 +44,7 @@ pub struct World {
     samplers: SamplerCache,
 }
 
-impl World {
+impl Renderer {
     pub fn new(device: Device, viewport: m::Size<u32>) -> Self {
         let default_camera = Camera::new(Projection::topleft_2d(viewport));
         let cameras = LayerMap::new(default_camera, default_camera, default_camera);

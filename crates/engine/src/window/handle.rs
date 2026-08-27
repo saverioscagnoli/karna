@@ -2,6 +2,7 @@ use math as m;
 use std::rc::Rc;
 
 use crate::Color;
+use crate::SceneId;
 use crate::events::UserEvent;
 use crate::events::WindowId;
 use crate::events::queue::EventDispatcher;
@@ -22,6 +23,34 @@ pub struct WindowHandle {
 impl WindowHandle {
     pub fn id(&self) -> WindowId {
         self.id
+    }
+
+    pub fn load_scene(&self, scene: SceneId) {
+        self.dispatcher.dispatch(UserEvent::Window {
+            id: self.id,
+            wevent: UserWindowEvent::LoadScene(scene),
+        });
+    }
+
+    pub fn unload_scene(&self, scene: SceneId) {
+        self.dispatcher.dispatch(UserEvent::Window {
+            id: self.id,
+            wevent: UserWindowEvent::UnloadScene(scene),
+        });
+    }
+
+    pub fn activate_scene(&self, scene: SceneId) {
+        self.dispatcher.dispatch(UserEvent::Window {
+            id: self.id,
+            wevent: UserWindowEvent::ActivateScene(scene),
+        });
+    }
+
+    pub fn deactivate_scene(&self, scene: SceneId) {
+        self.dispatcher.dispatch(UserEvent::Window {
+            id: self.id,
+            wevent: UserWindowEvent::DeactivateScene(scene),
+        });
     }
 
     pub fn title(&self) -> &str {

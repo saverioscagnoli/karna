@@ -13,10 +13,12 @@ pub trait Scene: 'static {
     where
         Self: Sized;
 
-    fn fixed_update(&mut self, ctx: UpdateContext) {}
     fn update(&mut self, ctx: UpdateContext);
     fn draw(&mut self, ctx: DrawContext, draw: &mut Draw);
+
+    fn fixed_update(&mut self, ctx: UpdateContext) {}
+    fn unload(&mut self, ctx: LoadContext) {}
 }
 
 pub type BoxedScene = Box<dyn Scene>;
-pub type SceneBuilder = Box<dyn FnOnce(LoadContext) -> BoxedScene>;
+pub type SceneBuilder = Box<dyn Fn(LoadContext) -> BoxedScene>;

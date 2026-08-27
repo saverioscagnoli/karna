@@ -1,6 +1,7 @@
 use math as m;
 use std::rc::Rc;
 
+use crate::SceneId;
 use crate::events::WindowId;
 use crate::window::FpsCalcStrategy;
 
@@ -20,4 +21,8 @@ pub enum UserWindowEvent {
     ChangeResizable(bool),
     ChangeTargetFps(u32),
     ChangeFpsCalcStrategy(FpsCalcStrategy),
+    LoadScene(SceneId),
+    UnloadScene(SceneId),
+    ActivateScene(SceneId),
+    DeactivateScene(SceneId),
 }

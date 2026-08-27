@@ -22,6 +22,7 @@ use crate::gpu::Device;
 use crate::gpu::Filter;
 use crate::gpu::Texture;
 
+pub use crate::assets::atlas::ImageView;
 pub use crate::assets::image::Image;
 pub use crate::assets::workers::AssetWorkers;
 
@@ -91,7 +92,6 @@ impl AssetServer {
                     );
 
                     self.images.slots[res.slot.cast()] = AssetSlot::Ready(image);
-                    self.images.rgba.insert(res.slot.cast(), dec.rgba.into());
                 }
 
                 (AssetKind::Image, Err(e)) => {

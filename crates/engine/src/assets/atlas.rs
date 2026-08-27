@@ -139,6 +139,66 @@ impl Page {
     }
 }
 
+pub struct ImageView<'a> {
+    pub pixels: &'a [u8],
+    pub stride: usize,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl<'a> ImageView<'a> {
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    pub fn stride(&self) -> usize {
+        self.stride
+    }
+
+    pub fn row(&self, y: u32) -> &'a [u8] {
+        assert!(
+            y < self.height,
+            "row {y} is out of bounds for a {}px tall image",
+            self.height
+        );
+
+        let start = y as usize * self.stride;
+
+        &self.pixels[start..start + self.width as usize * 4]
+    }
+
+    pub fn rows(&self) -> impl Iterator<Item = &'a [u8]> + '_ {
+        (0..self.height).map(|y| self.row(y))
+    }
+
+    pub fn pixel(&self, x: u32, y: u32) -> [u8; 4] {
+        assert!(
+            x < self.width,
+            "column {x} is out of bounds for a {}px wide image",
+            self.width
+        );
+
+        let row = self.row(y);
+        let o = x as usize * 4;
+
+        [row[o], row[o + 1], row[o + 2], row[o + 3]]
+    }
+
+    pub fn to_rgba8(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(self.width as usize * self.height as usize * 4);
+
+        for row in self.rows() {
+            out.extend_from_slice(row);
+        }
+
+        out
+    }
+}
+
 pub struct TextureAtlas {
     pages: Vec<Page>,
 }
@@ -170,6 +230,34 @@ impl TextureAtlas {
 
     pub fn page_count(&self) -> usize {
         self.pages.len()
+    }
+
+    pub fn view(&self, image: &Image) -> ImageView<'_> {
+        let Some(page) = self.pages.get(image.page) else {
+            fatal!("Image references a missing atlas page: {}", image.page);
+        };
+
+        let extent = page.data.extent as usize;
+        let stride = extent * 4;
+
+        if image.size.width == 0 || image.size.height == 0 {
+            return ImageView {
+                pixels: &[],
+                stride,
+                width: 0,
+                height: 0,
+            };
+        }
+
+        let start = (image.origin.y as usize * extent + image.origin.x as usize) * 4;
+        let len = (image.size.height as usize - 1) * stride + image.size.width as usize * 4;
+
+        ImageView {
+            pixels: &page.data.pixels[start..start + len],
+            stride,
+            width: image.size.width,
+            height: image.size.height,
+        }
     }
 
     pub fn upload_dirty(&mut self, device: &Device) {
@@ -232,6 +320,7 @@ impl TextureAtlas {
 
         Image {
             page: index,
+            origin,
             uv_min: math::Vector2::new(origin.x as f32 / extent, origin.y as f32 / extent),
             uv_max: math::Vector2::new(
                 (origin.x + size.width) as f32 / extent,

@@ -1,12 +1,10 @@
-use std::mem;
-
 use logging::error;
 use utils::FastHashMap;
 
 use crate::SceneId;
 use crate::assets::AssetServer;
 use crate::clock::Clock;
-use crate::render::World;
+use crate::render::Renderer;
 use crate::scene::BoxedScene;
 use crate::scene::SceneBuilder;
 use crate::window::Window;
@@ -15,10 +13,9 @@ use crate::window::context::ForContextMut;
 use crate::window::context::UserContext;
 use crate::window::pacer::FramePacer;
 
-pub enum SceneSlot {
-    Unloaded(SceneBuilder),
-    Loaded { scene: BoxedScene },
-    Poisoned,
+pub struct SceneSlot {
+    pub builder: SceneBuilder,
+    pub scene: Option<BoxedScene>,
 }
 
 pub enum UpdatePhase {
@@ -31,7 +28,7 @@ pub struct WindowState {
     pub pacer: FramePacer,
     pub scenes: FastHashMap<SceneId, SceneSlot>,
     pub scenes_active: Vec<SceneId>,
-    pub world: World,
+    pub renderer: Renderer,
 }
 
 impl WindowState {
@@ -44,29 +41,52 @@ impl WindowState {
         self.ctx.time.sync(clock, &self.pacer);
     }
 
-    pub fn load_active_scenes<'a>(&mut self, mut fctx: ForContextMut<'a>) {
-        #[rustfmt::skip]
-        let Self { ctx, scenes, scenes_active, .. } = self;
+    pub fn load_scene<'a>(&mut self, scene_id: SceneId, fctx: &mut ForContextMut<'a>) {
+        let Self { ctx, scenes, .. } = self;
 
-        for id in scenes_active {
-            let Some(slot) = scenes.get_mut(&id) else {
-                error!("No scene registered under id: {:?}", id);
-                return;
-            };
+        let Some(slot) = scenes.get_mut(&scene_id) else {
+            error!("Trying to load an invalid scene: {:?}", scene_id);
+            return;
+        };
 
-            let builder = match mem::replace(slot, SceneSlot::Poisoned) {
-                SceneSlot::Unloaded(f) => f,
-                SceneSlot::Poisoned => return error!("Scene {:?} re-entered during load.", id),
-                loaded @ SceneSlot::Loaded { .. } => {
-                    *slot = loaded;
-                    return;
-                }
-            };
+        if slot.scene.is_none() {
+            slot.scene = Some((slot.builder)(ctx.for_load(fctx)));
+        }
+    }
 
-            let ctx = ctx.for_load(&mut fctx);
-            let scene = builder(ctx);
+    pub fn unload_scene<'a>(&mut self, scene_id: SceneId, fctx: &mut ForContextMut<'a>) {
+        let Some(slot) = self.scenes.get_mut(&scene_id) else {
+            return;
+        };
 
-            scenes.insert(*id, SceneSlot::Loaded { scene });
+        if let Some(ref mut scene) = slot.scene {
+            let ctx = self.ctx.for_load(fctx);
+            scene.unload(ctx);
+        }
+
+        slot.scene = None;
+    }
+
+    pub fn activate_scene<'a>(&mut self, scene_id: SceneId, fctx: &mut ForContextMut<'a>) {
+        if !self.scenes.contains_key(&scene_id) {
+            error!("Trying to activate an invalid scene: {:?}", scene_id);
+            return;
+        }
+
+        self.load_scene(scene_id, fctx);
+
+        if !self.scenes_active.contains(&scene_id) {
+            self.scenes_active.push(scene_id);
+        }
+    }
+
+    pub fn deactivate_scene<'a>(&mut self, scene_id: SceneId) {
+        self.scenes_active.retain(|id| &scene_id != id);
+    }
+
+    pub fn load_active_scenes<'a>(&mut self, fctx: &mut ForContextMut<'a>) {
+        for id in self.scenes_active.clone() {
+            self.load_scene(id, fctx);
         }
     }
 
@@ -80,12 +100,8 @@ impl WindowState {
                 continue;
             };
 
-            let scene = match slot {
-                SceneSlot::Loaded { scene } => scene,
-                _ => {
-                    error!("Updating unloaded or poisoned scene: {:?}", id);
-                    continue;
-                }
+            let Some(ref mut scene) = slot.scene else {
+                continue;
             };
 
             let ctx = ctx.for_update(&mut fctx);
@@ -98,15 +114,17 @@ impl WindowState {
     }
 
     pub fn render(&mut self, window: &Window, assets: &AssetServer) {
-        self.world
+        self.renderer
             .render(window, assets, self.ctx.window.clear_color);
     }
 
     pub fn draw_active_scenes<'a>(&mut self, fctx: ForContext<'a>) {
         #[rustfmt::skip]
-        let Self { ctx, scenes, scenes_active, world, .. } = self;
+        let Self { ctx, scenes, scenes_active, renderer, .. } = self;
 
-        world.begin_frame(ctx.window.size());
+        renderer.begin_frame(ctx.window.size());
+
+        let mut draw = renderer.draw(ctx.window.size(), fctx.assets);
 
         for id in scenes_active {
             let Some(slot) = scenes.get_mut(&id) else {
@@ -114,16 +132,11 @@ impl WindowState {
                 continue;
             };
 
-            let scene = match slot {
-                SceneSlot::Loaded { scene } => scene,
-                _ => {
-                    error!("Updating unloaded or poisoned scene: {:?}", id);
-                    continue;
-                }
+            let Some(ref mut scene) = slot.scene else {
+                continue;
             };
 
             let ctx = ctx.for_draw(&fctx);
-            let mut draw = world.draw(ctx.window.size(), fctx.assets);
 
             scene.draw(ctx, &mut draw);
         }

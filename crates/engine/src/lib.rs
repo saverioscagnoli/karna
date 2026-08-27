@@ -46,7 +46,7 @@ use crate::events::queue::EventQueue;
 use crate::events::user::UserWindowEvent;
 use crate::gpu::Device;
 use crate::input::InputScope;
-use crate::render::World;
+use crate::render::Renderer;
 use crate::sdl::SDLGuard;
 use crate::window::ForContext;
 use crate::window::ForContextMut;
@@ -59,9 +59,9 @@ use crate::window::Window;
 use crate::window::WindowEntry;
 use crate::window::WindowHandle;
 use crate::window::WindowState;
-use rquickjs::prelude::*;
 
 pub use crate::assets::Image;
+pub use crate::assets::ImageView;
 pub use crate::builder::AppBuilder;
 pub use crate::builder::WindowBuilder;
 pub use crate::events::MouseButton;
@@ -149,12 +149,13 @@ impl App {
                 time: Time::new(window.id(), self.event_queue.dispatcher()),
             },
             pacer: FramePacer::new(PaceMode::Fixed),
+            #[rustfmt::skip]
             scenes: scene_builders
                 .into_iter()
-                .map(|(k, b)| (k, SceneSlot::Unloaded(b)))
+                .map(|(k, b)| (k, SceneSlot{ builder: b, scene: None }))
                 .collect(),
             scenes_active,
-            world: World::new(self.gpu.clone(), window.size()),
+            renderer: Renderer::new(self.gpu.clone(), window.size()),
         };
 
         self.windows
@@ -197,7 +198,7 @@ impl App {
 
         for entry in self.windows.values_mut() {
             entry.state.sync_time(&self.clock);
-            entry.state.load_active_scenes(ForContextMut {
+            entry.state.load_active_scenes(&mut ForContextMut {
                 input: &self.input,
                 assets: &mut self.asset_server,
             });
@@ -294,6 +295,30 @@ impl App {
                             UserWindowEvent::ChangeResizable(r) => window.set_resizable(r),
                             UserWindowEvent::ChangeTargetFps(t) => pacer.set_target_fps(t),
                             UserWindowEvent::ChangeFpsCalcStrategy(s) => counter.set_strategy(s),
+
+                            event => {
+                                let mut fctx = ForContextMut {
+                                    input: &self.input,
+                                    assets: &mut self.asset_server,
+                                };
+
+                                match event {
+                                    UserWindowEvent::LoadScene(s) => {
+                                        entry.state.load_scene(s, &mut fctx)
+                                    }
+                                    UserWindowEvent::UnloadScene(s) => {
+                                        entry.state.unload_scene(s, &mut fctx)
+                                    }
+                                    UserWindowEvent::ActivateScene(s) => {
+                                        entry.state.activate_scene(s, &mut fctx)
+                                    }
+                                    UserWindowEvent::DeactivateScene(s) => {
+                                        entry.state.deactivate_scene(s)
+                                    }
+
+                                    _ => unreachable!(),
+                                }
+                            }
                         }
                     }
                 }

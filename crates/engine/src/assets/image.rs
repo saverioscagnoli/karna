@@ -30,6 +30,7 @@ use crate::assets::AssetRequest;
 use crate::assets::AssetServer;
 use crate::assets::AssetSlot;
 use crate::assets::AssetSource;
+use crate::assets::atlas::ImageView;
 use crate::assets::atlas::TextureAtlas;
 use crate::err::sdl_last_error;
 use crate::gpu::Filter;
@@ -39,6 +40,7 @@ const TARGET_FORMAT: SDL_PixelFormat = SDL_PixelFormat::SDL_PIXELFORMAT_ABGR8888
 #[derive(Debug, Clone, Copy)]
 pub struct Image {
     pub page: usize,
+    pub origin: math::Vector2<u32>,
     pub uv_min: math::Vector2<f32>,
     pub uv_max: math::Vector2<f32>,
     pub size: math::Size<u32>,
@@ -171,7 +173,6 @@ pub struct ImageRegistry {
     pub atlas: TextureAtlas,
     pub slots: SlotMap<AssetSlot<Image>>,
     pub paths: FastHashMap<PathBuf, Handle<Image>>,
-    pub rgba: FastHashMap<Handle<Image>, Arc<[u8]>>,
     pub white_texel: Handle<Image>,
     pub placeholder: Handle<Image>,
 }
@@ -188,7 +189,6 @@ impl ImageRegistry {
             atlas: TextureAtlas::new(),
             slots: SlotMap::new(),
             paths: FastHashMap::default(),
-            rgba: FastHashMap::default(),
             white_texel: Handle::INVALID,
             placeholder: Handle::INVALID,
         }
@@ -243,7 +243,6 @@ impl ImageRegistry {
         match decode_image_bytes(bytes) {
             Ok(dec) => {
                 let image = self.atlas.insert(&dec, handle, Filter::default());
-                self.rgba.insert(handle, dec.rgba);
                 self.slots[handle.cast()] = AssetSlot::Ready(image);
             }
             Err(e) => {
@@ -279,6 +278,14 @@ impl AssetServer {
 
     pub fn get_image(&self, image: Handle<Image>) -> &Image {
         self.images.get(image)
+    }
+
+    pub fn image_view(&self, image: Handle<Image>) -> ImageView<'_> {
+        self.images.atlas.view(self.images.get(image))
+    }
+
+    pub fn get_image_rgba8(&self, image: Handle<Image>) -> Vec<u8> {
+        self.image_view(image).to_rgba8()
     }
 
     pub fn load_image<P>(&mut self, path: P) -> Handle<Image>
