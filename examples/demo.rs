@@ -10,6 +10,7 @@ struct Demo {
     pos: Vector2<f32>,
     vel: Vector2<f32>,
     pcb: Handle<Image>,
+    cob: Handle<Image>,
 }
 
 impl Scene for Demo {
@@ -18,11 +19,13 @@ impl Scene for Demo {
         Self: Sized,
     {
         let pcb = ctx.assets.load_image("assets/pcb.png");
+        let cob = ctx.assets.load_image("assets/cobblestone.png");
 
         Self {
             pos: Vector2::new(10.0, 10.0),
             vel: Vector2::zero(),
             pcb,
+            cob,
         }
     }
 
@@ -50,6 +53,16 @@ impl Scene for Demo {
 
         if self.vel.length() < 0.25 {
             self.vel.set([0.0, 0.0]);
+        }
+
+        let mouse = ctx.window.mouse_position();
+        let inside = mouse.x >= 400.0 && mouse.x < 560.0 && mouse.y >= 300.0 && mouse.y < 460.0;
+
+        if inside {
+            ctx.window
+                .set_cursor(CursorKind::Custom(self.cob, Vector2::zero()));
+        } else {
+            ctx.window.set_cursor(CursorKind::default());
         }
 
         if ctx.input.key_pressed(Key::F) {
@@ -95,7 +108,7 @@ impl Scene for Demo2 {
 }
 
 fn main() {
-    let _ = init_logging(LogConfig::default().with_min_level(LevelFilter::Debug));
+    let _ = init_logging(LogConfig::default().with_min_level(LevelFilter::Trace));
 
     AppBuilder::default()
         .with_window(

@@ -15,6 +15,7 @@ mod scene;
 mod sdl;
 mod window;
 
+use std::ffi::c_void;
 use std::mem;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -26,9 +27,19 @@ use logging::info;
 use logging::trace;
 use logging::warn;
 use math as m;
+use rquickjs::function::Opt;
+use sdl3::SDL_CreateColorCursor;
+use sdl3::SDL_CreateSurfaceFrom;
+use sdl3::SDL_CreateSystemCursor;
+use sdl3::SDL_Cursor;
+use sdl3::SDL_DestroyCursor;
+use sdl3::SDL_DestroySurface;
 use sdl3::SDL_INIT_VIDEO;
 use sdl3::SDL_Init;
+use sdl3::SDL_PixelFormat;
+use sdl3::SDL_SetCursor;
 use utils::FastHashMap;
+use utils::Handle;
 use utils::SleepTimer;
 
 use crate::assets::AssetServer;
@@ -74,8 +85,10 @@ pub use crate::render::Layer;
 pub use crate::render::Projection;
 pub use crate::scene::Scene;
 pub use crate::scene::SceneId;
+pub use crate::window::CursorKind;
 pub use crate::window::DrawContext;
 pub use crate::window::LoadContext;
+pub use crate::window::SystemCursor;
 pub use crate::window::Time;
 pub use crate::window::UpdateContext;
 
@@ -88,6 +101,10 @@ pub struct App {
     input: Input,
     asset_workers: AssetWorkers,
     asset_server: AssetServer,
+    cursor_pending: Option<CursorKind>,
+    cursor_active: Option<CursorKind>,
+    cursor_cache: FastHashMap<CursorKind, *mut SDL_Cursor>,
+
     event_queue: EventQueue<UserEvent>,
 
     gpu: Device,
@@ -122,6 +139,9 @@ impl App {
             input: Input::default(),
             asset_workers,
             asset_server,
+            cursor_pending: None,
+            cursor_active: None,
+            cursor_cache: FastHashMap::default(),
             event_queue: EventQueue::default(),
             gpu,
             _sdl: SDLGuard::new(),
@@ -189,6 +209,93 @@ impl App {
         for id in self.windows.keys().copied().collect::<Vec<_>>() {
             self.close_window(id);
         }
+    }
+
+    fn poll_pending_cursor(&mut self) {
+        let Some(kind) = self.cursor_pending else {
+            return;
+        };
+
+        if self.cursor_active == Some(kind) {
+            self.cursor_pending = None;
+            trace!("Requested cursor is already in use: {:?}", kind);
+            return;
+        }
+
+        if let Some(&cached) = self.cursor_cache.get(&kind) {
+            unsafe {
+                if !SDL_SetCursor(cached) {
+                    error!("Failed to set cursor {:?}: {}", kind, sdl_last_error());
+                    return;
+                }
+            }
+
+            trace!("Cache hit: cursor {:?}", kind);
+            self.cursor_active = Some(kind);
+            self.cursor_pending = None;
+            return;
+        }
+
+        let cursor = match kind {
+            CursorKind::System(system) => unsafe {
+                let cursor = SDL_CreateSystemCursor(system.0);
+
+                if cursor.is_null() {
+                    error!("Failed to create system cursor: {}", sdl_last_error());
+                    return;
+                }
+
+                cursor
+            },
+
+            CursorKind::Custom(image, hotspot) => {
+                if !self.asset_server.is_image_ready(image) {
+                    trace!("Cursor image {:?} not ready, retrying next frame.", image);
+                    return;
+                }
+
+                let hot = hotspot.cast::<i32>();
+                let size = self.asset_server.get_image(image).size.cast::<i32>();
+                let rgba = self.asset_server.get_image_rgba8(image);
+
+                unsafe {
+                    let surface = SDL_CreateSurfaceFrom(
+                        size.w(),
+                        size.h(),
+                        SDL_PixelFormat::SDL_PIXELFORMAT_RGBA32,
+                        rgba.as_ptr().cast_mut().cast::<c_void>(),
+                        size.w() * 4,
+                    );
+
+                    if surface.is_null() {
+                        error!("Failed to create surface for cursor: {}", sdl_last_error());
+                        return;
+                    }
+
+                    let cursor = SDL_CreateColorCursor(surface, hot.x, hot.y);
+                    SDL_DestroySurface(surface);
+
+                    if cursor.is_null() {
+                        error!("Failed to create custom cursor: {}", sdl_last_error());
+                        return;
+                    }
+
+                    cursor
+                }
+            }
+        };
+
+        unsafe {
+            if !SDL_SetCursor(cursor) {
+                error!("Failed to set cursor {:?}: {}", kind, sdl_last_error());
+                SDL_DestroyCursor(cursor);
+                return;
+            }
+        }
+
+        self.cursor_active = Some(kind);
+        self.cursor_pending = None;
+        self.cursor_cache.insert(kind, cursor);
     }
 
     pub fn run(mut self) {
@@ -279,6 +386,7 @@ impl App {
 
                 match event {
                     UserEvent::ChangeTargetTps(t) => self.clock.set_target_tps(t),
+                    UserEvent::ChangeCursor(kind) => self.cursor_pending = Some(kind),
                     UserEvent::Window { id, wevent } => {
                         let Some(entry) = self.windows.get_mut(&id) else {
                             warn!("Received user event for dropped {:?}: {:?}", id, wevent);
@@ -325,6 +433,7 @@ impl App {
             }
 
             self.asset_server.poll(&self.gpu);
+            self.poll_pending_cursor();
 
             if self.should_quit {
                 break;
@@ -408,5 +517,10 @@ impl App {
 
         info!("Lifecycle loop over. Exiting.");
         self.asset_workers.shutdown(self.asset_server);
+
+        for (kind, ptr) in self.cursor_cache {
+            unsafe { SDL_DestroyCursor(ptr) };
+            debug!("Destroyed cursor {:?}", kind);
+        }
     }
 }

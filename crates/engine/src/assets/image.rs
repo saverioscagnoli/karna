@@ -280,6 +280,20 @@ impl AssetServer {
         self.images.get(image)
     }
 
+    pub fn is_image_pending(&self, image: Handle<Image>) -> bool {
+        matches!(
+            self.images.slots.get(image.cast()),
+            Some(AssetSlot::Pending)
+        )
+    }
+
+    pub fn is_image_ready(&self, image: Handle<Image>) -> bool {
+        matches!(
+            self.images.slots.get(image.cast()),
+            Some(AssetSlot::Ready(_))
+        )
+    }
+
     pub fn image_view(&self, image: Handle<Image>) -> ImageView<'_> {
         self.images.atlas.view(self.images.get(image))
     }

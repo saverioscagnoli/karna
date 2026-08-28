@@ -7,6 +7,7 @@ use crate::events::UserEvent;
 use crate::events::WindowId;
 use crate::events::queue::EventDispatcher;
 use crate::events::user::UserWindowEvent;
+use crate::window::CursorKind;
 use crate::window::Window;
 
 pub struct WindowHandle {
@@ -109,6 +110,10 @@ impl WindowHandle {
 
     pub fn mouse_delta(&self) -> m::Vector2<f32> {
         self.mouse_delta
+    }
+
+    pub fn set_cursor(&self, cursor: CursorKind) {
+        self.dispatcher.dispatch(UserEvent::ChangeCursor(cursor));
     }
 
     pub(crate) fn sync(&mut self, window: &Window) {

@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use crate::SceneId;
 use crate::events::WindowId;
+use crate::window::CursorKind;
 use crate::window::FpsCalcStrategy;
 
 #[derive(Debug)]
@@ -12,6 +13,7 @@ pub enum UserEvent {
         wevent: UserWindowEvent,
     },
     ChangeTargetTps(u32),
+    ChangeCursor(CursorKind),
 }
 
 #[derive(Debug)]
