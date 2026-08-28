@@ -2,12 +2,12 @@ use math as m;
 use std::rc::Rc;
 
 use crate::Color;
+use crate::Cursor;
 use crate::SceneId;
 use crate::events::UserEvent;
 use crate::events::WindowId;
 use crate::events::queue::EventDispatcher;
 use crate::events::user::UserWindowEvent;
-use crate::window::CursorKind;
 use crate::window::Window;
 
 pub struct WindowHandle {
@@ -112,7 +112,7 @@ impl WindowHandle {
         self.mouse_delta
     }
 
-    pub fn set_cursor(&self, cursor: CursorKind) {
+    pub fn set_cursor(&self, cursor: Cursor) {
         self.dispatcher.dispatch(UserEvent::ChangeCursor(cursor));
     }
 

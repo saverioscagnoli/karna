@@ -60,9 +60,9 @@ impl Scene for Demo {
 
         if inside {
             ctx.window
-                .set_cursor(CursorKind::Custom(self.cob, Vector2::zero()));
+                .set_cursor(Cursor::Custom(self.cob, Vector2::zero()));
         } else {
-            ctx.window.set_cursor(CursorKind::default());
+            ctx.window.set_cursor(Cursor::default());
         }
 
         if ctx.input.key_pressed(Key::F) {
@@ -108,7 +108,7 @@ impl Scene for Demo2 {
 }
 
 fn main() {
-    let _ = init_logging(LogConfig::default().with_min_level(LevelFilter::Trace));
+    let _ = init_logging(LogConfig::default().with_min_level(LevelFilter::Debug));
 
     AppBuilder::default()
         .with_window(
