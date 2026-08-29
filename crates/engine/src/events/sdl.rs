@@ -148,13 +148,6 @@ pub enum SDLEvent {
         kevent: KeyEvent,
     },
 
-    /// Composed text. Distinct from [`Event::Key`]: one keystroke may produce
-    /// several characters, or none, depending on the IME.
-    TextInput {
-        window: WindowId,
-        text: String,
-    },
-
     Mouse {
         window: WindowId,
         mevent: MouseEvent,
@@ -178,6 +171,11 @@ pub enum SDLEvent {
     DropText {
         window: WindowId,
         text: String,
+    },
+
+    Text {
+        window: WindowId,
+        tevent: TextEvent,
     },
 }
 
@@ -219,6 +217,28 @@ pub enum SDLWindowEvent {
     /// The usable region changed — mobile notches, rounded corners, gesture bars.
     SafeAreaChanged,
     Destroyed,
+}
+
+/// Text as composed by the platform, after layout and IME processing.
+///
+/// Distinct from [`SDLEvent::Key`]: one keystroke may produce several
+/// characters, or none.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum TextEvent {
+    /// Committed text. Insert at the caret.
+    Input { text: String },
+
+    /// In-flight IME composition. Render it underlined at the caret; it is
+    /// not part of the document until an `Input` arrives. An empty `text`
+    /// means the composition was cancelled — clear the preedit.
+    Editing {
+        text: String,
+        /// Caret position within `text`, in characters. `-1` if unknown.
+        cursor: i32,
+        /// Selection length within `text`. `-1` if unknown.
+        len: i32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

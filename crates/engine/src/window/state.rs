@@ -8,7 +8,6 @@ use crate::render::Renderer;
 use crate::scene::BoxedScene;
 use crate::scene::SceneBuilder;
 use crate::window::Window;
-use crate::window::context::ForContext;
 use crate::window::context::ForContextMut;
 use crate::window::context::UserContext;
 use crate::window::pacer::FramePacer;
@@ -50,7 +49,7 @@ impl WindowState {
         };
 
         if slot.scene.is_none() {
-            slot.scene = Some((slot.builder)(ctx.for_load(fctx)));
+            slot.scene = Some((slot.builder)(&mut ctx.for_load(fctx)));
         }
     }
 
@@ -60,8 +59,8 @@ impl WindowState {
         };
 
         if let Some(ref mut scene) = slot.scene {
-            let ctx = self.ctx.for_load(fctx);
-            scene.unload(ctx);
+            let mut ctx = self.ctx.for_load(fctx);
+            scene.unload(&mut ctx);
         }
 
         slot.scene = None;
@@ -104,11 +103,11 @@ impl WindowState {
                 continue;
             };
 
-            let ctx = ctx.for_update(&mut fctx);
+            let mut ctx = ctx.for_update(&mut fctx);
 
             match phase {
-                UpdatePhase::Fixed => scene.fixed_update(ctx),
-                UpdatePhase::Unrestrained => scene.update(ctx),
+                UpdatePhase::Fixed => scene.fixed_update(&mut ctx),
+                UpdatePhase::Unrestrained => scene.update(&mut ctx),
             }
         }
     }
@@ -118,7 +117,7 @@ impl WindowState {
             .render(window, assets, self.ctx.window.clear_color);
     }
 
-    pub fn draw_active_scenes<'a>(&mut self, fctx: ForContext<'a>) {
+    pub fn draw_active_scenes<'a>(&mut self, fctx: ForContextMut<'a>) {
         #[rustfmt::skip]
         let Self { ctx, scenes, scenes_active, renderer, .. } = self;
 
@@ -136,7 +135,7 @@ impl WindowState {
                 continue;
             };
 
-            let ctx = ctx.for_draw(&fctx);
+            let ctx = ctx.for_draw(fctx.input);
 
             scene.draw(ctx, &mut draw);
         }

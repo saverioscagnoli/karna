@@ -31,6 +31,7 @@ use crate::assets::AssetServer;
 use crate::assets::AssetSlot;
 use crate::assets::AssetSource;
 use crate::assets::atlas::ImageView;
+use crate::assets::atlas::PageId;
 use crate::assets::atlas::TextureAtlas;
 use crate::err::sdl_last_error;
 use crate::gpu::Filter;
@@ -39,7 +40,7 @@ const TARGET_FORMAT: SDL_PixelFormat = SDL_PixelFormat::SDL_PIXELFORMAT_ABGR8888
 
 #[derive(Debug, Clone, Copy)]
 pub struct Image {
-    pub page: usize,
+    pub page: PageId,
     pub origin: math::Vector2<u32>,
     pub uv_min: math::Vector2<f32>,
     pub uv_max: math::Vector2<f32>,

@@ -57,6 +57,7 @@ pub use crate::gpu::texture::Filter;
 pub use crate::gpu::texture::Sampler;
 pub use crate::gpu::texture::Texture;
 pub use crate::gpu::texture::TextureDesc;
+pub use crate::gpu::texture::TextureRegion;
 pub use crate::gpu::vertex::LayoutDescriptor;
 pub use crate::gpu::vertex::VertexAttribute;
 pub use crate::gpu::vertex::VertexLayout;

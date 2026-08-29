@@ -15,6 +15,7 @@ pub use sdl::MouseEvent;
 pub use sdl::SDLEvent;
 pub use sdl::SDLWindowEvent;
 pub use sdl::Scancode;
+pub use sdl::TextEvent;
 pub use sdl::TouchEvent;
 pub use sdl::WindowId;
 pub use user::UserEvent;

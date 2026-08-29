@@ -27,4 +27,12 @@ pub enum UserWindowEvent {
     UnloadScene(SceneId),
     ActivateScene(SceneId),
     DeactivateScene(SceneId),
+    StartTextInput,
+    StopTextInput,
+    SetTextInputArea {
+        origin: m::Vector2<i32>,
+        size: m::Size<u32>,
+        cursor: i32,
+    },
+    ClearTextInputArea,
 }

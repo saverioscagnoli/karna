@@ -7,6 +7,9 @@ use crate::render::layer::Layer;
 use crate::render::layer::LayerData;
 use crate::render::layer::LayerMap;
 use crate::render::vertex::Vertex;
+use crate::text::Text;
+use crate::text::TextSpan;
+use crate::text::TextStyle;
 use math as m;
 use utils::Handle;
 
@@ -16,7 +19,7 @@ pub struct Draw<'w> {
     cameras: &'w LayerMap<Camera>,
     data: &'w mut LayerMap<LayerData>,
     viewport: m::Size<u32>,
-    assets: &'w AssetServer,
+    assets: &'w mut AssetServer,
 }
 
 impl<'w> Draw<'w> {
@@ -24,7 +27,7 @@ impl<'w> Draw<'w> {
         cameras: &'w LayerMap<Camera>,
         data: &'w mut LayerMap<LayerData>,
         viewport: m::Size<u32>,
-        assets: &'w AssetServer,
+        assets: &'w mut AssetServer,
     ) -> Self {
         let config = config();
 
@@ -36,6 +39,10 @@ impl<'w> Draw<'w> {
             viewport,
             assets,
         }
+    }
+
+    pub fn assets(&self) -> &AssetServer {
+        self.assets
     }
 
     pub fn color(&self) -> Color {
@@ -114,9 +121,74 @@ impl<'w> Draw<'w> {
 
     pub fn image_sized(&mut self, handle: Handle<Image>, x: f32, y: f32, w: f32, h: f32) {
         let image = *self.assets.get_image(handle);
+
+        self.textured(image, x, y, w, h, self.color);
+    }
+
+    pub fn layout<T>(&mut self, text: T, style: &TextStyle) -> Text
+    where
+        T: AsRef<str>,
+    {
+        self.layout_rich(&[TextSpan::new(text.as_ref())], style)
+    }
+
+    pub fn layout_rich(&mut self, spans: &[TextSpan], style: &TextStyle) -> Text {
+        let (text, atlas) = self.assets.text_targets();
+
+        text.layout_rich(spans, style, atlas)
+    }
+
+    pub fn print<T>(&mut self, text: T, style: &TextStyle, x: f32, y: f32) -> m::Size<f32>
+    where
+        T: AsRef<str>,
+    {
+        self.print_rich(&[TextSpan::new(text.as_ref())], style, x, y)
+    }
+
+    pub fn print_rich(
+        &mut self,
+        spans: &[TextSpan],
+        style: &TextStyle,
+        x: f32,
+        y: f32,
+    ) -> m::Size<f32> {
+        let laid_out = self.layout_rich(spans, style);
+        let size = laid_out.size();
+
+        self.text(&laid_out, x, y);
+
+        size
+    }
+
+    pub fn text(&mut self, text: &Text, x: f32, y: f32) {
+        for glyph in text.glyphs() {
+            let Some(image) = glyph.image else {
+                continue;
+            };
+
+            let color = if glyph.colored {
+                Color::WHITE
+            } else {
+                glyph.color.unwrap_or(self.color)
+            };
+
+            let size = glyph.size.cast::<f32>();
+
+            self.textured(
+                image,
+                x + glyph.pos.x,
+                y + glyph.pos.y,
+                size.w(),
+                size.h(),
+                color,
+            );
+        }
+    }
+
+    pub fn textured(&mut self, image: Image, x: f32, y: f32, w: f32, h: f32, color: Color) {
         let min = image.uv_min;
         let max = image.uv_max;
-        let color: m::Vector4<f32> = self.color.into();
+        let color: m::Vector4<f32> = color.into();
 
         self.data[self.layer].immediate_mut().push_quad(
             image.page,

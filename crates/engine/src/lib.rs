@@ -14,6 +14,7 @@ mod path;
 mod render;
 mod scene;
 mod sdl;
+mod text;
 mod window;
 
 use std::mem;
@@ -50,7 +51,6 @@ use crate::gpu::Device;
 use crate::input::InputScope;
 use crate::render::Renderer;
 use crate::sdl::SDLGuard;
-use crate::window::ForContext;
 use crate::window::ForContextMut;
 use crate::window::FramePacer;
 use crate::window::PaceMode;
@@ -69,6 +69,7 @@ pub use crate::builder::WindowBuilder;
 pub use crate::cursor::Cursor;
 pub use crate::cursor::SystemCursor;
 pub use crate::events::MouseButton;
+use crate::events::TextEvent;
 pub use crate::input::Input;
 pub use crate::input::Key;
 pub use crate::render::Camera;
@@ -78,7 +79,14 @@ pub use crate::render::Layer;
 pub use crate::render::Projection;
 pub use crate::scene::Scene;
 pub use crate::scene::SceneId;
+pub use crate::text::Font;
+pub use crate::text::Text;
+pub use crate::text::TextAlign;
+pub use crate::text::TextSpan;
+pub use crate::text::TextStyle;
+pub use crate::text::TextSystem;
 pub use crate::window::DrawContext;
+pub use crate::window::TextHandle;
 pub use crate::window::LoadContext;
 pub use crate::window::Time;
 pub use crate::window::UpdateContext;
@@ -234,6 +242,25 @@ impl App {
                             self.input.keys.release(key);
                         }
                     }
+                    SDLEvent::Text { window, tevent } => {
+                        if self.input.focused != Some(window) {
+                            continue;
+                        }
+
+                        match tevent {
+                            TextEvent::Input { text } => {
+                                self.input.text.push_str(&text);
+                                self.input.preedit.clear();
+                                self.input.preedit_cursor = -1;
+                            }
+
+                            TextEvent::Editing { text, cursor, .. } => {
+                                self.input.preedit = text;
+                                self.input.preedit_cursor = cursor;
+                            }
+                        }
+                    }
+
                     SDLEvent::Mouse { window, mevent } => match mevent {
                         MouseEvent::Motion { x, y, dx, dy } => {
                             let Some(entry) = self.windows.get_mut(&window) else {
@@ -303,6 +330,15 @@ impl App {
                             UserWindowEvent::ChangeResizable(r) => window.set_resizable(r),
                             UserWindowEvent::ChangeTargetFps(t) => pacer.set_target_fps(t),
                             UserWindowEvent::ChangeFpsCalcStrategy(s) => counter.set_strategy(s),
+                            UserWindowEvent::StartTextInput => window.start_text_input(),
+                            UserWindowEvent::StopTextInput => window.stop_text_input(),
+                            UserWindowEvent::ClearTextInputArea => window.clear_text_input_area(),
+
+                            UserWindowEvent::SetTextInputArea {
+                                origin,
+                                size,
+                                cursor,
+                            } => window.set_text_input_area(origin, size, cursor),
 
                             event => {
                                 let mut fctx = ForContextMut {
@@ -384,10 +420,12 @@ impl App {
                     },
                 );
 
-                entry.state.draw_active_scenes(ForContext {
+                entry.state.draw_active_scenes(ForContextMut {
                     input: &self.input,
-                    assets: &self.asset_server,
+                    assets: &mut self.asset_server,
                 });
+
+                self.asset_server.flush(&self.gpu);
 
                 entry.state.render(&entry.window, &self.asset_server);
                 entry.state.sync_window(&entry.window);

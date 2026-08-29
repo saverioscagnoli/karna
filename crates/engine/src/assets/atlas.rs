@@ -13,12 +13,37 @@ use crate::gpu::Filter;
 use crate::gpu::Gpu;
 use crate::gpu::Texture;
 use crate::gpu::TextureDesc;
+use crate::gpu::TextureRegion;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DirtyRect {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+}
+
+impl DirtyRect {
+    fn union(self, other: Self) -> Self {
+        let x = self.x.min(other.x);
+        let y = self.y.min(other.y);
+        let right = (self.x + self.w).max(other.x + other.w);
+        let bottom = (self.y + self.h).max(other.y + other.h);
+
+        Self {
+            x,
+            y,
+            w: right - x,
+            h: bottom - y,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct PageData {
     pixels: Arc<Vec<u8>>,
     extent: u32,
-    version: u64,
+    dirty: Option<DirtyRect>,
 }
 
 impl PageData {
@@ -26,8 +51,36 @@ impl PageData {
         Self {
             pixels: Arc::new(vec![0u8; (extent as usize).pow(2) * 4]),
             extent,
-            version: 0,
+            dirty: None,
         }
+    }
+
+    fn mark(&mut self, rect: DirtyRect) {
+        if rect.w == 0 || rect.h == 0 {
+            return;
+        }
+
+        self.dirty = Some(match self.dirty {
+            Some(current) => current.union(rect),
+            None => rect,
+        });
+    }
+
+    fn take_dirty(&mut self) -> Option<DirtyRect> {
+        self.dirty.take()
+    }
+
+    fn region_pixels(&self, rect: DirtyRect) -> Vec<u8> {
+        let stride = self.extent as usize * 4;
+        let row_bytes = rect.w as usize * 4;
+        let mut out = Vec::with_capacity(row_bytes * rect.h as usize);
+
+        for row in 0..rect.h as usize {
+            let start = (rect.y as usize + row) * stride + rect.x as usize * 4;
+            out.extend_from_slice(&self.pixels[start..start + row_bytes]);
+        }
+
+        out
     }
 
     fn write(&mut self, data: &[u8], origin: math::Vector2<u32>, size: math::Size<u32>) {
@@ -41,7 +94,12 @@ impl PageData {
             pixels[dst..dst + row_bytes].copy_from_slice(&data[src..src + row_bytes]);
         }
 
-        self.version += 1;
+        self.mark(DirtyRect {
+            x: origin.x,
+            y: origin.y,
+            w: size.width,
+            h: size.height,
+        });
     }
 
     fn extrude(&mut self, origin: math::Vector2<u32>, size: math::Size<u32>, pad: u32) {
@@ -57,6 +115,13 @@ impl PageData {
         let top = pad.min(y0) as usize;
         let right = pad.min(extent - (x0 + w)) as usize;
         let bottom = pad.min(extent - (y0 + h)) as usize;
+
+        let padded = DirtyRect {
+            x: x0 - left as u32,
+            y: y0 - top as u32,
+            w: w + left as u32 + right as u32,
+            h: h + top as u32 + bottom as u32,
+        };
 
         let stride = extent as usize * 4;
         let pixels = Arc::make_mut(&mut self.pixels);
@@ -94,7 +159,7 @@ impl PageData {
             pixels.copy_within(src..src + span, (y0 + h - 1 + p) * stride + x);
         }
 
-        self.version += 1;
+        self.mark(padded);
     }
 }
 
@@ -109,7 +174,6 @@ pub struct Page {
     kind: PageKind,
     filter: Filter,
     texture: Option<Texture>,
-    uploaded: u64,
 }
 
 impl Page {
@@ -122,7 +186,6 @@ impl Page {
             kind,
             filter,
             texture: None,
-            uploaded: 0,
         }
     }
 
@@ -135,7 +198,7 @@ impl Page {
     }
 
     fn dirty(&self) -> bool {
-        self.data.version != self.uploaded
+        self.data.dirty.is_some()
     }
 }
 
@@ -199,6 +262,15 @@ impl<'a> ImageView<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PageId(usize);
+
+impl PageId {
+    pub fn index(self) -> usize {
+        self.0
+    }
+}
+
 pub struct TextureAtlas {
     pages: Vec<Page>,
 }
@@ -220,21 +292,37 @@ impl TextureAtlas {
         Self::page_size() - Self::padding() * 2
     }
 
-    pub fn page_texture(&self, index: usize) -> Option<&Texture> {
-        self.pages.get(index)?.texture.as_ref()
+    pub fn page_texture(&self, page: PageId) -> Option<&Texture> {
+        self.pages.get(page.index())?.texture.as_ref()
     }
 
-    pub fn page_filter(&self, index: usize) -> Option<Filter> {
-        Some(self.pages.get(index)?.filter)
+    pub fn page_filter(&self, page: PageId) -> Option<Filter> {
+        Some(self.pages.get(page.index())?.filter)
     }
 
     pub fn page_count(&self) -> usize {
         self.pages.len()
     }
 
+    pub fn page_image(&self, index: usize) -> Option<Image> {
+        let page = self.pages.get(index)?;
+        let extent = page.data.extent;
+
+        Some(Image {
+            page: PageId(index),
+            origin: math::Vector2::new(0, 0),
+            uv_min: math::Vector2::new(0.0, 0.0),
+            uv_max: math::Vector2::new(1.0, 1.0),
+            size: math::Size::new(extent, extent),
+        })
+    }
+
     pub fn view(&self, image: &Image) -> ImageView<'_> {
-        let Some(page) = self.pages.get(image.page) else {
-            fatal!("Image references a missing atlas page: {}", image.page);
+        let Some(page) = self.pages.get(image.page.index()) else {
+            fatal!(
+                "Image references a missing atlas page: {}",
+                image.page.index()
+            );
         };
 
         let extent = page.data.extent as usize;
@@ -277,32 +365,52 @@ impl TextureAtlas {
             let page = &mut self.pages[i];
             let extent = page.data.extent;
 
-            page.texture.get_or_insert_with(|| {
-                Texture::new(
+            if page.texture.is_none() {
+                page.texture = Some(Texture::new(
                     device.clone(),
                     format!("atlas-page-{i}"),
                     TextureDesc::rgba8(extent, extent),
-                )
-            });
+                ));
+
+                page.data.mark(DirtyRect {
+                    x: 0,
+                    y: 0,
+                    w: extent,
+                    h: extent,
+                });
+            }
         }
 
-        let uploads = dirty
+        let staged = dirty
             .iter()
             .filter_map(|&i| {
-                let page = &self.pages[i];
-                let texture = page.texture.as_ref()?;
+                let page = &mut self.pages[i];
+                let rect = page.data.take_dirty()?;
 
-                Some((texture, page.data.pixels.as_slice()))
+                Some((i, rect, page.data.region_pixels(rect)))
+            })
+            .collect::<Vec<_>>();
+
+        let uploads = staged
+            .iter()
+            .filter_map(|(i, rect, pixels)| {
+                let texture = self.pages[*i].texture.as_ref()?;
+
+                let region = TextureRegion {
+                    mip_level: 0,
+                    layer: 0,
+                    x: rect.x,
+                    y: rect.y,
+                    w: rect.w,
+                    h: rect.h,
+                };
+
+                Some((texture, region, pixels.as_slice()))
             })
             .collect::<Vec<_>>();
 
         if let Err(err) = device.upload_textures(&uploads) {
             fatal!("Atlas upload failed: {:?}", err);
-        }
-
-        for &i in &dirty {
-            let page = &mut self.pages[i];
-            page.uploaded = page.data.version;
         }
     }
 
@@ -319,7 +427,7 @@ impl TextureAtlas {
         let extent = page.data.extent as f32;
 
         Image {
-            page: index,
+            page: PageId(index),
             origin,
             uv_min: math::Vector2::new(origin.x as f32 / extent, origin.y as f32 / extent),
             uv_max: math::Vector2::new(

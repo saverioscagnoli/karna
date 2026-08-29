@@ -2,10 +2,12 @@ mod context;
 mod handle;
 mod pacer;
 mod state;
+mod text;
 mod time;
 
 use std::ffi::CStr;
 use std::ffi::CString;
+use std::ptr;
 
 use logging::debug;
 use logging::error;
@@ -18,10 +20,14 @@ use sdl3::SDL_GetWindowFlags;
 use sdl3::SDL_GetWindowID;
 use sdl3::SDL_GetWindowSize;
 use sdl3::SDL_GetWindowTitle;
+use sdl3::SDL_Rect;
 use sdl3::SDL_ReleaseWindowFromGPUDevice;
+use sdl3::SDL_SetTextInputArea;
 use sdl3::SDL_SetWindowResizable;
 use sdl3::SDL_SetWindowSize;
 use sdl3::SDL_SetWindowTitle;
+use sdl3::SDL_StartTextInput;
+use sdl3::SDL_StopTextInput;
 use sdl3::SDL_WINDOW_RESIZABLE;
 use sdl3::SDL_Window;
 
@@ -30,7 +36,6 @@ use crate::events::WindowId;
 use crate::gpu::Device;
 
 pub use context::DrawContext;
-pub use context::ForContext;
 pub use context::ForContextMut;
 pub use context::LoadContext;
 pub use context::UpdateContext;
@@ -42,6 +47,7 @@ pub use pacer::PaceMode;
 pub use state::SceneSlot;
 pub use state::UpdatePhase;
 pub use state::WindowState;
+pub use text::TextHandle;
 pub use time::Time;
 
 pub struct WindowEntry {
@@ -138,6 +144,38 @@ impl Window {
 
         if !unsafe { SDL_SetWindowSize(self.raw, size.w(), size.h()) } {
             error!("Failed to set window size: {}", sdl_last_error());
+        }
+    }
+
+    pub fn start_text_input(&self) {
+        if !unsafe { SDL_StartTextInput(self.raw) } {
+            error!("Failed to start text input: {}", sdl_last_error());
+        }
+    }
+
+    pub fn stop_text_input(&self) {
+        if !unsafe { SDL_StopTextInput(self.raw) } {
+            error!("Failed to stop text input: {}", sdl_last_error());
+        }
+    }
+
+    pub fn set_text_input_area(&self, origin: m::Vector2<i32>, size: m::Size<u32>, cursor: i32) {
+        let size = size.cast::<i32>();
+        let rect = SDL_Rect {
+            x: origin.x,
+            y: origin.y,
+            w: size.w(),
+            h: size.h(),
+        };
+
+        if !unsafe { SDL_SetTextInputArea(self.raw, &rect, cursor) } {
+            error!("Failed to set text input area: {}", sdl_last_error());
+        }
+    }
+
+    pub fn clear_text_input_area(&self) {
+        if !unsafe { SDL_SetTextInputArea(self.raw, ptr::null(), 0) } {
+            error!("Failed to clear text input area: {}", sdl_last_error());
         }
     }
 

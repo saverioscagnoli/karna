@@ -54,6 +54,42 @@ impl WindowHandle {
         });
     }
 
+    pub fn start_text_input(&self) {
+        self.dispatcher.dispatch(UserEvent::Window {
+            id: self.id,
+            wevent: UserWindowEvent::StartTextInput,
+        });
+    }
+
+    pub fn stop_text_input(&self) {
+        self.dispatcher.dispatch(UserEvent::Window {
+            id: self.id,
+            wevent: UserWindowEvent::StopTextInput,
+        });
+    }
+
+    pub fn set_text_input_area<O, S>(&self, origin: O, size: S, cursor: i32)
+    where
+        O: Into<m::Vector2<i32>>,
+        S: Into<m::Size<u32>>,
+    {
+        self.dispatcher.dispatch(UserEvent::Window {
+            id: self.id,
+            wevent: UserWindowEvent::SetTextInputArea {
+                origin: origin.into(),
+                size: size.into(),
+                cursor,
+            },
+        });
+    }
+
+    pub fn clear_text_input_area(&self) {
+        self.dispatcher.dispatch(UserEvent::Window {
+            id: self.id,
+            wevent: UserWindowEvent::ClearTextInputArea,
+        });
+    }
+
     pub fn title(&self) -> &str {
         &self.title
     }

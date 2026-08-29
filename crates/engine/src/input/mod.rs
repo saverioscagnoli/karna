@@ -327,9 +327,24 @@ pub struct Input {
     pub(crate) keys: Edges<KeySet>,
     pub(crate) mouse: Edges<MouseSet>,
     pub(crate) m_wheel: math::Vector2<f32>,
+    pub(crate) text: String,
+    pub(crate) preedit: String,
+    pub(crate) preedit_cursor: i32,
 }
 
 impl Input {
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    pub fn preedit(&self) -> &str {
+        &self.preedit
+    }
+
+    pub fn preedit_cursor(&self) -> i32 {
+        self.preedit_cursor
+    }
+
     pub fn key_down(&self, key: Key) -> bool {
         self.keys.held(key)
     }
@@ -367,6 +382,7 @@ impl Input {
         self.keys.roll_frame();
         self.mouse.roll_frame();
         self.m_wheel.set([0.0, 0.0]);
+        self.text.clear();
     }
 
     pub(crate) fn change_scope(&mut self, scope: InputScope) {

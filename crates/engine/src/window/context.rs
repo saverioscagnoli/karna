@@ -1,6 +1,7 @@
 use crate::Input;
 use crate::assets::AssetServer;
 use crate::window::handle::WindowHandle;
+use crate::window::text::TextHandle;
 use crate::window::time::Time;
 
 pub struct UserContext {
@@ -11,11 +12,6 @@ pub struct UserContext {
 pub struct ForContextMut<'app> {
     pub input: &'app Input,
     pub assets: &'app mut AssetServer,
-}
-
-pub struct ForContext<'app> {
-    pub input: &'app Input,
-    pub assets: &'app AssetServer,
 }
 
 pub struct LoadContext<'uctx> {
@@ -36,7 +32,6 @@ pub struct DrawContext<'uctx> {
     pub window: &'uctx WindowHandle,
     pub time: &'uctx Time,
     pub input: &'uctx Input,
-    pub assets: &'uctx AssetServer,
 }
 
 impl UserContext {
@@ -58,12 +53,27 @@ impl UserContext {
         }
     }
 
-    pub fn for_draw<'a>(&'a mut self, fctx: &ForContext<'a>) -> DrawContext<'a> {
+    pub fn for_draw<'a>(&'a self, input: &'a Input) -> DrawContext<'a> {
         DrawContext {
             window: &self.window,
             time: &self.time,
-            input: fctx.input,
-            assets: fctx.assets,
+            input,
         }
+    }
+}
+
+impl LoadContext<'_> {
+    pub fn text(&mut self) -> TextHandle<'_> {
+        let (text, atlas) = self.assets.text_targets();
+
+        TextHandle { text, atlas }
+    }
+}
+
+impl UpdateContext<'_> {
+    pub fn text(&mut self) -> TextHandle<'_> {
+        let (text, atlas) = self.assets.text_targets();
+
+        TextHandle { text, atlas }
     }
 }

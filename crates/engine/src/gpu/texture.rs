@@ -431,14 +431,17 @@ impl Gpu {
 impl Gpu {
     /// Uploads several full textures through one mapping and one command
     /// buffer. Direct replacement for the old `TextureBatch`.
-    pub fn upload_textures(&self, uploads: &[(&Texture, &[u8])]) -> Result<(), BufferError> {
+    pub fn upload_textures(
+        &self,
+        uploads: &[(&Texture, TextureRegion, &[u8])],
+    ) -> Result<(), BufferError> {
         if uploads.is_empty() {
             return Ok(());
         }
 
         let total: usize = uploads
             .iter()
-            .map(|(_, pixels)| pixels.len() + TEXTURE_TRANSFER_ALIGN as usize)
+            .map(|(_, _, pixels)| pixels.len() + TEXTURE_TRANSFER_ALIGN as usize)
             .sum();
         let total = u32::try_from(total).map_err(|_| BufferError::TooLarge)?;
 
@@ -450,7 +453,7 @@ impl Gpu {
         {
             let mut mapped = staging.map(true)?;
 
-            for (_, pixels) in uploads {
+            for (_, _, pixels) in uploads {
                 offsets.push(mapped.write_aligned(pixels, TEXTURE_TRANSFER_ALIGN)?);
             }
         }
@@ -464,23 +467,23 @@ impl Gpu {
 
             let pass = SDL_BeginGPUCopyPass(cmd);
 
-            for ((texture, _), &offset) in uploads.iter().zip(&offsets) {
+            for ((texture, region, _), &offset) in uploads.iter().zip(&offsets) {
                 let source = SDL_GPUTextureTransferInfo {
                     transfer_buffer: staging.raw(),
                     offset,
-                    pixels_per_row: texture.width(),
-                    rows_per_layer: texture.height(),
+                    pixels_per_row: region.w,
+                    rows_per_layer: region.h,
                 };
 
                 let destination = SDL_GPUTextureRegion {
                     texture: texture.raw(),
-                    mip_level: 0,
-                    layer: 0,
-                    x: 0,
-                    y: 0,
+                    mip_level: region.mip_level,
+                    layer: region.layer,
+                    x: region.x,
+                    y: region.y,
                     z: 0,
-                    w: texture.width(),
-                    h: texture.height(),
+                    w: region.w,
+                    h: region.h,
                     d: 1,
                 };
 

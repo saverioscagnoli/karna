@@ -14,7 +14,7 @@ struct Demo {
 }
 
 impl Scene for Demo {
-    fn load(ctx: LoadContext) -> Self
+    fn load(ctx: &mut LoadContext) -> Self
     where
         Self: Sized,
     {
@@ -29,7 +29,7 @@ impl Scene for Demo {
         }
     }
 
-    fn update(&mut self, ctx: UpdateContext) {
+    fn update(&mut self, ctx: &mut UpdateContext) {
         let dt = ctx.time.delta();
 
         if ctx.input.key_down(Key::W) {
@@ -87,14 +87,14 @@ impl Scene for Demo {
 struct Demo2;
 
 impl Scene for Demo2 {
-    fn load(ctx: LoadContext) -> Self
+    fn load(ctx: &mut LoadContext) -> Self
     where
         Self: Sized,
     {
         Self
     }
 
-    fn update(&mut self, ctx: UpdateContext) {
+    fn update(&mut self, ctx: &mut UpdateContext) {
         if ctx.input.key_pressed(Key::F) {
             ctx.window.deactivate_scene(DEMO2_SCENE);
             ctx.window.activate_scene(DEMO_SCENE);

@@ -1,3 +1,4 @@
+use crate::assets::PageId;
 use crate::gpu::BufferUsage;
 use crate::gpu::Device;
 use crate::gpu::GpuBuffer;
@@ -5,7 +6,7 @@ use crate::render::vertex::Vertex;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Batch {
-    pub page: usize,
+    pub page: PageId,
     pub start: u32,
     pub count: u32,
 }
@@ -32,7 +33,7 @@ impl ImmediateGeometry {
         }
     }
 
-    pub fn push_quad(&mut self, page: usize, quad: [Vertex; 4]) {
+    pub fn push_quad(&mut self, page: PageId, quad: [Vertex; 4]) {
         let base = self.vertices.len() as u32;
         let start = self.indices.len() as u32;
 

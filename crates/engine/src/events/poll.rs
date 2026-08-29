@@ -32,6 +32,7 @@ use crate::events::sdl::MouseEvent;
 use crate::events::sdl::SDLEvent;
 use crate::events::sdl::SDLWindowEvent;
 use crate::events::sdl::Scancode;
+use crate::events::sdl::TextEvent;
 use crate::events::sdl::TouchEvent;
 use crate::events::sdl::WindowId;
 
@@ -128,17 +129,6 @@ fn translate(raw: &SDL_Event) -> Option<SDLEvent> {
                     pressed: k.down,
                     repeat: k.repeat,
                 },
-            })
-        }
-
-        SDL_EventType::SDL_EVENT_TEXT_INPUT => {
-            // SAFETY: writes the `text` member.
-            let t = unsafe { raw.text };
-
-            Some(SDLEvent::TextInput {
-                window: WindowId(t.windowID),
-                // SDL owns the buffer and reuses it; copy before returning.
-                text: unsafe { cstr(t.text) }?,
             })
         }
 
@@ -282,6 +272,29 @@ fn translate(raw: &SDL_Event) -> Option<SDLEvent> {
             })
         }
 
+        SDL_EventType::SDL_EVENT_TEXT_INPUT => {
+            let e = unsafe { raw.text };
+
+            Some(SDLEvent::Text {
+                window: WindowId(e.windowID),
+                tevent: TextEvent::Input {
+                    text: unsafe { owned(e.text) },
+                },
+            })
+        }
+
+        SDL_EventType::SDL_EVENT_TEXT_EDITING => {
+            let e = unsafe { raw.edit };
+            Some(SDLEvent::Text {
+                window: WindowId(e.windowID),
+                tevent: TextEvent::Editing {
+                    text: unsafe { owned(e.text) },
+                    cursor: e.start,
+                    len: e.length,
+                },
+            })
+        }
+
         other => {
             trace!("Unmapped SDL event: {}", other.0);
             None
@@ -296,6 +309,14 @@ fn life(l: Lifecycle) -> Option<SDLEvent> {
 fn is_window(kind: SDL_EventType) -> bool {
     (SDL_EventType::SDL_EVENT_WINDOW_FIRST.0..=SDL_EventType::SDL_EVENT_WINDOW_LAST.0)
         .contains(&kind.0)
+}
+
+unsafe fn owned(p: *const std::ffi::c_char) -> String {
+    if p.is_null() {
+        return String::new();
+    }
+
+    unsafe { std::ffi::CStr::from_ptr(p).to_string_lossy().into_owned() }
 }
 
 fn window_event(kind: SDL_EventType, data1: i32, data2: i32) -> Option<SDLWindowEvent> {

@@ -85,7 +85,7 @@ impl Renderer {
         }
     }
 
-    pub fn draw<'w>(&'w mut self, viewport: m::Size<u32>, assets: &'w AssetServer) -> Draw<'w> {
+    pub fn draw<'w>(&'w mut self, viewport: m::Size<u32>, assets: &'w mut AssetServer) -> Draw<'w> {
         Draw::new(&self.cameras, &mut self.data, viewport, assets)
     }
 

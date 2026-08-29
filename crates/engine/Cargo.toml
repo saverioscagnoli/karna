@@ -10,3 +10,4 @@ sdl3.workspace = true
 sdl3-image.workspace = true
 utils.workspace = true
 rquickjs = "0.12.2"
+cosmic-text = { version = "0.19.0", default-features = false, features = ["std", "swash"] }
