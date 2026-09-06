@@ -1,6 +1,5 @@
 use std::ffi::c_void;
 
-use logging::LevelFilter::Info;
 use logging::debug;
 use logging::error;
 use logging::info;

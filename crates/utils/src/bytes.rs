@@ -2,6 +2,8 @@
 use std::ffi::CStr;
 use std::ffi::c_char;
 use std::fmt;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::mem;
 use std::ops::Add;
 use std::ops::AddAssign;
@@ -20,6 +22,17 @@ pub const fn fnv1a(bytes: &[u8]) -> u64 {
         i += 1;
     }
     hash
+}
+
+pub fn hash_f32<H>(v: f32, h: &mut H)
+where
+    H: Hasher,
+{
+    if v == 0.0 {
+        0u32.hash(h)
+    } else {
+        v.to_bits().hash(h);
+    }
 }
 
 pub fn as_u8_slice<T: Sized>(slice: &[T]) -> &[u8] {

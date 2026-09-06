@@ -36,25 +36,39 @@ pub use crate::text::text::Text;
 pub use crate::text::text::TextAlign;
 pub use crate::text::text::TextSpan;
 pub use crate::text::text::TextStyle;
+use crate::text::text::layout_key;
+
+struct CachedLayout {
+    text: Arc<Text>,
+    used: u64,
+}
 
 pub struct TextSystem {
     fonts: FontSystem,
+    scratch: Buffer,
     swash: SwashCache,
     glyphs: FastHashMap<CacheKey, Option<CachedGlyph>>,
     registry: SlotMap<Font>,
     paths: FastHashMap<PathBuf, Handle<Font>>,
     families: FastHashMap<String, Handle<Font>>,
+    layouts: FastHashMap<u64, CachedLayout>,
+    frame: u64,
 }
 
 impl Default for TextSystem {
     fn default() -> Self {
+        let mut fonts = FontSystem::new();
+        let scratch = Buffer::new(&mut fonts, Metrics::new(16.0, 20.0));
         Self {
-            fonts: FontSystem::new(),
+            fonts,
+            scratch,
             swash: SwashCache::new(),
             glyphs: FastHashMap::default(),
             registry: SlotMap::new(),
             paths: FastHashMap::default(),
             families: FastHashMap::default(),
+            layouts: FastHashMap::default(),
+            frame: 0,
         }
     }
 }
@@ -86,7 +100,10 @@ impl TextSystem {
             .any(|face| face.families.iter().any(|(family, _)| family == name));
 
         if !known {
-            warn!("No system font family named '{}', text will fall back.", name);
+            warn!(
+                "No system font family named '{}', text will fall back.",
+                name
+            );
         }
 
         self.intern(name.to_owned())
@@ -184,7 +201,28 @@ impl TextSystem {
         spans: &[TextSpan],
         style: &TextStyle,
         atlas: &mut TextureAtlas,
-    ) -> Text {
+    ) -> Arc<Text> {
+        let key = layout_key(spans, style);
+
+        if let Some(entry) = self.layouts.get_mut(&key) {
+            entry.used = self.frame;
+            return entry.text.clone();
+        }
+
+        let text = Arc::new(self.shape(spans, style, atlas));
+
+        self.layouts.insert(
+            key,
+            CachedLayout {
+                text: text.clone(),
+                used: self.frame,
+            },
+        );
+
+        text
+    }
+
+    fn shape(&mut self, spans: &[TextSpan], style: &TextStyle, atlas: &mut TextureAtlas) -> Text {
         let default_family = style
             .font
             .and_then(|font| self.family(font))
@@ -192,11 +230,22 @@ impl TextSystem {
 
         let span_families = spans
             .iter()
-            .map(|span| span.font.and_then(|font| self.family(font)).map(str::to_owned))
+            .map(|span| {
+                span.font
+                    .and_then(|font| self.family(font))
+                    .map(str::to_owned)
+            })
             .collect::<Vec<_>>();
 
-        let metrics = Metrics::new(style.size, style.line_height);
-        let mut buffer = Buffer::new(&mut self.fonts, metrics);
+        let default = match &default_family {
+            Some(family) => Attrs::new().family(Family::Name(family)),
+            None => Attrs::new(),
+        };
+
+        let content = spans.iter().map(|span| span.text).collect::<String>();
+        let mut buffer = self.scratch.borrow_with(&mut self.fonts);
+
+        buffer.set_metrics(Metrics::new(style.size, style.line_height));
 
         buffer.set_wrap(if style.wrap.is_some() {
             Wrap::WordOrGlyph
@@ -205,16 +254,6 @@ impl TextSystem {
         });
 
         buffer.set_size(style.wrap, None);
-
-        let default = match &default_family {
-            Some(family) => Attrs::new().family(Family::Name(family)),
-            None => Attrs::new(),
-        };
-
-        let content = spans.iter().map(|span| span.text).collect::<String>();
-        let mut buffer = buffer.borrow_with(&mut self.fonts);
-
-        buffer.shape_until_scroll(false);
         buffer.set_rich_text(
             spans
                 .iter()
@@ -274,15 +313,19 @@ impl TextSystem {
         }
     }
 
-    pub fn layout<T>(
-        &mut self,
-        text: T,
-        style: &TextStyle,
-        atlas: &mut TextureAtlas,
-    ) -> Text
+    pub fn layout<T>(&mut self, text: T, style: &TextStyle, atlas: &mut TextureAtlas) -> Arc<Text>
     where
         T: AsRef<str>,
     {
         self.layout_rich(&[TextSpan::new(text.as_ref())], style, atlas)
+    }
+
+    pub(crate) fn begin_frame(&mut self) {
+        self.frame += 1;
+
+        if self.frame % 60 == 0 {
+            let cutoff = self.frame.saturating_sub(120);
+            self.layouts.retain(|_, entry| entry.used >= cutoff);
+        }
     }
 }

@@ -43,6 +43,7 @@ use crate::events::KeyEvent;
 use crate::events::MouseEvent;
 use crate::events::SDLEvent;
 use crate::events::SDLWindowEvent;
+use crate::events::TextEvent;
 use crate::events::UserEvent;
 use crate::events::WindowId;
 use crate::events::queue::EventQueue;
@@ -69,7 +70,7 @@ pub use crate::builder::WindowBuilder;
 pub use crate::cursor::Cursor;
 pub use crate::cursor::SystemCursor;
 pub use crate::events::MouseButton;
-use crate::events::TextEvent;
+pub use crate::gpu::PresentMode;
 pub use crate::input::Input;
 pub use crate::input::Key;
 pub use crate::render::Camera;
@@ -86,8 +87,8 @@ pub use crate::text::TextSpan;
 pub use crate::text::TextStyle;
 pub use crate::text::TextSystem;
 pub use crate::window::DrawContext;
-pub use crate::window::TextHandle;
 pub use crate::window::LoadContext;
+pub use crate::window::TextHandle;
 pub use crate::window::Time;
 pub use crate::window::UpdateContext;
 
@@ -160,6 +161,7 @@ impl App {
                     mouse_delta: m::Vector::zero(),
                     clear_color: config.window.clear_color,
                     dispatcher: self.event_queue.dispatcher(),
+                    present_mode: PresentMode::VSYNC,
                 },
                 time: Time::new(window.id(), self.event_queue.dispatcher()),
             },
@@ -340,6 +342,16 @@ impl App {
                                 cursor,
                             } => window.set_text_input_area(origin, size, cursor),
 
+                            UserWindowEvent::SetPresentMode(mode) => {
+                                if self.gpu.set_present_mode(&entry.window, mode) {
+                                    debug!(
+                                        "Set present mode to {:?} for {}",
+                                        mode,
+                                        entry.window.id()
+                                    )
+                                }
+                            }
+
                             event => {
                                 let mut fctx = ForContextMut {
                                     input: &self.input,
@@ -350,12 +362,15 @@ impl App {
                                     UserWindowEvent::LoadScene(s) => {
                                         entry.state.load_scene(s, &mut fctx)
                                     }
+
                                     UserWindowEvent::UnloadScene(s) => {
                                         entry.state.unload_scene(s, &mut fctx)
                                     }
+
                                     UserWindowEvent::ActivateScene(s) => {
                                         entry.state.activate_scene(s, &mut fctx)
                                     }
+
                                     UserWindowEvent::DeactivateScene(s) => {
                                         entry.state.deactivate_scene(s)
                                     }

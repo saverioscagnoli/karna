@@ -10,6 +10,9 @@
 //! The second window shows the glyph atlas the text system rasterises into, so you can
 //! watch pages fill up as new sizes, faces and colour glyphs get cached.
 
+use std::sync::Arc;
+use std::u32;
+
 use karna::prelude::*;
 
 const SHOWCASE_SCENE: SceneId = SceneId::new_str("text_showcase");
@@ -552,7 +555,7 @@ impl Showcase {
         let phrase = "the quick brown fox jumps over the lazy dog";
         let clock = self.clock;
 
-        let row = |draw: &mut Draw, index: usize, label: &str| -> (Text, f32) {
+        let row = |draw: &mut Draw, index: usize, label: &str| -> (Arc<Text>, f32) {
             let y = y + index as f32 * 80.0;
 
             draw.set_color(DIM);
@@ -761,6 +764,9 @@ impl Showcase {
 
 impl Scene for Showcase {
     fn load(ctx: &mut LoadContext) -> Self {
+        ctx.window.set_present_mode(PresentMode::IMMEDIATE);
+        ctx.time.set_target_fps(u32::MAX);
+
         let fonts = Fonts {
             sans: ctx.assets.system_font("Inter"),
             serif: ctx.assets.system_font("Noto Serif"),

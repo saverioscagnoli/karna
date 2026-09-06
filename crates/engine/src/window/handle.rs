@@ -8,6 +8,7 @@ use crate::events::UserEvent;
 use crate::events::WindowId;
 use crate::events::queue::EventDispatcher;
 use crate::events::user::UserWindowEvent;
+use crate::gpu::PresentMode;
 use crate::window::Window;
 
 pub struct WindowHandle {
@@ -18,6 +19,7 @@ pub struct WindowHandle {
     pub(crate) mouse_position: m::Vector2<f32>,
     pub(crate) mouse_delta: m::Vector2<f32>,
     pub(crate) clear_color: Color,
+    pub(crate) present_mode: PresentMode,
     pub(crate) dispatcher: EventDispatcher<UserEvent>,
 }
 
@@ -150,6 +152,13 @@ impl WindowHandle {
 
     pub fn set_cursor(&self, cursor: Cursor) {
         self.dispatcher.dispatch(UserEvent::ChangeCursor(cursor));
+    }
+
+    pub fn set_present_mode(&mut self, mode: PresentMode) {
+        self.dispatcher.dispatch(UserEvent::Window {
+            id: self.id,
+            wevent: UserWindowEvent::SetPresentMode(mode),
+        });
     }
 
     pub(crate) fn sync(&mut self, window: &Window) {

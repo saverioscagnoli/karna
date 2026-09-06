@@ -25,12 +25,6 @@ pub struct WindowConfig {
     pub clear_color: Color,
 }
 
-impl WindowConfig {
-    pub const fn size_is_advisory() -> bool {
-        cfg!(any(target_os = "ios", target_os = "android"))
-    }
-}
-
 impl Default for WindowConfig {
     fn default() -> Self {
         Self {

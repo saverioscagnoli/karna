@@ -177,6 +177,10 @@ impl AssetServer {
         self.images.atlas.page_filter(page)
     }
 
+    pub(crate) fn begin_frame(&mut self) {
+        self.text.begin_frame();
+    }
+
     /// Upload anything baked since the last poll. Called after the scenes
     /// have run, so text laid out this frame is on the GPU before the frame
     /// that uses it is submitted.

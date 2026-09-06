@@ -95,7 +95,9 @@ impl Renderer {
         self.pipelines.immediate(&self.device, format)
     }
 
-    pub(crate) fn begin_frame(&mut self, viewport: m::Size<u32>) {
+    pub(crate) fn begin_frame(&mut self, viewport: m::Size<u32>, assets: &mut AssetServer) {
+        assets.begin_frame();
+
         for index in 0..self.data.len() {
             let layer = self.data.layer_at(index);
 

@@ -121,7 +121,7 @@ impl WindowState {
         #[rustfmt::skip]
         let Self { ctx, scenes, scenes_active, renderer, .. } = self;
 
-        renderer.begin_frame(ctx.window.size());
+        renderer.begin_frame(ctx.window.size(), fctx.assets);
 
         let mut draw = renderer.draw(ctx.window.size(), fctx.assets);
 

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::Color;
 use crate::assets::AssetServer;
 use crate::assets::Image;
@@ -125,14 +127,14 @@ impl<'w> Draw<'w> {
         self.textured(image, x, y, w, h, self.color);
     }
 
-    pub fn layout<T>(&mut self, text: T, style: &TextStyle) -> Text
+    pub fn layout<T>(&mut self, text: T, style: &TextStyle) -> Arc<Text>
     where
         T: AsRef<str>,
     {
         self.layout_rich(&[TextSpan::new(text.as_ref())], style)
     }
 
-    pub fn layout_rich(&mut self, spans: &[TextSpan], style: &TextStyle) -> Text {
+    pub fn layout_rich(&mut self, spans: &[TextSpan], style: &TextStyle) -> Arc<Text> {
         let (text, atlas) = self.assets.text_targets();
 
         text.layout_rich(spans, style, atlas)

@@ -1,3 +1,8 @@
+use std::env::temp_dir;
+use std::hash::Hash;
+use std::hash::Hasher;
+use std::mem;
+
 use cosmic_text::Attrs;
 use cosmic_text::Family;
 use cosmic_text::Style;
@@ -194,11 +199,7 @@ impl Into<cosmic_text::Color> for Color {
     }
 }
 
-pub fn attrs<'a>(
-    span: &TextSpan<'a>,
-    family: Option<&'a str>,
-    default: &Attrs<'a>,
-) -> Attrs<'a> {
+pub fn attrs<'a>(span: &TextSpan<'a>, family: Option<&'a str>, default: &Attrs<'a>) -> Attrs<'a> {
     let mut attrs = default.clone();
 
     if let Some(family) = family {
@@ -218,4 +219,43 @@ pub fn attrs<'a>(
     }
 
     attrs.metadata(span.metadata)
+}
+
+pub fn layout_key(spans: &[TextSpan], style: &TextStyle) -> u64 {
+    let mut h = utils::FastHasher::default();
+
+    style.font.hash(&mut h);
+    utils::hash_f32(style.size, &mut h);
+    utils::hash_f32(style.line_height, &mut h);
+    mem::discriminant(&style.align).hash(&mut h);
+
+    match style.wrap {
+        Some(w) => {
+            1u8.hash(&mut h);
+            utils::hash_f32(w, &mut h);
+        }
+        None => 0u8.hash(&mut h),
+    };
+
+    spans.len().hash(&mut h);
+
+    for span in spans {
+        span.text.hash(&mut h);
+        span.font.hash(&mut h);
+        span.bold.hash(&mut h);
+        span.italic.hash(&mut h);
+        span.metadata.hash(&mut h);
+
+        match span.color {
+            Some(c) => {
+                1u8.hash(&mut h);
+                for v in c.array() {
+                    utils::hash_f32(v, &mut h);
+                }
+            }
+            None => 0u8.hash(&mut h),
+        };
+    }
+
+    h.finish()
 }

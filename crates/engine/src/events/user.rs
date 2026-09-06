@@ -4,6 +4,7 @@ use std::rc::Rc;
 use crate::Cursor;
 use crate::SceneId;
 use crate::events::WindowId;
+use crate::gpu::PresentMode;
 use crate::window::FpsCalcStrategy;
 
 #[derive(Debug)]
@@ -35,4 +36,5 @@ pub enum UserWindowEvent {
         cursor: i32,
     },
     ClearTextInputArea,
+    SetPresentMode(PresentMode),
 }

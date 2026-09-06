@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::TextSystem;
 use crate::assets::TextureAtlas;
 use crate::text::Text;
@@ -10,14 +12,14 @@ pub struct TextHandle<'a> {
 }
 
 impl TextHandle<'_> {
-    pub fn layout<T>(&mut self, text: T, style: &TextStyle) -> Text
+    pub fn layout<T>(&mut self, text: T, style: &TextStyle) -> Arc<Text>
     where
         T: AsRef<str>,
     {
         self.text.layout(text, style, self.atlas)
     }
 
-    pub fn layout_rich(&mut self, spans: &[TextSpan], style: &TextStyle) -> Text {
+    pub fn layout_rich(&mut self, spans: &[TextSpan], style: &TextStyle) -> Arc<Text> {
         self.text.layout_rich(spans, style, self.atlas)
     }
 }

@@ -74,8 +74,12 @@ impl Color {
         }
     }
 
-    pub fn tuple(&self) -> (f32, f32, f32, f32) {
+    pub const fn tuple(&self) -> (f32, f32, f32, f32) {
         (self.r, self.g, self.b, self.a)
+    }
+
+    pub const fn array(&self) -> [f32; 4] {
+        [self.r, self.g, self.b, self.a]
     }
 }
 

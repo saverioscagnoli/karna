@@ -1,6 +1,7 @@
 mod buffer;
 mod info;
 mod pipeline;
+mod present_mode;
 mod texture;
 mod vertex;
 
@@ -53,6 +54,7 @@ pub use crate::gpu::pipeline::Primitive;
 pub use crate::gpu::pipeline::Shader;
 pub use crate::gpu::pipeline::ShaderDesc;
 pub use crate::gpu::pipeline::ShaderStage;
+pub use crate::gpu::present_mode::PresentMode;
 pub use crate::gpu::texture::Filter;
 pub use crate::gpu::texture::Sampler;
 pub use crate::gpu::texture::Texture;
