@@ -1,0 +1,1 @@
+/usr/lib64/ccache/cc -g -Wl,--dependency-file=CMakeFiles/myapp.dir/link.d CMakeFiles/myapp.dir/logging/log.c.o CMakeFiles/myapp.dir/src/main.c.o CMakeFiles/myapp.dir/src/time.c.o CMakeFiles/myapp.dir/src/window.c.o -o myapp  -Wl,-rpath,/home/svscagn/dev/karna/build/vendor/SDL vendor/SDL/libSDL3.so.0.2.10

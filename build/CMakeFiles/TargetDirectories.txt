@@ -1,0 +1,7 @@
+/home/svscagn/dev/karna/build/CMakeFiles/myapp.dir
+/home/svscagn/dev/karna/build/CMakeFiles/edit_cache.dir
+/home/svscagn/dev/karna/build/CMakeFiles/rebuild_cache.dir
+/home/svscagn/dev/karna/build/vendor/SDL/CMakeFiles/SDL3-shared.dir
+/home/svscagn/dev/karna/build/vendor/SDL/CMakeFiles/SDL_uclibc.dir
+/home/svscagn/dev/karna/build/vendor/SDL/CMakeFiles/edit_cache.dir
+/home/svscagn/dev/karna/build/vendor/SDL/CMakeFiles/rebuild_cache.dir

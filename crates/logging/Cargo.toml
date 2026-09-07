@@ -1,9 +1,0 @@
-[package]
-name = "logging"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-parking_lot.workspace = true
-
-log = "0.4.33"
