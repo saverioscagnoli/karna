@@ -65,6 +65,20 @@ Uses a custom `build.rs` to transpile shaders to the correct format, using `glsl
 - `window` - The window module, includes the sdl window wrapper, window state, game loop, context definition.
 - `events` - The event module, includes a event queue implementation, sdl event wrappers, key wrappers, etc. Also includes the actual User events
 
+### QuickJS
+
+JavaScript bindings, on top of `rquickjs`. A scene becomes a `.js` ES module whose default export is an object with `load` / `update` / `fixedUpdate` / `draw` / `unload`, registered with `WindowBuilder::with_js_scene`. Each method is called with that object as `this`, so a script keeps state on `this` the way a Rust scene keeps it in `Self`. Scripts reach the value types with `import { vec2, Key } from "karna"`; `console` is routed into `logging`. A script that throws is logged with its JS stack and then disabled, rather than taking the process down mid-frame.
+
+#### Structure
+
+The split is by lifetime, since that is the only hard problem here.
+
+- `value.rs`, `enums.rs` - Owned values (`Vec2`, `Size`, `Color`) and opaque tokens (keys, buttons, layers, cursors, asset handles). JavaScript may keep these for as long as it likes.
+- `slot.rs` - The lending machinery. `rquickjs` classes must be `'static`, but the engine hands each callback short-lived borrows, so the JS-side object holds only a `Slot`; Rust fills it just before calling in and the lease clears it on the way out.
+- `context.rs`, `draw.rs` - The engine borrows: `ctx.window` / `time` / `input` / `assets`, and `draw`. Stashing one and using it later raises instead of dangling. The window is read-only inside `draw`, and `assets` is absent there, matching `DrawContext`.
+- `module.rs` - The native `karna` module, and `scene.rs` the bridge to the `Scene` trait.
+- `types/karna.d.ts` - Type definitions, for editor completion.
+
 ### Events
 
 There are 2 main components to the event definitions, first, the sdl event wrappers, that are the boring part They just make it more easy to work with raw sdl event.

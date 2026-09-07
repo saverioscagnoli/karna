@@ -33,7 +33,6 @@ use sdl3::SDL_Init;
 use utils::FastHashMap;
 use utils::SleepTimer;
 
-use crate::assets::AssetServer;
 use crate::assets::AssetWorkers;
 use crate::clock::Clock;
 use crate::config::config;
@@ -60,9 +59,9 @@ use crate::window::UpdatePhase;
 use crate::window::UserContext;
 use crate::window::Window;
 use crate::window::WindowEntry;
-use crate::window::WindowHandle;
 use crate::window::WindowState;
 
+pub use crate::assets::AssetServer;
 pub use crate::assets::Image;
 pub use crate::assets::ImageView;
 pub use crate::builder::AppBuilder;
@@ -91,6 +90,7 @@ pub use crate::window::LoadContext;
 pub use crate::window::TextHandle;
 pub use crate::window::Time;
 pub use crate::window::UpdateContext;
+pub use crate::window::WindowHandle;
 
 pub struct App {
     requested_windows: Vec<WindowBuilder>,
