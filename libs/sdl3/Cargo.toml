@@ -1,0 +1,10 @@
+[package]
+name = "sdl3"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+karna-sdl3-sys.workspace = true

@@ -1,0 +1,38 @@
+[package]
+name = "karna-sdl3-sys"
+description = "Raw FFI bindings to SDL3 for the karna engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+links = "SDL3"
+
+[lib]
+name = "sdl3_sys"
+path = "src/lib.rs"
+# SDL doc comments contain C snippets that rustdoc would try to run as Rust.
+doctest = false
+
+[features]
+default = []
+# Build SDL from the vendored source tree in vendor/SDL instead of linking
+# a system SDL3. Requires the git submodule to be checked out.
+build-from-source = ["dep:cmake"]
+# Only needed to regenerate src/bindings.rs; not used in a normal build.
+regenerate = ["dep:bindgen"]
+
+[dependencies]
+
+[build-dependencies]
+cmake = { version = "0.1", optional = true }
+pkg-config = "0.3"
+
+[[bin]]
+name = "regenerate-bindings"
+path = "src/bin/regenerate.rs"
+required-features = ["regenerate"]
+
+[dependencies.bindgen]
+version = "0.72"
+optional = true

@@ -1,0 +1,17 @@
+[package]
+name = "karna"
+description = "!"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "karna"
+path = "src/lib.rs"
+
+[dependencies]
+karna-engine.workspace = true
+karna-math.workspace = true
+karna-utils.workspace = true

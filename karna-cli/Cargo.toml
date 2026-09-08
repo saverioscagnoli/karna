@@ -1,0 +1,15 @@
+[package]
+name = "karna-cli"
+description = "Command line tools for the karna engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "karna"
+path = "src/main.rs"
+
+[dependencies]
+karna.workspace = true
