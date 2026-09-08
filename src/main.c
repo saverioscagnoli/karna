@@ -1,80 +1,132 @@
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_main.h>
-#include <SDL3/SDL_oldnames.h>
-#include "../math/vector.h"
-#include "../logging/log.h"
-#include "../types.h"
-#include <SDL3/SDL_stdinc.h>
-#include <SDL3/SDL_timer.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-const Uint64 FRAME_NS = SDL_NS_PER_SECOND / 60; // target 60fps
+#include "bundle/payload.h"
+#include "cli/cli.h"
+#include "core/log.h"
 
-int main(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
+static void usage(void) {
+    fprintf(stderr,
+            "karna -- a scene-based game framework\n"
+            "\n"
+            "usage:\n"
+            "  karna run <file.js>              run a game from source\n"
+            "  karna bundle <file.js> [-o out]  build a self-contained executable\n"
+            "  karna <file.js>                  shorthand for run\n"
+            "\n"
+            "options:\n"
+            "  -v, --verbose   log at debug level\n"
+            "  -q, --quiet     log errors only\n"
+            "\n"
+            "The entry module default-exports either a scene or an app config:\n"
+            "\n"
+            "  export default {\n"
+            "    title: \"my game\", width: 1280, height: 720,\n"
+            "    scenes: { demo }, scene: \"demo\",\n"
+            "  };\n");
+}
 
-    log_set_level_from_env("KARNA_LOG");
-    log_set_level(LOG_DEBUG);
+static void configure_logging(int *argc, char **argv) {
+    const char *env = getenv("KARNA_LOG");
 
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
-        FATAL("SDL_Init failed: %s", SDL_GetError());
+    if (env) {
+        if (strcmp(env, "trace") == 0)
+            log_set_level(LOG_TRACE);
+        else if (strcmp(env, "debug") == 0)
+            log_set_level(LOG_DEBUG);
+        else if (strcmp(env, "warn") == 0)
+            log_set_level(LOG_WARN);
+        else if (strcmp(env, "error") == 0)
+            log_set_level(LOG_ERROR);
+    }
+
+    // The flags are pulled out of argv so the rest of the parsing only ever
+    // sees positional arguments.
+    int out = 1;
+
+    for (int i = 1; i < *argc; i++) {
+        if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0)
+            log_set_level(LOG_DEBUG);
+        else if (strcmp(argv[i], "-q") == 0 || strcmp(argv[i], "--quiet") == 0)
+            log_set_level(LOG_ERROR);
+        else
+            argv[out++] = argv[i];
+    }
+
+    *argc = out;
+}
+
+static bool has_js_suffix(const char *path) {
+    usize len = strlen(path);
+
+    return (len > 3 && strcmp(path + len - 3, ".js") == 0) ||
+           (len > 4 && strcmp(path + len - 4, ".mjs") == 0);
+}
+
+int main(int argc, char **argv) {
+    // Before anything else, so a shipped game still answers to -v and
+    // KARNA_LOG when someone needs to see why it will not start.
+    configure_logging(&argc, argv);
+
+    // A bundled game is this same executable with a payload on the end, so the
+    // next question is always which of the two is running.
+    Pkg pkg;
+
+    if (pkg_open_self(&pkg)) {
+        int status = cli_play(&pkg);
+        pkg_close(&pkg);
+
+        return status;
+    }
+
+    if (argc < 2) {
+        usage();
         return 1;
     }
 
-    SDL_Window *window = NULL;
-    SDL_Renderer *renderer = NULL;
-    if (!SDL_CreateWindowAndRenderer("karna", 800, 600, 0, &window, &renderer)) {
-        FATAL("SDL_CreateWindowAndRenderer failed: %s", SDL_GetError());
-        SDL_Quit();
-        return 1;
+    const char *command = argv[1];
+
+    if (strcmp(command, "help") == 0 || strcmp(command, "--help") == 0 ||
+        strcmp(command, "-h") == 0) {
+        usage();
+        return 0;
     }
 
-    DEBUG("BRUH>>");
-    INFO("Created window 'karna' (%dx%d)", 800, 600);
-
-    //    SDL_SetRenderVSync(renderer, 1);
-
-    bool running = true;
-
-    u64 freq = SDL_GetPerformanceFrequency();
-    u64 last = SDL_GetPerformanceCounter();
-
-    while (running) {
-        u64 frame_start = SDL_GetTicksNS();
-        f32 dt = (f32)(frame_start - last) / 1e9f;
-
-        if (dt > 0.05f)
-            dt = 0.05f;
-        last = frame_start;
-
-        SDL_Event e;
-        while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_EVENT_QUIT)
-                running = false;
-            if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE)
-                running = false;
+    if (strcmp(command, "run") == 0) {
+        if (argc < 3) {
+            usage();
+            return 1;
         }
 
-        SDL_SetRenderDrawColor(renderer, 30, 30, 46, 255);
-        SDL_RenderClear(renderer);
-
-        SDL_SetRenderDrawColor(renderer, 137, 180, 250, 255);
-        SDL_FRect r = {350.0f, 250.0f, 100.0f, 100.0f};
-        SDL_RenderFillRect(renderer, &r);
-
-        SDL_RenderPresent(renderer); // <-- this is the buffer commit
-        Uint64 elapsed = SDL_GetTicksNS() - frame_start;
-        if (elapsed < FRAME_NS) {
-            SDL_DelayNS(FRAME_NS - elapsed);
-        }
+        return cli_run(argv[2]);
     }
 
-    DEBUG("Quit signal received");
+    if (strcmp(command, "bundle") == 0) {
+        if (argc < 3) {
+            usage();
+            return 1;
+        }
 
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+        const char *out = NULL;
 
-    INFO("Lifecycle loop over. Exiting.");
-    return 0;
+        for (int i = 3; i < argc; i++) {
+            if ((strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) && i + 1 < argc)
+                out = argv[++i];
+            else {
+                log_error("unexpected argument: %s", argv[i]);
+                return 1;
+            }
+        }
+
+        return cli_bundle(argv[2], out);
+    }
+
+    if (has_js_suffix(command))
+        return cli_run(command);
+
+    log_error("unknown command: %s", command);
+    usage();
+
+    return 1;
 }

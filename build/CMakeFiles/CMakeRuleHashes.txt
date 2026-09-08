@@ -1,4 +1,9 @@
 # Hashes of file build rules.
+91e6317a291b45e093f27a041e30311d CMakeFiles/karna_shaders
+881e7f596111405b29e8d775ca373e53 generated/karna/immediate.frag.spv
+3310d48f44356af62777f76afc0fcf47 generated/karna/immediate.vert.spv
+a4367768099f97943a4234ad20dfd382 generated/karna/immediate_fragment.h
+f9af025d6270191c1f008fcc9deb352a generated/karna/immediate_vertex.h
 93f08b63467f12bbba2351d0cd95fdcd vendor/SDL/wayland-generated-protocols/alpha-modifier-v1-client-protocol.h
 02f1533418f6699c64814c92294a3745 vendor/SDL/wayland-generated-protocols/alpha-modifier-v1-protocol.c
 ab8afe5347abec051c7b8151608d6275 vendor/SDL/wayland-generated-protocols/color-management-v1-client-protocol.h

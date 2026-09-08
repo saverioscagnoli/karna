@@ -118,30 +118,43 @@ depend:
 .PHONY : depend
 
 #=============================================================================
-# Target rules for targets named myapp
+# Target rules for targets named karna_shaders
 
 # Build rule for target.
-myapp: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 myapp
-.PHONY : myapp
+karna_shaders: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 karna_shaders
+.PHONY : karna_shaders
 
 # fast build rule for target.
-myapp/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/myapp.dir/build.make CMakeFiles/myapp.dir/build
-.PHONY : myapp/fast
+karna_shaders/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna_shaders.dir/build.make CMakeFiles/karna_shaders.dir/build
+.PHONY : karna_shaders/fast
 
 #=============================================================================
-# Target rules for targets named SDL3-shared
+# Target rules for targets named karna
 
 # Build rule for target.
-SDL3-shared: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 SDL3-shared
-.PHONY : SDL3-shared
+karna: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 karna
+.PHONY : karna
 
 # fast build rule for target.
-SDL3-shared/fast:
-	$(MAKE) $(MAKESILENT) -f vendor/SDL/CMakeFiles/SDL3-shared.dir/build.make vendor/SDL/CMakeFiles/SDL3-shared.dir/build
-.PHONY : SDL3-shared/fast
+karna/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/build
+.PHONY : karna/fast
+
+#=============================================================================
+# Target rules for targets named SDL3-static
+
+# Build rule for target.
+SDL3-static: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 SDL3-static
+.PHONY : SDL3-static
+
+# fast build rule for target.
+SDL3-static/fast:
+	$(MAKE) $(MAKESILENT) -f vendor/SDL/CMakeFiles/SDL3-static.dir/build.make vendor/SDL/CMakeFiles/SDL3-static.dir/build
+.PHONY : SDL3-static/fast
 
 #=============================================================================
 # Target rules for targets named SDL_uclibc
@@ -156,36 +169,489 @@ SDL_uclibc/fast:
 	$(MAKE) $(MAKESILENT) -f vendor/SDL/CMakeFiles/SDL_uclibc.dir/build.make vendor/SDL/CMakeFiles/SDL_uclibc.dir/build
 .PHONY : SDL_uclibc/fast
 
-logging/log.o: logging/log.c.o
-.PHONY : logging/log.o
+#=============================================================================
+# Target rules for targets named qjs
+
+# Build rule for target.
+qjs: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 qjs
+.PHONY : qjs
+
+# fast build rule for target.
+qjs/fast:
+	$(MAKE) $(MAKESILENT) -f vendor/quickjs/CMakeFiles/qjs.dir/build.make vendor/quickjs/CMakeFiles/qjs.dir/build
+.PHONY : qjs/fast
+
+#=============================================================================
+# Target rules for targets named qjs-libc
+
+# Build rule for target.
+qjs-libc: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 qjs-libc
+.PHONY : qjs-libc
+
+# fast build rule for target.
+qjs-libc/fast:
+	$(MAKE) $(MAKESILENT) -f vendor/quickjs/CMakeFiles/qjs-libc.dir/build.make vendor/quickjs/CMakeFiles/qjs-libc.dir/build
+.PHONY : qjs-libc/fast
+
+#=============================================================================
+# Target rules for targets named qjsc
+
+# Build rule for target.
+qjsc: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 qjsc
+.PHONY : qjsc
+
+# fast build rule for target.
+qjsc/fast:
+	$(MAKE) $(MAKESILENT) -f vendor/quickjs/CMakeFiles/qjsc.dir/build.make vendor/quickjs/CMakeFiles/qjsc.dir/build
+.PHONY : qjsc/fast
+
+#=============================================================================
+# Target rules for targets named qjs_exe
+
+# Build rule for target.
+qjs_exe: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 qjs_exe
+.PHONY : qjs_exe
+
+# fast build rule for target.
+qjs_exe/fast:
+	$(MAKE) $(MAKESILENT) -f vendor/quickjs/CMakeFiles/qjs_exe.dir/build.make vendor/quickjs/CMakeFiles/qjs_exe.dir/build
+.PHONY : qjs_exe/fast
+
+#=============================================================================
+# Target rules for targets named run-test262
+
+# Build rule for target.
+run-test262: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 run-test262
+.PHONY : run-test262
+
+# fast build rule for target.
+run-test262/fast:
+	$(MAKE) $(MAKESILENT) -f vendor/quickjs/CMakeFiles/run-test262.dir/build.make vendor/quickjs/CMakeFiles/run-test262.dir/build
+.PHONY : run-test262/fast
+
+#=============================================================================
+# Target rules for targets named api-test
+
+# Build rule for target.
+api-test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 api-test
+.PHONY : api-test
+
+# fast build rule for target.
+api-test/fast:
+	$(MAKE) $(MAKESILENT) -f vendor/quickjs/CMakeFiles/api-test.dir/build.make vendor/quickjs/CMakeFiles/api-test.dir/build
+.PHONY : api-test/fast
+
+#=============================================================================
+# Target rules for targets named lre-test
+
+# Build rule for target.
+lre-test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 lre-test
+.PHONY : lre-test
+
+# fast build rule for target.
+lre-test/fast:
+	$(MAKE) $(MAKESILENT) -f vendor/quickjs/CMakeFiles/lre-test.dir/build.make vendor/quickjs/CMakeFiles/lre-test.dir/build
+.PHONY : lre-test/fast
+
+#=============================================================================
+# Target rules for targets named unicode_gen
+
+# Build rule for target.
+unicode_gen: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 unicode_gen
+.PHONY : unicode_gen
+
+# fast build rule for target.
+unicode_gen/fast:
+	$(MAKE) $(MAKESILENT) -f vendor/quickjs/CMakeFiles/unicode_gen.dir/build.make vendor/quickjs/CMakeFiles/unicode_gen.dir/build
+.PHONY : unicode_gen/fast
+
+#=============================================================================
+# Target rules for targets named function_source
+
+# Build rule for target.
+function_source: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 function_source
+.PHONY : function_source
+
+# fast build rule for target.
+function_source/fast:
+	$(MAKE) $(MAKESILENT) -f vendor/quickjs/CMakeFiles/function_source.dir/build.make vendor/quickjs/CMakeFiles/function_source.dir/build
+.PHONY : function_source/fast
+
+src/app/app.o: src/app/app.c.o
+.PHONY : src/app/app.o
 
 # target to build an object file
-logging/log.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/myapp.dir/build.make CMakeFiles/myapp.dir/logging/log.c.o
-.PHONY : logging/log.c.o
+src/app/app.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/app/app.c.o
+.PHONY : src/app/app.c.o
 
-logging/log.i: logging/log.c.i
-.PHONY : logging/log.i
+src/app/app.i: src/app/app.c.i
+.PHONY : src/app/app.i
 
 # target to preprocess a source file
-logging/log.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/myapp.dir/build.make CMakeFiles/myapp.dir/logging/log.c.i
-.PHONY : logging/log.c.i
+src/app/app.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/app/app.c.i
+.PHONY : src/app/app.c.i
 
-logging/log.s: logging/log.c.s
-.PHONY : logging/log.s
+src/app/app.s: src/app/app.c.s
+.PHONY : src/app/app.s
 
 # target to generate assembly for a file
-logging/log.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/myapp.dir/build.make CMakeFiles/myapp.dir/logging/log.c.s
-.PHONY : logging/log.c.s
+src/app/app.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/app/app.c.s
+.PHONY : src/app/app.c.s
+
+src/bundle/payload.o: src/bundle/payload.c.o
+.PHONY : src/bundle/payload.o
+
+# target to build an object file
+src/bundle/payload.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/bundle/payload.c.o
+.PHONY : src/bundle/payload.c.o
+
+src/bundle/payload.i: src/bundle/payload.c.i
+.PHONY : src/bundle/payload.i
+
+# target to preprocess a source file
+src/bundle/payload.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/bundle/payload.c.i
+.PHONY : src/bundle/payload.c.i
+
+src/bundle/payload.s: src/bundle/payload.c.s
+.PHONY : src/bundle/payload.s
+
+# target to generate assembly for a file
+src/bundle/payload.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/bundle/payload.c.s
+.PHONY : src/bundle/payload.c.s
+
+src/cli/bundle.o: src/cli/bundle.c.o
+.PHONY : src/cli/bundle.o
+
+# target to build an object file
+src/cli/bundle.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/cli/bundle.c.o
+.PHONY : src/cli/bundle.c.o
+
+src/cli/bundle.i: src/cli/bundle.c.i
+.PHONY : src/cli/bundle.i
+
+# target to preprocess a source file
+src/cli/bundle.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/cli/bundle.c.i
+.PHONY : src/cli/bundle.c.i
+
+src/cli/bundle.s: src/cli/bundle.c.s
+.PHONY : src/cli/bundle.s
+
+# target to generate assembly for a file
+src/cli/bundle.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/cli/bundle.c.s
+.PHONY : src/cli/bundle.c.s
+
+src/cli/run.o: src/cli/run.c.o
+.PHONY : src/cli/run.o
+
+# target to build an object file
+src/cli/run.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/cli/run.c.o
+.PHONY : src/cli/run.c.o
+
+src/cli/run.i: src/cli/run.c.i
+.PHONY : src/cli/run.i
+
+# target to preprocess a source file
+src/cli/run.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/cli/run.c.i
+.PHONY : src/cli/run.c.i
+
+src/cli/run.s: src/cli/run.c.s
+.PHONY : src/cli/run.s
+
+# target to generate assembly for a file
+src/cli/run.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/cli/run.c.s
+.PHONY : src/cli/run.c.s
+
+src/core/fs.o: src/core/fs.c.o
+.PHONY : src/core/fs.o
+
+# target to build an object file
+src/core/fs.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/core/fs.c.o
+.PHONY : src/core/fs.c.o
+
+src/core/fs.i: src/core/fs.c.i
+.PHONY : src/core/fs.i
+
+# target to preprocess a source file
+src/core/fs.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/core/fs.c.i
+.PHONY : src/core/fs.c.i
+
+src/core/fs.s: src/core/fs.c.s
+.PHONY : src/core/fs.s
+
+# target to generate assembly for a file
+src/core/fs.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/core/fs.c.s
+.PHONY : src/core/fs.c.s
+
+src/core/log.o: src/core/log.c.o
+.PHONY : src/core/log.o
+
+# target to build an object file
+src/core/log.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/core/log.c.o
+.PHONY : src/core/log.c.o
+
+src/core/log.i: src/core/log.c.i
+.PHONY : src/core/log.i
+
+# target to preprocess a source file
+src/core/log.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/core/log.c.i
+.PHONY : src/core/log.c.i
+
+src/core/log.s: src/core/log.c.s
+.PHONY : src/core/log.s
+
+# target to generate assembly for a file
+src/core/log.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/core/log.c.s
+.PHONY : src/core/log.c.s
+
+src/input/input.o: src/input/input.c.o
+.PHONY : src/input/input.o
+
+# target to build an object file
+src/input/input.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/input/input.c.o
+.PHONY : src/input/input.c.o
+
+src/input/input.i: src/input/input.c.i
+.PHONY : src/input/input.i
+
+# target to preprocess a source file
+src/input/input.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/input/input.c.i
+.PHONY : src/input/input.c.i
+
+src/input/input.s: src/input/input.c.s
+.PHONY : src/input/input.s
+
+# target to generate assembly for a file
+src/input/input.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/input/input.c.s
+.PHONY : src/input/input.c.s
+
+src/js/console.o: src/js/console.c.o
+.PHONY : src/js/console.o
+
+# target to build an object file
+src/js/console.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/console.c.o
+.PHONY : src/js/console.c.o
+
+src/js/console.i: src/js/console.c.i
+.PHONY : src/js/console.i
+
+# target to preprocess a source file
+src/js/console.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/console.c.i
+.PHONY : src/js/console.c.i
+
+src/js/console.s: src/js/console.c.s
+.PHONY : src/js/console.s
+
+# target to generate assembly for a file
+src/js/console.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/console.c.s
+.PHONY : src/js/console.c.s
+
+src/js/context.o: src/js/context.c.o
+.PHONY : src/js/context.o
+
+# target to build an object file
+src/js/context.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/context.c.o
+.PHONY : src/js/context.c.o
+
+src/js/context.i: src/js/context.c.i
+.PHONY : src/js/context.i
+
+# target to preprocess a source file
+src/js/context.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/context.c.i
+.PHONY : src/js/context.c.i
+
+src/js/context.s: src/js/context.c.s
+.PHONY : src/js/context.s
+
+# target to generate assembly for a file
+src/js/context.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/context.c.s
+.PHONY : src/js/context.c.s
+
+src/js/draw.o: src/js/draw.c.o
+.PHONY : src/js/draw.o
+
+# target to build an object file
+src/js/draw.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/draw.c.o
+.PHONY : src/js/draw.c.o
+
+src/js/draw.i: src/js/draw.c.i
+.PHONY : src/js/draw.i
+
+# target to preprocess a source file
+src/js/draw.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/draw.c.i
+.PHONY : src/js/draw.c.i
+
+src/js/draw.s: src/js/draw.c.s
+.PHONY : src/js/draw.s
+
+# target to generate assembly for a file
+src/js/draw.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/draw.c.s
+.PHONY : src/js/draw.c.s
+
+src/js/enums.o: src/js/enums.c.o
+.PHONY : src/js/enums.o
+
+# target to build an object file
+src/js/enums.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/enums.c.o
+.PHONY : src/js/enums.c.o
+
+src/js/enums.i: src/js/enums.c.i
+.PHONY : src/js/enums.i
+
+# target to preprocess a source file
+src/js/enums.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/enums.c.i
+.PHONY : src/js/enums.c.i
+
+src/js/enums.s: src/js/enums.c.s
+.PHONY : src/js/enums.s
+
+# target to generate assembly for a file
+src/js/enums.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/enums.c.s
+.PHONY : src/js/enums.c.s
+
+src/js/module.o: src/js/module.c.o
+.PHONY : src/js/module.o
+
+# target to build an object file
+src/js/module.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/module.c.o
+.PHONY : src/js/module.c.o
+
+src/js/module.i: src/js/module.c.i
+.PHONY : src/js/module.i
+
+# target to preprocess a source file
+src/js/module.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/module.c.i
+.PHONY : src/js/module.c.i
+
+src/js/module.s: src/js/module.c.s
+.PHONY : src/js/module.s
+
+# target to generate assembly for a file
+src/js/module.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/module.c.s
+.PHONY : src/js/module.c.s
+
+src/js/runtime.o: src/js/runtime.c.o
+.PHONY : src/js/runtime.o
+
+# target to build an object file
+src/js/runtime.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/runtime.c.o
+.PHONY : src/js/runtime.c.o
+
+src/js/runtime.i: src/js/runtime.c.i
+.PHONY : src/js/runtime.i
+
+# target to preprocess a source file
+src/js/runtime.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/runtime.c.i
+.PHONY : src/js/runtime.c.i
+
+src/js/runtime.s: src/js/runtime.c.s
+.PHONY : src/js/runtime.s
+
+# target to generate assembly for a file
+src/js/runtime.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/runtime.c.s
+.PHONY : src/js/runtime.c.s
+
+src/js/scene.o: src/js/scene.c.o
+.PHONY : src/js/scene.o
+
+# target to build an object file
+src/js/scene.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/scene.c.o
+.PHONY : src/js/scene.c.o
+
+src/js/scene.i: src/js/scene.c.i
+.PHONY : src/js/scene.i
+
+# target to preprocess a source file
+src/js/scene.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/scene.c.i
+.PHONY : src/js/scene.c.i
+
+src/js/scene.s: src/js/scene.c.s
+.PHONY : src/js/scene.s
+
+# target to generate assembly for a file
+src/js/scene.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/scene.c.s
+.PHONY : src/js/scene.c.s
+
+src/js/value.o: src/js/value.c.o
+.PHONY : src/js/value.o
+
+# target to build an object file
+src/js/value.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/value.c.o
+.PHONY : src/js/value.c.o
+
+src/js/value.i: src/js/value.c.i
+.PHONY : src/js/value.i
+
+# target to preprocess a source file
+src/js/value.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/value.c.i
+.PHONY : src/js/value.c.i
+
+src/js/value.s: src/js/value.c.s
+.PHONY : src/js/value.s
+
+# target to generate assembly for a file
+src/js/value.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/js/value.c.s
+.PHONY : src/js/value.c.s
 
 src/main.o: src/main.c.o
 .PHONY : src/main.o
 
 # target to build an object file
 src/main.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/myapp.dir/build.make CMakeFiles/myapp.dir/src/main.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/main.c.o
 .PHONY : src/main.c.o
 
 src/main.i: src/main.c.i
@@ -193,7 +659,7 @@ src/main.i: src/main.c.i
 
 # target to preprocess a source file
 src/main.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/myapp.dir/build.make CMakeFiles/myapp.dir/src/main.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/main.c.i
 .PHONY : src/main.c.i
 
 src/main.s: src/main.c.s
@@ -201,56 +667,176 @@ src/main.s: src/main.c.s
 
 # target to generate assembly for a file
 src/main.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/myapp.dir/build.make CMakeFiles/myapp.dir/src/main.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/main.c.s
 .PHONY : src/main.c.s
 
-src/time.o: src/time.c.o
-.PHONY : src/time.o
+src/math/matrix.o: src/math/matrix.c.o
+.PHONY : src/math/matrix.o
 
 # target to build an object file
-src/time.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/myapp.dir/build.make CMakeFiles/myapp.dir/src/time.c.o
-.PHONY : src/time.c.o
+src/math/matrix.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/math/matrix.c.o
+.PHONY : src/math/matrix.c.o
 
-src/time.i: src/time.c.i
-.PHONY : src/time.i
+src/math/matrix.i: src/math/matrix.c.i
+.PHONY : src/math/matrix.i
 
 # target to preprocess a source file
-src/time.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/myapp.dir/build.make CMakeFiles/myapp.dir/src/time.c.i
-.PHONY : src/time.c.i
+src/math/matrix.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/math/matrix.c.i
+.PHONY : src/math/matrix.c.i
 
-src/time.s: src/time.c.s
-.PHONY : src/time.s
+src/math/matrix.s: src/math/matrix.c.s
+.PHONY : src/math/matrix.s
 
 # target to generate assembly for a file
-src/time.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/myapp.dir/build.make CMakeFiles/myapp.dir/src/time.c.s
-.PHONY : src/time.c.s
+src/math/matrix.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/math/matrix.c.s
+.PHONY : src/math/matrix.c.s
 
-src/window.o: src/window.c.o
-.PHONY : src/window.o
+src/math/vector.o: src/math/vector.c.o
+.PHONY : src/math/vector.o
 
 # target to build an object file
-src/window.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/myapp.dir/build.make CMakeFiles/myapp.dir/src/window.c.o
-.PHONY : src/window.c.o
+src/math/vector.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/math/vector.c.o
+.PHONY : src/math/vector.c.o
 
-src/window.i: src/window.c.i
-.PHONY : src/window.i
+src/math/vector.i: src/math/vector.c.i
+.PHONY : src/math/vector.i
 
 # target to preprocess a source file
-src/window.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/myapp.dir/build.make CMakeFiles/myapp.dir/src/window.c.i
-.PHONY : src/window.c.i
+src/math/vector.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/math/vector.c.i
+.PHONY : src/math/vector.c.i
 
-src/window.s: src/window.c.s
-.PHONY : src/window.s
+src/math/vector.s: src/math/vector.c.s
+.PHONY : src/math/vector.s
 
 # target to generate assembly for a file
-src/window.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/myapp.dir/build.make CMakeFiles/myapp.dir/src/window.c.s
-.PHONY : src/window.c.s
+src/math/vector.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/math/vector.c.s
+.PHONY : src/math/vector.c.s
+
+src/render/color.o: src/render/color.c.o
+.PHONY : src/render/color.o
+
+# target to build an object file
+src/render/color.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/render/color.c.o
+.PHONY : src/render/color.c.o
+
+src/render/color.i: src/render/color.c.i
+.PHONY : src/render/color.i
+
+# target to preprocess a source file
+src/render/color.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/render/color.c.i
+.PHONY : src/render/color.c.i
+
+src/render/color.s: src/render/color.c.s
+.PHONY : src/render/color.s
+
+# target to generate assembly for a file
+src/render/color.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/render/color.c.s
+.PHONY : src/render/color.c.s
+
+src/render/draw.o: src/render/draw.c.o
+.PHONY : src/render/draw.o
+
+# target to build an object file
+src/render/draw.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/render/draw.c.o
+.PHONY : src/render/draw.c.o
+
+src/render/draw.i: src/render/draw.c.i
+.PHONY : src/render/draw.i
+
+# target to preprocess a source file
+src/render/draw.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/render/draw.c.i
+.PHONY : src/render/draw.c.i
+
+src/render/draw.s: src/render/draw.c.s
+.PHONY : src/render/draw.s
+
+# target to generate assembly for a file
+src/render/draw.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/render/draw.c.s
+.PHONY : src/render/draw.c.s
+
+src/render/gpu.o: src/render/gpu.c.o
+.PHONY : src/render/gpu.o
+
+# target to build an object file
+src/render/gpu.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/render/gpu.c.o
+.PHONY : src/render/gpu.c.o
+
+src/render/gpu.i: src/render/gpu.c.i
+.PHONY : src/render/gpu.i
+
+# target to preprocess a source file
+src/render/gpu.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/render/gpu.c.i
+.PHONY : src/render/gpu.c.i
+
+src/render/gpu.s: src/render/gpu.c.s
+.PHONY : src/render/gpu.s
+
+# target to generate assembly for a file
+src/render/gpu.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/render/gpu.c.s
+.PHONY : src/render/gpu.c.s
+
+src/time/clock.o: src/time/clock.c.o
+.PHONY : src/time/clock.o
+
+# target to build an object file
+src/time/clock.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/time/clock.c.o
+.PHONY : src/time/clock.c.o
+
+src/time/clock.i: src/time/clock.c.i
+.PHONY : src/time/clock.i
+
+# target to preprocess a source file
+src/time/clock.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/time/clock.c.i
+.PHONY : src/time/clock.c.i
+
+src/time/clock.s: src/time/clock.c.s
+.PHONY : src/time/clock.s
+
+# target to generate assembly for a file
+src/time/clock.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/time/clock.c.s
+.PHONY : src/time/clock.c.s
+
+src/window/window.o: src/window/window.c.o
+.PHONY : src/window/window.o
+
+# target to build an object file
+src/window/window.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/window/window.c.o
+.PHONY : src/window/window.c.o
+
+src/window/window.i: src/window/window.c.i
+.PHONY : src/window/window.i
+
+# target to preprocess a source file
+src/window/window.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/window/window.c.i
+.PHONY : src/window/window.c.i
+
+src/window/window.s: src/window/window.c.s
+.PHONY : src/window/window.s
+
+# target to generate assembly for a file
+src/window/window.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/karna.dir/build.make CMakeFiles/karna.dir/src/window/window.c.s
+.PHONY : src/window/window.c.s
 
 # Help Target
 help:
@@ -260,21 +846,88 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
-	@echo "... SDL3-shared"
+	@echo "... karna_shaders"
+	@echo "... SDL3-static"
 	@echo "... SDL_uclibc"
-	@echo "... myapp"
-	@echo "... logging/log.o"
-	@echo "... logging/log.i"
-	@echo "... logging/log.s"
+	@echo "... api-test"
+	@echo "... function_source"
+	@echo "... karna"
+	@echo "... lre-test"
+	@echo "... qjs"
+	@echo "... qjs-libc"
+	@echo "... qjs_exe"
+	@echo "... qjsc"
+	@echo "... run-test262"
+	@echo "... unicode_gen"
+	@echo "... src/app/app.o"
+	@echo "... src/app/app.i"
+	@echo "... src/app/app.s"
+	@echo "... src/bundle/payload.o"
+	@echo "... src/bundle/payload.i"
+	@echo "... src/bundle/payload.s"
+	@echo "... src/cli/bundle.o"
+	@echo "... src/cli/bundle.i"
+	@echo "... src/cli/bundle.s"
+	@echo "... src/cli/run.o"
+	@echo "... src/cli/run.i"
+	@echo "... src/cli/run.s"
+	@echo "... src/core/fs.o"
+	@echo "... src/core/fs.i"
+	@echo "... src/core/fs.s"
+	@echo "... src/core/log.o"
+	@echo "... src/core/log.i"
+	@echo "... src/core/log.s"
+	@echo "... src/input/input.o"
+	@echo "... src/input/input.i"
+	@echo "... src/input/input.s"
+	@echo "... src/js/console.o"
+	@echo "... src/js/console.i"
+	@echo "... src/js/console.s"
+	@echo "... src/js/context.o"
+	@echo "... src/js/context.i"
+	@echo "... src/js/context.s"
+	@echo "... src/js/draw.o"
+	@echo "... src/js/draw.i"
+	@echo "... src/js/draw.s"
+	@echo "... src/js/enums.o"
+	@echo "... src/js/enums.i"
+	@echo "... src/js/enums.s"
+	@echo "... src/js/module.o"
+	@echo "... src/js/module.i"
+	@echo "... src/js/module.s"
+	@echo "... src/js/runtime.o"
+	@echo "... src/js/runtime.i"
+	@echo "... src/js/runtime.s"
+	@echo "... src/js/scene.o"
+	@echo "... src/js/scene.i"
+	@echo "... src/js/scene.s"
+	@echo "... src/js/value.o"
+	@echo "... src/js/value.i"
+	@echo "... src/js/value.s"
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
-	@echo "... src/time.o"
-	@echo "... src/time.i"
-	@echo "... src/time.s"
-	@echo "... src/window.o"
-	@echo "... src/window.i"
-	@echo "... src/window.s"
+	@echo "... src/math/matrix.o"
+	@echo "... src/math/matrix.i"
+	@echo "... src/math/matrix.s"
+	@echo "... src/math/vector.o"
+	@echo "... src/math/vector.i"
+	@echo "... src/math/vector.s"
+	@echo "... src/render/color.o"
+	@echo "... src/render/color.i"
+	@echo "... src/render/color.s"
+	@echo "... src/render/draw.o"
+	@echo "... src/render/draw.i"
+	@echo "... src/render/draw.s"
+	@echo "... src/render/gpu.o"
+	@echo "... src/render/gpu.i"
+	@echo "... src/render/gpu.s"
+	@echo "... src/time/clock.o"
+	@echo "... src/time/clock.i"
+	@echo "... src/time/clock.s"
+	@echo "... src/window/window.o"
+	@echo "... src/window/window.i"
+	@echo "... src/window/window.s"
 .PHONY : help
 
 

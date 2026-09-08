@@ -2,7 +2,8 @@
 	"InstallScripts" : 
 	[
 		"/home/svscagn/dev/karna/build/cmake_install.cmake",
-		"/home/svscagn/dev/karna/build/vendor/SDL/cmake_install.cmake"
+		"/home/svscagn/dev/karna/build/vendor/SDL/cmake_install.cmake",
+		"/home/svscagn/dev/karna/build/vendor/quickjs/cmake_install.cmake"
 	],
 	"Parallel" : false
 }
