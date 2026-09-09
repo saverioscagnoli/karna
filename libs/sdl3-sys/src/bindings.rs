@@ -13544,6 +13544,32 @@ unsafe extern "C" {
     #[doc = " Get the code revision of the SDL library that is linked against your\n program.\n\n This value is the revision of the code you are linking against and may be\n different from the code you are compiling with, which is found in the\n constant SDL_REVISION if you explicitly include SDL_revision.h\n\n The revision is an arbitrary string (a hash value) uniquely identifying the\n exact revision of the SDL library in use, and is only useful in comparing\n against other revisions. It is NOT an incrementing number.\n\n If SDL wasn't built from a git repository with the appropriate tools, this\n will return an empty string.\n\n You shouldn't use this function for anything but logging it for debugging\n purposes. The string is not intended to be reliable in any way.\n\n \\returns an arbitrary string, uniquely identifying the exact revision of\n          the SDL library in use.\n\n \\threadsafety It is safe to call this function from any thread.\n\n \\since This function is available since SDL 3.2.0.\n\n \\sa SDL_GetVersion"]
     pub fn SDL_GetRevision() -> *const core::ffi::c_char;
 }
+pub const SDL_WINDOW_FULLSCREEN: SDL_WindowFlags = 1;
+pub const SDL_WINDOW_OPENGL: SDL_WindowFlags = 2;
+pub const SDL_WINDOW_OCCLUDED: SDL_WindowFlags = 4;
+pub const SDL_WINDOW_HIDDEN: SDL_WindowFlags = 8;
+pub const SDL_WINDOW_BORDERLESS: SDL_WindowFlags = 16;
+pub const SDL_WINDOW_RESIZABLE: SDL_WindowFlags = 32;
+pub const SDL_WINDOW_MINIMIZED: SDL_WindowFlags = 64;
+pub const SDL_WINDOW_MAXIMIZED: SDL_WindowFlags = 128;
+pub const SDL_WINDOW_MOUSE_GRABBED: SDL_WindowFlags = 256;
+pub const SDL_WINDOW_INPUT_FOCUS: SDL_WindowFlags = 512;
+pub const SDL_WINDOW_MOUSE_FOCUS: SDL_WindowFlags = 1024;
+pub const SDL_WINDOW_EXTERNAL: SDL_WindowFlags = 2048;
+pub const SDL_WINDOW_MODAL: SDL_WindowFlags = 4096;
+pub const SDL_WINDOW_HIGH_PIXEL_DENSITY: SDL_WindowFlags = 8192;
+pub const SDL_WINDOW_MOUSE_CAPTURE: SDL_WindowFlags = 16384;
+pub const SDL_WINDOW_MOUSE_RELATIVE_MODE: SDL_WindowFlags = 32768;
+pub const SDL_WINDOW_ALWAYS_ON_TOP: SDL_WindowFlags = 65536;
+pub const SDL_WINDOW_UTILITY: SDL_WindowFlags = 131072;
+pub const SDL_WINDOW_TOOLTIP: SDL_WindowFlags = 262144;
+pub const SDL_WINDOW_POPUP_MENU: SDL_WindowFlags = 524288;
+pub const SDL_WINDOW_KEYBOARD_GRABBED: SDL_WindowFlags = 1048576;
+pub const SDL_WINDOW_FILL_DOCUMENT: SDL_WindowFlags = 2097152;
+pub const SDL_WINDOW_VULKAN: SDL_WindowFlags = 268435456;
+pub const SDL_WINDOW_METAL: SDL_WindowFlags = 536870912;
+pub const SDL_WINDOW_TRANSPARENT: SDL_WindowFlags = 1073741824;
+pub const SDL_WINDOW_NOT_FOCUSABLE: SDL_WindowFlags = 2147483648;
 pub type __builtin_va_list = [__va_list_tag; 1usize];
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

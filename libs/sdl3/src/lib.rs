@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+pub mod events;
 pub mod gpu;
 pub mod math;
 pub mod window;

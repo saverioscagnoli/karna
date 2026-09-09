@@ -14,3 +14,4 @@ path = "src/lib.rs"
 karna-sdl3-sys.workspace = true
 karna-nostd.workspace = true
 karna-math.workspace = true
+traccia.workspace = true

@@ -20,7 +20,7 @@ impl<T: fmt::Display + Num + Copy> fmt::Debug for Size<T> {
 }
 
 impl<T: Num + Copy> Size<T> {
-    pub fn new(width: T, height: T) -> Self {
+    pub const fn new(width: T, height: T) -> Self {
         Self { width, height }
     }
 
@@ -28,19 +28,19 @@ impl<T: Num + Copy> Size<T> {
         Self::new(T::zero(), T::zero())
     }
 
-    pub fn square(size: T) -> Self {
+    pub const fn square(size: T) -> Self {
         Self::new(size, size)
     }
 
-    pub fn w(&self) -> T {
+    pub const fn w(&self) -> T {
         self.width
     }
 
-    pub fn h(&self) -> T {
+    pub const fn h(&self) -> T {
         self.height
     }
 
-    pub fn tuple(&self) -> (T, T) {
+    pub const fn tuple(&self) -> (T, T) {
         (self.width, self.height)
     }
 
@@ -117,4 +117,14 @@ impl<T: Num + Copy> Into<[T; 2]> for Size<T> {
     fn into(self) -> [T; 2] {
         [self.width, self.height]
     }
+}
+
+#[macro_export]
+macro_rules! size {
+    ($w:expr, $h:expr $(,)?) => {
+        $crate::Size::new($w, $h)
+    };
+    ($s:expr $(,)?) => {
+        $crate::Size::square($s)
+    };
 }

@@ -3,9 +3,23 @@
 //! This is a developer tool, not part of a normal build: the generated file is
 //! committed so that users never need libclang installed.
 //!
-//!     cargo run -p karna-sdl3 --features regenerate --bin regenerate-bindings
+//!     cargo run -p karna-sdl3-sys --features regenerate --bin regenerate-bindings
 
 use std::path::Path;
+
+use bindgen::callbacks::ItemInfo;
+use bindgen::callbacks::ParseCallbacks;
+
+/// Drops the `karna_` prefix that `wrapper.h` puts on the window flag
+/// constants, so the generated names match SDL's own.
+#[derive(Debug)]
+struct StripKarnaPrefix;
+
+impl ParseCallbacks for StripKarnaPrefix {
+    fn item_name(&self, item: ItemInfo) -> Option<String> {
+        item.name.strip_prefix("karna_").map(String::from)
+    }
+}
 
 fn main() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -34,6 +48,10 @@ fn main() {
         .allowlist_type("SDL_.*")
         .allowlist_var("SDL_.*")
         .allowlist_var("SDLK_.*")
+        // The window flag shims in wrapper.h; StripKarnaPrefix renames them
+        // back to SDL_WINDOW_*.
+        .allowlist_var("karna_SDL_.*")
+        .parse_callbacks(Box::new(StripKarnaPrefix))
         .derive_debug(true)
         .derive_default(true)
         .prepend_enum_name(false)

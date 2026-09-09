@@ -11,7 +11,7 @@ fn main() {
             .with_target(SdlTarget::default()),
     );
 
-    App::new();
+    App::new().run();
 
     info!("bye");
 }
