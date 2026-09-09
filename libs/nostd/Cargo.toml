@@ -1,6 +1,5 @@
 [package]
-name = "karna-math"
-description = "Internal math crate for the karna engine"
+name = "karna-nostd"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,11 +7,10 @@ repository.workspace = true
 authors.workspace = true
 
 [lib]
-name = "math"
+name = "nostd"
 path = "src/lib.rs"
 
 [dependencies]
-karna-utils.workspace = true
 karna-sdl3-sys.workspace = true
-
-num-traits = {version = "0.2.19", default-features = false }
+hashbrown = { version = "0.17.1", default-features = false }
+traccia.workspace = true

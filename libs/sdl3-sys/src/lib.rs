@@ -10,3 +10,45 @@
 #![allow(rustdoc::all)]
 
 include!("bindings.rs");
+
+extern crate alloc;
+
+use core::error;
+use core::ffi::CStr;
+use core::fmt;
+
+use alloc::string::String;
+
+#[derive(Debug)]
+pub struct SdlError(String);
+
+impl SdlError {
+    pub fn new<T>(desc: T) -> Self
+    where
+        T: Into<String>,
+    {
+        Self(desc.into())
+    }
+}
+
+impl fmt::Display for SdlError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl error::Error for SdlError {
+    fn description(&self) -> &str {
+        &self.0
+    }
+}
+
+pub fn get_error() -> SdlError {
+    unsafe {
+        SdlError(
+            CStr::from_ptr(SDL_GetError())
+                .to_string_lossy()
+                .into_owned(),
+        )
+    }
+}

@@ -1,10 +1,16 @@
 [package]
-name = "sdl3"
+name = "karna-sdl3"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[lib]
+name = "sdl3"
+path = "src/lib.rs"
+
 [dependencies]
 karna-sdl3-sys.workspace = true
+karna-nostd.workspace = true
+karna-math.workspace = true

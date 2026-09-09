@@ -13,5 +13,9 @@ authors = ["Saverio Scagnoli"]
 karna = { version = "0.1.0", path = "karna" }
 karna-engine = { version = "0.1.0", path = "libs/engine" }
 karna-math = { version = "0.1.0", path = "libs/math" }
+karna-sdl3 = { version = "0.1.0", path = "libs/sdl3" }
 karna-sdl3-sys = { version = "0.1.0", path = "libs/sdl3-sys" }
 karna-utils = { version = "0.1.0", path = "libs/utils" }
+karna-nostd = { version = "0.1.0", path = "libs/nostd" }
+
+traccia = { version = "4.1.1", default-features = false }

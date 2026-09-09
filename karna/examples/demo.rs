@@ -1,3 +1,17 @@
+#![no_std]
+
+use karna::App;
+use karna::log::SdlTarget;
+use traccia::info;
+
 fn main() {
-    println!("Hello world!");
+    _ = traccia::init(
+        traccia::Config::default()
+            .with_min_level(traccia::LevelFilter::Debug)
+            .with_target(SdlTarget::default()),
+    );
+
+    App::new();
+
+    info!("bye");
 }

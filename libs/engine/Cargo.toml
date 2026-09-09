@@ -12,3 +12,6 @@ name = "engine"
 path = "src/lib.rs"
 
 [dependencies]
+karna-sdl3.workspace = true
+karna-nostd.workspace = true
+traccia.workspace = true

@@ -12,6 +12,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "autocfg"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
+
+[[package]]
 name = "bindgen"
 version = "0.72.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -101,6 +107,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
+name = "hashbrown"
+version = "0.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+
+[[package]]
 name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -115,7 +127,9 @@ version = "0.1.0"
 dependencies = [
  "karna-engine",
  "karna-math",
+ "karna-nostd",
  "karna-utils",
+ "traccia",
 ]
 
 [[package]]
@@ -128,10 +142,38 @@ dependencies = [
 [[package]]
 name = "karna-engine"
 version = "0.1.0"
+dependencies = [
+ "karna-nostd",
+ "karna-sdl3",
+ "traccia",
+]
 
 [[package]]
 name = "karna-math"
 version = "0.1.0"
+dependencies = [
+ "karna-sdl3-sys",
+ "karna-utils",
+ "num-traits",
+]
+
+[[package]]
+name = "karna-nostd"
+version = "0.1.0"
+dependencies = [
+ "hashbrown",
+ "karna-sdl3-sys",
+ "traccia",
+]
+
+[[package]]
+name = "karna-sdl3"
+version = "0.1.0"
+dependencies = [
+ "karna-math",
+ "karna-nostd",
+ "karna-sdl3-sys",
+]
 
 [[package]]
 name = "karna-sdl3-sys"
@@ -188,6 +230,15 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
+]
+
+[[package]]
+name = "num-traits"
+version = "0.2.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
+dependencies = [
+ "autocfg",
 ]
 
 [[package]]
@@ -260,13 +311,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d"
 
 [[package]]
-name = "sdl3"
-version = "0.1.0"
-dependencies = [
- "karna-sdl3-sys",
-]
-
-[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -287,6 +331,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "traccia"
+version = "4.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "317f792dfda66474c047e13bf9d9d4dd02761e8064a2cd9b6b1497fcad3a6d7c"
+dependencies = [
+ "log",
 ]
 
 [[package]]
