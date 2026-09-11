@@ -1,14 +1,12 @@
 use nostd::alloc::vec::Vec;
 use utils::Label;
 
-pub type OutboxId = Label;
-
 pub struct Outbox<T> {
-    pub buf: Vec<T>,
-    pub cap: usize,
-    pub name: &'static str,
-    pub peak: usize,
-    pub dropped: u32,
+    buf: Vec<T>,
+    cap: usize,
+    name: &'static str,
+    peak: usize,
+    dropped: u32,
 }
 
 impl<T> Outbox<T> {
@@ -50,5 +48,10 @@ impl<T> Outbox<T> {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.buf.is_empty()
+    }
+
+    #[inline]
+    pub fn cap(&self) -> usize {
+        self.cap
     }
 }

@@ -9,8 +9,6 @@ mod time;
 mod window;
 mod window_state;
 
-use core::iter::empty;
-
 use nostd::alloc::vec::Vec;
 use nostd::collections::HashMap;
 use nostd::log;
@@ -23,7 +21,6 @@ use sdl3::gpu::Device;
 use sdl3::render::Color;
 use sdl3::window::Window;
 use sdl3::window::WindowId;
-use traccia::error;
 use traccia::info;
 use traccia::trace;
 use traccia::warn;
@@ -173,9 +170,9 @@ impl App {
                     entry
                         .state
                         .update_active_scenes(UpdatePhase::Fixed, &mut self.event_outboxes);
-
-                    self.clock.consume();
                 }
+
+                self.clock.consume();
             }
 
             let mut rendered = false;
@@ -185,8 +182,6 @@ impl App {
                 if !entry.pacer.due(now) {
                     continue;
                 }
-
-                info!("fps {}", entry.pacer.counter.fps());
 
                 rendered = true;
 

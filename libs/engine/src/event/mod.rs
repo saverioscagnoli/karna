@@ -19,7 +19,7 @@ impl AppOutboxes {
     }
 
     pub fn total_cap(&self) -> usize {
-        self.window.cap + self.time.cap
+        self.window.cap() + self.time.cap()
     }
 
     pub fn drain_into(&mut self, out: &mut Vec<AppEvent>) {
