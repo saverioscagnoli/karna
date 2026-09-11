@@ -353,6 +353,13 @@ impl<T: Num + SdlFloat> Vector2<T> {
     }
 }
 
+#[macro_export]
+macro_rules! vec2 {
+    ($x:expr, $y:expr $(,)?) => {
+        $crate::Vector2::new($x, $y)
+    };
+}
+
 // Vector3
 
 impl_deref_to_generic!(Vector3<T> => Point3<T> where T: Num + Copy);
@@ -382,6 +389,13 @@ impl<T: Num + SdlFloat> Vector3<T> {
     }
 }
 
+#[macro_export]
+macro_rules! vec3 {
+    ($x:expr, $y:expr, $z:expr $(,)?) => {
+        $crate::Vector3::new($x, $y, $z)
+    };
+}
+
 // Vector4
 
 impl_deref_to_generic!(Vector4<T> => Point4<T> where T: Num + Copy);
@@ -406,6 +420,13 @@ impl<T: Num + SdlFloat> Vector4<T> {
 
         Vector3::new(self.x * inv, self.y * inv, self.z * inv)
     }
+}
+
+#[macro_export]
+macro_rules! vec4 {
+    ($x:expr, $y:expr, $z:expr, $w:expr $(,)?) => {
+        $crate::Vector4::new($x, $y, $z, $w)
+    };
 }
 
 // Conversion

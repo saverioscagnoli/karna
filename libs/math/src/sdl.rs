@@ -14,8 +14,12 @@ use sdl3_sys::SDL_atan2;
 use sdl3_sys::SDL_atan2f;
 use sdl3_sys::SDL_cos;
 use sdl3_sys::SDL_cosf;
+use sdl3_sys::SDL_exp;
+use sdl3_sys::SDL_expf;
 use sdl3_sys::SDL_fabs;
 use sdl3_sys::SDL_fabsf;
+use sdl3_sys::SDL_round;
+use sdl3_sys::SDL_roundf;
 use sdl3_sys::SDL_sin;
 use sdl3_sys::SDL_sinf;
 use sdl3_sys::SDL_sqrt;
@@ -38,12 +42,14 @@ pub trait SdlFloat:
     const ONE: Self;
     const EPSILON: Self;
 
+    fn sdl_round(self) -> Self;
     fn sdl_sqrt(self) -> Self;
     fn sdl_abs(self) -> Self;
     fn sdl_sin(self) -> Self;
     fn sdl_cos(self) -> Self;
     fn sdl_acos(self) -> Self;
     fn sdl_atan2(self, other: Self) -> Self;
+    fn sdl_exp(self) -> Self;
     fn sdl_from_f32(v: f32) -> Self;
 
     #[inline]
@@ -72,6 +78,11 @@ impl SdlFloat for f32 {
     const ZERO: Self = 0.0;
     const ONE: Self = 1.0;
     const EPSILON: Self = f32::EPSILON;
+
+    #[inline]
+    fn sdl_round(self) -> Self {
+        unsafe { SDL_roundf(self) }
+    }
 
     #[inline]
     fn sdl_sqrt(self) -> Self {
@@ -103,6 +114,11 @@ impl SdlFloat for f32 {
     }
 
     #[inline]
+    fn sdl_exp(self) -> Self {
+        unsafe { SDL_expf(self) }
+    }
+
+    #[inline]
     fn sdl_from_f32(v: f32) -> Self {
         v
     }
@@ -112,6 +128,11 @@ impl SdlFloat for f64 {
     const ZERO: Self = 0.0;
     const ONE: Self = 1.0;
     const EPSILON: Self = f64::EPSILON;
+
+    #[inline]
+    fn sdl_round(self) -> Self {
+        unsafe { SDL_round(self) }
+    }
 
     #[inline]
     fn sdl_sqrt(self) -> Self {
@@ -141,6 +162,10 @@ impl SdlFloat for f64 {
     #[inline]
     fn sdl_atan2(self, o: Self) -> Self {
         unsafe { SDL_atan2(self, o) }
+    }
+
+    fn sdl_exp(self) -> Self {
+        unsafe { SDL_exp(self) }
     }
 
     #[inline]

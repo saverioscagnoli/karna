@@ -4,7 +4,7 @@ extern crate alloc;
 
 pub mod events;
 pub mod gpu;
-pub mod math;
+pub mod render;
 pub mod window;
 
 use core::marker::PhantomData;

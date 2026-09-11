@@ -12,6 +12,7 @@ use sdl3_sys::SDL_Window;
 use sdl3_sys::SDL_WindowID;
 
 use crate::gpu::Device;
+use crate::render::Color;
 
 pub type WindowId = SDL_WindowID;
 
@@ -60,6 +61,10 @@ impl Window {
     {
         let size = size.into().cast::<i32>();
         unsafe { SDL_SetWindowSize(self.raw.as_ptr(), size.w(), size.h()) };
+    }
+
+    pub fn clear(&self, color: Color) {
+        let _ = self.device.clear(&self, color);
     }
 
     fn destroy(&self) {

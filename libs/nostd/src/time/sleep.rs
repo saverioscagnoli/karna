@@ -25,7 +25,7 @@ pub fn sleep_precise(d: Duration) {
 
 /// Sleep until a specific Instant, or return immediately if it's past.
 #[inline]
-pub fn sleep_until(target: Instant) {
+pub fn sleep_precise_until(target: Instant) {
     let now = Instant::now();
     if target > now {
         sleep_precise(target - now);

@@ -146,6 +146,7 @@ dependencies = [
  "karna-math",
  "karna-nostd",
  "karna-sdl3",
+ "karna-utils",
  "traccia",
 ]
 
