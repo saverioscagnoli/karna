@@ -14,6 +14,8 @@ impl Scene for DemoScene {
         Self
     }
 
+    fn fixed_update(&mut self, ctx: &mut UpdateContext) {}
+
     fn update(&mut self, ctx: &mut UpdateContext) {}
 
     fn draw(&mut self, ctx: &mut DrawContext, draw: &mut Draw) {}

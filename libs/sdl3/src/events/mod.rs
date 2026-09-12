@@ -1,5 +1,7 @@
+mod key;
 mod poll;
 
+pub use key::*;
 pub use poll::*;
 
 use alloc::string::String;
@@ -105,7 +107,7 @@ pub enum SdlEvent {
     Quit,
     Window {
         window: WindowId,
-        wevent: SDLWindowEvent,
+        wevent: SdlWindowEvent,
     },
     Key {
         window: WindowId,
@@ -137,7 +139,7 @@ pub enum SdlEvent {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum SDLWindowEvent {
+pub enum SdlWindowEvent {
     Shown,
     Hidden,
     Exposed,

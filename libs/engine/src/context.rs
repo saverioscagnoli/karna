@@ -1,4 +1,5 @@
 use crate::event::AppOutboxes;
+use crate::input::Input;
 use crate::time::Time;
 use crate::time::TimeData;
 use crate::window::Window;
@@ -10,7 +11,11 @@ pub struct UserContext {
 }
 
 impl UserContext {
-    pub fn for_load<'a>(&'a mut self, outboxes: &'a mut AppOutboxes) -> LoadContext<'a> {
+    pub fn for_load<'a>(
+        &'a mut self,
+        outboxes: &'a mut AppOutboxes,
+        input: &'a Input,
+    ) -> LoadContext<'a> {
         let window_id = self.window_data.id();
         let AppOutboxes { time, window } = outboxes;
 
@@ -24,10 +29,16 @@ impl UserContext {
                 data: &mut self.time_data,
                 outbox: time,
             },
+            input,
         }
     }
 
-    pub fn for_update<'a>(&'a mut self, outboxes: &'a mut AppOutboxes) -> UpdateContext<'a> {
+    pub fn for_update<'a>(
+        &'a mut self,
+        outboxes: &'a mut AppOutboxes,
+
+        input: &'a Input,
+    ) -> UpdateContext<'a> {
         let window_id = self.window_data.id();
         let AppOutboxes { window, time } = outboxes;
 
@@ -41,10 +52,16 @@ impl UserContext {
                 data: &mut self.time_data,
                 outbox: time,
             },
+            input,
         }
     }
 
-    pub fn for_draw<'a>(&'a mut self, outboxes: &'a mut AppOutboxes) -> DrawContext<'a> {
+    pub fn for_draw<'a>(
+        &'a mut self,
+        outboxes: &'a mut AppOutboxes,
+
+        input: &'a Input,
+    ) -> DrawContext<'a> {
         let window_id = self.window_data.id();
         let AppOutboxes { window, time } = outboxes;
 
@@ -58,6 +75,7 @@ impl UserContext {
                 data: &mut self.time_data,
                 outbox: time,
             },
+            input,
         }
     }
 }
@@ -65,14 +83,17 @@ impl UserContext {
 pub struct LoadContext<'a> {
     pub window: Window<'a>,
     pub time: Time<'a>,
+    pub input: &'a Input,
 }
 
 pub struct UpdateContext<'a> {
     pub window: Window<'a>,
     pub time: Time<'a>,
+    pub input: &'a Input,
 }
 
 pub struct DrawContext<'a> {
     pub window: Window<'a>,
     pub time: Time<'a>,
+    pub input: &'a Input,
 }

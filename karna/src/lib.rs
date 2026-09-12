@@ -13,6 +13,11 @@ pub use engine::time::PaceMode;
 pub use engine::time::Time;
 pub use engine::window::Window;
 
+pub mod input {
+    pub use sdl3::events::Key;
+    pub use sdl3::events::MouseButton;
+}
+
 pub use math;
 pub use utils::Label;
 
@@ -20,6 +25,7 @@ pub use nostd::log;
 
 pub mod prelude {
     pub use crate::*;
+    pub use input::*;
     pub use math::*;
     pub use nostd::log::*;
 }

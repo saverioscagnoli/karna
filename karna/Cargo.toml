@@ -15,6 +15,7 @@ path = "src/lib.rs"
 karna-engine.workspace = true
 karna-math.workspace = true
 karna-utils.workspace = true
+karna-sdl3.workspace = true
 karna-nostd.workspace = true
 
 [dev-dependencies]

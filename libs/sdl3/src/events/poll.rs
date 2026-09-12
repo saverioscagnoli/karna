@@ -70,9 +70,9 @@ use crate::events::Lifecycle;
 use crate::events::Modifiers;
 use crate::events::MouseButton;
 use crate::events::MouseEvent;
-use crate::events::SDLWindowEvent;
 use crate::events::Scancode;
 use crate::events::SdlEvent;
+use crate::events::SdlWindowEvent;
 use crate::events::TextEvent;
 use crate::events::TouchEvent;
 
@@ -343,36 +343,36 @@ unsafe fn owned(p: *const ffi::c_char) -> String {
     unsafe { ffi::CStr::from_ptr(p).to_string_lossy().into_owned() }
 }
 
-fn window_event(kind: SDL_EventType, data1: i32, data2: i32) -> Option<SDLWindowEvent> {
+fn window_event(kind: SDL_EventType, data1: i32, data2: i32) -> Option<SdlWindowEvent> {
     let size = || (data1.max(0) as u32, data2.max(0) as u32);
 
     Some(match kind {
-        SDL_EVENT_WINDOW_SHOWN => SDLWindowEvent::Shown,
-        SDL_EVENT_WINDOW_HIDDEN => SDLWindowEvent::Hidden,
-        SDL_EVENT_WINDOW_EXPOSED => SDLWindowEvent::Exposed,
-        SDL_EVENT_WINDOW_MOVED => SDLWindowEvent::Moved { x: data1, y: data2 },
+        SDL_EVENT_WINDOW_SHOWN => SdlWindowEvent::Shown,
+        SDL_EVENT_WINDOW_HIDDEN => SdlWindowEvent::Hidden,
+        SDL_EVENT_WINDOW_EXPOSED => SdlWindowEvent::Exposed,
+        SDL_EVENT_WINDOW_MOVED => SdlWindowEvent::Moved { x: data1, y: data2 },
         SDL_EVENT_WINDOW_RESIZED => {
             let (width, height) = size();
-            SDLWindowEvent::Resized { width, height }
+            SdlWindowEvent::Resized { width, height }
         }
         SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
             let (width, height) = size();
-            SDLWindowEvent::PixelSizeChanged { width, height }
+            SdlWindowEvent::PixelSizeChanged { width, height }
         }
-        SDL_EVENT_WINDOW_MINIMIZED => SDLWindowEvent::Minimized,
-        SDL_EVENT_WINDOW_MAXIMIZED => SDLWindowEvent::Maximized,
-        SDL_EVENT_WINDOW_RESTORED => SDLWindowEvent::Restored,
-        SDL_EVENT_WINDOW_MOUSE_ENTER => SDLWindowEvent::MouseEnter,
-        SDL_EVENT_WINDOW_MOUSE_LEAVE => SDLWindowEvent::MouseLeave,
-        SDL_EVENT_WINDOW_FOCUS_GAINED => SDLWindowEvent::FocusGained,
-        SDL_EVENT_WINDOW_FOCUS_LOST => SDLWindowEvent::FocusLost,
-        SDL_EVENT_WINDOW_CLOSE_REQUESTED => SDLWindowEvent::CloseRequested,
-        SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED => SDLWindowEvent::DisplayScaleChanged,
-        SDL_EVENT_WINDOW_ENTER_FULLSCREEN => SDLWindowEvent::EnterFullscreen,
-        SDL_EVENT_WINDOW_LEAVE_FULLSCREEN => SDLWindowEvent::LeaveFullscreen,
-        SDL_EVENT_WINDOW_OCCLUDED => SDLWindowEvent::Occluded,
-        SDL_EVENT_WINDOW_SAFE_AREA_CHANGED => SDLWindowEvent::SafeAreaChanged,
-        SDL_EVENT_WINDOW_DESTROYED => SDLWindowEvent::Destroyed,
+        SDL_EVENT_WINDOW_MINIMIZED => SdlWindowEvent::Minimized,
+        SDL_EVENT_WINDOW_MAXIMIZED => SdlWindowEvent::Maximized,
+        SDL_EVENT_WINDOW_RESTORED => SdlWindowEvent::Restored,
+        SDL_EVENT_WINDOW_MOUSE_ENTER => SdlWindowEvent::MouseEnter,
+        SDL_EVENT_WINDOW_MOUSE_LEAVE => SdlWindowEvent::MouseLeave,
+        SDL_EVENT_WINDOW_FOCUS_GAINED => SdlWindowEvent::FocusGained,
+        SDL_EVENT_WINDOW_FOCUS_LOST => SdlWindowEvent::FocusLost,
+        SDL_EVENT_WINDOW_CLOSE_REQUESTED => SdlWindowEvent::CloseRequested,
+        SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED => SdlWindowEvent::DisplayScaleChanged,
+        SDL_EVENT_WINDOW_ENTER_FULLSCREEN => SdlWindowEvent::EnterFullscreen,
+        SDL_EVENT_WINDOW_LEAVE_FULLSCREEN => SdlWindowEvent::LeaveFullscreen,
+        SDL_EVENT_WINDOW_OCCLUDED => SdlWindowEvent::Occluded,
+        SDL_EVENT_WINDOW_SAFE_AREA_CHANGED => SdlWindowEvent::SafeAreaChanged,
+        SDL_EVENT_WINDOW_DESTROYED => SdlWindowEvent::Destroyed,
         other => {
             trace!("Unmapped SDL window event: {}", other);
             return None;
