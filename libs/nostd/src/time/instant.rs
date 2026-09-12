@@ -29,6 +29,11 @@ fn freq() -> u64 {
 #[inline]
 fn ticks_to_duration(ticks: u64) -> Duration {
     let f = freq();
+
+    if f == 1_000_000_000 {
+        return Duration::new(ticks / 1_000_000_000, (ticks % 1_000_000_000) as u32);
+    }
+
     let secs = ticks / f;
     let rem = ticks % f;
     let nanos = (rem * 1_000_000_000) / f;
@@ -79,7 +84,7 @@ impl Instant {
     #[inline]
     pub fn checked_sub(&self, d: Duration) -> Option<Instant> {
         duration_to_ticks(d)
-            .and_then(|t| self.0.checked_add(t))
+            .and_then(|t| self.0.checked_sub(t))
             .map(Instant)
     }
 

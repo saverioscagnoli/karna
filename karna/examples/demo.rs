@@ -1,8 +1,23 @@
-#![no_std]
+#![allow(unused)]
 
-use karna::App;
-use karna::log::SdlTarget;
-use traccia::info;
+use karna::prelude::*;
+
+const DEMO_SCENE: SceneId = SceneId::new_str("DEMO");
+
+struct DemoScene;
+
+impl Scene for DemoScene {
+    fn load(ctx: &mut LoadContext) -> Self
+    where
+        Self: Sized,
+    {
+        Self
+    }
+
+    fn update(&mut self, ctx: &mut UpdateContext) {}
+
+    fn draw(&mut self, ctx: &mut DrawContext, draw: &mut Draw) {}
+}
 
 fn main() {
     _ = traccia::init(
@@ -11,7 +26,14 @@ fn main() {
             .with_target(SdlTarget::default()),
     );
 
-    App::new().run();
-
-    info!("bye");
+    App::builder()
+        .with_window(
+            WindowBuilder::new()
+                .with_title("Demo window")
+                .with_size((1280, 720))
+                .with_scene::<DemoScene>(DEMO_SCENE)
+                .with_active_scene(DEMO_SCENE),
+        )
+        .build()
+        .run();
 }

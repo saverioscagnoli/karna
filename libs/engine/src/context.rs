@@ -1,8 +1,8 @@
 use crate::event::AppOutboxes;
 use crate::time::Time;
 use crate::time::TimeData;
+use crate::window::Window;
 use crate::window::WindowData;
-use crate::window::WindowHandle;
 
 pub struct UserContext {
     pub window_data: WindowData,
@@ -15,8 +15,7 @@ impl UserContext {
         let AppOutboxes { time, window } = outboxes;
 
         LoadContext {
-            window: WindowHandle {
-                window_id,
+            window: Window {
                 data: &mut self.window_data,
                 outbox: window,
             },
@@ -33,8 +32,7 @@ impl UserContext {
         let AppOutboxes { window, time } = outboxes;
 
         UpdateContext {
-            window: WindowHandle {
-                window_id,
+            window: Window {
                 data: &mut self.window_data,
                 outbox: window,
             },
@@ -51,8 +49,7 @@ impl UserContext {
         let AppOutboxes { window, time } = outboxes;
 
         DrawContext {
-            window: WindowHandle {
-                window_id,
+            window: Window {
                 data: &mut self.window_data,
                 outbox: window,
             },
@@ -66,16 +63,16 @@ impl UserContext {
 }
 
 pub struct LoadContext<'a> {
-    pub window: WindowHandle<'a>,
+    pub window: Window<'a>,
     pub time: Time<'a>,
 }
 
 pub struct UpdateContext<'a> {
-    pub window: WindowHandle<'a>,
+    pub window: Window<'a>,
     pub time: Time<'a>,
 }
 
 pub struct DrawContext<'a> {
-    pub window: WindowHandle<'a>,
+    pub window: Window<'a>,
     pub time: Time<'a>,
 }

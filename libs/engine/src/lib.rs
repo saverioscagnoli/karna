@@ -1,14 +1,17 @@
 #![no_std]
 
-mod builder;
-mod context;
-mod event;
-mod render;
-mod scene;
-mod time;
-mod window;
-mod window_state;
+pub mod builder;
+pub mod context;
+pub mod event;
+pub mod render;
+pub mod scene;
+pub mod time;
+pub mod window;
+pub mod window_state;
 
+use core::mem;
+
+use nostd::alloc::string::String;
 use nostd::alloc::vec::Vec;
 use nostd::collections::HashMap;
 use nostd::log;
@@ -19,18 +22,21 @@ use sdl3::SdlGuard;
 use sdl3::events::SdlEvent;
 use sdl3::gpu::Device;
 use sdl3::render::Color;
-use sdl3::window::Window;
 use sdl3::window::WindowId;
 use traccia::info;
 use traccia::trace;
 use traccia::warn;
 
+use crate::builder::WindowBuilder;
 use crate::event::AppEvent;
 use crate::event::AppOutboxes;
 use crate::event::WindowEvent;
+use crate::scene::SceneId;
 use crate::time::Clock;
 use crate::time::FramePacer;
 use crate::time::PaceMode;
+use crate::window::SdlWindow;
+use crate::window_state::SceneSlot;
 use crate::window_state::UpdatePhase;
 use crate::window_state::WindowState;
 
@@ -40,10 +46,11 @@ static ALLOC: SdlAllocator = SdlAllocator;
 struct WindowEntry {
     state: WindowState,
     pacer: FramePacer,
-    window: Window,
+    sdl_window: SdlWindow,
 }
 
 pub struct App {
+    requested_windows: Vec<WindowBuilder>,
     windows: HashMap<WindowId, WindowEntry>,
     clock: Clock,
     device: Device,
@@ -54,7 +61,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(root: String) -> Self {
         let Ok(_sdl) = SdlGuard::init() else {
             panic!("sdl failed to init");
         };
@@ -69,6 +76,7 @@ impl App {
         let event_outboxes = AppOutboxes::new();
 
         Self {
+            requested_windows: Vec::new(),
             windows: HashMap::default(),
             device,
             should_quit: false,
@@ -79,20 +87,36 @@ impl App {
         }
     }
 
-    fn spawn_window(&mut self, title: &str, size: math::Size<u32>) {
-        let window = self
+    fn spawn_window(&mut self, builder: WindowBuilder) {
+        #[rustfmt::skip]
+        let WindowBuilder { title, size, resizable, scene_builders, active_scenes } = builder;
+
+        let sdl_window = self
             .device
-            .create_window(title, size)
+            .create_window(title, size, resizable)
             .expect("Failed to create window");
 
-        let state = WindowState::init(&window, HashMap::default(), Vec::new());
+        let scenes = scene_builders
+            .into_iter()
+            .map(|(k, v)| {
+                (
+                    k,
+                    SceneSlot {
+                        builder: v,
+                        scene: None,
+                    },
+                )
+            })
+            .collect::<HashMap<SceneId, SceneSlot>>();
+
+        let state = WindowState::init(&sdl_window, scenes, active_scenes);
 
         self.windows.insert(
-            window.id(),
+            sdl_window.id(),
             WindowEntry {
                 state,
                 pacer: FramePacer::new(PaceMode::Fixed),
-                window,
+                sdl_window,
             },
         );
     }
@@ -120,6 +144,8 @@ impl App {
         event_outboxes.drain_into(event_queue);
 
         for event in event_queue.drain(..) {
+            trace!("Received App event: {:?}", event);
+
             match event {
                 AppEvent::SetTargetTPS(t) => clock.set_target_tps(t),
                 AppEvent::Window { window, wevent } => {
@@ -129,8 +155,12 @@ impl App {
                     };
 
                     match wevent {
-                        WindowEvent::SetTitle(t) => {}
+                        WindowEvent::SetTitle(t) => entry.sdl_window.set_title(t),
+                        WindowEvent::SetSize(s) => entry.sdl_window.set_size(s),
                         WindowEvent::SetTargetFPS(t) => entry.pacer.set_target_fps(t),
+                        WindowEvent::SetFPSCalculationStrategy(s) => {
+                            entry.pacer.counter.set_strategy(s)
+                        }
                     }
                 }
             }
@@ -138,7 +168,9 @@ impl App {
     }
 
     pub fn run(mut self) {
-        self.spawn_window("hello", math::size!(1280, 720));
+        for builder in mem::take(&mut self.requested_windows) {
+            self.spawn_window(builder);
+        }
 
         for entry in self.windows.values_mut() {
             entry.state.sync_time(&self.clock, &entry.pacer);
@@ -192,7 +224,7 @@ impl App {
                     .update_active_scenes(UpdatePhase::Unrestrained, &mut self.event_outboxes);
                 entry.state.draw_active_scenes(&mut self.event_outboxes);
 
-                entry.window.clear(Color::RED);
+                entry.sdl_window.clear(Color::RED);
             }
 
             if rendered {

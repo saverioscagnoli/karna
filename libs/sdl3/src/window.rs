@@ -5,6 +5,7 @@ use alloc::ffi::CString;
 use sdl3_sys::SDL_DestroyWindow;
 use sdl3_sys::SDL_GetWindowID;
 use sdl3_sys::SDL_GetWindowSize;
+use sdl3_sys::SDL_GetWindowSizeInPixels;
 use sdl3_sys::SDL_GetWindowTitle;
 use sdl3_sys::SDL_SetWindowSize;
 use sdl3_sys::SDL_SetWindowTitle;
@@ -54,13 +55,19 @@ impl Window {
 
         size.cast::<u32>()
     }
-
     pub fn set_size<S>(&self, size: S)
     where
         S: Into<math::Size<u32>>,
     {
         let size = size.into().cast::<i32>();
         unsafe { SDL_SetWindowSize(self.raw.as_ptr(), size.w(), size.h()) };
+    }
+
+    pub fn pixel_size(&self) -> math::Size<u32> {
+        let mut size = math::size!(0, 0);
+        unsafe { SDL_GetWindowSizeInPixels(self.raw.as_ptr(), &mut size.width, &mut size.height) };
+
+        size.cast::<u32>()
     }
 
     pub fn clear(&self, color: Color) {

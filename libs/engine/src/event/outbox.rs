@@ -1,5 +1,4 @@
 use nostd::alloc::vec::Vec;
-use utils::Label;
 
 pub struct Outbox<T> {
     buf: Vec<T>,

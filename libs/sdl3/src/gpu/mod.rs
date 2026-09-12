@@ -81,7 +81,12 @@ impl Device {
         unsafe { SDL_ReleaseWindowFromGPUDevice(self.0.as_ptr(), window.as_ptr()) }
     }
 
-    pub fn create_window<T, S>(&self, title: T, size: S) -> Result<Window, SdlError>
+    pub fn create_window<T, S>(
+        &self,
+        title: T,
+        size: S,
+        resizable: bool,
+    ) -> Result<Window, SdlError>
     where
         T: AsRef<str>,
         S: Into<math::Size<u32>>,
@@ -89,8 +94,14 @@ impl Device {
         let title = CString::new(title.as_ref()).map_err(|_| SdlError::new("InteriorNul"))?;
 
         let size = size.into().cast::<i32>();
-        let ptr =
-            unsafe { SDL_CreateWindow(title.as_ptr(), size.w(), size.h(), SDL_WINDOW_RESIZABLE) };
+        let ptr = unsafe {
+            SDL_CreateWindow(
+                title.as_ptr(),
+                size.w(),
+                size.h(),
+                if resizable { SDL_WINDOW_RESIZABLE } else { 0 },
+            )
+        };
 
         let raw = ptr::NonNull::new(ptr).ok_or_else(|| get_error())?;
         let window = Window {

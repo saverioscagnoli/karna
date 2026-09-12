@@ -6,7 +6,7 @@ use traccia::warn;
 
 use crate::context::UserContext;
 use crate::event::AppOutboxes;
-use crate::render::draw::Draw;
+use crate::render::Draw;
 use crate::scene::BoxedScene;
 use crate::scene::SceneBuilder;
 use crate::scene::SceneId;
@@ -76,7 +76,7 @@ impl WindowState {
         };
 
         if let Some(ref mut scene) = slot.scene {
-            scene.unload(self.ctx.for_load(outboxes));
+            scene.unload(&mut self.ctx.for_load(outboxes));
         }
 
         slot.scene = None;
@@ -121,8 +121,8 @@ impl WindowState {
             };
 
             match phase {
-                UpdatePhase::Fixed => scene.fixed_update(ctx.for_update(outboxes)),
-                UpdatePhase::Unrestrained => scene.fixed_update(ctx.for_update(outboxes)),
+                UpdatePhase::Fixed => scene.fixed_update(&mut ctx.for_update(outboxes)),
+                UpdatePhase::Unrestrained => scene.update(&mut ctx.for_update(outboxes)),
             }
         }
     }
@@ -144,7 +144,7 @@ impl WindowState {
                 continue;
             };
 
-            scene.draw(ctx.for_draw(outboxes), &mut draw);
+            scene.draw(&mut ctx.for_draw(outboxes), &mut draw);
         }
     }
 }

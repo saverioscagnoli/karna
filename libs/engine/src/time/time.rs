@@ -14,7 +14,7 @@ pub struct TimeData {
     delta: f32,
     fixed_delta: f32,
     fps: f32,
-    fps_calculation_stratefy: FpsCalculationStrategy,
+    fps_calculation_strategy: FpsCalculationStrategy,
     frame: Duration,
     alpha: f32,
 }
@@ -25,7 +25,7 @@ impl Default for TimeData {
             delta: 0.0,
             fixed_delta: 0.0,
             fps: 0.0,
-            fps_calculation_stratefy: FpsCalculationStrategy::default(),
+            fps_calculation_strategy: FpsCalculationStrategy::default(),
             frame: Duration::ZERO,
             alpha: 0.0,
         }
@@ -37,7 +37,7 @@ impl TimeData {
         self.delta = pacer.delta.as_secs_f32();
         self.fixed_delta = clock.tick_rate.as_secs_f32();
         self.fps = pacer.counter.fps();
-        self.fps_calculation_stratefy = pacer.counter.strategy;
+        self.fps_calculation_strategy = pacer.counter.strategy;
         self.frame = pacer.counter.average_frame_time().unwrap_or(Duration::ZERO);
         self.alpha = clock.alpha();
     }
@@ -82,6 +82,13 @@ impl<'a> Time<'a> {
         self.outbox.push(AppEvent::Window {
             window: self.window_id,
             wevent: WindowEvent::SetTargetFPS(t),
+        });
+    }
+
+    pub fn set_fps_calculation_strategy(&mut self, strat: FpsCalculationStrategy) {
+        self.outbox.push(AppEvent::Window {
+            window: self.window_id,
+            wevent: WindowEvent::SetFPSCalculationStrategy(strat),
         });
     }
 }

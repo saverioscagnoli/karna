@@ -1,1 +1,3 @@
-pub mod draw;
+mod draw;
+
+pub use draw::*;
