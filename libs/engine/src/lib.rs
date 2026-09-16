@@ -1,5 +1,6 @@
 #![no_std]
 
+pub mod assets;
 pub mod builder;
 pub mod context;
 pub mod event;

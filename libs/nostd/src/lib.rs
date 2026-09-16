@@ -6,6 +6,7 @@ pub mod collections;
 pub mod fs;
 pub mod log;
 pub mod mem;
+pub mod sync;
 pub mod thread;
 pub mod time;
 

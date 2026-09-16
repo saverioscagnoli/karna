@@ -175,8 +175,19 @@ version = "0.1.0"
 dependencies = [
  "karna-math",
  "karna-nostd",
+ "karna-sdl3-image-sys",
  "karna-sdl3-sys",
  "traccia",
+]
+
+[[package]]
+name = "karna-sdl3-image-sys"
+version = "0.1.0"
+dependencies = [
+ "bindgen",
+ "cmake",
+ "karna-sdl3-sys",
+ "pkg-config",
 ]
 
 [[package]]

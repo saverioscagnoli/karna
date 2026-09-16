@@ -12,5 +12,5 @@ path = "src/lib.rs"
 
 [dependencies]
 karna-sdl3-sys.workspace = true
-hashbrown = { version = "0.17.1", default-features = false }
 traccia.workspace = true
+hashbrown = { version = "0.17.1", default-features = false }

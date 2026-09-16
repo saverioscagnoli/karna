@@ -4,6 +4,7 @@ extern crate alloc;
 
 pub mod events;
 pub mod gpu;
+pub mod image;
 pub mod render;
 pub mod window;
 

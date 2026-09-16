@@ -24,7 +24,7 @@ impl Scene for DemoScene {
 fn main() {
     _ = traccia::init(
         traccia::Config::default()
-            .with_min_level(traccia::LevelFilter::Debug)
+            .with_min_level(traccia::LevelFilter::Trace)
             .with_target(SdlTarget::default()),
     );
 

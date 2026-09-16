@@ -60,6 +60,9 @@ fn build_vendored() {
         }
     }
     println!("cargo:rustc-link-lib=dylib=SDL3");
+    // Exposed to dependents as DEP_SDL3_ROOT; karna-sdl3-image-sys hands it
+    // to CMake so SDL_image builds against this copy of SDL.
+    println!("cargo:root={}", dst.display());
     println!("cargo:include={}", dst.join("include").display());
 }
 

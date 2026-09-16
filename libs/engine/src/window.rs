@@ -38,7 +38,7 @@ impl WindowData {
     #[inline]
     pub fn update_input(&mut self, pos: math::Vector2<f32>, d: math::Vector2<f32>) {
         self.mouse_poistion = pos;
-        self.mouse_delta = d;
+        self.mouse_delta += d;
     }
 
     #[inline]
