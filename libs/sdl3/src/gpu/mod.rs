@@ -1,28 +1,38 @@
+mod buffer;
+mod pass;
+mod pipeline;
+mod shader;
+mod texture;
+
+pub use buffer::*;
+pub use pass::*;
+pub use pipeline::*;
+pub use shader::*;
+pub use texture::*;
+
+use core::cell::RefCell;
+use core::ffi::CStr;
+use core::mem::ManuallyDrop;
 use core::ptr;
 
 use alloc::ffi::CString;
 use alloc::rc::Rc;
-use sdl3_sys::SDL_AcquireGPUCommandBuffer;
-use sdl3_sys::SDL_BeginGPURenderPass;
-use sdl3_sys::SDL_CancelGPUCommandBuffer;
 use sdl3_sys::SDL_ClaimWindowForGPUDevice;
 use sdl3_sys::SDL_CreateGPUDevice;
 use sdl3_sys::SDL_CreateWindow;
 use sdl3_sys::SDL_DestroyGPUDevice;
-use sdl3_sys::SDL_EndGPURenderPass;
-use sdl3_sys::SDL_GPU_LOADOP_CLEAR;
 use sdl3_sys::SDL_GPU_SHADERFORMAT_DXIL;
 use sdl3_sys::SDL_GPU_SHADERFORMAT_MSL;
 use sdl3_sys::SDL_GPU_SHADERFORMAT_SPIRV;
-use sdl3_sys::SDL_GPU_STOREOP_STORE;
-use sdl3_sys::SDL_GPUColorTargetInfo;
 use sdl3_sys::SDL_GPUDevice;
 use sdl3_sys::SDL_GPUShaderFormat;
-use sdl3_sys::SDL_GPUTexture;
+use sdl3_sys::SDL_GPUTextureFormat;
+use sdl3_sys::SDL_GetGPUDeviceDriver;
+use sdl3_sys::SDL_GetGPUShaderFormats;
+use sdl3_sys::SDL_GetGPUSwapchainTextureFormat;
 use sdl3_sys::SDL_ReleaseWindowFromGPUDevice;
-use sdl3_sys::SDL_SubmitGPUCommandBuffer;
+use sdl3_sys::SDL_SetGPUAllowedFramesInFlight;
 use sdl3_sys::SDL_WINDOW_RESIZABLE;
-use sdl3_sys::SDL_WaitAndAcquireGPUSwapchainTexture;
 use sdl3_sys::SdlError;
 use sdl3_sys::get_error;
 use traccia::debug;
@@ -30,8 +40,17 @@ use traccia::debug;
 use crate::render::Color;
 use crate::window::Window;
 
+/// Starting size of the shared upload staging buffer. It grows on demand; this
+/// is just big enough that the first few uploads do not have to.
+const STAGING_CAPACITY: u32 = 64 * 1024;
+
 struct DeviceInner {
     raw: ptr::NonNull<SDL_GPUDevice>,
+
+    /// Scratch buffer every upload writes through. It holds a raw device
+    /// pointer rather than a `Device` because it lives inside the device, and
+    /// an `Rc` back to its owner would never free.
+    staging: ManuallyDrop<RefCell<GpuTransferBuffer>>,
 }
 
 impl DeviceInner {
@@ -43,6 +62,10 @@ impl DeviceInner {
 impl Drop for DeviceInner {
     fn drop(&mut self) {
         unsafe {
+            // The staging buffer belongs to this device, so it has to be
+            // released while the device is still alive.
+            ManuallyDrop::drop(&mut self.staging);
+
             SDL_DestroyGPUDevice(self.as_ptr());
         }
     }
@@ -58,13 +81,62 @@ impl Device {
         let ptr = unsafe { SDL_CreateGPUDevice(SHADER_FORMATS, false, ptr::null()) };
         let raw = ptr::NonNull::new(ptr).ok_or_else(|| get_error())?;
 
+        let staging = GpuTransferBuffer::new(raw.as_ptr(), STAGING_CAPACITY);
+
         debug!("GPU Device initalized.");
 
-        Ok(Self(DeviceInner { raw }.into()))
+        Ok(Self(
+            DeviceInner {
+                raw,
+                staging: ManuallyDrop::new(RefCell::new(staging)),
+            }
+            .into(),
+        ))
     }
 
     pub fn share(&self) -> Self {
         Self(Rc::clone(&self.0))
+    }
+
+    pub fn as_ptr(&self) -> *mut SDL_GPUDevice {
+        self.0.as_ptr()
+    }
+
+    pub(crate) fn staging(&self) -> &RefCell<GpuTransferBuffer> {
+        &self.0.staging
+    }
+
+    /// The backend SDL picked: `vulkan`, `direct3d12`, `metal`.
+    pub fn driver(&self) -> &str {
+        let ptr = unsafe { SDL_GetGPUDeviceDriver(self.as_ptr()) };
+
+        if ptr.is_null() {
+            return "unknown";
+        }
+
+        unsafe { CStr::from_ptr(ptr).to_str().unwrap_or("unknown") }
+    }
+
+    /// Which shader bytecode formats this device accepts. Check before handing
+    /// [`Shader`] a blob.
+    pub fn shader_formats(&self) -> SDL_GPUShaderFormat {
+        unsafe { SDL_GetGPUShaderFormats(self.as_ptr()) }
+    }
+
+    /// The texture format of the window's swapchain, which is what a pipeline
+    /// drawing to that window has to declare as its color target.
+    pub fn swapchain_format(&self, window: &Window) -> SDL_GPUTextureFormat {
+        unsafe { SDL_GetGPUSwapchainTextureFormat(self.as_ptr(), window.as_ptr()) }
+    }
+
+    /// How many frames may be queued before [`Device::begin_frame`] blocks.
+    /// Between 1 and 3; lower trades throughput for latency.
+    pub fn set_frames_in_flight(&self, frames: u32) -> Result<(), SdlError> {
+        if !unsafe { SDL_SetGPUAllowedFramesInFlight(self.as_ptr(), frames) } {
+            return Err(get_error());
+        }
+
+        Ok(())
     }
 
     fn claim_window(&self, window: &Window) -> Result<(), SdlError> {
@@ -113,55 +185,15 @@ impl Device {
         Ok(window)
     }
 
+    /// Presents a frame that is nothing but a clear.
     pub fn clear(&self, window: &Window, color: Color) -> Result<(), SdlError> {
-        unsafe {
-            let cmd = SDL_AcquireGPUCommandBuffer(self.0.as_ptr());
-            if cmd.is_null() {
-                return Err(get_error());
-            }
+        let Some(mut frame) = self.begin_frame(window)? else {
+            return Ok(());
+        };
 
-            let mut texture: *mut SDL_GPUTexture = ptr::null_mut();
-            let (mut w, mut h) = (0u32, 0u32);
+        // An empty pass with a clear load op is the cheapest way to clear.
+        drop(frame.render_pass(LoadOp::Clear(color))?);
 
-            if !SDL_WaitAndAcquireGPUSwapchainTexture(
-                cmd,
-                window.as_ptr(),
-                &mut texture,
-                &mut w,
-                &mut h,
-            ) {
-                let err = get_error();
-                SDL_CancelGPUCommandBuffer(cmd);
-                return Err(err);
-            }
-
-            if texture.is_null() {
-                SDL_CancelGPUCommandBuffer(cmd);
-                return Ok(());
-            }
-
-            let target = SDL_GPUColorTargetInfo {
-                texture,
-                clear_color: color.raw(),
-                load_op: SDL_GPU_LOADOP_CLEAR,
-                store_op: SDL_GPU_STOREOP_STORE,
-                ..Default::default()
-            };
-
-            let pass = SDL_BeginGPURenderPass(cmd, &target, 1, ptr::null());
-            if pass.is_null() {
-                let err = get_error();
-                SDL_CancelGPUCommandBuffer(cmd);
-                return Err(err);
-            }
-
-            SDL_EndGPURenderPass(pass);
-
-            if !SDL_SubmitGPUCommandBuffer(cmd) {
-                return Err(get_error());
-            }
-
-            Ok(())
-        }
+        frame.submit()
     }
 }

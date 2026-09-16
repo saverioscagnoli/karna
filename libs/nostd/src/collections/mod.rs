@@ -1,3 +1,7 @@
+mod slotmap;
+
+pub use slotmap::*;
+
 use core::hash::BuildHasherDefault;
 use core::hash::Hasher;
 

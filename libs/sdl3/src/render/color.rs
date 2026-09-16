@@ -1,5 +1,6 @@
 use sdl3_sys::SDL_FColor;
 
+#[derive(Debug, Clone, Copy)]
 pub struct Color(SDL_FColor);
 
 impl Color {

@@ -2,43 +2,13 @@ use alloc::string::String;
 use alloc::string::ToString;
 use sdl3_sys::SDL_LoadFile;
 
-use core::ffi;
 use core::ops::Deref;
 use core::ptr;
 use core::slice;
 
 use sdl3_sys::SDL_free;
 
-pub struct CPath {
-    buf: [u8; 512],
-    len: usize,
-}
-
-impl CPath {
-    pub fn new(s: &str) -> Result<Self, String> {
-        let b = s.as_bytes();
-
-        if b.len() >= 512 {
-            return Err(String::from("Path too long"));
-        }
-
-        if b.contains(&0) {
-            return Err(String::from("Interior null"));
-        }
-
-        let mut buf = [0u8; 512];
-        buf[..b.len()].copy_from_slice(b);
-        Ok(Self { buf, len: b.len() })
-    }
-
-    pub fn as_ptr(&self) -> *const ffi::c_char {
-        self.buf.as_ptr().cast()
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
-    }
-}
+use crate::path::Path;
 
 pub struct Blob {
     ptr: ptr::NonNull<u8>,
@@ -81,11 +51,12 @@ impl Drop for Blob {
 unsafe impl Send for Blob {}
 unsafe impl Sync for Blob {}
 
-pub fn read(path: &str) -> Result<Blob, String> {
-    let path = CPath::new(path)?;
+pub fn read(path: impl AsRef<Path>) -> Result<Blob, String> {
     let mut len = 0;
 
-    let ptr = unsafe { SDL_LoadFile(path.as_ptr(), &mut len) };
+    let ptr = path
+        .as_ref()
+        .with_c_str(|path| unsafe { SDL_LoadFile(path, &mut len) });
 
     match ptr::NonNull::new(ptr.cast::<u8>()) {
         Some(ptr) => Ok(Blob { ptr, len }),
