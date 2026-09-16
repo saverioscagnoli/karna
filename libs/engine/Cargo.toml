@@ -11,6 +11,10 @@ authors.workspace = true
 name = "engine"
 path = "src/lib.rs"
 
+[features]
+default = ["build-from-source"]
+build-from-source = ["karna-sdl3/build-from-source"]
+
 [dependencies]
 karna-sdl3.workspace = true
 karna-nostd.workspace = true

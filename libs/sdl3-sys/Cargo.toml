@@ -15,9 +15,10 @@ path = "src/lib.rs"
 doctest = false
 
 [features]
-default = []
+default = ["build-from-source"]
 # Build SDL from the vendored source tree in vendor/SDL instead of linking
-# a system SDL3. Requires the git submodule to be checked out.
+# a system SDL3. Requires the git submodule to be checked out. On by default;
+# turn it off with --no-default-features to link a system SDL3 via pkg-config.
 build-from-source = ["dep:cmake"]
 # Only needed to regenerate src/bindings.rs; not used in a normal build.
 regenerate = ["dep:bindgen"]

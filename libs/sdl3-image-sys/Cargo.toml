@@ -15,10 +15,11 @@ path = "src/lib.rs"
 doctest = false
 
 [features]
-default = []
+default = ["build-from-source"]
 # Build SDL_image from the vendored source tree in vendor/SDL_image instead of
 # linking a system SDL3_image. Also builds SDL itself from source, so both
-# libraries come from the same place.
+# libraries come from the same place. On by default; turn it off with
+# --no-default-features to link a system SDL3_image via pkg-config.
 build-from-source = ["dep:cmake", "karna-sdl3-sys/build-from-source"]
 # Only needed to regenerate src/bindings.rs; not used in a normal build.
 regenerate = ["dep:bindgen"]

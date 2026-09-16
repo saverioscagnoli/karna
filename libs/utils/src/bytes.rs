@@ -9,7 +9,6 @@ use core::ops::Mul;
 use core::ops::Sub;
 use core::ops::SubAssign;
 
-#[cfg(unix)]
 pub const fn fnv1a(bytes: &[u8]) -> u64 {
     let mut hash = 0xcbf29ce484222325;
     let mut i = 0;

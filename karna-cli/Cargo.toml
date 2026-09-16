@@ -11,5 +11,9 @@ authors.workspace = true
 name = "karna"
 path = "src/main.rs"
 
+[features]
+default = ["build-from-source"]
+build-from-source = ["karna/build-from-source"]
+
 [dependencies]
 karna.workspace = true

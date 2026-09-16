@@ -11,6 +11,13 @@ authors.workspace = true
 name = "karna"
 path = "src/lib.rs"
 
+[features]
+default = ["build-from-source"]
+build-from-source = [
+    "karna-engine/build-from-source",
+    "karna-sdl3/build-from-source",
+]
+
 [dependencies]
 karna-engine.workspace = true
 karna-math.workspace = true

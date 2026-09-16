@@ -10,12 +10,16 @@ repository = "https://github.com/saverioscagnoli/karna"
 authors = ["Saverio Scagnoli"]
 
 [workspace.dependencies]
-karna = { version = "0.1.0", path = "karna" }
-karna-engine = { version = "0.1.0", path = "libs/engine" }
+karna = { version = "0.1.0", path = "karna", default-features = false }
 karna-math = { version = "0.1.0", path = "libs/math" }
-karna-sdl3 = { version = "0.1.0", path = "libs/sdl3" }
-karna-sdl3-sys = { version = "0.1.0", path = "libs/sdl3-sys" }
-karna-sdl3-image-sys = { version = "0.1.0", path = "libs/sdl3-image-sys" }
+# default-features = false on the SDL chain: the `build-from-source` switch is
+# re-exported by each crate along it (karna -> karna-engine -> karna-sdl3 ->
+# the -sys crates) so `--no-default-features` at the top reaches all the way
+# down to the pkg-config path.
+karna-engine = { version = "0.1.0", path = "libs/engine", default-features = false }
+karna-sdl3 = { version = "0.1.0", path = "libs/sdl3", default-features = false }
+karna-sdl3-sys = { version = "0.1.0", path = "libs/sdl3-sys", default-features = false }
+karna-sdl3-image-sys = { version = "0.1.0", path = "libs/sdl3-image-sys", default-features = false }
 karna-utils = { version = "0.1.0", path = "libs/utils" }
 karna-nostd = { version = "0.1.0", path = "libs/nostd" }
 
