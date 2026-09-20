@@ -24,6 +24,8 @@ use sdl3_sys::SDL_sin;
 use sdl3_sys::SDL_sinf;
 use sdl3_sys::SDL_sqrt;
 use sdl3_sys::SDL_sqrtf;
+use sdl3_sys::SDL_tan;
+use sdl3_sys::SDL_tanf;
 
 pub trait SdlFloat:
     Copy
@@ -47,6 +49,7 @@ pub trait SdlFloat:
     fn sdl_abs(self) -> Self;
     fn sdl_sin(self) -> Self;
     fn sdl_cos(self) -> Self;
+    fn sdl_tan(self) -> Self;
     fn sdl_acos(self) -> Self;
     fn sdl_atan2(self, other: Self) -> Self;
     fn sdl_exp(self) -> Self;
@@ -104,6 +107,11 @@ impl SdlFloat for f32 {
     }
 
     #[inline]
+    fn sdl_tan(self) -> Self {
+        unsafe { SDL_tanf(self) }
+    }
+
+    #[inline]
     fn sdl_acos(self) -> Self {
         unsafe { SDL_acosf(self) }
     }
@@ -152,6 +160,11 @@ impl SdlFloat for f64 {
     #[inline]
     fn sdl_cos(self) -> Self {
         unsafe { SDL_cos(self) }
+    }
+
+    #[inline]
+    fn sdl_tan(self) -> Self {
+        unsafe { SDL_tan(self) }
     }
 
     #[inline]

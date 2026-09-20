@@ -1,13 +1,16 @@
 use nostd::alloc::vec::Vec;
 use nostd::collections::HashMap;
+use sdl3::gpu::Device;
 use sdl3::window::Window;
 use traccia::error;
 use traccia::warn;
 
+use crate::assets::AssetServer;
 use crate::context::UserContext;
 use crate::event::AppOutboxes;
 use crate::input::Input;
 use crate::render::Draw;
+use crate::render::Renderer;
 use crate::scene::BoxedScene;
 use crate::scene::SceneBuilder;
 use crate::scene::SceneId;
@@ -31,12 +34,14 @@ pub enum UpdatePhase {
 pub struct WindowState {
     pub time: TimeData,
     pub ctx: UserContext,
+    pub renderer: Renderer,
     pub scenes: HashMap<SceneId, SceneSlot>,
     pub active_scenes: Vec<SceneId>,
 }
 
 impl WindowState {
     pub fn init(
+        device: &Device,
         window: &Window,
         scenes: HashMap<SceneId, SceneSlot>,
         active_scenes: Vec<SceneId>,
@@ -49,6 +54,7 @@ impl WindowState {
         Self {
             time: TimeData::default(),
             ctx,
+            renderer: Renderer::new(device.share(), window.pixel_size()),
             scenes,
             active_scenes,
         }
@@ -64,7 +70,13 @@ impl WindowState {
         self.ctx.window_data.sync(window);
     }
 
-    pub fn load_scene(&mut self, scene_id: SceneId, outboxes: &mut AppOutboxes, input: &Input) {
+    pub fn load_scene(
+        &mut self,
+        scene_id: SceneId,
+        outboxes: &mut AppOutboxes,
+        input: &Input,
+        assets: &mut AssetServer,
+    ) {
         let Self { ctx, scenes, .. } = self;
 
         let Some(slot) = scenes.get_mut(&scene_id) else {
@@ -73,30 +85,42 @@ impl WindowState {
         };
 
         if slot.scene.is_none() {
-            slot.scene = Some((slot.builder)(&mut ctx.for_load(outboxes, input)));
+            slot.scene = Some((slot.builder)(&mut ctx.for_load(outboxes, input, assets)));
         }
     }
 
-    pub fn unload_scene(&mut self, scene_id: SceneId, outboxes: &mut AppOutboxes, input: &Input) {
+    pub fn unload_scene(
+        &mut self,
+        scene_id: SceneId,
+        outboxes: &mut AppOutboxes,
+        input: &Input,
+        assets: &mut AssetServer,
+    ) {
         let Some(slot) = self.scenes.get_mut(&scene_id) else {
             error!("Trying to unload an invalid scene: {}", scene_id);
             return;
         };
 
         if let Some(ref mut scene) = slot.scene {
-            scene.unload(&mut self.ctx.for_load(outboxes, input));
+            scene.unload(&mut self.ctx.for_load(outboxes, input, assets));
         }
 
         slot.scene = None;
     }
 
-    pub fn activate_scene(&mut self, scene_id: SceneId, outboxes: &mut AppOutboxes, input: &Input) {
+    pub fn activate_scene(
+        &mut self,
+        scene_id: SceneId,
+        outboxes: &mut AppOutboxes,
+        input: &Input,
+        assets: &mut AssetServer,
+    ) {
         if !self.scenes.contains_key(&scene_id) {
             error!("Trying to activate an invalid scene: {}", scene_id);
             return;
         }
 
-        self.load_scene(scene_id, outboxes, input);
+        self.load_scene(scene_id, outboxes, input, assets);
 
         if !self.active_scenes.contains(&scene_id) {
             self.active_scenes.push(scene_id);
@@ -107,9 +131,14 @@ impl WindowState {
         self.active_scenes.retain(|id| &scene_id != id);
     }
 
-    pub fn load_active_scenes(&mut self, outboxes: &mut AppOutboxes, input: &Input) {
+    pub fn load_active_scenes(
+        &mut self,
+        outboxes: &mut AppOutboxes,
+        input: &Input,
+        assets: &mut AssetServer,
+    ) {
         for id in self.active_scenes.clone() {
-            self.load_scene(id, outboxes, input);
+            self.load_scene(id, outboxes, input, assets);
         }
     }
 
@@ -118,6 +147,7 @@ impl WindowState {
         phase: UpdatePhase,
         outboxes: &mut AppOutboxes,
         input: &Input,
+        assets: &mut AssetServer,
     ) {
         #[rustfmt::skip]
         let Self { ctx, scenes, active_scenes, .. } = self;
@@ -134,13 +164,22 @@ impl WindowState {
             };
 
             match phase {
-                UpdatePhase::Fixed => scene.fixed_update(&mut ctx.for_update(outboxes, input)),
-                UpdatePhase::Unrestrained => scene.update(&mut ctx.for_update(outboxes, input)),
+                UpdatePhase::Fixed => {
+                    scene.fixed_update(&mut ctx.for_update(outboxes, input, assets))
+                }
+                UpdatePhase::Unrestrained => {
+                    scene.update(&mut ctx.for_update(outboxes, input, assets))
+                }
             }
         }
     }
 
-    pub fn draw_active_scenes(&mut self, outboxes: &mut AppOutboxes, input: &Input) {
+    pub fn draw_active_scenes(
+        &mut self,
+        outboxes: &mut AppOutboxes,
+        input: &Input,
+        assets: &AssetServer,
+    ) {
         #[rustfmt::skip]
         let Self { ctx, scenes, active_scenes, .. } = self;
 
@@ -157,7 +196,7 @@ impl WindowState {
                 continue;
             };
 
-            scene.draw(&mut ctx.for_draw(outboxes, input), &mut draw);
+            scene.draw(&mut ctx.for_draw(outboxes, input, assets), &mut draw);
         }
     }
 }

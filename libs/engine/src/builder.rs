@@ -2,6 +2,8 @@ use nostd::alloc::boxed::Box;
 use nostd::alloc::string::String;
 use nostd::alloc::vec::Vec;
 use nostd::collections::HashMap;
+use nostd::path::Path;
+use nostd::path::PathBuf;
 use traccia::debug;
 
 use crate::App;
@@ -67,14 +69,16 @@ impl WindowBuilder {
 
 pub struct AppBuilder {
     windows: Vec<WindowBuilder>,
-    root: String,
+    root: PathBuf,
+    workers: usize,
 }
 
 impl Default for AppBuilder {
     fn default() -> Self {
         Self {
             windows: Vec::new(),
-            root: String::from("."),
+            root: Path::new(".").to_path_buf(),
+            workers: 4,
         }
     }
 }
@@ -91,9 +95,14 @@ impl AppBuilder {
 
     pub fn with_root<P>(mut self, root: P) -> Self
     where
-        P: Into<String>,
+        P: Into<PathBuf>,
     {
         self.root = root.into();
+        self
+    }
+
+    pub fn with_workers(mut self, workers: usize) -> Self {
+        self.workers = workers;
         self
     }
 
@@ -101,7 +110,7 @@ impl AppBuilder {
         debug!("Requested creation of {} window(s)", self.windows.len());
         debug!("Resolved root path: {}", self.root);
 
-        let mut app = App::new(self.root);
+        let mut app = App::new(self.root, self.workers);
 
         for builder in self.windows {
             app.requested_windows.push(builder)

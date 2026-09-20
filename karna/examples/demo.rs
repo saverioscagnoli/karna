@@ -4,14 +4,18 @@ use karna::prelude::*;
 
 const DEMO_SCENE: SceneId = SceneId::new_str("DEMO");
 
-struct DemoScene;
+struct DemoScene {
+    pcb: Handle<Image>,
+}
 
 impl Scene for DemoScene {
     fn load(ctx: &mut LoadContext) -> Self
     where
         Self: Sized,
     {
-        Self
+        Self {
+            pcb: ctx.assets.load_image("assets/pcb.png"),
+        }
     }
 
     fn fixed_update(&mut self, ctx: &mut UpdateContext) {}
@@ -24,7 +28,7 @@ impl Scene for DemoScene {
 fn main() {
     _ = traccia::init(
         traccia::Config::default()
-            .with_min_level(traccia::LevelFilter::Trace)
+            .with_min_level(traccia::LevelFilter::Debug)
             .with_target(SdlTarget::default()),
     );
 
@@ -36,6 +40,7 @@ fn main() {
                 .with_scene::<DemoScene>(DEMO_SCENE)
                 .with_active_scene(DEMO_SCENE),
         )
+        .with_root("karna/examples/")
         .build()
         .run();
 }

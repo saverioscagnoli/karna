@@ -14,6 +14,4 @@ pub mod sync;
 pub mod thread;
 pub mod time;
 
-pub mod vec {
-    pub use alloc::vec::*;
-}
+pub use alloc::vec;

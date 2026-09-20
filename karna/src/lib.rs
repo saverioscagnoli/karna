@@ -25,7 +25,11 @@ pub use nostd::log;
 
 pub mod prelude {
     pub use crate::*;
+    pub use engine::assets::AssetServer;
+    pub use engine::assets::Image;
     pub use input::*;
     pub use math::*;
+    pub use nostd::collections::Handle;
+    pub use nostd::collections::SlotMap;
     pub use nostd::log::*;
 }

@@ -1,501 +1,173 @@
-use nostd::alloc::sync::Arc;
+use nostd::alloc::format;
 use nostd::alloc::vec::Vec;
-use nostd::alloc::vec::{self};
-use nostd::collections::Handle;
+use nostd::vec;
+use sdl3::gpu::Device;
+use sdl3::gpu::Texture;
+use sdl3::gpu::TextureCopy;
+use sdl3::gpu::TextureDesc;
+use sdl3::gpu::TextureLocation;
+use sdl3::gpu::TextureRegion;
+use sdl3::gpu::TextureUsage;
+use sdl3::image::DecodedImage;
+use traccia::debug;
+use traccia::error;
 
 use crate::assets::image::Image;
-use crate::assets::packer::PagePacker;
+use crate::assets::packer::Packer;
+use crate::assets::packer::Placement;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DirtyRect {
-    pub x: u32,
-    pub y: u32,
-    pub w: u32,
-    pub h: u32,
-}
-
-impl DirtyRect {
-    fn union(self, other: Self) -> Self {
-        let x = self.x.min(other.x);
-        let y = self.y.min(other.y);
-        let right = (self.x + self.w).max(other.x + other.w);
-        let bottom = (self.y + self.h).max(other.y + other.h);
-
-        Self {
-            x,
-            y,
-            w: right - x,
-            h: bottom - y,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct PageData {
-    pixels: Arc<Vec<u8>>,
-    extent: u32,
-    dirty: Option<DirtyRect>,
-}
-
-impl PageData {
-    fn new(extent: u32) -> Self {
-        Self {
-            pixels: Arc::new(vec![0u8; (extent as usize).pow(2) * 4]),
-            extent,
-            dirty: None,
-        }
-    }
-
-    fn mark(&mut self, rect: DirtyRect) {
-        if rect.w == 0 || rect.h == 0 {
-            return;
-        }
-
-        self.dirty = Some(match self.dirty {
-            Some(current) => current.union(rect),
-            None => rect,
-        });
-    }
-
-    fn take_dirty(&mut self) -> Option<DirtyRect> {
-        self.dirty.take()
-    }
-
-    fn region_pixels(&self, rect: DirtyRect) -> Vec<u8> {
-        let stride = self.extent as usize * 4;
-        let row_bytes = rect.w as usize * 4;
-        let mut out = Vec::with_capacity(row_bytes * rect.h as usize);
-
-        for row in 0..rect.h as usize {
-            let start = (rect.y as usize + row) * stride + rect.x as usize * 4;
-            out.extend_from_slice(&self.pixels[start..start + row_bytes]);
-        }
-
-        out
-    }
-
-    fn write(&mut self, data: &[u8], origin: math::Vector2<u32>, size: math::Size<u32>) {
-        let pixels = Arc::make_mut(&mut self.pixels);
-        let row_bytes = (size.width * 4) as usize;
-
-        for row in 0..size.height {
-            let src = (row * size.width * 4) as usize;
-            let dst = (((origin.y + row) * self.extent + origin.x) * 4) as usize;
-
-            pixels[dst..dst + row_bytes].copy_from_slice(&data[src..src + row_bytes]);
-        }
-
-        self.mark(DirtyRect {
-            x: origin.x,
-            y: origin.y,
-            w: size.width,
-            h: size.height,
-        });
-    }
-
-    fn extrude(&mut self, origin: math::Vector2<u32>, size: math::Size<u32>, pad: u32) {
-        if pad == 0 || size.width == 0 || size.height == 0 {
-            return;
-        }
-
-        let extent = self.extent;
-        let (w, h) = (size.width, size.height);
-        let (x0, y0) = (origin.x, origin.y);
-
-        let left = pad.min(x0) as usize;
-        let top = pad.min(y0) as usize;
-        let right = pad.min(extent - (x0 + w)) as usize;
-        let bottom = pad.min(extent - (y0 + h)) as usize;
-
-        let padded = DirtyRect {
-            x: x0 - left as u32,
-            y: y0 - top as u32,
-            w: w + left as u32 + right as u32,
-            h: h + top as u32 + bottom as u32,
-        };
-
-        let stride = extent as usize * 4;
-        let pixels = Arc::make_mut(&mut self.pixels);
-        let (x0, y0, w, h) = (x0 as usize, y0 as usize, w as usize, h as usize);
-
-        for row in y0..y0 + h {
-            let base = row * stride;
-            let l = base + x0 * 4;
-            let r = base + (x0 + w - 1) * 4;
-
-            let first: [u8; 4] = pixels[l..l + 4].try_into().expect("Failed to cast");
-            let last: [u8; 4] = pixels[r..r + 4].try_into().expect("Failed to cast");
-
-            for p in 1..=left {
-                let o = base + (x0 - p) * 4;
-                pixels[o..o + 4].copy_from_slice(&first);
-            }
-
-            for p in 1..=right {
-                let o = base + (x0 + w - 1 + p) * 4;
-                pixels[o..o + 4].copy_from_slice(&last);
-            }
-        }
-
-        let span = (left + w + right) * 4;
-        let x = (x0 - left) * 4;
-
-        for p in 1..=top {
-            let src = y0 * stride + x;
-            pixels.copy_within(src..src + span, (y0 - p) * stride + x);
-        }
-
-        for p in 1..=bottom {
-            let src = (y0 + h - 1) * stride + x;
-            pixels.copy_within(src..src + span, (y0 + h - 1 + p) * stride + x);
-        }
-
-        self.mark(padded);
-    }
-}
-
-pub enum PageKind {
-    Shared,
-    Dedicated(Handle<Image>),
-}
-
-pub struct Page {
-    data: PageData,
-    packer: PagePacker,
-    kind: PageKind,
-    filter: Filter,
-    texture: Option<Texture>,
-}
-
-impl Page {
-    fn new(extent: u32, kind: PageKind, filter: Filter) -> Self {
-        let config = config();
-
-        Self {
-            data: PageData::new(extent),
-            packer: PagePacker::new(extent, config.asset.atlas_padding),
-            kind,
-            filter,
-            texture: None,
-        }
-    }
-
-    fn shared(extent: u32, filter: Filter) -> Self {
-        Self::new(extent, PageKind::Shared, filter)
-    }
-
-    fn dedicated(extent: u32, owner: Handle<Image>, filter: Filter) -> Self {
-        Self::new(extent, PageKind::Dedicated(owner), filter)
-    }
-
-    fn dirty(&self) -> bool {
-        self.data.dirty.is_some()
-    }
-}
-
-pub struct ImageView<'a> {
-    pub pixels: &'a [u8],
-    pub stride: usize,
-    pub width: u32,
-    pub height: u32,
-}
-
-impl<'a> ImageView<'a> {
-    pub fn width(&self) -> u32 {
-        self.width
-    }
-
-    pub fn height(&self) -> u32 {
-        self.height
-    }
-
-    pub fn stride(&self) -> usize {
-        self.stride
-    }
-
-    pub fn row(&self, y: u32) -> &'a [u8] {
-        assert!(
-            y < self.height,
-            "row {y} is out of bounds for a {}px tall image",
-            self.height
-        );
-
-        let start = y as usize * self.stride;
-
-        &self.pixels[start..start + self.width as usize * 4]
-    }
-
-    pub fn rows(&self) -> impl Iterator<Item = &'a [u8]> + '_ {
-        (0..self.height).map(|y| self.row(y))
-    }
-
-    pub fn pixel(&self, x: u32, y: u32) -> [u8; 4] {
-        assert!(
-            x < self.width,
-            "column {x} is out of bounds for a {}px wide image",
-            self.width
-        );
-
-        let row = self.row(y);
-        let o = x as usize * 4;
-
-        [row[o], row[o + 1], row[o + 2], row[o + 3]]
-    }
-
-    pub fn to_rgba8(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(self.width as usize * self.height as usize * 4);
-
-        for row in self.rows() {
-            out.extend_from_slice(row);
-        }
-
-        out
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct PageId(usize);
-
-impl PageId {
-    pub fn index(self) -> usize {
-        self.0
-    }
-}
+const PADDING: u32 = 1;
 
 pub struct TextureAtlas {
-    pages: Vec<Page>,
+    device: Device,
+    size: u32,
+    texture: Texture,
+    pages: Vec<Packer>,
+    capacity: u32,
+    max_pages: u32,
+    generation: u32,
 }
 
 impl TextureAtlas {
-    pub fn new() -> Self {
-        Self { pages: Vec::new() }
+    pub fn new(device: Device, size: u32, max_pages: u32) -> Self {
+        assert!(max_pages >= 1, "atlas needs at least one page");
+
+        let texture = Self::alloc_texture(&device, size, 1, 0);
+
+        Self {
+            device,
+            size,
+            texture,
+            pages: vec![Packer::new(size, PADDING)],
+            capacity: 1,
+            max_pages,
+            generation: 0,
+        }
     }
 
-    fn padding() -> u32 {
-        config().asset.atlas_padding
+    pub fn texture(&self) -> &Texture {
+        &self.texture
     }
 
-    fn page_size() -> u32 {
-        config().asset.atlas_page_size
+    pub fn size(&self) -> u32 {
+        self.size
     }
 
-    fn shared_capacity() -> u32 {
-        Self::page_size() - Self::padding() * 2
+    pub fn pages(&self) -> u32 {
+        self.pages.len() as u32
+    }
+    pub fn generation(&self) -> u32 {
+        self.generation
     }
 
-    pub fn page_texture(&self, page: PageId) -> Option<&Texture> {
-        self.pages.get(page.index())?.texture.as_ref()
-    }
+    /// Packs `image` into the atlas and uploads its pixels.
+    ///
+    /// Returns `None` when the image is larger than a page, or when every page
+    /// is full and no more can be opened; either way the caller has to fall
+    /// back to a standalone texture.
+    pub fn insert(&mut self, image: &DecodedImage) -> Option<Image> {
+        let (w, h) = (image.width(), image.heigth());
 
-    pub fn page_filter(&self, page: PageId) -> Option<Filter> {
-        Some(self.pages.get(page.index())?.filter)
-    }
+        if w == 0 || h == 0 || w + PADDING > self.size || h + PADDING > self.size {
+            return None;
+        }
 
-    pub fn page_count(&self) -> usize {
-        self.pages.len()
-    }
+        let (page, placement) = self.alloc(w, h)?;
 
-    pub fn page_image(&self, index: usize) -> Option<Image> {
-        let page = self.pages.get(index)?;
-        let extent = page.data.extent;
-
-        Some(Image {
-            page: PageId(index),
-            origin: math::Vector2::new(0, 0),
-            uv_min: math::Vector2::new(0.0, 0.0),
-            uv_max: math::Vector2::new(1.0, 1.0),
-            size: math::Size::new(extent, extent),
-        })
-    }
-
-    pub fn view(&self, image: &Image) -> ImageView<'_> {
-        let Some(page) = self.pages.get(image.page.index()) else {
-            fatal!(
-                "Image references a missing atlas page: {}",
-                image.page.index()
-            );
+        let region = TextureRegion {
+            mip_level: 0,
+            layer: page,
+            x: placement.x,
+            y: placement.y,
+            w,
+            h,
         };
 
-        let extent = page.data.extent as usize;
-        let stride = extent * 4;
-
-        if image.size.width == 0 || image.size.height == 0 {
-            return ImageView {
-                pixels: &[],
-                stride,
-                width: 0,
-                height: 0,
-            };
+        if let Err(e) = self
+            .device
+            .upload_texture_region(&self.texture, region, image.pixels())
+        {
+            error!("Failed to upload image to atlas page {}: {}", page, e);
+            return None;
         }
 
-        let start = (image.origin.y as usize * extent + image.origin.x as usize) * 4;
-        let len = (image.size.height as usize - 1) * stride + image.size.width as usize * 4;
-
-        ImageView {
-            pixels: &page.data.pixels[start..start + len],
-            stride,
-            width: image.size.width,
-            height: image.size.height,
-        }
+        Some(self.image(page, placement.x, placement.y, w, h))
     }
 
-    pub fn upload_dirty(&mut self, device: &Device) {
-        let dirty = self
-            .pages
-            .iter()
-            .enumerate()
-            .filter(|(_, page)| page.dirty())
-            .map(|(i, _)| i)
-            .collect::<Vec<_>>();
-
-        if dirty.is_empty() {
-            return;
-        }
-
-        for &i in &dirty {
-            let page = &mut self.pages[i];
-            let extent = page.data.extent;
-
-            if page.texture.is_none() {
-                page.texture = Some(Texture::new(
-                    device.clone(),
-                    format!("atlas-page-{i}"),
-                    TextureDesc::rgba8(extent, extent),
-                ));
-
-                page.data.mark(DirtyRect {
-                    x: 0,
-                    y: 0,
-                    w: extent,
-                    h: extent,
-                });
+    fn alloc(&mut self, w: u32, h: u32) -> Option<(u32, Placement)> {
+        for (i, packer) in self.pages.iter_mut().enumerate() {
+            if let Some(placement) = packer.insert(w, h) {
+                return Some((i as u32, placement));
             }
         }
 
-        let staged = dirty
-            .iter()
-            .filter_map(|&i| {
-                let page = &mut self.pages[i];
-                let rect = page.data.take_dirty()?;
+        let next = self.pages.len() as u32;
 
-                Some((i, rect, page.data.region_pixels(rect)))
+        if next >= self.max_pages {
+            return None;
+        }
+
+        if next == self.capacity && !self.grow() {
+            return None;
+        }
+
+        let mut packer = Packer::new(self.size, PADDING);
+        let placement = packer.insert(w, h)?;
+        self.pages.push(packer);
+
+        Some((next, placement))
+    }
+
+    fn grow(&mut self) -> bool {
+        let capacity = self.capacity.saturating_mul(2).min(self.max_pages);
+
+        if capacity <= self.capacity {
+            return false;
+        }
+
+        let generation = self.generation + 1;
+        let grown = Self::alloc_texture(&self.device, self.size, capacity, generation);
+
+        let copies = (0..self.capacity)
+            .map(|layer| TextureCopy {
+                src: &self.texture,
+                src_at: TextureLocation::layer(layer),
+                dst: &grown,
+                dst_at: TextureLocation::layer(layer),
+                w: self.size,
+                h: self.size,
             })
             .collect::<Vec<_>>();
 
-        let uploads = staged
-            .iter()
-            .filter_map(|(i, rect, pixels)| {
-                let texture = self.pages[*i].texture.as_ref()?;
-
-                let region = TextureRegion {
-                    mip_level: 0,
-                    layer: 0,
-                    x: rect.x,
-                    y: rect.y,
-                    w: rect.w,
-                    h: rect.h,
-                };
-
-                Some((texture, region, pixels.as_slice()))
-            })
-            .collect::<Vec<_>>();
-
-        if let Err(err) = device.upload_textures(&uploads) {
-            fatal!("Atlas upload failed: {:?}", err);
+        if let Err(e) = self.device.copy_textures(&copies) {
+            error!("Failed to grow atlas to {} pages: {}", capacity, e);
+            return false;
         }
+
+        debug!("Atlas grown from {} to {} pages.", self.capacity, capacity);
+
+        self.texture = grown;
+        self.capacity = capacity;
+        self.generation = generation;
+
+        true
     }
 
-    fn place(
-        page: &mut Page,
-        index: usize,
-        pixels: &[u8],
-        size: math::Size<u32>,
-        origin: math::Vector2<u32>,
-    ) -> Image {
-        page.data.write(pixels, origin, size);
-        page.data.extrude(origin, size, Self::padding());
+    fn alloc_texture(device: &Device, size: u32, layers: u32, generation: u32) -> Texture {
+        let desc = TextureDesc::rgba8_array(size, size, layers).with_usage(TextureUsage::SAMPLER);
 
-        let extent = page.data.extent as f32;
-
-        Image {
-            page: PageId(index),
-            origin,
-            uv_min: math::Vector2::new(origin.x as f32 / extent, origin.y as f32 / extent),
-            uv_max: math::Vector2::new(
-                (origin.x + size.width) as f32 / extent,
-                (origin.y + size.height) as f32 / extent,
-            ),
-            size,
-        }
+        Texture::new(device.share(), format!("atlas#{}", generation), desc)
     }
 
-    pub fn insert(&mut self, dec: &DecodedImage, owner: Handle<Image>, filter: Filter) -> Image {
-        self.insert_rgba(&dec.rgba, dec.size, owner, filter)
-    }
+    fn image(&self, page: u32, x: u32, y: u32, w: u32, h: u32) -> Image {
+        // Half texel inset, so linear filtering never reaches into the gutter.
+        let s = self.size as f32;
 
-    pub fn insert_rgba(
-        &mut self,
-        pixels: &[u8],
-        size: math::Size<u32>,
-        owner: Handle<Image>,
-        filter: Filter,
-    ) -> Image {
-        let expected = (size.width * size.height * 4) as usize;
-
-        if pixels.len() != expected {
-            fatal!(
-                "Atlas insert: expected {} bytes for a {}x{} image, got {}",
-                expected,
-                size.width,
-                size.height,
-                pixels.len()
-            );
-        }
-
-        let capacity = Self::shared_capacity();
-
-        if size.width > capacity || size.height > capacity {
-            let extent = size.width.max(size.height) + Self::padding() * 2;
-            let index = self.pages.len();
-            let mut page = Page::dedicated(extent, owner, filter);
-
-            let origin = page
-                .packer
-                .insert(size.width, size.height)
-                .expect("a dedicated page always fits its own image");
-
-            let origin = math::Vector2::new(origin.x, origin.y);
-            let image = Self::place(&mut page, index, pixels, size, origin);
-            self.pages.push(page);
-
-            return image;
-        }
-
-        for index in 0..self.pages.len() {
-            let page = &mut self.pages[index];
-
-            if !matches!(page.kind, PageKind::Shared) || page.filter != filter {
-                continue;
-            }
-
-            if let Some(origin) = page.packer.insert(size.width, size.height) {
-                let origin = math::Vector2::new(origin.x, origin.y);
-                return Self::place(page, index, pixels, size, origin);
-            }
-        }
-
-        let index = self.pages.len();
-        let mut page = Page::shared(Self::page_size(), filter);
-
-        let origin = page
-            .packer
-            .insert(size.width, size.height)
-            .expect("an empty shared page fits anything within shared_capacity");
-
-        let origin = math::Vector2::new(origin.x, origin.y);
-        let image = Self::place(&mut page, index, pixels, size, origin);
-        self.pages.push(page);
-
-        image
+        Image::new(
+            math::Size::new(w, h),
+            page,
+            math::vec2!((x as f32 + 0.5) / s, (y as f32 + 0.5) / s),
+            math::vec2!(((x + w) as f32 - 0.5) / s, ((y + h) as f32 - 0.5) / s),
+        )
     }
 }

@@ -9,6 +9,7 @@ use alloc::vec::Vec;
 use sdl3_sys::SDL_AcquireGPUCommandBuffer;
 use sdl3_sys::SDL_BeginGPUCopyPass;
 use sdl3_sys::SDL_CalculateGPUTextureFormatSize;
+use sdl3_sys::SDL_CopyGPUTextureToTexture;
 use sdl3_sys::SDL_CreateGPUSampler;
 use sdl3_sys::SDL_CreateGPUTexture;
 use sdl3_sys::SDL_EndGPUCopyPass;
@@ -21,6 +22,7 @@ use sdl3_sys::SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
 use sdl3_sys::SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
 use sdl3_sys::SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 use sdl3_sys::SDL_GPU_TEXTURETYPE_2D;
+use sdl3_sys::SDL_GPU_TEXTURETYPE_2D_ARRAY;
 use sdl3_sys::SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
 use sdl3_sys::SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ;
 use sdl3_sys::SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE;
@@ -36,6 +38,7 @@ use sdl3_sys::SDL_GPUSamplerMipmapMode;
 use sdl3_sys::SDL_GPUTexture;
 use sdl3_sys::SDL_GPUTextureCreateInfo;
 use sdl3_sys::SDL_GPUTextureFormat;
+use sdl3_sys::SDL_GPUTextureLocation;
 use sdl3_sys::SDL_GPUTextureRegion;
 use sdl3_sys::SDL_GPUTextureSamplerBinding;
 use sdl3_sys::SDL_GPUTextureTransferInfo;
@@ -121,6 +124,16 @@ impl TextureDesc {
             layers: 1,
             levels: 1,
             sample_count: SDL_GPU_SAMPLECOUNT_1,
+        }
+    }
+
+    /// A `width x height` 2D array with `layers` slices, all sampled through
+    /// one binding.
+    pub fn rgba8_array(width: u32, height: u32, layers: u32) -> Self {
+        Self {
+            kind: SDL_GPU_TEXTURETYPE_2D_ARRAY,
+            layers,
+            ..Self::rgba8(width, height)
         }
     }
 
@@ -354,6 +367,33 @@ impl TextureRegion {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TextureLocation {
+    pub mip_level: u32,
+    pub layer: u32,
+    pub x: u32,
+    pub y: u32,
+}
+
+impl TextureLocation {
+    pub fn layer(layer: u32) -> Self {
+        Self {
+            layer,
+            ..Self::default()
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct TextureCopy<'a> {
+    pub src: &'a Texture,
+    pub src_at: TextureLocation,
+    pub dst: &'a Texture,
+    pub dst_at: TextureLocation,
+    pub w: u32,
+    pub h: u32,
+}
+
 impl Device {
     pub fn upload_texture(&self, dst: &Texture, pixels: &[u8]) -> Result<(), SdlError> {
         self.upload_texture_region(dst, TextureRegion::full(dst), pixels)
@@ -488,6 +528,68 @@ impl Device {
                 };
 
                 SDL_UploadToGPUTexture(pass, &source, &destination, false);
+            }
+
+            SDL_EndGPUCopyPass(pass);
+
+            if !SDL_SubmitGPUCommandBuffer(cmd) {
+                return Err(get_error());
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn copy_texture(&self, copy: TextureCopy<'_>) -> Result<(), SdlError> {
+        self.copy_textures(&[copy])
+    }
+
+    /// Texture to texture copies, all in one copy pass. Both textures must
+    /// share a format, and neither may be a depth/stencil target.
+    pub fn copy_textures(&self, copies: &[TextureCopy<'_>]) -> Result<(), SdlError> {
+        if copies.is_empty() {
+            return Ok(());
+        }
+
+        for copy in copies {
+            assert_eq!(
+                copy.src.format(),
+                copy.dst.format(),
+                "cannot copy '{}' into '{}': formats differ",
+                copy.src.label(),
+                copy.dst.label()
+            );
+        }
+
+        unsafe {
+            let cmd = SDL_AcquireGPUCommandBuffer(self.0.as_ptr());
+
+            if cmd.is_null() {
+                return Err(get_error());
+            }
+
+            let pass = SDL_BeginGPUCopyPass(cmd);
+
+            for copy in copies {
+                let source = SDL_GPUTextureLocation {
+                    texture: copy.src.raw(),
+                    mip_level: copy.src_at.mip_level,
+                    layer: copy.src_at.layer,
+                    x: copy.src_at.x,
+                    y: copy.src_at.y,
+                    z: 0,
+                };
+
+                let destination = SDL_GPUTextureLocation {
+                    texture: copy.dst.raw(),
+                    mip_level: copy.dst_at.mip_level,
+                    layer: copy.dst_at.layer,
+                    x: copy.dst_at.x,
+                    y: copy.dst_at.y,
+                    z: 0,
+                };
+
+                SDL_CopyGPUTextureToTexture(pass, &source, &destination, copy.w, copy.h, 1, false);
             }
 
             SDL_EndGPUCopyPass(pass);

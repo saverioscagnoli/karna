@@ -17,13 +17,13 @@ struct Node {
 }
 
 #[derive(Debug, Clone)]
-pub struct PagePacker {
+pub struct Packer {
     size: u32,
     padding: u32,
     nodes: Vec<Node>,
 }
 
-impl PagePacker {
+impl Packer {
     pub fn new(size: u32, padding: u32) -> Self {
         Self {
             size,

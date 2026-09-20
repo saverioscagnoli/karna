@@ -13,11 +13,11 @@ pub mod window_state;
 
 use core::mem;
 
-use nostd::alloc::string::String;
 use nostd::alloc::vec::Vec;
 use nostd::collections::HashMap;
 use nostd::log;
 use nostd::mem::SdlAllocator;
+use nostd::path::PathBuf;
 use nostd::time::Instant;
 use nostd::time::sleep_precise_until;
 use sdl3::SdlGuard;
@@ -35,6 +35,8 @@ use traccia::info;
 use traccia::trace;
 use traccia::warn;
 
+use crate::assets::AssetServer;
+use crate::assets::AssetThreadPool;
 use crate::builder::WindowBuilder;
 use crate::event::AppEvent;
 use crate::event::AppOutboxes;
@@ -64,6 +66,8 @@ pub struct App {
     windows: HashMap<WindowId, WindowEntry>,
     clock: Clock,
     input: Input,
+    assets: AssetServer,
+    assets_pool: AssetThreadPool,
     should_quit: bool,
     event_outboxes: AppOutboxes,
     event_queue: Vec<AppEvent>,
@@ -73,7 +77,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(_root: String) -> Self {
+    pub fn new(root: PathBuf, workers: usize) -> Self {
         let Ok(_sdl) = SdlGuard::init() else {
             panic!("sdl failed to init");
         };
@@ -85,6 +89,8 @@ impl App {
             panic!("failed to init gpu device");
         };
 
+        let (pool, assets) = assets::spawn(root, workers, &device);
+
         let event_outboxes = AppOutboxes::new();
 
         Self {
@@ -93,6 +99,8 @@ impl App {
             should_quit: false,
             clock: Clock::default(),
             input: Input::default(),
+            assets,
+            assets_pool: pool,
             event_queue: Vec::with_capacity(event_outboxes.total_cap()),
             event_outboxes,
             device,
@@ -122,7 +130,7 @@ impl App {
             })
             .collect::<HashMap<SceneId, SceneSlot>>();
 
-        let state = WindowState::init(&sdl_window, scenes, active_scenes);
+        let state = WindowState::init(&self.device, &sdl_window, scenes, active_scenes);
 
         self.windows.insert(
             sdl_window.id(),
@@ -299,12 +307,13 @@ impl App {
             entry.state.sync_time(&self.clock, &entry.pacer);
             entry
                 .state
-                .load_active_scenes(&mut self.event_outboxes, &self.input);
+                .load_active_scenes(&mut self.event_outboxes, &self.input, &mut self.assets);
         }
 
         while !self.should_quit {
             self.drain_sdl_events();
             self.drain_app_events();
+            self.assets.poll();
 
             if self.should_quit {
                 break;
@@ -322,6 +331,7 @@ impl App {
                         UpdatePhase::Fixed,
                         &mut self.event_outboxes,
                         &self.input,
+                        &mut self.assets,
                     );
                 }
 
@@ -347,10 +357,11 @@ impl App {
                     UpdatePhase::Unrestrained,
                     &mut self.event_outboxes,
                     &self.input,
+                    &mut self.assets,
                 );
                 entry
                     .state
-                    .draw_active_scenes(&mut self.event_outboxes, &self.input);
+                    .draw_active_scenes(&mut self.event_outboxes, &self.input, &self.assets);
 
                 entry.sdl_window.clear(Color::RED);
                 entry.state.sync_window(&entry.sdl_window);
@@ -377,5 +388,6 @@ impl App {
         }
 
         info!("App lifecycle ended, exiting.");
+        self.assets_pool.shutdown(self.assets);
     }
 }

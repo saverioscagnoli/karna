@@ -6,13 +6,14 @@ struct Camera { float4x4 view_projection; };
 struct VertexIn {
     float3 position [[attribute(0)]];
     float4 color    [[attribute(1)]];
-    float2 uv       [[attribute(2)]];
+    // .xy = uv within the page, .z = atlas page (array slice)
+    float3 uv       [[attribute(2)]];
 };
 
 struct VertexOut {
     float4 position [[position]];
     float4 color;
-    float2 uv;
+    float3 uv;
 };
 
 vertex VertexOut main0(VertexIn in [[stage_in]],
@@ -26,8 +27,8 @@ vertex VertexOut main0(VertexIn in [[stage_in]],
 }
 
 fragment float4 main0(VertexOut in [[stage_in]],
-                      texture2d<float> atlas_page [[texture(0)]],
+                      texture2d_array<float> atlas_page [[texture(0)]],
                       sampler atlas_smp [[sampler(0)]])
 {
-    return in.color * atlas_page.sample(atlas_smp, in.uv);
+    return in.color * atlas_page.sample(atlas_smp, in.uv.xy, uint(in.uv.z + 0.5));
 }

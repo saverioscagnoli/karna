@@ -1,3 +1,4 @@
+use crate::assets::AssetServer;
 use crate::event::AppOutboxes;
 use crate::input::Input;
 use crate::time::Time;
@@ -15,6 +16,7 @@ impl UserContext {
         &'a mut self,
         outboxes: &'a mut AppOutboxes,
         input: &'a Input,
+        assets: &'a mut AssetServer,
     ) -> LoadContext<'a> {
         let window_id = self.window_data.id();
         let AppOutboxes { time, window } = outboxes;
@@ -30,14 +32,15 @@ impl UserContext {
                 outbox: time,
             },
             input,
+            assets,
         }
     }
 
     pub fn for_update<'a>(
         &'a mut self,
         outboxes: &'a mut AppOutboxes,
-
         input: &'a Input,
+        assets: &'a mut AssetServer,
     ) -> UpdateContext<'a> {
         let window_id = self.window_data.id();
         let AppOutboxes { window, time } = outboxes;
@@ -53,14 +56,15 @@ impl UserContext {
                 outbox: time,
             },
             input,
+            assets,
         }
     }
 
     pub fn for_draw<'a>(
         &'a mut self,
         outboxes: &'a mut AppOutboxes,
-
         input: &'a Input,
+        assets: &'a AssetServer,
     ) -> DrawContext<'a> {
         let window_id = self.window_data.id();
         let AppOutboxes { window, time } = outboxes;
@@ -76,6 +80,7 @@ impl UserContext {
                 outbox: time,
             },
             input,
+            assets,
         }
     }
 }
@@ -84,16 +89,19 @@ pub struct LoadContext<'a> {
     pub window: Window<'a>,
     pub time: Time<'a>,
     pub input: &'a Input,
+    pub assets: &'a mut AssetServer,
 }
 
 pub struct UpdateContext<'a> {
     pub window: Window<'a>,
     pub time: Time<'a>,
     pub input: &'a Input,
+    pub assets: &'a mut AssetServer,
 }
 
 pub struct DrawContext<'a> {
     pub window: Window<'a>,
     pub time: Time<'a>,
     pub input: &'a Input,
+    pub assets: &'a AssetServer,
 }

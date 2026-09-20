@@ -7,13 +7,14 @@ struct Input
 {
     float3 position : TEXCOORD0;
     float4 color    : TEXCOORD1;
-    float2 uv       : TEXCOORD2;
+    // .xy = uv within the page, .z = atlas page (array layer)
+    float3 uv       : TEXCOORD2;
 };
 
 struct Output
 {
     float4 color    : TEXCOORD0;
-    float2 uv       : TEXCOORD1;
+    float3 uv       : TEXCOORD1;
     float4 position : SV_Position;
 };
 
