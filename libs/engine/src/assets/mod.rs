@@ -25,9 +25,10 @@ use sdl3::image::DecodedImage;
 use traccia::error;
 use traccia::info;
 
-use crate::assets::image::ImageRegistry;
-pub use crate::assets::worker::AssetThreadPool;
 use crate::assets::worker::worker;
+
+pub use crate::assets::image::ImageRegistry;
+pub use crate::assets::worker::AssetThreadPool;
 
 pub enum AssetKind {
     Image,
@@ -98,6 +99,10 @@ impl AssetServer {
 
     pub fn bake_image(&mut self, bytes: &[u8]) -> Handle<Image> {
         self.images.bake(bytes.to_vec())
+    }
+
+    pub(crate) fn images(&self) -> &ImageRegistry {
+        &self.images
     }
 
     pub(crate) fn poll(&mut self) {

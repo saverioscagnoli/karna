@@ -21,7 +21,7 @@ use sdl3_sys::SDL_MAJOR_VERSION;
 use sdl3_sys::SDL_MICRO_VERSION;
 use sdl3_sys::SDL_MINOR_VERSION;
 use sdl3_sys::SDL_Quit;
-use sdl3_sys::SdlError;
+pub use sdl3_sys::SdlError;
 
 pub use sdl3_sys::get_error;
 

@@ -5,6 +5,8 @@ use nostd::alloc::vec::Vec;
 use nostd::collections::HashMap;
 use utils::fnv1a;
 
+use crate::render::ImmediateVertex;
+
 #[derive(Hash)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Layer(u64);
@@ -31,8 +33,11 @@ impl Default for Layer {
     }
 }
 
+#[derive(Default)]
+#[derive(Debug, Clone)]
 pub struct LayerData {
-    // Immediate data...
+    pub vertices: Vec<ImmediateVertex>,
+    pub indices: Vec<u32>,
 }
 
 pub struct LayerMap<T> {
@@ -78,6 +83,15 @@ impl<T> LayerMap<T> {
         }
     }
 
+    pub fn get(&self, layer: Layer) -> Option<&T> {
+        match layer {
+            Layer::WORLD => Some(&self.world),
+            Layer::UI => Some(&self.ui),
+            Layer::DEBUG => Some(&self.debug),
+            l => self.other.get(&l),
+        }
+    }
+
     pub fn contains(&self, layer: Layer) -> bool {
         matches!(layer, Layer::WORLD | Layer::UI | Layer::DEBUG) || self.other.contains_key(&layer)
     }
@@ -88,6 +102,13 @@ impl<T> LayerMap<T> {
         }
 
         self.other.insert(layer, value);
+    }
+
+    /// Every layer's value, built-ins included, in no particular order.
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        [&mut self.world, &mut self.ui, &mut self.debug]
+            .into_iter()
+            .chain(self.other.values_mut())
     }
 
     pub fn order(&self) -> &[Layer] {

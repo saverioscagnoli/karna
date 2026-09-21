@@ -12,16 +12,18 @@ path = "src/lib.rs"
 
 [features]
 default = ["build-from-source"]
-# Build SDL and SDL_image from the vendored sources under vendor/ rather than
+# Build SDL, SDL_image and SDL_shadercross from the vendored sources under vendor/ rather than
 # linking system copies. See karna-sdl3-sys for details.
 build-from-source = [
     "karna-sdl3-sys/build-from-source",
     "karna-sdl3-image-sys/build-from-source",
+    "karna-sdl3-shadercross-sys/build-from-source",
 ]
 
 [dependencies]
 karna-sdl3-sys.workspace = true
 karna-sdl3-image-sys.workspace = true
+karna-sdl3-shadercross-sys.workspace = true
 karna-nostd.workspace = true
 karna-math.workspace = true
 traccia.workspace = true

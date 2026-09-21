@@ -14,7 +14,7 @@ impl Scene for DemoScene {
         Self: Sized,
     {
         Self {
-            pcb: ctx.assets.load_image("assets/pcb.png"),
+            pcb: ctx.assets.load_image("assets/pcb2.png"),
         }
     }
 
@@ -22,7 +22,16 @@ impl Scene for DemoScene {
 
     fn update(&mut self, ctx: &mut UpdateContext) {}
 
-    fn draw(&mut self, ctx: &mut DrawContext, draw: &mut Draw) {}
+    fn draw(&mut self, ctx: &mut DrawContext, draw: &mut Draw) {
+        draw.set_color(Color::RED).rect(10.0, 10.0, 100.0, 50.0);
+        draw.set_color(Color::CYAN).circle(300.0, 200.0, 40.0);
+        draw.set_color(Color::YELLOW).line(20.0, 300.0, 400.0, 350.0, 3.0);
+        draw.set_color(Color::WHITE).image(self.pcb, 500.0, 100.0);
+
+        draw.on_layer(Layer::UI)
+            .set_color(Color::WHITE)
+            .rect_lines(0.0, 0.0, 1280.0, 32.0, 2.0);
+    }
 }
 
 fn main() {

@@ -20,6 +20,7 @@ karna-engine = { version = "0.1.0", path = "libs/engine", default-features = fal
 karna-sdl3 = { version = "0.1.0", path = "libs/sdl3", default-features = false }
 karna-sdl3-sys = { version = "0.1.0", path = "libs/sdl3-sys", default-features = false }
 karna-sdl3-image-sys = { version = "0.1.0", path = "libs/sdl3-image-sys", default-features = false }
+karna-sdl3-shadercross-sys = { version = "0.1.0", path = "libs/sdl3-shadercross-sys", default-features = false }
 karna-utils = { version = "0.1.0", path = "libs/utils" }
 karna-nostd = { version = "0.1.0", path = "libs/nostd" }
 

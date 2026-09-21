@@ -28,9 +28,9 @@ use sdl3::events::SdlEvent;
 use sdl3::events::SdlWindowEvent;
 use sdl3::events::TextEvent;
 use sdl3::gpu::Device;
-use sdl3::render::Color;
 use sdl3::window::WindowId;
 use traccia::debug;
+use traccia::error;
 use traccia::info;
 use traccia::trace;
 use traccia::warn;
@@ -363,7 +363,13 @@ impl App {
                     .state
                     .draw_active_scenes(&mut self.event_outboxes, &self.input, &self.assets);
 
-                entry.sdl_window.clear(Color::RED);
+                if let Err(e) = entry
+                    .state
+                    .renderer
+                    .flush(&entry.sdl_window, self.assets.images().atlas.texture())
+                {
+                    error!("Failed to render frame: {}", e);
+                }
                 entry.state.sync_window(&entry.sdl_window);
             }
 

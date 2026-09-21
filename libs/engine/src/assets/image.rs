@@ -86,12 +86,20 @@ impl ImageRegistry {
 
     pub fn new(device: &Device) -> Self {
         Self {
-            atlas: TextureAtlas::new(device.share(), 1024, 32),
+            atlas: TextureAtlas::new(device.share(), 2048, 32),
             slots: SlotMap::default(),
             paths: HashMap::default(),
             bytes: HashMap::default(),
             white_texel: Handle::INVALID,
             placeholder: Handle::INVALID,
+        }
+    }
+
+    /// Returns the image if it has finished loading.
+    pub fn resolve(&self, handle: Handle<Image>) -> Option<Image> {
+        match self.slots.get(handle.cast())? {
+            AssetSlot::Ready(image) => Some(*image),
+            _ => None,
         }
     }
 

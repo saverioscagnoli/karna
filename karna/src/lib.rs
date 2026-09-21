@@ -5,6 +5,8 @@ pub use engine::context::DrawContext;
 pub use engine::context::LoadContext;
 pub use engine::context::UpdateContext;
 pub use engine::render::Draw;
+pub use engine::render::Layer;
+pub use sdl3::render::Color;
 pub use engine::scene::Scene;
 pub use engine::scene::SceneId;
 pub use engine::time::Clock;

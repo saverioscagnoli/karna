@@ -9,7 +9,6 @@ use crate::assets::AssetServer;
 use crate::context::UserContext;
 use crate::event::AppOutboxes;
 use crate::input::Input;
-use crate::render::Draw;
 use crate::render::Renderer;
 use crate::scene::BoxedScene;
 use crate::scene::SceneBuilder;
@@ -54,7 +53,7 @@ impl WindowState {
         Self {
             time: TimeData::default(),
             ctx,
-            renderer: Renderer::new(device.share(), window.pixel_size()),
+            renderer: Renderer::new(device.share(), window),
             scenes,
             active_scenes,
         }
@@ -181,9 +180,9 @@ impl WindowState {
         assets: &AssetServer,
     ) {
         #[rustfmt::skip]
-        let Self { ctx, scenes, active_scenes, .. } = self;
+        let Self { ctx, renderer, scenes, active_scenes, .. } = self;
 
-        let mut draw = Draw {};
+        let mut draw = renderer.begin(assets.images());
 
         for id in active_scenes {
             let Some(slot) = scenes.get_mut(id) else {

@@ -1,0 +1,42 @@
+[package]
+name = "karna-sdl3-shadercross-sys"
+description = "Raw FFI bindings to SDL3_shadercross for the karna engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+links = "SDL3_shadercross"
+
+[lib]
+name = "sdl3_shadercross_sys"
+path = "src/lib.rs"
+# SDL doc comments contain C snippets that rustdoc would try to run as Rust.
+doctest = false
+
+[features]
+default = ["build-from-source"]
+# Build SDL_shadercross (and the SPIRV-Cross it depends on) from the vendored
+# source tree in vendor/SDL_shadercross instead of linking a system
+# SDL3_shadercross. Also builds SDL itself from source, so every library comes
+# from the same place. On by default; turn it off with --no-default-features to
+# link a system SDL3_shadercross via pkg-config.
+build-from-source = ["dep:cmake", "karna-sdl3-sys/build-from-source"]
+# Only needed to regenerate src/bindings.rs; not used in a normal build.
+regenerate = ["dep:bindgen"]
+
+[dependencies]
+karna-sdl3-sys.workspace = true
+
+[build-dependencies]
+cmake = { version = "0.1", optional = true }
+pkg-config = "0.3"
+
+[[bin]]
+name = "regenerate-bindings"
+path = "src/bin/regenerate.rs"
+required-features = ["regenerate"]
+
+[dependencies.bindgen]
+version = "0.72"
+optional = true
