@@ -19,6 +19,7 @@ pub struct Draw<'a> {
     layer: Layer,
     color: Color,
     white: Image,
+    thickness: f32,
 }
 
 impl<'a> Draw<'a> {
@@ -33,14 +34,17 @@ impl<'a> Draw<'a> {
             layer: Layer::WORLD,
             color: Color::WHITE,
             white,
+            thickness: 1.0,
         }
     }
 
+    #[inline]
     pub fn layer(&self) -> Layer {
         self.layer
     }
 
-    pub fn on_layer(&mut self, layer: Layer) -> &mut Self {
+    #[inline]
+    pub fn with_layer(&mut self, layer: Layer) -> &mut Self {
         if !self.data.contains(layer) {
             self.data.insert(layer, LayerData::default());
         }
@@ -49,12 +53,41 @@ impl<'a> Draw<'a> {
         self
     }
 
+    #[inline]
     pub fn color(&self) -> Color {
         self.color
     }
 
-    pub fn set_color(&mut self, color: Color) -> &mut Self {
-        self.color = color;
+    #[inline]
+    pub fn set_color<C>(&mut self, color: C)
+    where
+        C: Into<Color>,
+    {
+        self.color = color.into();
+    }
+
+    #[inline]
+    pub fn with_color<C>(&mut self, color: C) -> &mut Self
+    where
+        C: Into<Color>,
+    {
+        self.color = color.into();
+        self
+    }
+
+    #[inline]
+    pub fn thickness(&self) -> f32 {
+        self.thickness
+    }
+
+    #[inline]
+    pub fn set_thickness(&mut self, t: f32) {
+        self.thickness = t;
+    }
+
+    #[inline]
+    pub fn with_thickness(&mut self, t: f32) -> &mut Self {
+        self.thickness = t;
         self
     }
 
@@ -62,8 +95,8 @@ impl<'a> Draw<'a> {
         self.solid_quad(corners(x, y, w, h));
     }
 
-    pub fn rect_lines(&mut self, x: f32, y: f32, w: f32, h: f32, thickness: f32) {
-        let t = thickness.sdl_min(w * 0.5).sdl_min(h * 0.5);
+    pub fn rect_outline(&mut self, x: f32, y: f32, w: f32, h: f32) {
+        let t = self.thickness.sdl_min(w * 0.5).sdl_min(h * 0.5);
 
         self.rect(x, y, w, t);
         self.rect(x, y + h - t, w, t);
@@ -71,10 +104,10 @@ impl<'a> Draw<'a> {
         self.rect(x + w - t, y + t, t, h - 2.0 * t);
     }
 
-    pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32) {
+    pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
         let a = math::vec2!(x1, y1);
         let b = math::vec2!(x2, y2);
-        let n = (b - a).normalize().perp() * (thickness * 0.5);
+        let n = (b - a).normalize().perp() * (self.thickness * 0.5);
 
         self.solid_quad([a + n, b + n, b - n, a - n]);
     }
@@ -127,9 +160,9 @@ impl<'a> Draw<'a> {
         }
     }
 
-    pub fn circle_lines(&mut self, x: f32, y: f32, radius: f32, thickness: f32) {
+    pub fn circle_outline(&mut self, x: f32, y: f32, radius: f32) {
         let n = segments(radius);
-        let inner = (radius - thickness).sdl_max(0.0);
+        let inner = (radius - self.thickness).sdl_max(0.0);
         let (uv, page) = self.solid();
         let color = self.color_vec();
         let d = &mut self.data[self.layer];
@@ -185,27 +218,32 @@ impl<'a> Draw<'a> {
 
     // Internals
 
+    #[inline]
     fn lookup(&self, image: Handle<Image>) -> Option<Image> {
         self.images
             .resolve(image)
             .or_else(|| self.images.resolve(self.images.placeholder))
     }
 
+    #[inline]
     fn solid(&self) -> (Vector2<f32>, u32) {
         let uv = (self.white.uv_min() + self.white.uv_max()) * 0.5;
         (uv, self.white.page())
     }
 
+    #[inline]
     fn color_vec(&self) -> Vector4<f32> {
         let [r, g, b, a] = self.color.array();
         math::vec4!(r, g, b, a)
     }
 
+    #[inline]
     fn solid_quad(&mut self, p: [Vector2<f32>; 4]) {
         let (uv, page) = self.solid();
         self.quad(p, [uv; 4], page);
     }
 
+    #[inline]
     fn quad(&mut self, p: [Vector2<f32>; 4], uv: [Vector2<f32>; 4], page: u32) {
         let color = self.color_vec();
         let d = &mut self.data[self.layer];

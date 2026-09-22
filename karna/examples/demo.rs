@@ -23,14 +23,27 @@ impl Scene for DemoScene {
     fn update(&mut self, ctx: &mut UpdateContext) {}
 
     fn draw(&mut self, ctx: &mut DrawContext, draw: &mut Draw) {
-        draw.set_color(Color::RED).rect(10.0, 10.0, 100.0, 50.0);
-        draw.set_color(Color::CYAN).circle(300.0, 200.0, 40.0);
-        draw.set_color(Color::YELLOW).line(20.0, 300.0, 400.0, 350.0, 3.0);
-        draw.set_color(Color::WHITE).image(self.pcb, 500.0, 100.0);
+        draw.set_color(Color::RED);
+        draw.rect(10.0, 10.0, 50.0, 50.0);
 
-        draw.on_layer(Layer::UI)
-            .set_color(Color::WHITE)
-            .rect_lines(0.0, 0.0, 1280.0, 32.0, 2.0);
+        draw.set_color(Color::CYAN);
+        draw.circle(300.0, 200.0, 40.0);
+
+        draw.set_color(Color::MAGENTA);
+        draw.set_thickness(5.0);
+        draw.circle_outline(300.0, 600.0, 35.0);
+
+        draw.set_color(Color::YELLOW);
+        draw.set_thickness(2.5);
+        draw.line(20.0, 300.0, 400.0, 350.0);
+
+        draw.set_color(Color::WHITE);
+        draw.image(self.pcb, 600.0, 100.0);
+
+        draw.with_layer(Layer::UI)
+            .with_color(Color::WHITE)
+            .with_thickness(3.0)
+            .rect_outline(0.0, 400.0, 1280.0, 32.0);
     }
 }
 
