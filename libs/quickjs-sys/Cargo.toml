@@ -1,0 +1,43 @@
+[package]
+name = "karna-quickjs-sys"
+description = "Raw FFI bindings to QuickJS (quickjs-ng) for the karna engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+links = "qjs"
+
+[lib]
+name = "quickjs_sys"
+path = "src/lib.rs"
+# QuickJS doc comments contain C snippets that rustdoc would try to run as Rust.
+doctest = false
+
+[features]
+default = ["build-from-source"]
+# Build QuickJS from the vendored source tree in vendor/quickjs instead of
+# linking a system quickjs-ng. On by default; turn it off with
+# --no-default-features to link a system quickjs-ng via pkg-config.
+build-from-source = ["dep:cmake"]
+# Only needed to regenerate src/bindings.rs and src/extern.c; not used in a
+# normal build.
+regenerate = ["dep:bindgen"]
+
+[dependencies]
+
+[build-dependencies]
+cc = "1"
+cmake = { version = "0.1", optional = true }
+pkg-config = "0.3"
+
+[[bin]]
+name = "regenerate-bindings"
+path = "src/bin/regenerate.rs"
+required-features = ["regenerate"]
+
+[dependencies.bindgen]
+version = "0.72"
+optional = true
+# For wrap_static_fns, which quickjs.h's static inline helpers need.
+features = ["experimental"]

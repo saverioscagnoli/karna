@@ -7,3 +7,6 @@
 [submodule "vendor/SDL_shadercross"]
 	path = vendor/SDL_shadercross
 	url = https://github.com/libsdl-org/SDL_shadercross.git
+[submodule "vendor/quickjs"]
+	path = vendor/quickjs
+	url = https://github.com/quickjs-ng/quickjs.git
