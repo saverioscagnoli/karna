@@ -4,7 +4,7 @@ use sdl3_shadercross_sys::*;
 use sdl3_sys::*;
 
 /// The engine's immediate-mode vertex shader, compiled from GLSL with glslc.
-const VERT_SPV: &[u8] = include_bytes!("../../engine/shaders/immediate.vert.spv");
+const VERT_SPV: &[u8] = include_bytes!("../../../shaders/immediate.vert.spv");
 
 fn spirv_info(code: &[u8], stage: SDL_ShaderCross_ShaderStage) -> SDL_ShaderCross_SPIRV_Info {
     SDL_ShaderCross_SPIRV_Info {
@@ -19,7 +19,11 @@ fn spirv_info(code: &[u8], stage: SDL_ShaderCross_ShaderStage) -> SDL_ShaderCros
 #[test]
 fn initializes_and_reports_formats() {
     unsafe {
-        assert!(SDL_ShaderCross_Init(), "SDL_ShaderCross_Init failed: {}", get_error());
+        assert!(
+            SDL_ShaderCross_Init(),
+            "SDL_ShaderCross_Init failed: {}",
+            get_error()
+        );
 
         let formats = SDL_ShaderCross_GetSPIRVShaderFormats();
         assert!(
@@ -38,14 +42,21 @@ fn initializes_and_reports_formats() {
 #[test]
 fn transpiles_spirv_to_msl() {
     unsafe {
-        assert!(SDL_ShaderCross_Init(), "SDL_ShaderCross_Init failed: {}", get_error());
+        assert!(
+            SDL_ShaderCross_Init(),
+            "SDL_ShaderCross_Init failed: {}",
+            get_error()
+        );
 
         let info = spirv_info(VERT_SPV, SDL_SHADERCROSS_SHADERSTAGE_VERTEX);
         let msl = SDL_ShaderCross_TranspileMSLFromSPIRV(&info);
         assert!(!msl.is_null(), "MSL transpile failed: {}", get_error());
 
         let source = CStr::from_ptr(msl.cast()).to_str().unwrap();
-        assert!(source.contains("#include <metal_stdlib>"), "unexpected MSL:\n{source}");
+        assert!(
+            source.contains("#include <metal_stdlib>"),
+            "unexpected MSL:\n{source}"
+        );
 
         SDL_free(msl);
         SDL_ShaderCross_Quit();
@@ -55,7 +66,11 @@ fn transpiles_spirv_to_msl() {
 #[test]
 fn transpiles_spirv_to_hlsl() {
     unsafe {
-        assert!(SDL_ShaderCross_Init(), "SDL_ShaderCross_Init failed: {}", get_error());
+        assert!(
+            SDL_ShaderCross_Init(),
+            "SDL_ShaderCross_Init failed: {}",
+            get_error()
+        );
 
         let info = spirv_info(VERT_SPV, SDL_SHADERCROSS_SHADERSTAGE_VERTEX);
         let hlsl = SDL_ShaderCross_TranspileHLSLFromSPIRV(&info);

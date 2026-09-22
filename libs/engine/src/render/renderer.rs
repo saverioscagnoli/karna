@@ -28,8 +28,8 @@ use crate::render::LayerData;
 use crate::render::LayerMap;
 use crate::render::Projection;
 
-const IMMEDIATE_VERT: &[u8] = include_bytes!("../../shaders/immediate.vert.spv");
-const IMMEDIATE_FRAG: &[u8] = include_bytes!("../../shaders/immediate.frag.spv");
+const IMMEDIATE_VERT: &[u8] = include_bytes!("../../../../shaders/immediate.vert.spv");
+const IMMEDIATE_FRAG: &[u8] = include_bytes!("../../../../shaders/immediate.frag.spv");
 
 struct Batch {
     layer: Layer,
@@ -62,14 +62,22 @@ impl Renderer {
             LayerData::default(),
         );
 
-        let pipeline = Self::immediate_pipeline(&device, window)
-            .expect("Failed to create immediate pipeline");
+        let pipeline =
+            Self::immediate_pipeline(&device, window).expect("Failed to create immediate pipeline");
         let sampler = Sampler::new(device.share(), SamplerDesc::nearest());
 
-        let vertex_buffer =
-            GpuBuffer::new(device.share(), "immediate vertices", 4096, BufferUsage::VERTEX);
-        let index_buffer =
-            GpuBuffer::new(device.share(), "immediate indices", 6144, BufferUsage::INDEX);
+        let vertex_buffer = GpuBuffer::new(
+            device.share(),
+            "immediate vertices",
+            4096,
+            BufferUsage::VERTEX,
+        );
+        let index_buffer = GpuBuffer::new(
+            device.share(),
+            "immediate indices",
+            6144,
+            BufferUsage::INDEX,
+        );
 
         Self {
             device,
@@ -154,7 +162,8 @@ impl Renderer {
         self.collect();
 
         if !self.indices.is_empty() {
-            self.device.upload(&mut self.vertex_buffer, &self.vertices)?;
+            self.device
+                .upload(&mut self.vertex_buffer, &self.vertices)?;
             self.device.upload(&mut self.index_buffer, &self.indices)?;
         }
 

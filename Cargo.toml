@@ -1,5 +1,5 @@
 [workspace]
-members = ["karna", "karna-cli", "libs/*"]
+members = ["karna", "karna-cli", "libs/*", "sys/*"]
 resolver = "3"
 
 [workspace.package]
@@ -18,11 +18,13 @@ karna-math = { version = "0.1.0", path = "libs/math" }
 # down to the pkg-config path.
 karna-engine = { version = "0.1.0", path = "libs/engine", default-features = false }
 karna-sdl3 = { version = "0.1.0", path = "libs/sdl3", default-features = false }
-karna-sdl3-sys = { version = "0.1.0", path = "libs/sdl3-sys", default-features = false }
-karna-sdl3-image-sys = { version = "0.1.0", path = "libs/sdl3-image-sys", default-features = false }
-karna-sdl3-shadercross-sys = { version = "0.1.0", path = "libs/sdl3-shadercross-sys", default-features = false }
-karna-quickjs-sys = { version = "0.1.0", path = "libs/quickjs-sys", default-features = false }
+karna-quickjs = { version = "0.1.0", path = "libs/quickjs", default-features = false }
 karna-utils = { version = "0.1.0", path = "libs/utils" }
 karna-nostd = { version = "0.1.0", path = "libs/nostd" }
+
+karna-sdl3-sys = { version = "0.1.0", path = "sys/sdl3-sys", default-features = false }
+karna-sdl3-image-sys = { version = "0.1.0", path = "sys/sdl3-image-sys", default-features = false }
+karna-sdl3-shadercross-sys = { version = "0.1.0", path = "sys/sdl3-shadercross-sys", default-features = false }
+karna-quickjs-sys = { version = "0.1.0", path = "sys/quickjs-sys", default-features = false }
 
 traccia = { version = "4.1.1", default-features = false }

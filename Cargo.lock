@@ -163,6 +163,7 @@ version = "0.1.0"
 dependencies = [
  "karna-math",
  "karna-nostd",
+ "karna-quickjs-sys",
  "karna-sdl3",
  "karna-utils",
  "traccia",
@@ -184,6 +185,13 @@ dependencies = [
  "hashbrown",
  "karna-sdl3-sys",
  "traccia",
+]
+
+[[package]]
+name = "karna-quickjs"
+version = "0.1.0"
+dependencies = [
+ "karna-quickjs-sys",
 ]
 
 [[package]]
