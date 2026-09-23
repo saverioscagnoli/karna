@@ -1,3 +1,5 @@
+#![no_std]
+
 pub use engine::App;
 pub use engine::builder::AppBuilder;
 pub use engine::builder::WindowBuilder;

@@ -1,14 +1,13 @@
-Texture2DArray<float4> atlas_page : register(t0, space2);
-SamplerState           atlas_smp  : register(s0, space2);
+Texture2DArray<float4> atlas : register(t0, space2);
+SamplerState atlas_sampler : register(s0, space2);
 
 struct Input
 {
-    float4 color : TEXCOORD0;
-    // .xy = uv within the page, .z = atlas page (array layer)
-    float3 uv    : TEXCOORD1;
+    [[vk::location(0)]] float4 color : TEXCOORD0;
+    [[vk::location(1)]] float3 uv : TEXCOORD1;
 };
 
 float4 main(Input input) : SV_Target0
 {
-    return input.color * atlas_page.Sample(atlas_smp, input.uv);
+    return atlas.Sample(atlas_sampler, input.uv) * input.color;
 }

@@ -21,6 +21,7 @@ use sdl3_sys::SDL_ClaimWindowForGPUDevice;
 use sdl3_sys::SDL_CreateGPUDevice;
 use sdl3_sys::SDL_CreateWindow;
 use sdl3_sys::SDL_DestroyGPUDevice;
+use sdl3_sys::SDL_GPU_SHADERFORMAT_DXBC;
 use sdl3_sys::SDL_GPU_SHADERFORMAT_DXIL;
 use sdl3_sys::SDL_GPU_SHADERFORMAT_MSL;
 use sdl3_sys::SDL_GPU_SHADERFORMAT_SPIRV;
@@ -75,8 +76,10 @@ pub struct Device(Rc<DeviceInner>);
 
 impl Device {
     pub fn init() -> Result<Self, SdlError> {
-        const SHADER_FORMATS: SDL_GPUShaderFormat =
-            SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL;
+        const SHADER_FORMATS: SDL_GPUShaderFormat = SDL_GPU_SHADERFORMAT_SPIRV
+            | SDL_GPU_SHADERFORMAT_DXBC
+            | SDL_GPU_SHADERFORMAT_DXIL
+            | SDL_GPU_SHADERFORMAT_MSL;
 
         let ptr = unsafe { SDL_CreateGPUDevice(SHADER_FORMATS, false, ptr::null()) };
         let raw = ptr::NonNull::new(ptr).ok_or_else(|| get_error())?;
@@ -119,8 +122,8 @@ impl Device {
 
     /// Which shader bytecode formats this device accepts. Check before handing
     /// [`Shader`] a blob.
-    pub fn shader_formats(&self) -> SDL_GPUShaderFormat {
-        unsafe { SDL_GetGPUShaderFormats(self.as_ptr()) }
+    pub fn shader_formats(&self) -> ShaderFormat {
+        ShaderFormat::from_bits(unsafe { SDL_GetGPUShaderFormats(self.as_ptr()) })
     }
 
     /// The texture format of the window's swapchain, which is what a pipeline

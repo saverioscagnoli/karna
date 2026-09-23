@@ -44,7 +44,10 @@ fn copy_runtime_dlls(dst: &Path) {
 
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dll")) {
+        if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("dll"))
+        {
             let name = entry.file_name();
             // Also into deps/, which is where test and example binaries run from.
             for dir in [profile_dir.to_path_buf(), profile_dir.join("deps")] {
@@ -56,29 +59,100 @@ fn copy_runtime_dlls(dst: &Path) {
     }
 }
 
-/// Build the SPIRV-Cross submodule nested in SDL_shadercross as static,
-/// position-independent libraries, so they can be folded into the shared
-/// SDL3_shadercross.
-///
-/// SDL_shadercross's own SDLSHADERCROSS_VENDORED mode is not used: it insists
-/// on SPIRV-Tools, SPIRV-Headers and DirectXShaderCompiler being checked out
-/// too, and DXC alone is a multi-gigabyte LLVM fork. Without DXC, SPIR-V still
-/// transpiles to MSL and HLSL, and on Windows HLSL compiles to DXBC through
-/// the system d3dcompiler_47.dll, which D3D12 accepts.
 #[cfg(feature = "build-from-source")]
-fn build_spirv_cross(src: &Path, out: &Path) -> PathBuf {
-    let spirv = src.join("external/SPIRV-Cross");
-    if !spirv.join("CMakeLists.txt").exists() {
+fn require_submodule(src: &Path, path: &str) {
+    if !src.join(path).join("CMakeLists.txt").exists() {
         panic!(
-            "SPIRV-Cross not found at {}\n\
-             The nested submodule is not checked out. Run:\n    \
-             git -C vendor/SDL_shadercross submodule update --init --depth 1 external/SPIRV-Cross",
-            spirv.display()
+            "{} not found at {}\n\
+             The vendored submodules are not checked out. Run:\n    \
+             git submodule update --init --recursive vendor/SDL_shadercross",
+            path,
+            src.join(path).display()
         );
     }
+}
 
-    cmake::Config::new(&spirv)
-        .out_dir(out.join("spirv-cross"))
+#[cfg(feature = "dxc")]
+fn collect_dxc(build: &Path, dst: &Path, windows: bool) {
+    let target = dst.join(if windows { "bin" } else { "lib" });
+    let _ = std::fs::create_dir_all(&target);
+
+    let wanted = |name: &str| {
+        if windows {
+            name.eq_ignore_ascii_case("dxcompiler.dll") || name.eq_ignore_ascii_case("dxil.dll")
+        } else {
+            ["libdxcompiler.", "libdxil."]
+                .iter()
+                .any(|p| name.starts_with(p))
+                && (name.contains(".so") || name.ends_with(".dylib"))
+        }
+    };
+
+    let mut stack = vec![build.to_path_buf()];
+
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+
+            if path.is_dir() {
+                stack.push(path);
+            } else if wanted(&name) {
+                let _ = std::fs::copy(&path, target.join(&name));
+            }
+        }
+    }
+}
+
+#[cfg(feature = "dxc")]
+fn build_shadercross(src: &Path, shared: &Path, origin: &str, windows: bool) -> PathBuf {
+    for path in [
+        "external/SPIRV-Cross",
+        "external/SPIRV-Headers",
+        "external/SPIRV-Tools",
+        "external/DirectXShaderCompiler",
+    ] {
+        require_submodule(src, path);
+    }
+
+    let mut config = cmake::Config::new(src);
+
+    config
+        .out_dir(shared.join("shadercross"))
+        .profile("Release")
+        .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
+        .define("CMAKE_INSTALL_RPATH", origin)
+        .define("SDLSHADERCROSS_SHARED", "ON")
+        .define("SDLSHADERCROSS_STATIC", "OFF")
+        .define("SDLSHADERCROSS_VENDORED", "ON")
+        .define("SDLSHADERCROSS_SPIRVCROSS_SHARED", "OFF")
+        .define("SDLSHADERCROSS_DXC", "ON")
+        .define("SDLSHADERCROSS_CLI", "OFF")
+        .define("SDLSHADERCROSS_TESTS", "OFF")
+        .define("SDLSHADERCROSS_INSTALL", "ON")
+        .define("LLVM_ENABLE_ZLIB", "OFF");
+
+    if let Ok(sdl_root) = std::env::var("DEP_SDL3_ROOT") {
+        config.define("CMAKE_PREFIX_PATH", sdl_root);
+    }
+
+    let dst = config.build();
+
+    collect_dxc(&dst.join("build"), &dst, windows);
+
+    dst
+}
+
+#[cfg(all(feature = "build-from-source", not(feature = "dxc")))]
+fn build_shadercross(src: &Path, shared: &Path, origin: &str, _windows: bool) -> PathBuf {
+    require_submodule(src, "external/SPIRV-Cross");
+
+    let spirv_root = cmake::Config::new(src.join("external/SPIRV-Cross"))
+        .out_dir(shared.join("spirv-cross"))
         .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
         .define("SPIRV_CROSS_STATIC", "ON")
         .define("SPIRV_CROSS_SHARED", "OFF")
@@ -91,11 +165,29 @@ fn build_spirv_cross(src: &Path, out: &Path) -> PathBuf {
         .define("SPIRV_CROSS_ENABLE_REFLECT", "ON")
         .define("SPIRV_CROSS_ENABLE_C_API", "ON")
         .define("SPIRV_CROSS_ENABLE_UTIL", "ON")
+        .build();
+
+    let mut prefix = spirv_root.display().to_string();
+    if let Ok(sdl_root) = std::env::var("DEP_SDL3_ROOT") {
+        prefix.push(';');
+        prefix.push_str(&sdl_root);
+    }
+
+    cmake::Config::new(src)
+        .out_dir(shared.join("shadercross-nodxc"))
+        .define("CMAKE_PREFIX_PATH", prefix)
+        .define("CMAKE_INSTALL_RPATH", origin)
+        .define("SDLSHADERCROSS_SHARED", "ON")
+        .define("SDLSHADERCROSS_STATIC", "OFF")
+        .define("SDLSHADERCROSS_VENDORED", "OFF")
+        .define("SDLSHADERCROSS_SPIRVCROSS_SHARED", "OFF")
+        .define("SDLSHADERCROSS_DXC", "OFF")
+        .define("SDLSHADERCROSS_CLI", "OFF")
+        .define("SDLSHADERCROSS_TESTS", "OFF")
+        .define("SDLSHADERCROSS_INSTALL", "ON")
         .build()
 }
 
-/// Build the vendored SDL_shadercross source tree with CMake and link the
-/// result.
 #[cfg(feature = "build-from-source")]
 fn build_vendored() {
     let src = vendored_dir();
@@ -103,7 +195,7 @@ fn build_vendored() {
         panic!(
             "vendored SDL_shadercross not found at {}\n\
              The submodule is not checked out. Run:\n    \
-             git submodule update --init --depth 1 vendor/SDL_shadercross",
+             git submodule update --init --recursive vendor/SDL_shadercross",
             src.display()
         );
     }
@@ -114,41 +206,24 @@ fn build_vendored() {
     );
 
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
-    let spirv_root = build_spirv_cross(&src, &out);
+    let shared = out
+        .ancestors()
+        .nth(3)
+        .map_or_else(|| out.clone(), |profile| profile.join("karna-vendor"));
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let windows = target_os == "windows";
+    let origin = if target_os == "macos" || target_os == "ios" {
+        "@loader_path"
+    } else {
+        "$ORIGIN"
+    };
 
-    // Point CMake's find_package(SDL3) at the SDL that karna-sdl3-sys built,
-    // and find_package(spirv_cross_*) at the copy built above.
-    // CMake lists are ';'-separated on every platform.
-    let mut prefix = spirv_root.display().to_string();
-    if let Ok(sdl_root) = std::env::var("DEP_SDL3_ROOT") {
-        prefix.push(';');
-        prefix.push_str(&sdl_root);
-    }
+    let dst = build_shadercross(&src, &shared, origin, windows);
 
-    let dst = cmake::Config::new(&src)
-        .out_dir(out.join("shadercross"))
-        .define("CMAKE_PREFIX_PATH", prefix)
-        .define("SDLSHADERCROSS_SHARED", "ON")
-        .define("SDLSHADERCROSS_STATIC", "OFF")
-        .define("SDLSHADERCROSS_VENDORED", "OFF")
-        .define("SDLSHADERCROSS_SPIRVCROSS_SHARED", "OFF")
-        .define("SDLSHADERCROSS_DXC", "OFF")
-        .define("SDLSHADERCROSS_CLI", "OFF")
-        .define("SDLSHADERCROSS_TESTS", "OFF")
-        .define("SDLSHADERCROSS_INSTALL", "ON")
-        .build();
-
-    let windows = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows");
-
-    // Installs to lib/ or lib64/ depending on the platform.
     for dir in ["lib", "lib64"] {
         let path = dst.join(dir);
         if path.exists() {
             println!("cargo:rustc-link-search=native={}", path.display());
-            // So test binaries and examples can find libSDL3_shadercross.so
-            // without the caller setting LD_LIBRARY_PATH. Windows has no rpath
-            // (and the MSVC linker rejects the flag), so the DLL is copied next
-            // to the executable instead.
             if !windows {
                 println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path.display());
             }

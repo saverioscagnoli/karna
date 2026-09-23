@@ -11,12 +11,13 @@ use sdl3::gpu::LoadOp;
 use sdl3::gpu::PipelineDesc;
 use sdl3::gpu::Sampler;
 use sdl3::gpu::SamplerDesc;
-use sdl3::gpu::Shader;
-use sdl3::gpu::ShaderDesc;
 use sdl3::gpu::Texture;
 use sdl3::gpu::VertexAttribute;
 use sdl3::gpu::VertexBuffer;
 use sdl3::render::Color;
+use sdl3::shadercross::CompileOptions;
+use sdl3::shadercross::ShaderCross;
+use sdl3::shadercross::ShaderSource;
 use sdl3::window::Window;
 
 use crate::assets::AssetServer;
@@ -53,7 +54,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(device: Device, window: &Window) -> Self {
+    pub fn new(device: Device, shadercross: &ShaderCross, window: &Window) -> Self {
         let default_camera = Camera::new(Projection::topleft_ortho(window.pixel_size()));
         let cameras = LayerMap::new(default_camera, default_camera, default_camera);
         let data = LayerMap::new(
@@ -62,8 +63,8 @@ impl Renderer {
             LayerData::default(),
         );
 
-        let pipeline =
-            Self::immediate_pipeline(&device, window).expect("Failed to create immediate pipeline");
+        let pipeline = Self::immediate_pipeline(&device, shadercross, window)
+            .expect("Failed to create immediate pipeline");
         let sampler = Sampler::new(device.share(), SamplerDesc::nearest());
 
         let vertex_buffer = GpuBuffer::new(
@@ -94,14 +95,20 @@ impl Renderer {
         }
     }
 
-    fn immediate_pipeline(device: &Device, window: &Window) -> Result<GraphicsPipeline, SdlError> {
-        let vertex = Shader::new(
+    fn immediate_pipeline(
+        device: &Device,
+        shadercross: &ShaderCross,
+        window: &Window,
+    ) -> Result<GraphicsPipeline, SdlError> {
+        let vertex = shadercross.create_shader(
             device.share(),
-            ShaderDesc::vertex(IMMEDIATE_VERT).with_uniform_buffers(1),
+            ShaderSource::Spirv(IMMEDIATE_VERT),
+            &CompileOptions::vertex().with_name("immediate.vert"),
         )?;
-        let fragment = Shader::new(
+        let fragment = shadercross.create_shader(
             device.share(),
-            ShaderDesc::fragment(IMMEDIATE_FRAG).with_samplers(1),
+            ShaderSource::Spirv(IMMEDIATE_FRAG),
+            &CompileOptions::fragment().with_name("immediate.frag"),
         )?;
 
         let buffers = [VertexBuffer::of::<ImmediateVertex>(0)];

@@ -22,6 +22,7 @@ default = ["build-from-source"]
 # from the same place. On by default; turn it off with --no-default-features to
 # link a system SDL3_shadercross via pkg-config.
 build-from-source = ["dep:cmake", "karna-sdl3-sys/build-from-source"]
+dxc = ["build-from-source"]
 # Only needed to regenerate src/bindings.rs; not used in a normal build.
 regenerate = ["dep:bindgen"]
 

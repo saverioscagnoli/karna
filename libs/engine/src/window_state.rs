@@ -1,6 +1,7 @@
 use nostd::alloc::vec::Vec;
 use nostd::collections::HashMap;
 use sdl3::gpu::Device;
+use sdl3::shadercross::ShaderCross;
 use sdl3::window::Window;
 use traccia::error;
 use traccia::warn;
@@ -41,6 +42,7 @@ pub struct WindowState {
 impl WindowState {
     pub fn init(
         device: &Device,
+        shadercross: &ShaderCross,
         window: &Window,
         scenes: HashMap<SceneId, SceneSlot>,
         active_scenes: Vec<SceneId>,
@@ -53,7 +55,7 @@ impl WindowState {
         Self {
             time: TimeData::default(),
             ctx,
-            renderer: Renderer::new(device.share(), window),
+            renderer: Renderer::new(device.share(), shadercross, window),
             scenes,
             active_scenes,
         }

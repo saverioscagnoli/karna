@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [features]
 default = ["build-from-source"]
-build-from-source = ["karna/build-from-source"]
+build-from-source = ["karna-sdl3/build-from-source"]
 
 [dependencies]
-karna.workspace = true
+karna-sdl3 = { workspace = true, features = ["dxc"] }

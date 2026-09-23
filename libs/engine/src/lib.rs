@@ -29,6 +29,7 @@ use sdl3::events::SdlEvent;
 use sdl3::events::SdlWindowEvent;
 use sdl3::events::TextEvent;
 use sdl3::gpu::Device;
+use sdl3::shadercross::ShaderCross;
 use sdl3::window::WindowId;
 use traccia::debug;
 use traccia::error;
@@ -73,6 +74,7 @@ pub struct App {
     event_outboxes: AppOutboxes,
     event_queue: Vec<AppEvent>,
 
+    shadercross: ShaderCross,
     device: Device,
     _sdl: SdlGuard,
 }
@@ -90,6 +92,10 @@ impl App {
             panic!("failed to init gpu device");
         };
 
+        let Ok(shadercross) = ShaderCross::init() else {
+            panic!("failed to init shadercross");
+        };
+
         let (pool, assets) = assets::spawn(root, workers, &device);
 
         let event_outboxes = AppOutboxes::new();
@@ -104,6 +110,7 @@ impl App {
             assets_pool: pool,
             event_queue: Vec::with_capacity(event_outboxes.total_cap()),
             event_outboxes,
+            shadercross,
             device,
             _sdl,
         }
@@ -131,7 +138,13 @@ impl App {
             })
             .collect::<HashMap<SceneId, SceneSlot>>();
 
-        let state = WindowState::init(&self.device, &sdl_window, scenes, active_scenes);
+        let state = WindowState::init(
+            &self.device,
+            &self.shadercross,
+            &sdl_window,
+            scenes,
+            active_scenes,
+        );
 
         self.windows.insert(
             sdl_window.id(),
