@@ -211,9 +211,7 @@ fn build_vendored() {
     let shared = out
         .ancestors()
         .find(|dir| dir.file_name().is_some_and(|name| name == "build"))
-        .and_then(Path::parent)
-        .and_then(Path::parent)
-        .map_or_else(|| out.clone(), |target| target.join("karna-vendor"));
+        .map_or_else(|| out.clone(), |build| build.join("karna-vendor"));
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let windows = target_os == "windows";
     let origin = if target_os == "macos" || target_os == "ios" {
