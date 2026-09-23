@@ -141,10 +141,24 @@ impl AssetServer {
         self.text.get_mut().register_bytes(bytes, size)
     }
 
+    pub fn debug_font(&self) -> Handle<Font> {
+        self.text.borrow().debug_font
+    }
+
+    pub fn placeholder_image(&self) -> Handle<Image> {
+        self.images.placeholder
+    }
+
     pub(crate) fn layout(&self, spans: &[TextSpan], style: &TextStyle) -> Arc<TextLayout> {
         self.text
             .borrow_mut()
             .layout(spans, style, &mut self.images.atlas.borrow_mut())
+    }
+
+    pub(crate) fn layout_str(&self, text: &str, style: &TextStyle) -> Arc<TextLayout> {
+        self.text
+            .borrow_mut()
+            .layout_str(text, style, &mut self.images.atlas.borrow_mut())
     }
 
     pub(crate) fn atlas(&self) -> Ref<'_, TextureAtlas> {

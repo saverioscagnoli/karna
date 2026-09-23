@@ -5,6 +5,7 @@ use karna::prelude::*;
 const DEMO_SCENE: SceneId = SceneId::new_str("DEMO");
 
 struct DemoScene {
+    jbmono: Handle<Font>,
     dt_text: Text,
     jbmono_text: Text,
     pcb: Handle<Image>,
@@ -18,6 +19,7 @@ impl Scene for DemoScene {
         let jbmono = ctx.assets.load_font("assets/jbmono.ttf");
 
         Self {
+            jbmono,
             dt_text: Text::default().with_style(TextStyle::default()),
             jbmono_text: Text::new("Hello world!")
                 .with_style(TextStyle::default().with_font(jbmono)),
@@ -59,6 +61,13 @@ impl Scene for DemoScene {
 
         draw.set_color(Color::CYAN);
         draw.text(&self.jbmono_text, 10.0, 50.0);
+
+        draw.text_style_mut().set_font(self.jbmono);
+        draw.print("AAAAAAAAAAA", 400.0, 100.0);
+
+        draw.text_style_mut().set_font(ctx.assets.debug_font());
+        draw.set_color(Color::MAGENTA);
+        draw.print("Debug font!\n(with a sexy new line!)", 400.0, 120.0);
     }
 }
 

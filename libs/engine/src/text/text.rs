@@ -15,7 +15,7 @@ use crate::assets::AssetServer;
 use crate::text::Font;
 use crate::text::PositionedGlyph;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct TextStyle {
     pub font: Option<Handle<Font>>,
     pub size: Option<f32>,
@@ -389,6 +389,28 @@ pub fn attrs<'a>(
 }
 
 pub fn layout_key(spans: &[TextSpan], style: &TextStyle, size: f32) -> u64 {
+    let mut h = hash_style(style, size);
+
+    spans.len().hash(&mut h);
+
+    for span in spans {
+        hash_span(&mut h, span);
+    }
+
+    h.finish()
+}
+
+pub fn layout_key_str(text: &str, style: &TextStyle, size: f32) -> u64 {
+    let mut h = hash_style(style, size);
+
+    1usize.hash(&mut h);
+    text.hash(&mut h);
+    hash_span_attrs(&mut h, &TextSpan::default());
+
+    h.finish()
+}
+
+fn hash_style(style: &TextStyle, size: f32) -> FxHasher {
     let mut h = FxHasher::default();
 
     style.font.hash(&mut h);
@@ -406,25 +428,27 @@ pub fn layout_key(spans: &[TextSpan], style: &TextStyle, size: f32) -> u64 {
         None => 0u8.hash(&mut h),
     };
 
-    spans.len().hash(&mut h);
+    h
+}
 
-    for span in spans {
-        span.text.hash(&mut h);
-        span.font.hash(&mut h);
-        span.bold.hash(&mut h);
-        span.italic.hash(&mut h);
-        span.metadata.hash(&mut h);
+fn hash_span(h: &mut FxHasher, span: &TextSpan) {
+    span.text.hash(h);
+    hash_span_attrs(h, span);
+}
 
-        match span.color {
-            Some(c) => {
-                1u8.hash(&mut h);
-                for v in c.array() {
-                    utils::hash_f32(v, &mut h);
-                }
+fn hash_span_attrs(h: &mut FxHasher, span: &TextSpan) {
+    span.font.hash(h);
+    span.bold.hash(h);
+    span.italic.hash(h);
+    span.metadata.hash(h);
+
+    match span.color {
+        Some(c) => {
+            1u8.hash(h);
+            for v in c.array() {
+                utils::hash_f32(v, h);
             }
-            None => 0u8.hash(&mut h),
-        };
-    }
-
-    h.finish()
+        }
+        None => 0u8.hash(h),
+    };
 }

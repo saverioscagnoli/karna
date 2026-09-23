@@ -13,6 +13,8 @@ use crate::render::Layer;
 use crate::render::LayerData;
 use crate::render::LayerMap;
 use crate::text::Text;
+use crate::text::TextLayout;
+use crate::text::TextStyle;
 
 pub struct Draw<'a> {
     data: &'a mut LayerMap<LayerData>,
@@ -21,6 +23,7 @@ pub struct Draw<'a> {
     color: Color,
     white: Image,
     thickness: f32,
+    text_style: TextStyle,
 }
 
 impl<'a> Draw<'a> {
@@ -37,6 +40,7 @@ impl<'a> Draw<'a> {
             color: Color::WHITE,
             white,
             thickness: 1.0,
+            text_style: TextStyle::default(),
         }
     }
 
@@ -90,6 +94,27 @@ impl<'a> Draw<'a> {
     #[inline]
     pub fn with_thickness(&mut self, t: f32) -> &mut Self {
         self.thickness = t;
+        self
+    }
+
+    #[inline]
+    pub fn text_style(&self) -> &TextStyle {
+        &self.text_style
+    }
+
+    #[inline]
+    pub fn text_style_mut(&mut self) -> &mut TextStyle {
+        &mut self.text_style
+    }
+
+    #[inline]
+    pub fn set_text_style(&mut self, style: TextStyle) {
+        self.text_style = style;
+    }
+
+    #[inline]
+    pub fn with_text_style(&mut self, style: TextStyle) -> &mut Self {
+        self.text_style = style;
         self
     }
 
@@ -207,8 +232,21 @@ impl<'a> Draw<'a> {
     }
 
     pub fn text(&mut self, text: &Text, x: f32, y: f32) {
+        self.glyphs(text.layout(self.assets), x, y);
+    }
+
+    pub fn print<S>(&mut self, text: S, x: f32, y: f32)
+    where
+        S: AsRef<str>,
+    {
+        let layout = self.assets.layout_str(text.as_ref(), &self.text_style);
+        self.glyphs(&layout, x, y);
+    }
+
+    // Internals
+
+    fn glyphs(&mut self, layout: &TextLayout, x: f32, y: f32) {
         let (x, y) = (x.sdl_round(), y.sdl_round());
-        let layout = text.layout(self.assets);
 
         for glyph in &layout.glyphs {
             let Some(image) = glyph.image else {
@@ -238,8 +276,6 @@ impl<'a> Draw<'a> {
             );
         }
     }
-
-    // Internals
 
     fn image_region(&mut self, img: &Image, x: f32, y: f32, w: f32, h: f32) {
         let (min, max) = (img.uv_min(), img.uv_max());

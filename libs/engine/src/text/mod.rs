@@ -315,12 +315,33 @@ impl TextSystem {
         let size = self.font_size(style);
         let key = layout_key(spans, style, size);
 
+        self.cached(key, |this| this.shape(spans, style, size, atlas))
+    }
+
+    pub(crate) fn layout_str(
+        &mut self,
+        text: &str,
+        style: &TextStyle,
+        atlas: &mut TextureAtlas,
+    ) -> Arc<TextLayout> {
+        let size = self.font_size(style);
+        let key = layout_key_str(text, style, size);
+
+        self.cached(key, |this| {
+            this.shape(&[TextSpan::new(text)], style, size, atlas)
+        })
+    }
+
+    fn cached<F>(&mut self, key: u64, shape: F) -> Arc<TextLayout>
+    where
+        F: FnOnce(&mut Self) -> TextLayout,
+    {
         if let Some(entry) = self.layouts.get_mut(&key) {
             entry.used = self.frame;
             return Arc::clone(&entry.text);
         }
 
-        let text = Arc::new(self.shape(spans, style, size, atlas));
+        let text = Arc::new(shape(self));
 
         self.layouts.insert(
             key,
