@@ -1,5 +1,6 @@
 [workspace]
 members = ["karna", "karna-cli", "libs/*", "sys/*", "wrappers/*"]
+default-members = ["karna", "libs/*", "sys/*", "wrappers/*"]
 resolver = "3"
 
 [workspace.package]

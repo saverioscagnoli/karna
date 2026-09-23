@@ -153,6 +153,7 @@ fn build_shadercross(src: &Path, shared: &Path, origin: &str, _windows: bool) ->
 
     let spirv_root = cmake::Config::new(src.join("external/SPIRV-Cross"))
         .out_dir(shared.join("spirv-cross"))
+        .profile("Release")
         .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
         .define("SPIRV_CROSS_STATIC", "ON")
         .define("SPIRV_CROSS_SHARED", "OFF")
@@ -175,6 +176,7 @@ fn build_shadercross(src: &Path, shared: &Path, origin: &str, _windows: bool) ->
 
     cmake::Config::new(src)
         .out_dir(shared.join("shadercross-nodxc"))
+        .profile("Release")
         .define("CMAKE_PREFIX_PATH", prefix)
         .define("CMAKE_INSTALL_RPATH", origin)
         .define("SDLSHADERCROSS_SHARED", "ON")
@@ -208,8 +210,10 @@ fn build_vendored() {
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let shared = out
         .ancestors()
-        .nth(3)
-        .map_or_else(|| out.clone(), |profile| profile.join("karna-vendor"));
+        .find(|dir| dir.file_name().is_some_and(|name| name == "build"))
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .map_or_else(|| out.clone(), |target| target.join("karna-vendor"));
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let windows = target_os == "windows";
     let origin = if target_os == "macos" || target_os == "ios" {
