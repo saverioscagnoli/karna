@@ -118,8 +118,35 @@ impl<'a> Draw<'a> {
         self
     }
 
+    pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
+        self.line_v([x1, y1], [x2, y2]);
+    }
+
+    pub fn line_v<P, Q>(&mut self, p1: P, p2: Q)
+    where
+        P: Into<math::Vector2<f32>>,
+        Q: Into<math::Vector2<f32>>,
+    {
+        let p1 = p1.into();
+        let p2 = p2.into();
+        let n = (p2 - p1).normalize().perp() * (self.thickness * 0.5);
+
+        self.solid_quad([p1 + n, p2 + n, p2 - n, p1 - n]);
+    }
+
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
         self.solid_quad(corners(x, y, w, h));
+    }
+
+    pub fn rect_v<P, S>(&mut self, pos: P, size: S)
+    where
+        P: Into<math::Vector2<f32>>,
+        S: Into<math::Size<f32>>,
+    {
+        let pos = pos.into();
+        let size = size.into();
+
+        self.rect(pos.x, pos.y, size.w(), size.h());
     }
 
     pub fn rect_outline(&mut self, x: f32, y: f32, w: f32, h: f32) {
@@ -131,23 +158,35 @@ impl<'a> Draw<'a> {
         self.rect(x + w - t, y + t, t, h - 2.0 * t);
     }
 
-    pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
-        let a = math::vec2!(x1, y1);
-        let b = math::vec2!(x2, y2);
-        let n = (b - a).normalize().perp() * (self.thickness * 0.5);
+    pub fn rect_outline_v<P, S>(&mut self, pos: P, size: S)
+    where
+        P: Into<math::Vector2<f32>>,
+        S: Into<math::Size<f32>>,
+    {
+        let pos = pos.into();
+        let size = size.into();
 
-        self.solid_quad([a + n, b + n, b - n, a - n]);
+        self.rect_outline(pos.x, pos.y, size.w(), size.h());
     }
 
     pub fn triangle(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32) {
-        self.polygon(&[
-            math::vec2!(x1, y1),
-            math::vec2!(x2, y2),
-            math::vec2!(x3, y3),
-        ]);
+        self.triangle_v([x1, y1], [x2, y2], [x3, y3]);
     }
 
-    pub fn polygon(&mut self, points: &[Vector2<f32>]) {
+    pub fn triangle_v<P, Q, S>(&mut self, p1: P, p2: Q, p3: S)
+    where
+        P: Into<math::Vector2<f32>>,
+        Q: Into<math::Vector2<f32>>,
+        S: Into<math::Vector2<f32>>,
+    {
+        let p1 = p1.into();
+        let p2 = p2.into();
+        let p3 = p3.into();
+
+        self.polygon(&[p1, p2, p3]);
+    }
+
+    pub fn polygon(&mut self, points: &[math::Vector2<f32>]) {
         if points.len() < 3 {
             return;
         }
@@ -187,6 +226,15 @@ impl<'a> Draw<'a> {
         }
     }
 
+    pub fn circle_v<P>(&mut self, pos: P, radius: f32)
+    where
+        P: Into<math::Vector2<f32>>,
+    {
+        let pos = pos.into();
+
+        self.circle(pos.x, pos.y, radius);
+    }
+
     pub fn circle_outline(&mut self, x: f32, y: f32, radius: f32) {
         let n = segments(radius);
         let inner = (radius - self.thickness).sdl_max(0.0);
@@ -215,12 +263,30 @@ impl<'a> Draw<'a> {
         }
     }
 
+    pub fn circle_outline_v<P>(&mut self, pos: P, radius: f32)
+    where
+        P: Into<math::Vector2<f32>>,
+    {
+        let pos = pos.into();
+
+        self.circle_outline(pos.x, pos.y, radius);
+    }
+
     pub fn image(&mut self, image: Handle<Image>, x: f32, y: f32) {
         let Some(img) = self.lookup(image) else {
             return;
         };
 
         self.image_region(&img, x, y, img.width() as f32, img.height() as f32);
+    }
+
+    pub fn image_v<P>(&mut self, image: Handle<Image>, pos: P)
+    where
+        P: Into<math::Vector2<f32>>,
+    {
+        let pos = pos.into();
+
+        self.image(image, pos.x, pos.y);
     }
 
     pub fn image_sized(&mut self, image: Handle<Image>, x: f32, y: f32, w: f32, h: f32) {
@@ -231,8 +297,28 @@ impl<'a> Draw<'a> {
         self.image_region(&img, x, y, w, h);
     }
 
+    pub fn image_sized_v<P, S>(&mut self, image: Handle<Image>, pos: P, size: S)
+    where
+        P: Into<math::Vector2<f32>>,
+        S: Into<math::Size<f32>>,
+    {
+        let pos = pos.into();
+        let size = size.into();
+
+        self.image_sized(image, pos.x, pos.y, size.w(), size.h());
+    }
+
     pub fn text(&mut self, text: &Text, x: f32, y: f32) {
         self.glyphs(text.layout(self.assets), x, y);
+    }
+
+    pub fn text_v<P>(&mut self, text: &Text, pos: P)
+    where
+        P: Into<math::Vector2<f32>>,
+    {
+        let pos = pos.into();
+
+        self.text(text, pos.x, pos.y);
     }
 
     pub fn print<S>(&mut self, text: S, x: f32, y: f32)
@@ -241,6 +327,16 @@ impl<'a> Draw<'a> {
     {
         let layout = self.assets.layout_str(text.as_ref(), &self.text_style);
         self.glyphs(&layout, x, y);
+    }
+
+    pub fn print_v<S, P>(&mut self, text: S, pos: P)
+    where
+        S: AsRef<str>,
+        P: Into<math::Vector2<f32>>,
+    {
+        let pos = pos.into();
+
+        self.print(text, pos.x, pos.y);
     }
 
     // Internals

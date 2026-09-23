@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use karna::prelude::*;
 
 const LINE_SCENE: SceneId = SceneId::new_str("line");
@@ -28,7 +30,7 @@ impl Scene for LineDemo {
         draw.line(m.x, 0.0, m.x, size.h());
 
         draw.set_color(Color::MAGENTA);
-        draw.circle(m.x, m.y, 5.0);
+        draw.circle_v(m, 5.0);
     }
 }
 
