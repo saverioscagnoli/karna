@@ -20,8 +20,8 @@ pub struct Mutex<T: ?Sized> {
     data: UnsafeCell<T>,
 }
 
-unsafe impl<T: ?Sized> Send for Mutex<T> {}
-unsafe impl<T: ?Sized> Sync for Mutex<T> {}
+unsafe impl<T: Send + ?Sized> Send for Mutex<T> {}
+unsafe impl<T: Send + ?Sized> Sync for Mutex<T> {}
 
 impl<T> Mutex<T> {
     pub fn new(value: T) -> Self {

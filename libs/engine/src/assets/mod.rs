@@ -10,6 +10,7 @@ use core::sync::atomic::AtomicBool;
 pub use atlas::TextureAtlas;
 pub use image::Image;
 
+use nostd::alloc::collections::VecDeque;
 use nostd::alloc::ffi::CString;
 use nostd::alloc::format;
 use nostd::alloc::string::String;
@@ -20,6 +21,7 @@ use nostd::path::Path;
 use nostd::path::PathBuf;
 use nostd::sync::Receiver;
 use nostd::sync::Sender;
+use nostd::sync::TrySendError;
 use nostd::sync::channel;
 use nostd::thread;
 use sdl3::gpu::Device;
@@ -62,6 +64,54 @@ pub struct AssetResponse {
     data: Result<DecodedAsset, String>,
 }
 
+pub struct AssetQueue {
+    sender: Sender<AssetRequest>,
+    backlog: VecDeque<AssetRequest>,
+}
+
+impl AssetQueue {
+    fn new(sender: Sender<AssetRequest>) -> Self {
+        Self {
+            sender,
+            backlog: VecDeque::new(),
+        }
+    }
+
+    pub(crate) fn submit(&mut self, request: AssetRequest) -> Result<(), AssetRequest> {
+        if !self.backlog.is_empty() {
+            self.backlog.push_back(request);
+            return Ok(());
+        }
+
+        match self.sender.try_send(request) {
+            Ok(()) => Ok(()),
+            Err(TrySendError::Full(request)) => {
+                self.backlog.push_back(request);
+                Ok(())
+            }
+            Err(TrySendError::Closed(request)) => Err(request),
+        }
+    }
+
+    fn flush(&mut self) -> Vec<AssetRequest> {
+        while let Some(request) = self.backlog.pop_front() {
+            match self.sender.try_send(request) {
+                Ok(()) => {}
+                Err(TrySendError::Full(request)) => {
+                    self.backlog.push_front(request);
+                    break;
+                }
+                Err(TrySendError::Closed(request)) => {
+                    self.backlog.push_front(request);
+                    return self.backlog.drain(..).collect();
+                }
+            }
+        }
+
+        Vec::new()
+    }
+}
+
 #[derive(Debug)]
 pub enum AssetSlot<T> {
     Pending,
@@ -71,7 +121,7 @@ pub enum AssetSlot<T> {
 
 pub struct AssetServer {
     root: PathBuf,
-    requests: Sender<AssetRequest>,
+    requests: AssetQueue,
     responses: Receiver<AssetResponse>,
     images: ImageRegistry,
     text: RefCell<TextSystem>,
@@ -86,7 +136,7 @@ impl AssetServer {
     ) -> Self {
         let mut this = Self {
             root,
-            requests,
+            requests: AssetQueue::new(requests),
             responses,
             images: ImageRegistry::new(device),
             text: RefCell::new(TextSystem::default()),
@@ -107,11 +157,11 @@ impl AssetServer {
     where
         P: AsRef<Path>,
     {
-        self.images.load_path(path, &self.requests)
+        self.images.load_path(path, &mut self.requests)
     }
 
     pub fn load_image_bytes(&mut self, bytes: &[u8]) -> Handle<Image> {
-        self.images.load_bytes(bytes.to_vec(), &self.requests)
+        self.images.load_bytes(bytes.to_vec(), &mut self.requests)
     }
 
     pub fn bake_image(&mut self, bytes: &[u8]) -> Handle<Image> {
@@ -190,6 +240,12 @@ impl AssetServer {
                     error!("Failed to load image: {}", e);
                 }
             }
+        }
+
+        for request in self.requests.flush() {
+            error!("Asset workers are gone, cannot load more assets.");
+            self.images.slots[request.slot.cast()] =
+                AssetSlot::Failed("Asset worker stopped.".into());
         }
     }
 }

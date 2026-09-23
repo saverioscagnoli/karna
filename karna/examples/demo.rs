@@ -67,7 +67,20 @@ impl Scene for DemoScene {
 
         draw.text_style_mut().set_font(ctx.assets.debug_font());
         draw.set_color(Color::MAGENTA);
+
         draw.print("Debug font!\n(with a sexy new line!)", 400.0, 120.0);
+
+        draw.set_color(Color::hex(0x252525));
+        draw.triangle_v([900.0, 600.0], [960.0, 650.0], [1000.0, 540.0]);
+
+        draw.set_color(Color::ORANGE);
+        draw.polygon([
+            [1000.0, 200.0],
+            [1200.0, 140.0],
+            [940.0, 250.0],
+            [1100.0, 300.0],
+            [1200.0, 200.0],
+        ]);
     }
 }
 

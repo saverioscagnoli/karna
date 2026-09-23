@@ -9,13 +9,13 @@ use nostd::collections::HashMap;
 use nostd::collections::SlotMap;
 use nostd::path::Path;
 use nostd::path::PathBuf;
-use nostd::sync::Sender;
 use sdl3::gpu::Device;
 use sdl3::image::DecodedImage;
 use traccia::error;
 use traccia::info;
 
 use crate::assets::AssetKind;
+use crate::assets::AssetQueue;
 use crate::assets::AssetRequest;
 use crate::assets::AssetSlot;
 use crate::assets::AssetSource;
@@ -104,7 +104,7 @@ impl ImageRegistry {
         }
     }
 
-    pub fn load_path<P>(&mut self, path: P, sender: &Sender<AssetRequest>) -> Handle<Image>
+    pub fn load_path<P>(&mut self, path: P, queue: &mut AssetQueue) -> Handle<Image>
     where
         P: AsRef<Path>,
     {
@@ -123,7 +123,7 @@ impl ImageRegistry {
             kind: AssetKind::Image,
         };
 
-        if sender.send(request).is_err() {
+        if queue.submit(request).is_err() {
             error!("Asset workers are gone, cannot load more assets.");
             self.slots[handle.cast()] = AssetSlot::Failed("Asset worker stopped.".into());
         }
@@ -131,7 +131,7 @@ impl ImageRegistry {
         handle
     }
 
-    pub fn load_bytes(&mut self, bytes: Vec<u8>, sender: &Sender<AssetRequest>) -> Handle<Image> {
+    pub fn load_bytes(&mut self, bytes: Vec<u8>, queue: &mut AssetQueue) -> Handle<Image> {
         let mut hasher = FxHasher::default();
         bytes.hash(&mut hasher);
         let hash = hasher.finish();
@@ -149,7 +149,7 @@ impl ImageRegistry {
             kind: AssetKind::Image,
         };
 
-        if sender.send(request).is_err() {
+        if queue.submit(request).is_err() {
             error!("Asset workers are gone, cannot load more assets.");
             self.slots[handle.cast()] = AssetSlot::Failed("Asset worker stopped.".into());
         }

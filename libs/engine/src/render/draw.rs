@@ -3,6 +3,7 @@ use core::f32::consts::TAU;
 use math::SdlFloat;
 use math::Vector2;
 use math::Vector4;
+use nostd::alloc::vec::Vec;
 use nostd::collections::Handle;
 use sdl3::render::Color;
 
@@ -183,10 +184,16 @@ impl<'a> Draw<'a> {
         let p2 = p2.into();
         let p3 = p3.into();
 
-        self.polygon(&[p1, p2, p3]);
+        self.polygon([p1, p2, p3]);
     }
 
-    pub fn polygon(&mut self, points: &[math::Vector2<f32>]) {
+    pub fn polygon<V, I>(&mut self, points: I)
+    where
+        V: Into<math::Vector2<f32>>,
+        I: IntoIterator<Item = V>,
+    {
+        let points = points.into_iter().map(|p| p.into()).collect::<Vec<_>>();
+
         if points.len() < 3 {
             return;
         }
