@@ -6,16 +6,17 @@ use math::Vector4;
 use nostd::collections::Handle;
 use sdl3::render::Color;
 
+use crate::assets::AssetServer;
 use crate::assets::Image;
-use crate::assets::ImageRegistry;
 use crate::render::ImmediateVertex;
 use crate::render::Layer;
 use crate::render::LayerData;
 use crate::render::LayerMap;
+use crate::text::Text;
 
 pub struct Draw<'a> {
     data: &'a mut LayerMap<LayerData>,
-    images: &'a ImageRegistry,
+    assets: &'a AssetServer,
     layer: Layer,
     color: Color,
     white: Image,
@@ -23,14 +24,15 @@ pub struct Draw<'a> {
 }
 
 impl<'a> Draw<'a> {
-    pub(crate) fn new(data: &'a mut LayerMap<LayerData>, images: &'a ImageRegistry) -> Self {
+    pub(crate) fn new(data: &'a mut LayerMap<LayerData>, assets: &'a AssetServer) -> Self {
+        let images = assets.images();
         let white = images
             .resolve(images.white_texel)
             .expect("white texel must be baked before drawing");
 
         Self {
             data,
-            images,
+            assets,
             layer: Layer::WORLD,
             color: Color::WHITE,
             white,
@@ -204,6 +206,41 @@ impl<'a> Draw<'a> {
         self.image_region(&img, x, y, w, h);
     }
 
+    pub fn text(&mut self, text: &Text, x: f32, y: f32) {
+        let (x, y) = (x.sdl_round(), y.sdl_round());
+        let layout = text.layout(self.assets);
+
+        for glyph in &layout.glyphs {
+            let Some(image) = glyph.image else {
+                continue;
+            };
+
+            let color = if glyph.colored {
+                Color::rgba(1.0, 1.0, 1.0, self.color.a())
+            } else {
+                glyph.color.unwrap_or(self.color)
+            };
+
+            let size = glyph.size.cast::<f32>();
+            let (min, max) = (image.uv_min(), image.uv_max());
+            let uvs = [
+                min,
+                math::vec2!(max.x, min.y),
+                max,
+                math::vec2!(min.x, max.y),
+            ];
+
+            self.quad(
+                corners(x + glyph.pos.x, y + glyph.pos.y, size.w(), size.h()),
+                uvs,
+                image.page(),
+                color_vec(color),
+            );
+        }
+    }
+
+    // Internals
+
     fn image_region(&mut self, img: &Image, x: f32, y: f32, w: f32, h: f32) {
         let (min, max) = (img.uv_min(), img.uv_max());
         let uvs = [
@@ -213,16 +250,16 @@ impl<'a> Draw<'a> {
             math::vec2!(min.x, max.y),
         ];
 
-        self.quad(corners(x, y, w, h), uvs, img.page());
+        self.quad(corners(x, y, w, h), uvs, img.page(), self.color_vec());
     }
-
-    // Internals
 
     #[inline]
     fn lookup(&self, image: Handle<Image>) -> Option<Image> {
-        self.images
+        let images = self.assets.images();
+
+        images
             .resolve(image)
-            .or_else(|| self.images.resolve(self.images.placeholder))
+            .or_else(|| images.resolve(images.placeholder))
     }
 
     #[inline]
@@ -233,19 +270,23 @@ impl<'a> Draw<'a> {
 
     #[inline]
     fn color_vec(&self) -> Vector4<f32> {
-        let [r, g, b, a] = self.color.array();
-        math::vec4!(r, g, b, a)
+        color_vec(self.color)
     }
 
     #[inline]
     fn solid_quad(&mut self, p: [Vector2<f32>; 4]) {
         let (uv, page) = self.solid();
-        self.quad(p, [uv; 4], page);
+        self.quad(p, [uv; 4], page, self.color_vec());
     }
 
     #[inline]
-    fn quad(&mut self, p: [Vector2<f32>; 4], uv: [Vector2<f32>; 4], page: u32) {
-        let color = self.color_vec();
+    fn quad(
+        &mut self,
+        p: [Vector2<f32>; 4],
+        uv: [Vector2<f32>; 4],
+        page: u32,
+        color: Vector4<f32>,
+    ) {
         let d = &mut self.data[self.layer];
         let b = d.vertices.len() as u32;
 
@@ -264,6 +305,12 @@ fn vertex(p: Vector2<f32>, color: Vector4<f32>, uv: Vector2<f32>, page: u32) -> 
         uv,
         page: page as f32,
     }
+}
+
+#[inline]
+fn color_vec(color: Color) -> Vector4<f32> {
+    let [r, g, b, a] = color.array();
+    math::vec4!(r, g, b, a)
 }
 
 #[inline]

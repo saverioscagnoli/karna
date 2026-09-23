@@ -177,12 +177,13 @@ impl WindowState {
         &mut self,
         outboxes: &mut AppOutboxes,
         input: &Input,
-        assets: &AssetServer,
+        assets: &mut AssetServer,
     ) {
         #[rustfmt::skip]
         let Self { ctx, renderer, scenes, active_scenes, .. } = self;
 
-        let mut draw = renderer.begin(assets.images());
+        assets.text_mut().begin_frame();
+        let mut draw = renderer.draw_handle(assets);
 
         for id in active_scenes {
             let Some(slot) = scenes.get_mut(id) else {

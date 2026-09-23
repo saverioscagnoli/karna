@@ -1,4 +1,6 @@
 use core::cmp::Ordering;
+use core::fmt;
+use core::fmt::Debug;
 use core::hash::Hash;
 use core::hash::Hasher;
 use core::marker::PhantomData;
@@ -7,11 +9,20 @@ use core::ops::IndexMut;
 
 use alloc::vec::Vec;
 
-#[derive(Debug)]
 pub struct Handle<T> {
     index: u32,
     generation: u32,
     _d: PhantomData<T>,
+}
+
+impl<T> Debug for Handle<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Handle {{ index: {}, generation: {} }}",
+            self.index, self.generation
+        )
+    }
 }
 
 impl<T> Default for Handle<T> {

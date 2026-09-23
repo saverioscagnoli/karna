@@ -3,6 +3,8 @@ mod image;
 mod packer;
 mod worker;
 
+use core::cell::Ref;
+use core::cell::RefCell;
 use core::sync::atomic::AtomicBool;
 
 pub use atlas::TextureAtlas;
@@ -29,6 +31,11 @@ use crate::assets::worker::worker;
 
 pub use crate::assets::image::ImageRegistry;
 pub use crate::assets::worker::AssetThreadPool;
+use crate::text::Font;
+use crate::text::TextLayout;
+use crate::text::TextSpan;
+use crate::text::TextStyle;
+use crate::text::TextSystem;
 
 pub enum AssetKind {
     Image,
@@ -63,25 +70,35 @@ pub enum AssetSlot<T> {
 }
 
 pub struct AssetServer {
+    root: PathBuf,
     requests: Sender<AssetRequest>,
     responses: Receiver<AssetResponse>,
     images: ImageRegistry,
+    text: RefCell<TextSystem>,
 }
 
 impl AssetServer {
     pub(crate) fn new(
+        root: PathBuf,
         requests: Sender<AssetRequest>,
         responses: Receiver<AssetResponse>,
         device: &Device,
     ) -> Self {
         let mut this = Self {
+            root,
             requests,
             responses,
             images: ImageRegistry::new(device),
+            text: RefCell::new(TextSystem::default()),
         };
 
         this.images.white_texel = this.bake_image(ImageRegistry::WHITE_TEXEL_BYTES);
         this.images.placeholder = this.bake_image(ImageRegistry::PLACEHOLDER_IMAGE_BYTES);
+        let debug_font =
+            this.load_font_bytes_sized(TextSystem::DEBUG_FONT_BYTES, TextSystem::DEBUG_FONT_SIZE);
+        let text = this.text.get_mut();
+        text.debug_font = debug_font;
+        text.set_default_font(debug_font);
 
         this
     }
@@ -101,15 +118,52 @@ impl AssetServer {
         self.images.bake(bytes.to_vec())
     }
 
+    pub fn load_font<P>(&mut self, path: P) -> Handle<Font>
+    where
+        P: AsRef<Path>,
+    {
+        self.load_font_sized(path, TextSystem::DEFAULT_FONT_SIZE)
+    }
+
+    pub fn load_font_sized<P>(&mut self, path: P, size: f32) -> Handle<Font>
+    where
+        P: AsRef<Path>,
+    {
+        let path = self.root.join(path.as_ref());
+        self.text.get_mut().register_path(&path, size)
+    }
+
+    pub fn load_font_bytes(&mut self, bytes: &[u8]) -> Handle<Font> {
+        self.load_font_bytes_sized(bytes, TextSystem::DEFAULT_FONT_SIZE)
+    }
+
+    pub fn load_font_bytes_sized(&mut self, bytes: &[u8], size: f32) -> Handle<Font> {
+        self.text.get_mut().register_bytes(bytes, size)
+    }
+
+    pub(crate) fn layout(&self, spans: &[TextSpan], style: &TextStyle) -> Arc<TextLayout> {
+        self.text
+            .borrow_mut()
+            .layout(spans, style, &mut self.images.atlas.borrow_mut())
+    }
+
+    pub(crate) fn atlas(&self) -> Ref<'_, TextureAtlas> {
+        self.images.atlas.borrow()
+    }
+
     pub(crate) fn images(&self) -> &ImageRegistry {
         &self.images
+    }
+
+    pub(crate) fn text_mut(&mut self) -> &mut TextSystem {
+        self.text.get_mut()
     }
 
     pub(crate) fn poll(&mut self) {
         while let Ok(r) = self.responses.try_recv() {
             match (r.kind, r.data) {
                 (AssetKind::Image, Ok(DecodedAsset::Image(dec))) => {
-                    let Some(image) = self.images.atlas.insert(&dec) else {
+                    let Some(image) = self.images.atlas.get_mut().insert(&dec) else {
                         error!("Failed to pack image into texture atlas");
                         continue;
                     };
@@ -153,7 +207,7 @@ pub fn spawn(root: PathBuf, workers: usize, device: &Device) -> (AssetThreadPool
     drop(res_tx);
 
     let pool = AssetThreadPool { threads, cancel };
-    let assets = AssetServer::new(req_tx, res_rx, device);
+    let assets = AssetServer::new(root, req_tx, res_rx, device);
 
     (pool, assets)
 }

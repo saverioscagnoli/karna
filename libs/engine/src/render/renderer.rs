@@ -19,7 +19,7 @@ use sdl3::gpu::VertexBuffer;
 use sdl3::render::Color;
 use sdl3::window::Window;
 
-use crate::assets::ImageRegistry;
+use crate::assets::AssetServer;
 use crate::render::Camera;
 use crate::render::Draw;
 use crate::render::ImmediateVertex;
@@ -141,13 +141,42 @@ impl Renderer {
         }
     }
 
-    pub fn begin<'a>(&'a mut self, images: &'a ImageRegistry) -> Draw<'a> {
+    pub fn draw_handle<'a>(&'a mut self, assets: &'a AssetServer) -> Draw<'a> {
         for layer in self.data.values_mut() {
             layer.vertices.clear();
             layer.indices.clear();
         }
 
-        Draw::new(&mut self.data, images)
+        Draw::new(&mut self.data, assets)
+    }
+
+    fn collect(&mut self) {
+        self.vertices.clear();
+        self.indices.clear();
+        self.batches.clear();
+
+        let order = [Layer::WORLD]
+            .into_iter()
+            .chain(self.data.order().iter().copied())
+            .chain([Layer::UI, Layer::DEBUG]);
+
+        for layer in order {
+            let data = &self.data[layer];
+
+            if data.indices.is_empty() {
+                continue;
+            }
+
+            self.batches.push(Batch {
+                layer,
+                first_index: self.indices.len() as u32,
+                indices: data.indices.len() as u32,
+                vertex_offset: self.vertices.len() as i32,
+            });
+
+            self.vertices.extend_from_slice(&data.vertices);
+            self.indices.extend_from_slice(&data.indices);
+        }
     }
 
     pub fn flush(&mut self, window: &Window, atlas: &Texture) -> Result<(), SdlError> {
@@ -194,34 +223,5 @@ impl Renderer {
         }
 
         frame.submit()
-    }
-
-    fn collect(&mut self) {
-        self.vertices.clear();
-        self.indices.clear();
-        self.batches.clear();
-
-        let order = [Layer::WORLD]
-            .into_iter()
-            .chain(self.data.order().iter().copied())
-            .chain([Layer::UI, Layer::DEBUG]);
-
-        for layer in order {
-            let data = &self.data[layer];
-
-            if data.indices.is_empty() {
-                continue;
-            }
-
-            self.batches.push(Batch {
-                layer,
-                first_index: self.indices.len() as u32,
-                indices: data.indices.len() as u32,
-                vertex_offset: self.vertices.len() as i32,
-            });
-
-            self.vertices.extend_from_slice(&data.vertices);
-            self.indices.extend_from_slice(&data.indices);
-        }
     }
 }

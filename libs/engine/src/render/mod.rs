@@ -7,7 +7,6 @@ mod vertex;
 
 pub use camera::*;
 pub use draw::*;
-pub use geometry::*;
 pub use layer::*;
 pub use renderer::*;
 pub use vertex::*;

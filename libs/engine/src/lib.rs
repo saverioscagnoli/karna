@@ -7,6 +7,7 @@ pub mod event;
 pub mod input;
 pub mod render;
 pub mod scene;
+pub mod text;
 pub mod time;
 pub mod window;
 pub mod window_state;
@@ -359,17 +360,22 @@ impl App {
                     &self.input,
                     &mut self.assets,
                 );
-                entry
-                    .state
-                    .draw_active_scenes(&mut self.event_outboxes, &self.input, &self.assets);
+                entry.state.draw_active_scenes(
+                    &mut self.event_outboxes,
+                    &self.input,
+                    &mut self.assets,
+                );
+
+                let atlas = self.assets.atlas();
 
                 if let Err(e) = entry
                     .state
                     .renderer
-                    .flush(&entry.sdl_window, self.assets.images().atlas.texture())
+                    .flush(&entry.sdl_window, atlas.texture())
                 {
                     error!("Failed to render frame: {}", e);
                 }
+
                 entry.state.sync_window(&entry.sdl_window);
             }
 

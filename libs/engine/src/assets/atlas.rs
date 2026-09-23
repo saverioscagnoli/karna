@@ -60,15 +60,27 @@ impl TextureAtlas {
         self.generation
     }
 
-    /// Packs `image` into the atlas and uploads its pixels.
+    /// Packs a tightly packed RGBA8 buffer (`w * h * 4` bytes, no row padding)
+    /// into the atlas and uploads it.
     ///
-    /// Returns `None` when the image is larger than a page, or when every page
-    /// is full and no more can be opened; either way the caller has to fall
-    /// back to a standalone texture.
-    pub fn insert(&mut self, image: &DecodedImage) -> Option<Image> {
-        let (w, h) = (image.width(), image.heigth());
+    /// Returns `None` if the buffer size doesn't match, the image doesn't fit
+    /// on a page, or the atlas is full.
+    pub fn insert_rgba(&mut self, pixels: &[u8], size: math::Size<u32>) -> Option<Image> {
+        let (w, h) = (size.width, size.height); // adjust to your Size field names
 
         if w == 0 || h == 0 || w + PADDING > self.size || h + PADDING > self.size {
+            return None;
+        }
+
+        let expected = (w as usize) * (h as usize) * 4;
+        if pixels.len() != expected {
+            error!(
+                "insert_rgba: expected {} bytes for {}x{} RGBA8, got {}",
+                expected,
+                w,
+                h,
+                pixels.len()
+            );
             return None;
         }
 
@@ -85,13 +97,20 @@ impl TextureAtlas {
 
         if let Err(e) = self
             .device
-            .upload_texture_region(&self.texture, region, image.pixels())
+            .upload_texture_region(&self.texture, region, pixels)
         {
             error!("Failed to upload image to atlas page {}: {}", page, e);
             return None;
         }
 
         Some(self.image(page, placement.x, placement.y, w, h))
+    }
+
+    pub fn insert(&mut self, image: &DecodedImage) -> Option<Image> {
+        self.insert_rgba(
+            image.pixels(),
+            math::Size::new(image.width(), image.heigth()),
+        )
     }
 
     fn alloc(&mut self, w: u32, h: u32) -> Option<(u32, Placement)> {
@@ -160,14 +179,13 @@ impl TextureAtlas {
     }
 
     fn image(&self, page: u32, x: u32, y: u32, w: u32, h: u32) -> Image {
-        // Half texel inset, so linear filtering never reaches into the gutter.
         let s = self.size as f32;
 
         Image::new(
             math::Size::new(w, h),
             page,
-            math::vec2!((x as f32 + 0.5) / s, (y as f32 + 0.5) / s),
-            math::vec2!(((x + w) as f32 - 0.5) / s, ((y + h) as f32 - 0.5) / s),
+            math::vec2!(x as f32 / s, y as f32 / s),
+            math::vec2!((x + w) as f32 / s, (y + h) as f32 / s),
         )
     }
 }

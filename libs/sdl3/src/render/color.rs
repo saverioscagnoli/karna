@@ -14,10 +14,32 @@ impl Color {
         Self(SDL_FColor { r, g, b, a })
     }
 
+    #[inline]
+    pub const fn rgb_u8(r: u8, g: u8, b: u8) -> Self {
+        Self(SDL_FColor {
+            r: r as f32 / 255.0,
+            g: g as f32 / 255.0,
+            b: b as f32 / 255.0,
+            a: 1.0,
+        })
+    }
+
+    #[inline]
+    pub const fn rgba_u8(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self(SDL_FColor {
+            r: r as f32 / 255.0,
+            g: g as f32 / 255.0,
+            b: b as f32 / 255.0,
+            a: a as f32 / 255.0,
+        })
+    }
+
+    #[inline]
     pub const fn raw(&self) -> SDL_FColor {
         self.0
     }
 
+    #[inline]
     pub const fn hex(v: u32) -> Self {
         Self::rgba(
             ((v >> 16) & 0xFF) as f32 / 255.0,
@@ -27,6 +49,7 @@ impl Color {
         )
     }
 
+    #[inline]
     pub const fn hex_a(v: u32) -> Self {
         Self::rgba(
             ((v >> 24) & 0xFF) as f32 / 255.0,
@@ -55,12 +78,54 @@ impl Color {
         }
     }
 
+    #[inline]
     pub const fn tuple(&self) -> (f32, f32, f32, f32) {
         (self.0.r, self.0.g, self.0.b, self.0.a)
     }
 
+    #[inline]
     pub const fn array(&self) -> [f32; 4] {
         [self.0.r, self.0.g, self.0.b, self.0.a]
+    }
+
+    #[inline]
+    pub const fn r(&self) -> f32 {
+        self.0.r
+    }
+
+    #[inline]
+    pub const fn r_u8(&self) -> u8 {
+        (self.r() * 255.0) as u8
+    }
+
+    #[inline]
+    pub const fn g(&self) -> f32 {
+        self.0.r
+    }
+
+    #[inline]
+    pub const fn g_u8(&self) -> u8 {
+        (self.g() * 255.0) as u8
+    }
+
+    #[inline]
+    pub const fn b(&self) -> f32 {
+        self.0.r
+    }
+
+    #[inline]
+    pub const fn b_u8(&self) -> u8 {
+        (self.b() * 255.0) as u8
+    }
+
+    #[inline]
+    pub const fn a(&self) -> f32 {
+        self.0.r
+    }
+
+    #[inline]
+    pub const fn a_u8(&self) -> u8 {
+        (self.a() * 255.0) as u8
     }
 }
 

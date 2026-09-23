@@ -5,6 +5,8 @@ use karna::prelude::*;
 const DEMO_SCENE: SceneId = SceneId::new_str("DEMO");
 
 struct DemoScene {
+    dt_text: Text,
+    jbmono_text: Text,
     pcb: Handle<Image>,
 }
 
@@ -13,18 +15,25 @@ impl Scene for DemoScene {
     where
         Self: Sized,
     {
+        let jbmono = ctx.assets.load_font("assets/jbmono.ttf");
+
         Self {
+            dt_text: Text::default().with_style(TextStyle::default()),
+            jbmono_text: Text::new("Hello world!")
+                .with_style(TextStyle::default().with_font(jbmono)),
             pcb: ctx.assets.load_image("assets/pcb2.png"),
         }
     }
 
     fn fixed_update(&mut self, ctx: &mut UpdateContext) {}
 
-    fn update(&mut self, ctx: &mut UpdateContext) {}
+    fn update(&mut self, ctx: &mut UpdateContext) {
+        self.dt_text.set(format!("dt: {}", ctx.time.delta()));
+    }
 
     fn draw(&mut self, ctx: &mut DrawContext, draw: &mut Draw) {
         draw.set_color(Color::RED);
-        draw.rect(10.0, 10.0, 50.0, 50.0);
+        draw.rect(50.0, 50.0, 50.0, 50.0);
 
         draw.set_color(Color::CYAN);
         draw.circle(300.0, 200.0, 40.0);
@@ -44,6 +53,12 @@ impl Scene for DemoScene {
             .with_color(Color::WHITE)
             .with_thickness(3.0)
             .rect_outline(0.0, 400.0, 1280.0, 32.0);
+
+        draw.set_color(Color::WHITE);
+        draw.text(&self.dt_text, 10.0, 10.0);
+
+        draw.set_color(Color::CYAN);
+        draw.text(&self.jbmono_text, 10.0, 50.0);
     }
 }
 
@@ -51,6 +66,7 @@ fn main() {
     _ = traccia::init(
         traccia::Config::default()
             .with_min_level(traccia::LevelFilter::Debug)
+            .with_module_filter("cosmic_text", traccia::LevelFilter::Warn)
             .with_target(SdlTarget::default()),
     );
 

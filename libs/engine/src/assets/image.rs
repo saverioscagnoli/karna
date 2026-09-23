@@ -1,3 +1,4 @@
+use core::cell::RefCell;
 use core::hash::Hash;
 use core::hash::Hasher;
 
@@ -69,7 +70,7 @@ impl Image {
 }
 
 pub struct ImageRegistry {
-    pub atlas: TextureAtlas,
+    pub atlas: RefCell<TextureAtlas>,
     pub slots: SlotMap<AssetSlot<Image>>,
     pub paths: HashMap<PathBuf, Handle<Image>>,
     pub bytes: HashMap<u64, Handle<Image>>,
@@ -86,7 +87,7 @@ impl ImageRegistry {
 
     pub fn new(device: &Device) -> Self {
         Self {
-            atlas: TextureAtlas::new(device.share(), 2048, 32),
+            atlas: RefCell::new(TextureAtlas::new(device.share(), 2048, 32)),
             slots: SlotMap::default(),
             paths: HashMap::default(),
             bytes: HashMap::default(),
@@ -161,7 +162,7 @@ impl ImageRegistry {
 
         match DecodedImage::from_bytes(&bytes) {
             Ok(dec) => {
-                let Some(image) = self.atlas.insert(&dec) else {
+                let Some(image) = self.atlas.get_mut().insert(&dec) else {
                     error!("Failed to bake image, no space in atlas.");
                     return Handle::INVALID;
                 };
