@@ -153,6 +153,11 @@ impl AssetServer {
         this
     }
 
+    /// The directory asset paths are resolved against.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     pub fn load_image<P>(&mut self, path: P) -> Handle<Image>
     where
         P: AsRef<Path>,

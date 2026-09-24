@@ -17,6 +17,11 @@ pub use engine::time::Time;
 pub use engine::window::Window;
 pub use sdl3::render::Color;
 
+#[cfg(feature = "js")]
+pub use js::ScriptScene;
+#[cfg(feature = "js")]
+pub use js::WindowBuilderExt;
+
 pub mod input {
     pub use sdl3::events::Key;
     pub use sdl3::events::MouseButton;

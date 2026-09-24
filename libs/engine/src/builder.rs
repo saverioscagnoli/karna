@@ -7,6 +7,8 @@ use nostd::path::PathBuf;
 use traccia::debug;
 
 use crate::App;
+use crate::context::LoadContext;
+use crate::scene::BoxedScene;
 use crate::scene::Scene;
 use crate::scene::SceneBuilder;
 use crate::scene::SceneId;
@@ -58,6 +60,16 @@ impl WindowBuilder {
     {
         self.scene_builders
             .insert(id, Box::new(|ctx| Box::new(S::load(ctx))));
+        self
+    }
+
+    /// Register a scene built by `f`, for scenes that need more than a
+    /// [`LoadContext`] to be constructed.
+    pub fn with_scene_fn<F>(mut self, id: SceneId, f: F) -> Self
+    where
+        F: Fn(&mut LoadContext) -> BoxedScene + 'static,
+    {
+        self.scene_builders.insert(id, Box::new(f));
         self
     }
 

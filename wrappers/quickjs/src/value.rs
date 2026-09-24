@@ -1,3 +1,5 @@
+use core::any::TypeId;
+use core::ffi::c_int;
 use core::fmt;
 use core::marker::PhantomData;
 use core::mem::ManuallyDrop;
@@ -6,10 +8,14 @@ use core::slice;
 
 use alloc::ffi::CString;
 use alloc::string::String;
+use alloc::vec::Vec;
 
+use quickjs_sys::JS_Call;
+use quickjs_sys::JS_CallConstructor;
 use quickjs_sys::JS_DupValue;
 use quickjs_sys::JS_FreeCString;
 use quickjs_sys::JS_FreeValue;
+use quickjs_sys::JS_GetOpaque;
 use quickjs_sys::JS_GetPropertyStr;
 use quickjs_sys::JS_GetRuntime;
 use quickjs_sys::JS_IsBool;
@@ -19,12 +25,14 @@ use quickjs_sys::JS_IsNull;
 use quickjs_sys::JS_IsNumber;
 use quickjs_sys::JS_IsObject;
 use quickjs_sys::JS_IsString;
+use quickjs_sys::JS_IsSymbol;
 use quickjs_sys::JS_IsUndefined;
 use quickjs_sys::JS_SetPropertyStr;
 use quickjs_sys::JS_TAG_BOOL;
 use quickjs_sys::JS_TAG_FLOAT64;
 use quickjs_sys::JS_TAG_INT;
 use quickjs_sys::JS_ToCStringLen;
+use quickjs_sys::JS_UNDEFINED;
 use quickjs_sys::JS_VALUE_GET_BOOL;
 use quickjs_sys::JS_VALUE_GET_FLOAT64;
 use quickjs_sys::JS_VALUE_GET_INT;
@@ -35,6 +43,7 @@ use quickjs_sys::JSValue;
 use crate::Context;
 use crate::Error;
 use crate::context::take_exception;
+use crate::runtime::state;
 
 pub struct Value<'ctx> {
     ctx: NonNull<JSContext>,
@@ -103,6 +112,29 @@ impl<'ctx> Value<'ctx> {
         unsafe { JS_IsException(self.raw) }
     }
 
+    /// The value's `typeof`, except that `null` reports `"null"`.
+    pub fn type_name(&self) -> &'static str {
+        if self.is_undefined() {
+            "undefined"
+        } else if self.is_null() {
+            "null"
+        } else if self.is_bool() {
+            "boolean"
+        } else if self.is_number() {
+            "number"
+        } else if self.is_string() {
+            "string"
+        } else if unsafe { JS_IsSymbol(self.raw) } {
+            "symbol"
+        } else if self.is_function() {
+            "function"
+        } else if self.is_object() {
+            "object"
+        } else {
+            "unknown"
+        }
+    }
+
     pub fn as_bool(&self) -> Option<bool> {
         (self.tag() == JS_TAG_BOOL).then(|| unsafe { JS_VALUE_GET_BOOL(self.raw) } != 0)
     }
@@ -162,6 +194,70 @@ impl<'ctx> Value<'ctx> {
         }
 
         Ok(())
+    }
+
+    /// Call this value as a function with `this` set to `undefined`.
+    pub fn call(&self, args: &[Value<'_>]) -> Result<Value<'ctx>, Error> {
+        self.call_raw(JS_UNDEFINED, args)
+    }
+
+    /// Call this value as a function with the given `this`.
+    pub fn call_with(&self, this: &Value<'_>, args: &[Value<'_>]) -> Result<Value<'ctx>, Error> {
+        self.call_raw(this.raw, args)
+    }
+
+    /// `new this(...args)`.
+    pub fn construct(&self, args: &[Value<'_>]) -> Result<Value<'ctx>, Error> {
+        let mut argv = args.iter().map(|a| a.raw).collect::<Vec<_>>();
+        let raw = unsafe {
+            JS_CallConstructor(
+                self.ctx_ptr(),
+                self.raw,
+                argv.len() as c_int,
+                argv.as_mut_ptr(),
+            )
+        };
+
+        if unsafe { JS_IsException(raw) } {
+            return Err(self.context_error());
+        }
+
+        Ok(self.sibling(raw))
+    }
+
+    fn call_raw(&self, this: JSValue, args: &[Value<'_>]) -> Result<Value<'ctx>, Error> {
+        // JS_Call only borrows the arguments.
+        let mut argv = args.iter().map(|a| a.raw).collect::<Vec<_>>();
+        let raw = unsafe {
+            JS_Call(
+                self.ctx_ptr(),
+                self.raw,
+                this,
+                argv.len() as c_int,
+                argv.as_mut_ptr(),
+            )
+        };
+
+        if unsafe { JS_IsException(raw) } {
+            return Err(self.context_error());
+        }
+
+        Ok(self.sibling(raw))
+    }
+
+    /// The Rust value inside an object made by
+    /// [`Context::instance`](crate::Context::instance), if this is one holding
+    /// a `T`.
+    pub fn opaque<T: 'static>(&self) -> Option<&T> {
+        let rt = unsafe { JS_GetRuntime(self.ctx_ptr()) };
+        let id = *unsafe { state(rt) }
+            .classes
+            .borrow()
+            .get(&TypeId::of::<T>())?;
+        let ptr = unsafe { JS_GetOpaque(self.raw, id) }.cast::<T>();
+
+        // The object keeps the value alive for as long as `self` does.
+        unsafe { ptr.as_ref() }
     }
 
     fn sibling(&self, raw: JSValue) -> Value<'ctx> {

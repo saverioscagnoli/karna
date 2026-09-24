@@ -241,6 +241,7 @@ name = "karna"
 version = "0.1.0"
 dependencies = [
  "karna-engine",
+ "karna-js",
  "karna-math",
  "karna-nostd",
  "karna-sdl3",
@@ -262,9 +263,20 @@ dependencies = [
  "cosmic-text",
  "karna-math",
  "karna-nostd",
- "karna-quickjs-sys",
  "karna-sdl3",
  "karna-utils",
+ "traccia",
+]
+
+[[package]]
+name = "karna-js"
+version = "0.1.0"
+dependencies = [
+ "karna-engine",
+ "karna-math",
+ "karna-nostd",
+ "karna-quickjs",
+ "karna-sdl3",
  "traccia",
 ]
 

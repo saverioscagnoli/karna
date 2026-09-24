@@ -25,7 +25,17 @@ impl fmt::Display for Exception {
 pub enum Error {
     OutOfMemory,
     InteriorNul,
+    /// A value had the wrong type; thrown into JS as a `TypeError`.
+    Type(String),
+    /// A free-form error raised by Rust code; thrown into JS as an `Error`.
+    Custom(String),
     Exception(Exception),
+}
+
+impl Error {
+    pub fn custom(message: impl Into<String>) -> Self {
+        Self::Custom(message.into())
+    }
 }
 
 impl fmt::Display for Error {
@@ -33,6 +43,8 @@ impl fmt::Display for Error {
         match self {
             Self::OutOfMemory => f.write_str("quickjs: out of memory"),
             Self::InteriorNul => f.write_str("quickjs: string contains an interior nul byte"),
+            Self::Type(msg) => write!(f, "quickjs: type error: {msg}"),
+            Self::Custom(msg) => f.write_str(msg),
             Self::Exception(e) => write!(f, "{e}"),
         }
     }

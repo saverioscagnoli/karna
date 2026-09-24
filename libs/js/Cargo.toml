@@ -1,6 +1,6 @@
 [package]
-name = "karna"
-description = "!"
+name = "karna-js"
+description = "JavaScript scripting for the karna engine"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,31 +8,21 @@ repository.workspace = true
 authors.workspace = true
 
 [lib]
-name = "karna"
+name = "js"
 path = "src/lib.rs"
 
 [features]
-default = ["build-from-source", "js"]
+default = ["build-from-source"]
 build-from-source = [
     "karna-engine/build-from-source",
+    "karna-quickjs/build-from-source",
     "karna-sdl3/build-from-source",
-    "karna-js?/build-from-source",
 ]
-
-# JS Scripting
-js = ["dep:karna-js"]
 
 [dependencies]
 karna-engine.workspace = true
-karna-math.workspace = true
-karna-utils.workspace = true
+karna-quickjs.workspace = true
 karna-sdl3.workspace = true
 karna-nostd.workspace = true
-karna-js = { workspace = true, optional = true }
-
-[dev-dependencies]
+karna-math.workspace = true
 traccia.workspace = true
-
-[[example]]
-name = "js"
-required-features = ["js"]

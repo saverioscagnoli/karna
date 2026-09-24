@@ -20,6 +20,5 @@ karna-sdl3 = { workspace = true, features = ["shadercross"] }
 karna-nostd.workspace = true
 karna-math.workspace = true
 karna-utils.workspace = true
-karna-quickjs-sys.workspace = true
 traccia.workspace = true
 cosmic-text = { version =  "0.19.0", default-features = false, features = ["no_std", "swash"] }
