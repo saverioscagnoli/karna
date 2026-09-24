@@ -1,4 +1,4 @@
-/// <reference path="../../../../libs/js/karna.d.ts" />
+/// <reference path="../../../../assets/karna.d.ts" />
 
 const { Key } = karna;
 

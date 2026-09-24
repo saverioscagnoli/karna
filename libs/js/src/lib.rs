@@ -3,6 +3,7 @@
 mod api;
 mod host;
 
+use core::cell::RefCell;
 use core::mem::ManuallyDrop;
 use core::ptr::NonNull;
 
@@ -24,6 +25,7 @@ use nostd::path::Path;
 use nostd::path::PathBuf;
 use quickjs::Context;
 use quickjs::Error;
+use quickjs::FromJs;
 use quickjs::Persistent;
 use quickjs::Runtime;
 use sdl3::render::Color;
@@ -35,11 +37,12 @@ use crate::host::Assets;
 use crate::host::Frame;
 use crate::host::Host;
 
-pub const TYPES: &str = include_str!("../karna.d.ts");
+pub const TYPES: &str = include_str!("../../../assets/karna.d.ts");
 
 pub struct ScriptScene {
     // All of these borrow the runtime behind `rt`; `Drop` frees them first.
     api: Option<Api<'static>>,
+    module: Option<Persistent<'static>>,
     scene: Option<Persistent<'static>>,
     js: ManuallyDrop<Context<'static>>,
     rt: NonNull<Runtime>,
@@ -57,7 +60,11 @@ enum Phase {
 
 impl ScriptScene {
     pub fn from_path(ctx: &mut LoadContext, path: impl AsRef<Path>) -> Self {
-        let path = ctx.assets.root().join(path);
+        Self::open(ctx.assets.root(), path).start(ctx)
+    }
+
+    pub fn open(root: &Path, path: impl AsRef<Path>) -> Self {
+        let path = root.join(path);
 
         let rt = Box::new(Runtime::new().expect("failed to create a JS runtime"));
         let rt = NonNull::from(Box::leak(rt));
@@ -71,6 +78,7 @@ impl ScriptScene {
 
         let mut this = Self {
             api: None,
+            module: None,
             scene: None,
             js: ManuallyDrop::new(js),
             rt,
@@ -97,6 +105,87 @@ impl ScriptScene {
 
         info!("Running script {}", this.path);
 
+        let module = this
+            .js
+            .eval_module(&source, this.path.as_str())
+            .map(|module| this.js.persist(module));
+
+        match module {
+            Ok(module) => this.module = Some(module),
+            Err(e) => this.fail("the module", e),
+        }
+
+        this
+    }
+
+    pub fn configure(&mut self, builder: WindowBuilder) -> WindowBuilder {
+        let Some(module) = &self.module else {
+            return builder;
+        };
+
+        let js = &*self.js;
+
+        let fields = (|| {
+            let window = module.get(js).get("window")?;
+
+            if window.is_undefined() {
+                return Ok(None);
+            }
+
+            if !window.is_object() {
+                return Err(Error::Type(format!(
+                    "the `window` export must be a karna.WindowBuilder, got {}",
+                    window.type_name()
+                )));
+            }
+
+            fn field<T: FromJs>(window: &quickjs::Value<'_>, name: &str) -> Result<T, Error> {
+                T::from_js(&window.get(name)?).map_err(|e| match e {
+                    Error::Type(msg) => Error::Type(format!("window.{name}: {msg}")),
+                    e => e,
+                })
+            }
+
+            Ok(Some((
+                field::<Option<String>>(&window, "title")?,
+                field::<Option<u32>>(&window, "width")?,
+                field::<Option<u32>>(&window, "height")?,
+                field::<Option<bool>>(&window, "resizable")?,
+            )))
+        })();
+
+        let (title, width, height, resizable) = match fields {
+            Ok(Some(fields)) => fields,
+            Ok(None) => return builder,
+            Err(e) => {
+                self.fail("the window export", e);
+                return builder;
+            }
+        };
+
+        let mut builder = builder;
+
+        if let Some(title) = title {
+            builder = builder.with_title(title);
+        }
+
+        if width.is_some() || height.is_some() {
+            let size = builder.size;
+            builder = builder.with_size((width.unwrap_or(size.w()), height.unwrap_or(size.h())));
+        }
+
+        if let Some(resizable) = resizable {
+            builder = builder.with_resizable(resizable);
+        }
+
+        builder
+    }
+
+    pub fn start(mut self, ctx: &mut LoadContext) -> Self {
+        let Some(module) = &self.module else {
+            return self;
+        };
+
         let frame = Frame::new(
             &mut ctx.window,
             &mut ctx.time,
@@ -105,13 +194,11 @@ impl ScriptScene {
             None,
         );
 
-        let js = &*this.js;
-        let rt = unsafe { this.rt.as_ref() };
-        let filename = this.path.as_str();
+        let js = &*self.js;
+        let rt = unsafe { self.rt.as_ref() };
 
-        let scene = this.host.enter(frame, || {
-            let module = js.eval_module(&source, filename)?;
-            let export = module.get("default")?;
+        let scene = self.host.enter(frame, || {
+            let export = module.get(js).get("default")?;
 
             // A class is instantiated; a plain object is the scene itself.
             let scene = if export.is_function() {
@@ -131,15 +218,15 @@ impl ScriptScene {
         });
 
         match scene {
-            Ok(scene) => this.scene = Some(scene),
+            Ok(scene) => self.scene = Some(scene),
             Err(e) => {
-                this.fail("the module", e);
-                return this;
+                self.fail("the module", e);
+                return self;
             }
         }
 
-        this.call(frame, "load", Phase::Update);
-        this
+        self.call(frame, "load", Phase::Update);
+        self
     }
 
     pub fn error(&self) -> Option<&str> {
@@ -256,6 +343,7 @@ impl Drop for ScriptScene {
     fn drop(&mut self) {
         unsafe {
             self.scene = None;
+            self.module = None;
             self.api = None;
             ManuallyDrop::drop(&mut self.js);
             drop(Box::from_raw(self.rt.as_ptr()));
@@ -265,6 +353,7 @@ impl Drop for ScriptScene {
 
 pub trait WindowBuilderExt {
     fn with_js_script(self, id: SceneId, path: impl Into<PathBuf>) -> Self;
+    fn with_js_entry(self, root: impl AsRef<Path>, id: SceneId, path: impl Into<PathBuf>) -> Self;
 }
 
 impl WindowBuilderExt for WindowBuilder {
@@ -273,6 +362,23 @@ impl WindowBuilderExt for WindowBuilder {
 
         self.with_scene_fn(id, move |ctx| {
             Box::new(ScriptScene::from_path(ctx, &path)) as BoxedScene
+        })
+    }
+
+    fn with_js_entry(self, root: impl AsRef<Path>, id: SceneId, path: impl Into<PathBuf>) -> Self {
+        let path = path.into();
+        let mut scene = ScriptScene::open(root.as_ref(), &path);
+        let builder = scene.configure(self);
+
+        let opened = RefCell::new(Some(scene));
+
+        builder.with_scene_fn(id, move |ctx| {
+            let scene = opened
+                .borrow_mut()
+                .take()
+                .unwrap_or_else(|| ScriptScene::open(ctx.assets.root(), &path));
+
+            Box::new(scene.start(ctx)) as BoxedScene
         })
     }
 }

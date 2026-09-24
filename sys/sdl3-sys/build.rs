@@ -23,34 +23,29 @@ fn link_system() {
     }
 }
 
-/// Copy the DLLs CMake installed into `<dst>/bin` next to the executables
-/// cargo is about to produce.
-///
-/// Windows resolves DLLs from the directory of the running binary, so without
-/// this every `cargo run` / `cargo test` would fail to start. OUT_DIR is
-/// `<target>/<profile>/build/<pkg>-<hash>/out`, so the profile directory --
-/// where cargo puts the final binaries -- is four levels up.
 #[cfg(feature = "build-from-source")]
-fn copy_runtime_dlls(dst: &Path) {
-    let bin = dst.join("bin");
-    let Ok(entries) = std::fs::read_dir(&bin) else {
+fn link_private_libs(pc: &Path) {
+    let Ok(contents) = std::fs::read_to_string(pc) else {
         return;
     };
 
-    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
-    let Some(profile_dir) = out_dir.ancestors().nth(3) else {
-        return;
-    };
+    let mut tokens = contents
+        .lines()
+        .filter_map(|line| line.strip_prefix("Libs:").or_else(|| line.strip_prefix("Libs.private:")))
+        .flat_map(str::split_whitespace);
 
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dll")) {
-            let name = entry.file_name();
-            // Also into deps/, which is where test and example binaries run from.
-            for dir in [profile_dir.to_path_buf(), profile_dir.join("deps")] {
-                if dir.is_dir() {
-                    let _ = std::fs::copy(&path, dir.join(&name));
-                }
+    while let Some(token) = tokens.next() {
+        if token == "-framework" {
+            if let Some(name) = tokens.next() {
+                println!("cargo:rustc-link-lib=framework={name}");
+            }
+        } else if let Some(name) = token.strip_prefix("-Wl,-framework,") {
+            println!("cargo:rustc-link-lib=framework={name}");
+        } else if token == "-pthread" {
+            println!("cargo:rustc-link-lib=pthread");
+        } else if let Some(name) = token.strip_prefix("-l") {
+            if name != "SDL3" {
+                println!("cargo:rustc-link-lib={name}");
             }
         }
     }
@@ -75,33 +70,29 @@ fn build_vendored() {
     );
 
     let dst = cmake::Config::new(&src)
-        .define("SDL_SHARED", "ON")
-        .define("SDL_STATIC", "OFF")
+        .define("SDL_SHARED", "OFF")
+        .define("SDL_STATIC", "ON")
         .define("SDL_TESTS", "OFF")
         .define("SDL_EXAMPLES", "OFF")
         .define("SDL_INSTALL_TESTS", "OFF")
         .build();
 
-    let windows = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows");
+    let msvc = std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
 
     // SDL installs to lib/ or lib64/ depending on the platform.
     for dir in ["lib", "lib64"] {
         let path = dst.join(dir);
         if path.exists() {
             println!("cargo:rustc-link-search=native={}", path.display());
-            // So test binaries and examples can find libSDL3.so without
-            // the caller setting LD_LIBRARY_PATH. Windows has no rpath (and
-            // the MSVC linker rejects the flag), so the DLL is copied next to
-            // the executable instead.
-            if !windows {
-                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path.display());
-            }
         }
     }
-    if windows {
-        copy_runtime_dlls(&dst);
+    println!(
+        "cargo:rustc-link-lib=static={}",
+        if msvc { "SDL3-static" } else { "SDL3" }
+    );
+    for dir in ["lib", "lib64"] {
+        link_private_libs(&dst.join(dir).join("pkgconfig/sdl3.pc"));
     }
-    println!("cargo:rustc-link-lib=dylib=SDL3");
     // Exposed to dependents as DEP_SDL3_ROOT; karna-sdl3-image-sys hands it
     // to CMake so SDL_image builds against this copy of SDL.
     println!("cargo:root={}", dst.display());

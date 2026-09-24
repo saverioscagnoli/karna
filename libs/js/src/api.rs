@@ -29,6 +29,16 @@ pub(crate) struct Api<'rt> {
     pub graphics: Persistent<'rt>,
 }
 
+// Plain data on purpose: `ScriptScene::configure` reads the fields back, so a
+// hand-written `{ title, width, height, resizable }` works just as well.
+const PRELUDE: &str = r#"
+karna.WindowBuilder = class WindowBuilder {
+    withTitle(title) { this.title = title; return this; }
+    withSize(width, height) { this.width = width; this.height = height; return this; }
+    withResizable(resizable = true) { this.resizable = resizable; return this; }
+};
+"#;
+
 pub(crate) fn install<'rt>(ctx: &Context<'rt>, host: &Rc<Host>) -> Result<Api<'rt>, Error> {
     let window = window(ctx, host)?;
     let time = time(ctx, host)?;
@@ -60,6 +70,8 @@ pub(crate) fn install<'rt>(ctx: &Context<'rt>, host: &Rc<Host>) -> Result<Api<'r
     let global = ctx.global();
     global.set("karna", karna)?;
     global.set("console", console)?;
+
+    ctx.eval(PRELUDE, "<karna>")?;
 
     Ok(Api {
         ctx: ctx.persist(update_ctx),

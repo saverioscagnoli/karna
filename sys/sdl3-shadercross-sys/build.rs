@@ -23,6 +23,7 @@ fn link_system() {
     }
 }
 
+#[cfg(feature = "dxc")]
 /// Copy the DLLs CMake installed into `<dst>/bin` next to the executables
 /// cargo is about to produce.
 ///
@@ -109,7 +110,7 @@ fn collect_dxc(build: &Path, dst: &Path, windows: bool) {
 }
 
 #[cfg(feature = "dxc")]
-fn build_shadercross(src: &Path, shared: &Path, origin: &str, windows: bool) -> PathBuf {
+fn build_shadercross(src: &Path, shared: &Path, windows: bool) -> Vec<PathBuf> {
     for path in [
         "external/SPIRV-Cross",
         "external/SPIRV-Headers",
@@ -125,9 +126,8 @@ fn build_shadercross(src: &Path, shared: &Path, origin: &str, windows: bool) -> 
         .out_dir(shared.join("shadercross"))
         .profile("Release")
         .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
-        .define("CMAKE_INSTALL_RPATH", origin)
-        .define("SDLSHADERCROSS_SHARED", "ON")
-        .define("SDLSHADERCROSS_STATIC", "OFF")
+        .define("SDLSHADERCROSS_SHARED", "OFF")
+        .define("SDLSHADERCROSS_STATIC", "ON")
         .define("SDLSHADERCROSS_VENDORED", "ON")
         .define("SDLSHADERCROSS_SPIRVCROSS_SHARED", "OFF")
         .define("SDLSHADERCROSS_DXC", "ON")
@@ -144,11 +144,15 @@ fn build_shadercross(src: &Path, shared: &Path, origin: &str, windows: bool) -> 
 
     collect_dxc(&dst.join("build"), &dst, windows);
 
-    dst
+    if windows {
+        copy_runtime_dlls(&dst);
+    }
+
+    vec![dst]
 }
 
 #[cfg(all(feature = "build-from-source", not(feature = "dxc")))]
-fn build_shadercross(src: &Path, shared: &Path, origin: &str, _windows: bool) -> PathBuf {
+fn build_shadercross(src: &Path, shared: &Path, _windows: bool) -> Vec<PathBuf> {
     require_submodule(src, "external/SPIRV-Cross");
 
     let spirv_root = cmake::Config::new(src.join("external/SPIRV-Cross"))
@@ -174,20 +178,21 @@ fn build_shadercross(src: &Path, shared: &Path, origin: &str, _windows: bool) ->
         prefix.push_str(&sdl_root);
     }
 
-    cmake::Config::new(src)
+    let dst = cmake::Config::new(src)
         .out_dir(shared.join("shadercross-nodxc"))
         .profile("Release")
         .define("CMAKE_PREFIX_PATH", prefix)
-        .define("CMAKE_INSTALL_RPATH", origin)
-        .define("SDLSHADERCROSS_SHARED", "ON")
-        .define("SDLSHADERCROSS_STATIC", "OFF")
+        .define("SDLSHADERCROSS_SHARED", "OFF")
+        .define("SDLSHADERCROSS_STATIC", "ON")
         .define("SDLSHADERCROSS_VENDORED", "OFF")
         .define("SDLSHADERCROSS_SPIRVCROSS_SHARED", "OFF")
         .define("SDLSHADERCROSS_DXC", "OFF")
         .define("SDLSHADERCROSS_CLI", "OFF")
         .define("SDLSHADERCROSS_TESTS", "OFF")
         .define("SDLSHADERCROSS_INSTALL", "ON")
-        .build()
+        .build();
+
+    vec![dst, spirv_root]
 }
 
 #[cfg(feature = "build-from-source")]
@@ -214,27 +219,64 @@ fn build_vendored() {
         .map_or_else(|| out.clone(), |build| build.join("karna-vendor"));
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let windows = target_os == "windows";
-    let origin = if target_os == "macos" || target_os == "ios" {
-        "@loader_path"
-    } else {
-        "$ORIGIN"
-    };
+    let msvc = std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
 
-    let dst = build_shadercross(&src, &shared, origin, windows);
+    let roots = build_shadercross(&src, &shared, windows);
+    let dst = roots[0].clone();
 
-    for dir in ["lib", "lib64"] {
-        let path = dst.join(dir);
-        if path.exists() {
-            println!("cargo:rustc-link-search=native={}", path.display());
-            if !windows {
-                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path.display());
+    for root in &roots {
+        for dir in ["lib", "lib64"] {
+            let path = root.join(dir);
+            if path.exists() {
+                println!("cargo:rustc-link-search=native={}", path.display());
             }
         }
     }
-    if windows {
-        copy_runtime_dlls(&dst);
+
+    println!(
+        "cargo:rustc-link-lib=static={}",
+        if msvc {
+            "SDL3_shadercross-static"
+        } else {
+            "SDL3_shadercross"
+        }
+    );
+    for lib in [
+        "spirv-cross-c",
+        "spirv-cross-glsl",
+        "spirv-cross-hlsl",
+        "spirv-cross-msl",
+        "spirv-cross-cpp",
+        "spirv-cross-reflect",
+        "spirv-cross-core",
+    ] {
+        println!("cargo:rustc-link-lib=static={lib}");
     }
-    println!("cargo:rustc-link-lib=dylib=SDL3_shadercross");
+
+    #[cfg(feature = "dxc")]
+    {
+        println!("cargo:rustc-link-lib=dylib=dxcompiler");
+        if !windows {
+            let origin = if target_os == "macos" || target_os == "ios" {
+                "@loader_path"
+            } else {
+                "$ORIGIN"
+            };
+            println!("cargo:rustc-link-arg=-Wl,-rpath,{origin}/lib");
+            for dir in ["lib", "lib64"] {
+                let path = dst.join(dir);
+                if path.exists() {
+                    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path.display());
+                }
+            }
+        }
+    }
+
+    if target_os == "macos" || target_os == "ios" {
+        println!("cargo:rustc-link-lib=c++");
+    } else if !msvc {
+        println!("cargo:rustc-link-lib=stdc++");
+    }
     println!("cargo:root={}", dst.display());
     println!("cargo:include={}", dst.join("include").display());
 }

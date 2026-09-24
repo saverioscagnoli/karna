@@ -1,160 +1,106 @@
-use std::env;
-use std::fs;
-use std::path::Path;
+mod bundle;
+mod jstypes;
+mod run;
+
 use std::path::PathBuf;
-use std::process::ExitCode;
 
-use sdl3::gpu::ShaderStage;
-use sdl3::shadercross::CompileOptions;
-use sdl3::shadercross::ShaderCross;
-
-const USAGE: &str = "\
-usage: karna <command>
-
-commands:
-    shaders [PATH...]    compile *.vert.hlsl / *.frag.hlsl to .spv next to each source
-                         (PATH is a file or a directory, default: shaders)
-    version              print the karna version";
-
-fn main() -> ExitCode {
-    let args = env::args().skip(1).collect::<Vec<_>>();
-
-    match args.first().map(String::as_str) {
-        Some("shaders") => shaders(&args[1..]),
-        Some("version" | "--version" | "-V") => {
-            println!("karna {}", env!("CARGO_PKG_VERSION"));
-            ExitCode::SUCCESS
-        }
-        Some("help" | "--help" | "-h") | None => {
-            println!("{USAGE}");
-            ExitCode::SUCCESS
-        }
-        Some(other) => {
-            eprintln!("unknown command `{other}`\n\n{USAGE}");
-            ExitCode::FAILURE
-        }
-    }
+enum Command {
+    Bundle { path: PathBuf },
+    Run { path: PathBuf },
+    JSTypes { path: Option<PathBuf> },
 }
 
-fn stage(path: &Path) -> Option<ShaderStage> {
-    let stem = path.file_stem()?.to_str()?;
-    let (_, kind) = stem.rsplit_once('.')?;
-
-    match kind {
-        "vert" | "vs" | "vertex" => Some(ShaderStage::Vertex),
-        "frag" | "fs" | "ps" | "pixel" | "fragment" => Some(ShaderStage::Fragment),
-        _ => None,
-    }
+struct Args {
+    command: Command,
 }
 
-fn is_hlsl(path: &Path) -> bool {
-    path.extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case("hlsl"))
-}
+impl Args {
+    fn parse_path(parser: &mut lexopt::Parser) -> Result<PathBuf, lexopt::Error> {
+        use lexopt::prelude::*;
 
-fn collect(paths: &[String]) -> Result<Vec<PathBuf>, String> {
-    let roots = if paths.is_empty() {
-        vec![PathBuf::from("shaders")]
-    } else {
-        paths.iter().map(PathBuf::from).collect()
-    };
+        let mut path = None;
 
-    let mut files = Vec::new();
-
-    for root in roots {
-        if root.is_dir() {
-            let entries = fs::read_dir(&root).map_err(|e| format!("{}: {e}", root.display()))?;
-
-            files.extend(
-                entries
-                    .flatten()
-                    .map(|entry| entry.path())
-                    .filter(|path| path.is_file() && is_hlsl(path) && stage(path).is_some()),
-            );
-        } else if root.is_file() {
-            if stage(&root).is_none() {
-                return Err(format!(
-                    "{}: cannot tell the stage, name it like `name.vert.hlsl` or `name.frag.hlsl`",
-                    root.display()
-                ));
+        while let Some(arg) = parser.next()? {
+            match arg {
+                Value(val) if path.is_none() => path = Some(PathBuf::from(val)),
+                _ => return Err(arg.unexpected()),
             }
-
-            files.push(root);
-        } else {
-            return Err(format!("{}: no such file or directory", root.display()));
         }
+
+        path.ok_or_else(|| "missing <path>".into())
     }
 
-    files.sort();
-    files.dedup();
+    fn parse() -> Result<Self, lexopt::Error> {
+        use lexopt::prelude::*;
 
-    Ok(files)
+        let mut parser = lexopt::Parser::from_env();
+
+        let subcommand = loop {
+            match parser.next()? {
+                Some(Short('h') | Long("help")) => {
+                    println!("Help");
+                    std::process::exit(0);
+                }
+
+                Some(Value(val)) => break val.string()?,
+                Some(arg) => return Err(arg.unexpected()),
+                None => return Err("missing subcommand".into()),
+            }
+        };
+
+        let command = match subcommand.as_str() {
+            "bundle" => Command::Bundle {
+                path: Self::parse_path(&mut parser)?,
+            },
+            "run" => Command::Run {
+                path: Self::parse_path(&mut parser)?,
+            },
+            "jstypes" => Command::JSTypes {
+                path: Self::parse_path(&mut parser).ok(),
+            },
+            other => return Err(format!("unknown subcommand '{other}'").into()),
+        };
+
+        Ok(Self { command })
+    }
 }
 
-fn compile(sc: &ShaderCross, path: &Path) -> Result<PathBuf, String> {
-    let fail = |e: &dyn std::fmt::Display| format!("{}: {e}", path.display());
+fn main() {
+    if let Some(archive) = bundle::embedded() {
+        nostd::fs::mount(archive);
 
-    let source = fs::read_to_string(path).map_err(|e| fail(&e))?;
-    let stage = stage(path).ok_or_else(|| fail(&"unknown shader stage"))?;
-    let include_dir = path
-        .parent()
-        .filter(|dir| !dir.as_os_str().is_empty())
-        .and_then(Path::to_str);
+        if let Err(e) = run::exec(&PathBuf::from(".")) {
+            eprintln!("error: {e}");
+        }
 
-    let mut options = CompileOptions::new(stage);
-
-    if let Some(dir) = include_dir {
-        options = options.with_include_dir(dir);
+        return;
     }
 
-    let spirv = sc
-        .spirv_from_hlsl(&source, &options)
-        .map_err(|e| fail(&e))?;
-    let out = path.with_extension("spv");
-
-    fs::write(&out, spirv).map_err(|e| format!("{}: {e}", out.display()))?;
-
-    Ok(out)
-}
-
-fn shaders(paths: &[String]) -> ExitCode {
-    let files = match collect(paths) {
-        Ok(files) => files,
+    let command = match Args::parse() {
+        Ok(args) => args.command,
         Err(e) => {
             eprintln!("error: {e}");
-            return ExitCode::FAILURE;
+            return;
         }
     };
 
-    if files.is_empty() {
-        eprintln!("no *.vert.hlsl or *.frag.hlsl files found");
-        return ExitCode::FAILURE;
-    }
-
-    let sc = match ShaderCross::init() {
-        Ok(sc) => sc,
-        Err(e) => {
-            eprintln!("error: failed to initialize SDL_shadercross: {e}");
-            return ExitCode::FAILURE;
-        }
-    };
-
-    let mut failed = 0;
-
-    for file in &files {
-        match compile(&sc, file) {
-            Ok(out) => println!("{} -> {}", file.display(), out.display()),
-            Err(e) => {
+    match command {
+        Command::Bundle { path } => {
+            if let Err(e) = bundle::exec(&path) {
                 eprintln!("error: {e}");
-                failed += 1;
+            }
+        }
+
+        Command::Run { path } => {
+            if let Err(e) = run::exec(&path) {
+                eprintln!("error: {e}");
+            }
+        }
+
+        Command::JSTypes { path } => {
+            if let Err(e) = jstypes::exec(path.as_ref()) {
+                eprintln!("error: {e}");
             }
         }
     }
-
-    if failed > 0 {
-        eprintln!("{failed} of {} shader(s) failed", files.len());
-        return ExitCode::FAILURE;
-    }
-
-    ExitCode::SUCCESS
 }

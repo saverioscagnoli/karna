@@ -54,6 +54,11 @@ impl WindowBuilder {
         self
     }
 
+    pub fn with_resizable(mut self, resizable: bool) -> Self {
+        self.resizable = resizable;
+        self
+    }
+
     pub fn with_scene<S>(mut self, id: SceneId) -> Self
     where
         S: Scene,
@@ -63,8 +68,6 @@ impl WindowBuilder {
         self
     }
 
-    /// Register a scene built by `f`, for scenes that need more than a
-    /// [`LoadContext`] to be constructed.
     pub fn with_scene_fn<F>(mut self, id: SceneId, f: F) -> Self
     where
         F: Fn(&mut LoadContext) -> BoxedScene + 'static,

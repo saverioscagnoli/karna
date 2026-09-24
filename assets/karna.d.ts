@@ -361,10 +361,35 @@ interface Scene {
   unload?(ctx: LoadContext): void;
 }
 
+/**
+ * Window settings, read once before the window opens. Export one from the
+ * entry script as `window`; unset fields keep the defaults.
+ */
+interface WindowConfig {
+  title?: string;
+  width?: number;
+  height?: number;
+  resizable?: boolean;
+}
+
+declare class KarnaWindowBuilder implements WindowConfig {
+  title?: string;
+  width?: number;
+  height?: number;
+  resizable?: boolean;
+
+  withTitle(title: string): this;
+  withSize(width: number, height: number): this;
+  withResizable(resizable?: boolean): this;
+}
+
 declare const karna: {
   /** Logs its arguments, space separated, at info level. */
   log(...args: unknown[]): void;
 
   readonly Key: { readonly [K in KeyName]: number };
   readonly Mouse: { readonly [B in MouseButtonName]: number };
+
+  /** Builds the `window` export of the entry script. */
+  readonly WindowBuilder: typeof KarnaWindowBuilder;
 };

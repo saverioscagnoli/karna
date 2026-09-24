@@ -13,7 +13,17 @@ path = "src/main.rs"
 
 [features]
 default = ["build-from-source"]
-build-from-source = ["karna-sdl3/build-from-source"]
+build-from-source = [
+    "karna-sdl3/build-from-source",
+    "karna/build-from-source",
+    "karna-quickjs/build-from-source",
+]
+dxc = ["karna-sdl3/dxc"]
 
 [dependencies]
-karna-sdl3 = { workspace = true, features = ["dxc"] }
+karna-sdl3.workspace = true
+karna = { workspace = true, features = ["js"] }
+karna-quickjs.workspace = true
+karna-nostd.workspace = true
+traccia.workspace = true
+lexopt = "0.3.2"
