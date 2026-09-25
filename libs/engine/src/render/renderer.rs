@@ -43,7 +43,6 @@ pub struct Renderer {
     device: Device,
     cameras: LayerMap<Camera>,
     data: LayerMap<LayerData>,
-    clear_color: Color,
     pipeline: GraphicsPipeline,
     sampler: Sampler,
     vertex_buffer: GpuBuffer<ImmediateVertex>,
@@ -84,7 +83,6 @@ impl Renderer {
             device,
             cameras,
             data,
-            clear_color: Color::BLACK,
             pipeline,
             sampler,
             vertex_buffer,
@@ -126,14 +124,6 @@ impl Renderer {
                 .with_vertex_layout(&buffers, &attributes)
                 .with_targets(&targets),
         )
-    }
-
-    pub fn clear_color(&self) -> Color {
-        self.clear_color
-    }
-
-    pub fn set_clear_color(&mut self, color: Color) {
-        self.clear_color = color;
     }
 
     pub fn camera(&self, layer: Layer) -> Option<&Camera> {
@@ -186,7 +176,12 @@ impl Renderer {
         }
     }
 
-    pub fn flush(&mut self, window: &Window, atlas: &Texture) -> Result<(), SdlError> {
+    pub fn flush(
+        &mut self,
+        window: &Window,
+        atlas: &Texture,
+        clear_color: Color,
+    ) -> Result<(), SdlError> {
         let Some(mut frame) = self.device.begin_frame(window)? else {
             return Ok(());
         };
@@ -204,7 +199,7 @@ impl Renderer {
         }
 
         {
-            let mut pass = frame.render_pass(LoadOp::Clear(self.clear_color))?;
+            let mut pass = frame.render_pass(LoadOp::Clear(clear_color))?;
 
             if !self.batches.is_empty() {
                 pass.bind_pipeline(&self.pipeline);

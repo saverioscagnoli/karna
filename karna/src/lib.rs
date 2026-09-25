@@ -18,7 +18,7 @@ pub use engine::window::Window;
 pub use sdl3::render::Color;
 
 #[cfg(feature = "js")]
-pub use js::ScriptScene;
+pub use js::JsScene;
 #[cfg(feature = "js")]
 pub use js::WindowBuilderExt;
 

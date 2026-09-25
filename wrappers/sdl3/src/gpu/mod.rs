@@ -7,6 +7,9 @@ mod texture;
 pub use buffer::*;
 pub use pass::*;
 pub use pipeline::*;
+use sdl3_sys::SDL_WINDOW_HIGH_PIXEL_DENSITY;
+use sdl3_sys::SDL_WINDOW_TRANSPARENT;
+use sdl3_sys::SDL_WindowFlags;
 pub use shader::*;
 pub use texture::*;
 
@@ -33,7 +36,6 @@ use sdl3_sys::SDL_GetGPUShaderFormats;
 use sdl3_sys::SDL_GetGPUSwapchainTextureFormat;
 use sdl3_sys::SDL_ReleaseWindowFromGPUDevice;
 use sdl3_sys::SDL_SetGPUAllowedFramesInFlight;
-use sdl3_sys::SDL_WINDOW_RESIZABLE;
 use sdl3_sys::SdlError;
 use sdl3_sys::get_error;
 use traccia::debug;
@@ -160,23 +162,26 @@ impl Device {
         &self,
         title: T,
         size: S,
-        resizable: bool,
+        transparent: bool,
+        high_pixel_density: bool,
     ) -> Result<Window, SdlError>
     where
         T: AsRef<str>,
         S: Into<math::Size<u32>>,
     {
         let title = CString::new(title.as_ref()).map_err(|_| SdlError::new("InteriorNul"))?;
+        let mut flags = SDL_WindowFlags::default();
+
+        if transparent {
+            flags |= SDL_WINDOW_TRANSPARENT;
+        }
+
+        if high_pixel_density {
+            flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+        }
 
         let size = size.into().cast::<i32>();
-        let ptr = unsafe {
-            SDL_CreateWindow(
-                title.as_ptr(),
-                size.w(),
-                size.h(),
-                if resizable { SDL_WINDOW_RESIZABLE } else { 0 },
-            )
-        };
+        let ptr = unsafe { SDL_CreateWindow(title.as_ptr(), size.w(), size.h(), flags) };
 
         let raw = ptr::NonNull::new(ptr).ok_or_else(|| get_error())?;
         let window = Window {

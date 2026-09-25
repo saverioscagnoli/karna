@@ -51,7 +51,7 @@ fn main() {
     println!("shader formats: {:?}", device.shader_formats());
 
     let window = device
-        .create_window("triangle", (640u32, 480u32), true)
+        .create_window("triangle", (640u32, 480u32), false, false)
         .expect("window");
 
     let shadercross = ShaderCross::init().expect("shadercross");

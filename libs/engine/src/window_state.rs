@@ -7,6 +7,7 @@ use traccia::error;
 use traccia::warn;
 
 use crate::assets::AssetServer;
+use crate::builder::WindowBuilder;
 use crate::context::UserContext;
 use crate::event::AppOutboxes;
 use crate::input::Input;
@@ -43,12 +44,12 @@ impl WindowState {
     pub fn init(
         device: &Device,
         shadercross: &ShaderCross,
-        window: &Window,
+        window: &mut Window,
+        builder: &WindowBuilder,
         scenes: HashMap<SceneId, SceneSlot>,
-        active_scenes: Vec<SceneId>,
     ) -> Self {
         let ctx = UserContext {
-            window_data: WindowData::init(window),
+            window_data: WindowData::init(window, builder),
             time_data: TimeData::default(),
         };
 
@@ -57,7 +58,7 @@ impl WindowState {
             ctx,
             renderer: Renderer::new(device.share(), shadercross, window),
             scenes,
-            active_scenes,
+            active_scenes: builder.active_scenes.clone(),
         }
     }
 

@@ -97,6 +97,7 @@ fn main() {
             WindowBuilder::new()
                 .with_title("Demo window")
                 .with_size((1280, 720))
+                .with_decorated(false)
                 .with_scene::<DemoScene>(DEMO_SCENE)
                 .with_active_scene(DEMO_SCENE),
         )

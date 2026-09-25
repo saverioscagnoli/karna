@@ -16,7 +16,7 @@ fn main() {
             WindowBuilder::default()
                 .with_title("script demo")
                 .with_size((1280, 720))
-                .with_js_script(MAIN, "assets/scripts/main.js")
+                .with_js_scene(MAIN, "assets/scripts/main.js")
                 .with_active_scene(MAIN),
         )
         .build()

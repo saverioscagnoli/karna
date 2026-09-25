@@ -39,7 +39,7 @@ use crate::host::Host;
 
 pub const TYPES: &str = include_str!("../../../assets/karna.d.ts");
 
-pub struct ScriptScene {
+pub struct JsScene {
     // All of these borrow the runtime behind `rt`; `Drop` frees them first.
     api: Option<Api<'static>>,
     module: Option<Persistent<'static>>,
@@ -58,7 +58,7 @@ enum Phase {
     Draw,
 }
 
-impl ScriptScene {
+impl JsScene {
     pub fn from_path(ctx: &mut LoadContext, path: impl AsRef<Path>) -> Self {
         Self::open(ctx.assets.root(), path).start(ctx)
     }
@@ -280,12 +280,13 @@ impl ScriptScene {
         let (layer, color) = (draw.layer(), draw.color());
 
         draw.with_layer(Layer::UI).set_color(Color::RED);
+        draw.set_text_style(draw.text_style().with_size(32.0));
         draw.print(msg, 10.0, 10.0);
         draw.with_layer(layer).set_color(color);
     }
 }
 
-impl Scene for ScriptScene {
+impl Scene for JsScene {
     fn load(ctx: &mut LoadContext) -> Self {
         Self::from_path(ctx, "main.js")
     }
@@ -339,7 +340,7 @@ impl Scene for ScriptScene {
     }
 }
 
-impl Drop for ScriptScene {
+impl Drop for JsScene {
     fn drop(&mut self) {
         unsafe {
             self.scene = None;
@@ -352,22 +353,22 @@ impl Drop for ScriptScene {
 }
 
 pub trait WindowBuilderExt {
-    fn with_js_script(self, id: SceneId, path: impl Into<PathBuf>) -> Self;
+    fn with_js_scene(self, id: SceneId, path: impl Into<PathBuf>) -> Self;
     fn with_js_entry(self, root: impl AsRef<Path>, id: SceneId, path: impl Into<PathBuf>) -> Self;
 }
 
 impl WindowBuilderExt for WindowBuilder {
-    fn with_js_script(self, id: SceneId, path: impl Into<PathBuf>) -> Self {
+    fn with_js_scene(self, id: SceneId, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
 
         self.with_scene_fn(id, move |ctx| {
-            Box::new(ScriptScene::from_path(ctx, &path)) as BoxedScene
+            Box::new(JsScene::from_path(ctx, &path)) as BoxedScene
         })
     }
 
     fn with_js_entry(self, root: impl AsRef<Path>, id: SceneId, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let mut scene = ScriptScene::open(root.as_ref(), &path);
+        let mut scene = JsScene::open(root.as_ref(), &path);
         let builder = scene.configure(self);
 
         let opened = RefCell::new(Some(scene));
@@ -376,7 +377,7 @@ impl WindowBuilderExt for WindowBuilder {
             let scene = opened
                 .borrow_mut()
                 .take()
-                .unwrap_or_else(|| ScriptScene::open(ctx.assets.root(), &path));
+                .unwrap_or_else(|| JsScene::open(ctx.assets.root(), &path));
 
             Box::new(scene.start(ctx)) as BoxedScene
         })

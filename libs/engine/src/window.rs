@@ -1,8 +1,10 @@
 use nostd::alloc::boxed::Box;
 use nostd::alloc::string::String;
 use nostd::alloc::string::ToString;
+use sdl3::render::Color;
 use sdl3::window::WindowId;
 
+use crate::builder::WindowBuilder;
 use crate::event::AppEvent;
 use crate::event::Outbox;
 use crate::event::WindowEvent;
@@ -16,10 +18,28 @@ pub struct WindowData {
     pixel_size: math::Size<u32>,
     mouse_poistion: math::Vector2<f32>,
     mouse_delta: math::Vector2<f32>,
+    resizable: bool,
+    decorated: bool,
+    always_on_top: bool,
+    transparent: bool,
+    opacity: f32,
+    focusable: bool,
+    high_pixel_density: bool,
+    grab_mouse: bool,
+    grab_keyboard: bool,
+    clear_color: Color,
 }
 
 impl WindowData {
-    pub(crate) fn init(sdl_window: &SdlWindow) -> Self {
+    pub(crate) fn init(sdl_window: &mut SdlWindow, b: &WindowBuilder) -> Self {
+        sdl_window.set_resizable(b.resizable);
+        sdl_window.set_decorated(b.decorated);
+        sdl_window.set_always_on_top(b.always_on_top);
+        sdl_window.set_opacity(b.opacity);
+        sdl_window.set_focusable(b.focusable);
+        sdl_window.set_mouse_grabbed(b.grab_mouse);
+        sdl_window.set_keyboard_grabbed(b.grab_keyboard);
+
         Self {
             id: sdl_window.id(),
             title: sdl_window.title().to_string(),
@@ -27,6 +47,16 @@ impl WindowData {
             pixel_size: sdl_window.pixel_size(),
             mouse_poistion: math::vec2!(0.0, 0.0),
             mouse_delta: math::vec2!(0.0, 0.0),
+            resizable: sdl_window.is_resizable(),
+            decorated: sdl_window.is_decorated(),
+            always_on_top: sdl_window.is_always_on_top(),
+            transparent: sdl_window.is_transparent(),
+            opacity: sdl_window.opacity(),
+            focusable: sdl_window.is_focusable(),
+            high_pixel_density: sdl_window.is_high_pixel_density(),
+            grab_mouse: sdl_window.mouse_grabbed(),
+            grab_keyboard: sdl_window.keyboard_grabbed(),
+            clear_color: Color::BLACK,
         }
     }
 
@@ -51,6 +81,11 @@ impl WindowData {
         self.title = window.title().into();
         self.size = window.size();
         self.roll_input();
+    }
+
+    #[inline]
+    pub fn clear_color(&self) -> Color {
+        self.clear_color
     }
 }
 
@@ -108,5 +143,52 @@ impl<'a> Window<'a> {
 
     pub fn mouse_delta(&self) -> math::Vector2<f32> {
         self.data.mouse_delta
+    }
+
+    pub fn is_resizable(&self) -> bool {
+        self.data.resizable
+    }
+
+    pub fn is_decorated(&self) -> bool {
+        self.data.decorated
+    }
+
+    pub fn is_always_on_top(&self) -> bool {
+        self.data.always_on_top
+    }
+
+    pub fn is_transparent(&self) -> bool {
+        self.data.transparent
+    }
+
+    pub fn opacity(&self) -> f32 {
+        self.data.opacity
+    }
+
+    pub fn is_focusable(&self) -> bool {
+        self.data.focusable
+    }
+
+    pub fn is_high_pixel_density(&self) -> bool {
+        self.data.high_pixel_density
+    }
+
+    pub fn mouse_grabbed(&self) -> bool {
+        self.data.grab_mouse
+    }
+
+    pub fn keyboard_grabbed(&self) -> bool {
+        self.data.grab_keyboard
+    }
+
+    pub fn clear_color(&self) -> Color {
+        self.data.clear_color
+    }
+
+    pub fn set_clear_color<C>(&mut self, color: C)
+    where
+        C: Into<Color>,
+    {
+        self.data.clear_color = color.into();
     }
 }

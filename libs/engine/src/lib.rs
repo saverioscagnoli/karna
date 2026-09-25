@@ -116,16 +116,13 @@ impl App {
         }
     }
 
-    fn spawn_window(&mut self, builder: WindowBuilder) {
-        #[rustfmt::skip]
-        let WindowBuilder { title, size, resizable, scene_builders, active_scenes } = builder;
-
-        let sdl_window = self
+    fn spawn_window(&mut self, mut b: WindowBuilder) {
+        let mut sdl_window = self
             .device
-            .create_window(title, size, resizable)
+            .create_window(b.title.clone(), b.size, b.transparent, b.high_pixel_density)
             .expect("Failed to create window");
 
-        let scenes = scene_builders
+        let scenes = mem::take(&mut b.scene_builders)
             .into_iter()
             .map(|(k, v)| {
                 (
@@ -138,13 +135,7 @@ impl App {
             })
             .collect::<HashMap<SceneId, SceneSlot>>();
 
-        let state = WindowState::init(
-            &self.device,
-            &self.shadercross,
-            &sdl_window,
-            scenes,
-            active_scenes,
-        );
+        let state = WindowState::init(&self.device, &self.shadercross, &mut sdl_window, &b, scenes);
 
         self.windows.insert(
             sdl_window.id(),
@@ -381,11 +372,11 @@ impl App {
 
                 let atlas = self.assets.atlas();
 
-                if let Err(e) = entry
-                    .state
-                    .renderer
-                    .flush(&entry.sdl_window, atlas.texture())
-                {
+                if let Err(e) = entry.state.renderer.flush(
+                    &entry.sdl_window,
+                    atlas.texture(),
+                    entry.state.ctx.window_data.clear_color(),
+                ) {
                     error!("Failed to render frame: {}", e);
                 }
 
