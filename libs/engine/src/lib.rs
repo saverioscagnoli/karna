@@ -327,11 +327,13 @@ impl App {
                         }
                         WindowEvent::SetWindowState(state) => match state {
                             SdlWindowState::Normal => entry.sdl_window.set_windowed(),
-                            SdlWindowState::Maximized => entry.sdl_window.set_maximized(),
-                            SdlWindowState::Minimized => entry.sdl_window.set_minimized(),
+                            SdlWindowState::Maximized => entry.sdl_window.maximize(),
+                            SdlWindowState::Minimized => entry.sdl_window.minimize(),
                             _ => unreachable!(),
                         },
-                        WindowEvent::SetFullscreen(mode) => entry.sdl_window.set_fullscreen(mode),
+                        WindowEvent::SetFullscreen(mode) => {
+                            entry.sdl_window.set_fullscreen(mode);
+                        }
                         WindowEvent::SetHidden(hidden) => entry.sdl_window.set_hidden(hidden),
                         WindowEvent::SetRelativeMouse(rel) => {
                             entry.sdl_window.set_relative_mouse(rel)

@@ -122,12 +122,12 @@ impl WindowBuilder {
     }
 
     pub fn with_grab_mouse(mut self, grab_mouse: bool) -> Self {
-        self.flags.grab_mouse = grab_mouse;
+        self.flags.mouse_grabbed = grab_mouse;
         self
     }
 
     pub fn with_grab_keyboard(mut self, grab_keyboard: bool) -> Self {
-        self.flags.grab_keyboard = grab_keyboard;
+        self.flags.keyboard_grabbed = grab_keyboard;
         self
     }
 

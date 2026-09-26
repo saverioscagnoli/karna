@@ -239,7 +239,7 @@ impl<'a> Window<'a> {
     }
 
     pub fn is_mouse_grabbed(&self) -> bool {
-        self.data.grab_mouse
+        self.data.mouse_grabbed
     }
 
     pub fn set_mouse_grabbed(&mut self, grab: bool) {
@@ -247,7 +247,7 @@ impl<'a> Window<'a> {
     }
 
     pub fn is_keyboard_grabbed(&self) -> bool {
-        self.data.grab_keyboard
+        self.data.keyboard_grabbed
     }
 
     pub fn set_keyboard_grabbed(&mut self, grab: bool) {
