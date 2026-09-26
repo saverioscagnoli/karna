@@ -18,6 +18,7 @@ use sdl3::render::Color;
 use sdl3::shadercross::CompileOptions;
 use sdl3::shadercross::ShaderCross;
 use sdl3::shadercross::ShaderSource;
+use sdl3::window::WindowFlags;
 
 const VERT: &[u8] = include_bytes!("../../../shaders/immediate.vert.spv");
 const FRAG: &[u8] = include_bytes!("../../../shaders/immediate.frag.spv");
@@ -51,7 +52,7 @@ fn main() {
     println!("shader formats: {:?}", device.shader_formats());
 
     let window = device
-        .create_window("triangle", (640u32, 480u32), false, false)
+        .create_window("triangle", (640u32, 480u32), WindowFlags::default())
         .expect("window");
 
     let shadercross = ShaderCross::init().expect("shadercross");

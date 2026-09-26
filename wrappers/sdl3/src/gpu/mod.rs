@@ -7,9 +7,6 @@ mod texture;
 pub use buffer::*;
 pub use pass::*;
 pub use pipeline::*;
-use sdl3_sys::SDL_WINDOW_HIGH_PIXEL_DENSITY;
-use sdl3_sys::SDL_WINDOW_TRANSPARENT;
-use sdl3_sys::SDL_WindowFlags;
 pub use shader::*;
 pub use texture::*;
 
@@ -42,6 +39,7 @@ use traccia::debug;
 
 use crate::render::Color;
 use crate::window::Window;
+use crate::window::WindowFlags;
 
 /// Starting size of the shared upload staging buffer. It grows on demand; this
 /// is just big enough that the first few uploads do not have to.
@@ -162,26 +160,16 @@ impl Device {
         &self,
         title: T,
         size: S,
-        transparent: bool,
-        high_pixel_density: bool,
+        flags: WindowFlags,
     ) -> Result<Window, SdlError>
     where
         T: AsRef<str>,
         S: Into<math::Size<u32>>,
     {
         let title = CString::new(title.as_ref()).map_err(|_| SdlError::new("InteriorNul"))?;
-        let mut flags = SDL_WindowFlags::default();
-
-        if transparent {
-            flags |= SDL_WINDOW_TRANSPARENT;
-        }
-
-        if high_pixel_density {
-            flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
-        }
 
         let size = size.into().cast::<i32>();
-        let ptr = unsafe { SDL_CreateWindow(title.as_ptr(), size.w(), size.h(), flags) };
+        let ptr = unsafe { SDL_CreateWindow(title.as_ptr(), size.w(), size.h(), flags.to_sdl()) };
 
         let raw = ptr::NonNull::new(ptr).ok_or_else(|| get_error())?;
         let window = Window {

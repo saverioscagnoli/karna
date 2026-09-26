@@ -20,7 +20,6 @@ use sdl3_sys::SDL_SetWindowSize;
 use sdl3_sys::SDL_SetWindowTitle;
 use sdl3_sys::SDL_WINDOW_ALWAYS_ON_TOP;
 use sdl3_sys::SDL_WINDOW_BORDERLESS;
-use sdl3_sys::SDL_WINDOW_FULLSCREEN;
 use sdl3_sys::SDL_WINDOW_HIGH_PIXEL_DENSITY;
 use sdl3_sys::SDL_WINDOW_KEYBOARD_GRABBED;
 use sdl3_sys::SDL_WINDOW_MOUSE_GRABBED;
@@ -37,6 +36,87 @@ use crate::render::Color;
 
 pub type WindowId = SDL_WindowID;
 
+pub struct WindowFlags {
+    pub resizable: bool,
+    pub decorated: bool,
+    pub always_on_top: bool,
+    pub transparent: bool,
+    pub focusable: bool,
+    pub high_pixel_density: bool,
+    pub grab_mouse: bool,
+    pub grab_keyboard: bool,
+}
+
+impl Default for WindowFlags {
+    fn default() -> Self {
+        Self {
+            resizable: false,
+            decorated: true,
+            always_on_top: false,
+            transparent: false,
+            focusable: true,
+            high_pixel_density: false,
+            grab_keyboard: false,
+            grab_mouse: false,
+        }
+    }
+}
+
+impl WindowFlags {
+    pub fn to_sdl(&self) -> SDL_WindowFlags {
+        let mut flags = SDL_WindowFlags::default();
+
+        if self.resizable {
+            flags |= SDL_WINDOW_RESIZABLE;
+        }
+
+        if !self.decorated {
+            flags |= SDL_WINDOW_BORDERLESS;
+        }
+
+        if self.always_on_top {
+            flags |= SDL_WINDOW_ALWAYS_ON_TOP;
+        }
+
+        if self.transparent {
+            flags |= SDL_WINDOW_TRANSPARENT;
+        }
+
+        if !self.focusable {
+            flags |= SDL_WINDOW_NOT_FOCUSABLE;
+        }
+
+        if self.high_pixel_density {
+            flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+        }
+
+        if self.grab_mouse {
+            flags |= SDL_WINDOW_MOUSE_GRABBED;
+        }
+
+        if self.grab_keyboard {
+            flags |= SDL_WINDOW_KEYBOARD_GRABBED;
+        }
+
+        flags
+    }
+
+    pub fn from_sdl(flags: SDL_WindowFlags) -> Self {
+        let has = |flag: SDL_WindowFlags| (flags & flag) == flag;
+
+        Self {
+            resizable: has(SDL_WINDOW_RESIZABLE),
+            decorated: !has(SDL_WINDOW_BORDERLESS),
+            always_on_top: has(SDL_WINDOW_ALWAYS_ON_TOP),
+            transparent: has(SDL_WINDOW_TRANSPARENT),
+            focusable: !has(SDL_WINDOW_NOT_FOCUSABLE),
+            high_pixel_density: has(SDL_WINDOW_HIGH_PIXEL_DENSITY),
+            grab_mouse: has(SDL_WINDOW_MOUSE_GRABBED),
+            grab_keyboard: has(SDL_WINDOW_KEYBOARD_GRABBED),
+        }
+    }
+}
+
 pub struct Window {
     pub(crate) raw: ptr::NonNull<SDL_Window>,
     pub(crate) device: Device,
@@ -51,12 +131,8 @@ impl Window {
         self.raw.as_ptr()
     }
 
-    pub fn flags(&self) -> SDL_WindowFlags {
-        unsafe { SDL_GetWindowFlags(self.as_ptr()) }
-    }
-
-    pub fn has_flag(&self, flag: SDL_WindowFlags) -> bool {
-        self.flags() & flag == flag
+    pub fn flags(&self) -> WindowFlags {
+        WindowFlags::from_sdl(unsafe { SDL_GetWindowFlags(self.as_ptr()) })
     }
 
     pub fn title(&self) -> &str {
@@ -105,7 +181,7 @@ impl Window {
     }
 
     pub fn is_resizable(&self) -> bool {
-        self.has_flag(SDL_WINDOW_RESIZABLE)
+        self.flags().resizable
     }
 
     pub fn set_resizable(&mut self, resizable: bool) {
@@ -114,7 +190,7 @@ impl Window {
     }
 
     pub fn is_decorated(&self) -> bool {
-        !self.has_flag(SDL_WINDOW_BORDERLESS) && !self.has_flag(SDL_WINDOW_FULLSCREEN)
+        self.flags().decorated
     }
 
     pub fn set_decorated(&mut self, decorated: bool) {
@@ -123,7 +199,7 @@ impl Window {
     }
 
     pub fn is_always_on_top(&self) -> bool {
-        self.has_flag(SDL_WINDOW_ALWAYS_ON_TOP)
+        self.flags().always_on_top
     }
 
     pub fn set_always_on_top(&mut self, always_on_top: bool) {
@@ -136,7 +212,7 @@ impl Window {
     }
 
     pub fn is_transparent(&self) -> bool {
-        self.has_flag(SDL_WINDOW_TRANSPARENT)
+        self.flags().transparent
     }
 
     pub fn opacity(&self) -> f32 {
@@ -149,7 +225,7 @@ impl Window {
     }
 
     pub fn is_focusable(&self) -> bool {
-        !self.has_flag(SDL_WINDOW_NOT_FOCUSABLE)
+        self.flags().focusable
     }
 
     pub fn set_focusable(&mut self, focusable: bool) {
@@ -158,11 +234,11 @@ impl Window {
     }
 
     pub fn is_high_pixel_density(&self) -> bool {
-        self.has_flag(SDL_WINDOW_HIGH_PIXEL_DENSITY)
+        self.flags().high_pixel_density
     }
 
     pub fn mouse_grabbed(&self) -> bool {
-        self.has_flag(SDL_WINDOW_MOUSE_GRABBED)
+        self.flags().grab_mouse
     }
 
     pub fn set_mouse_grabbed(&mut self, grabbed: bool) {
@@ -175,7 +251,7 @@ impl Window {
     }
 
     pub fn keyboard_grabbed(&self) -> bool {
-        self.has_flag(SDL_WINDOW_KEYBOARD_GRABBED)
+        self.flags().grab_keyboard
     }
 
     pub fn set_keyboard_grabbed(&mut self, grabbed: bool) {

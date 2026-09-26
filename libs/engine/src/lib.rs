@@ -123,8 +123,12 @@ impl App {
     fn spawn_window(&mut self, mut b: WindowBuilder) {
         let mut sdl_window = self
             .device
-            .create_window(b.title.clone(), b.size, b.transparent, b.high_pixel_density)
+            .create_window(b.title.clone(), b.size, b.flags)
             .expect("Failed to create window");
+
+        if b.opacity != 1.0 {
+            sdl_window.set_opacity(b.opacity);
+        }
 
         let scenes = mem::take(&mut b.scene_builders)
             .into_iter()
@@ -139,7 +143,13 @@ impl App {
             })
             .collect::<HashMap<SceneId, SceneSlot>>();
 
-        let state = WindowState::init(&self.device, &self.shadercross, &mut sdl_window, &b, scenes);
+        let state = WindowState::init(
+            &self.device,
+            &self.shadercross,
+            &mut sdl_window,
+            scenes,
+            b.active_scenes,
+        );
 
         self.windows.insert(
             sdl_window.id(),

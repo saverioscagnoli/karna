@@ -1,10 +1,12 @@
+use core::ops::Deref;
+
 use nostd::alloc::boxed::Box;
 use nostd::alloc::string::String;
 use nostd::alloc::string::ToString;
 use sdl3::render::Color;
+use sdl3::window::WindowFlags;
 use sdl3::window::WindowId;
 
-use crate::builder::WindowBuilder;
 use crate::event::AppEvent;
 use crate::event::Outbox;
 use crate::event::WindowEvent;
@@ -16,46 +18,32 @@ pub struct WindowData {
     title: String,
     size: math::Size<u32>,
     pixel_size: math::Size<u32>,
+    opacity: f32,
     mouse_poistion: math::Vector2<f32>,
     mouse_delta: math::Vector2<f32>,
-    resizable: bool,
-    decorated: bool,
-    always_on_top: bool,
-    transparent: bool,
-    opacity: f32,
-    focusable: bool,
-    high_pixel_density: bool,
-    grab_mouse: bool,
-    grab_keyboard: bool,
+    flags: WindowFlags,
     clear_color: Color,
 }
 
-impl WindowData {
-    pub(crate) fn init(sdl_window: &mut SdlWindow, b: &WindowBuilder) -> Self {
-        sdl_window.set_resizable(b.resizable);
-        sdl_window.set_decorated(b.decorated);
-        sdl_window.set_always_on_top(b.always_on_top);
-        sdl_window.set_opacity(b.opacity);
-        sdl_window.set_focusable(b.focusable);
-        sdl_window.set_mouse_grabbed(b.grab_mouse);
-        sdl_window.set_keyboard_grabbed(b.grab_keyboard);
+impl Deref for WindowData {
+    type Target = WindowFlags;
 
+    fn deref(&self) -> &Self::Target {
+        &self.flags
+    }
+}
+
+impl WindowData {
+    pub(crate) fn init(window: &SdlWindow) -> Self {
         Self {
-            id: sdl_window.id(),
-            title: sdl_window.title().to_string(),
-            size: sdl_window.size(),
-            pixel_size: sdl_window.pixel_size(),
+            id: window.id(),
+            title: window.title().to_string(),
+            size: window.size(),
+            pixel_size: window.pixel_size(),
+            opacity: window.opacity(),
+            flags: window.flags(),
             mouse_poistion: math::vec2!(0.0, 0.0),
             mouse_delta: math::vec2!(0.0, 0.0),
-            resizable: sdl_window.is_resizable(),
-            decorated: sdl_window.is_decorated(),
-            always_on_top: sdl_window.is_always_on_top(),
-            transparent: sdl_window.is_transparent(),
-            opacity: sdl_window.opacity(),
-            focusable: sdl_window.is_focusable(),
-            high_pixel_density: sdl_window.is_high_pixel_density(),
-            grab_mouse: sdl_window.mouse_grabbed(),
-            grab_keyboard: sdl_window.keyboard_grabbed(),
             clear_color: Color::BLACK,
         }
     }
@@ -80,13 +68,8 @@ impl WindowData {
     pub fn sync(&mut self, window: &SdlWindow) {
         self.title = window.title().into();
         self.size = window.size();
-        self.resizable = window.is_resizable();
-        self.decorated = window.is_decorated();
-        self.always_on_top = window.is_always_on_top();
         self.opacity = window.opacity();
-        self.focusable = window.is_focusable();
-        self.grab_mouse = window.mouse_grabbed();
-        self.grab_keyboard = window.keyboard_grabbed();
+        self.flags = window.flags();
         self.roll_input();
     }
 
