@@ -269,10 +269,10 @@ impl App {
                                 );
                             }
                         }
-                        _ => debug!("Unhandled SDL window event: {:?}", wevent),
+                        _ => trace!("Unhandled SDL window event: {:?}", wevent),
                     }
                 }
-                _ => debug!("Unhandled SDL event: {:?}", event),
+                _ => trace!("Unhandled SDL event: {:?}", event),
             }
         }
     }
