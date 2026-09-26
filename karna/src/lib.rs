@@ -16,6 +16,7 @@ pub use engine::time::PaceMode;
 pub use engine::time::Time;
 pub use engine::window::Window;
 
+pub use sdl3::gpu::PresentMode;
 pub use sdl3::render::Color;
 pub use sdl3::window::FullscreenMode;
 

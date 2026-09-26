@@ -1,12 +1,14 @@
 mod buffer;
 mod pass;
 mod pipeline;
+mod present_mode;
 mod shader;
 mod texture;
 
 pub use buffer::*;
 pub use pass::*;
 pub use pipeline::*;
+pub use present_mode::*;
 pub use shader::*;
 pub use texture::*;
 
@@ -175,6 +177,7 @@ impl Device {
         let window = Window {
             raw,
             device: self.share(),
+            present_mode: PresentMode::Vsync,
         };
 
         self.claim_window(&window)?;

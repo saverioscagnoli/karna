@@ -338,6 +338,9 @@ impl App {
                         WindowEvent::SetRelativeMouse(rel) => {
                             entry.sdl_window.set_relative_mouse(rel)
                         }
+                        WindowEvent::SetPresentMode(mode) => {
+                            entry.sdl_window.set_present_mode(mode);
+                        }
                         WindowEvent::Restore => entry.sdl_window.restore(),
                     }
                 }

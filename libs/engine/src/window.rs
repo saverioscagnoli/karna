@@ -3,6 +3,8 @@ use core::ops::Deref;
 use nostd::alloc::boxed::Box;
 use nostd::alloc::string::String;
 use nostd::alloc::string::ToString;
+use sdl3::gpu::PresentMode;
+use sdl3::gpu::PresentMode::Immediate;
 use sdl3::render::Color;
 use sdl3::window::FullscreenMode;
 use sdl3::window::WindowFlags;
@@ -20,9 +22,10 @@ pub struct WindowData {
     title: String,
     size: math::Size<u32>,
     pixel_size: math::Size<u32>,
-    opacity: f32,
     mouse_poistion: math::Vector2<f32>,
     mouse_delta: math::Vector2<f32>,
+    opacity: f32,
+    present_mode: PresentMode,
     flags: WindowFlags,
     clear_color: Color,
 }
@@ -42,10 +45,11 @@ impl WindowData {
             title: window.title().to_string(),
             size: window.size(),
             pixel_size: window.pixel_size(),
-            opacity: window.opacity(),
-            flags: window.flags(),
             mouse_poistion: math::vec2!(0.0, 0.0),
             mouse_delta: math::vec2!(0.0, 0.0),
+            opacity: window.opacity(),
+            present_mode: window.present_mode(),
+            flags: window.flags(),
             clear_color: Color::BLACK,
         }
     }
@@ -140,6 +144,22 @@ impl<'a> Window<'a> {
 
     pub fn mouse_delta(&self) -> math::Vector2<f32> {
         self.data.mouse_delta
+    }
+
+    pub fn present_mode(&self) -> PresentMode {
+        self.data.present_mode
+    }
+
+    pub fn set_present_mode(&mut self, mode: PresentMode) {
+        self.push(WindowEvent::SetPresentMode(mode));
+    }
+
+    pub fn set_vsync(&mut self, vsync: bool) {
+        if vsync {
+            self.push(WindowEvent::SetPresentMode(PresentMode::Vsync));
+        } else {
+            self.push(WindowEvent::SetPresentMode(Immediate));
+        }
     }
 
     pub fn is_windowed(&self) -> bool {

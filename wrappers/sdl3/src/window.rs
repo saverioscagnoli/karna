@@ -6,6 +6,7 @@ use alloc::ffi::CString;
 use alloc::format;
 use sdl3_sys::SDL_DestroyWindow;
 use sdl3_sys::SDL_DisplayMode;
+use sdl3_sys::SDL_GPU_SWAPCHAINCOMPOSITION_SDR;
 use sdl3_sys::SDL_GetClosestFullscreenDisplayMode;
 use sdl3_sys::SDL_GetDisplayForWindow;
 use sdl3_sys::SDL_GetWindowFlags;
@@ -18,6 +19,7 @@ use sdl3_sys::SDL_HideWindow;
 use sdl3_sys::SDL_MaximizeWindow;
 use sdl3_sys::SDL_MinimizeWindow;
 use sdl3_sys::SDL_RestoreWindow;
+use sdl3_sys::SDL_SetGPUSwapchainParameters;
 use sdl3_sys::SDL_SetWindowAlwaysOnTop;
 use sdl3_sys::SDL_SetWindowBordered;
 use sdl3_sys::SDL_SetWindowFocusable;
@@ -48,11 +50,13 @@ use sdl3_sys::SDL_WINDOW_UTILITY;
 use sdl3_sys::SDL_Window;
 use sdl3_sys::SDL_WindowFlags;
 use sdl3_sys::SDL_WindowID;
+use sdl3_sys::SDL_WindowSupportsGPUPresentMode;
 use sdl3_sys::get_error;
 use traccia::debug;
 use traccia::error;
 
 use crate::gpu::Device;
+use crate::gpu::PresentMode;
 use crate::render::Color;
 
 pub type WindowId = SDL_WindowID;
@@ -204,6 +208,7 @@ impl WindowFlags {
 pub struct Window {
     pub(crate) raw: ptr::NonNull<SDL_Window>,
     pub(crate) device: Device,
+    pub(crate) present_mode: PresentMode,
 }
 
 impl Window {
@@ -295,6 +300,47 @@ impl Window {
         );
 
         size.cast::<u32>()
+    }
+
+    pub fn present_mode(&self) -> PresentMode {
+        self.present_mode
+    }
+
+    pub fn supports_present_mode(&self, mode: PresentMode) -> bool {
+        unsafe {
+            SDL_WindowSupportsGPUPresentMode(self.device.as_ptr(), self.as_ptr(), mode.to_sdl())
+        }
+    }
+
+    pub fn set_present_mode(&mut self, mode: PresentMode) -> bool {
+        debug!("Window '{}': setting present mode to {:?}", self.id(), mode);
+
+        if !self.supports_present_mode(mode) {
+            error!(
+                "Window '{}': present mode {:?} is not supported",
+                self.id(),
+                mode
+            );
+            return false;
+        }
+
+        let ok = self.check(
+            unsafe {
+                SDL_SetGPUSwapchainParameters(
+                    self.device.as_ptr(),
+                    self.as_ptr(),
+                    SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                    mode.to_sdl(),
+                )
+            },
+            "set present mode",
+        );
+
+        if ok {
+            self.present_mode = mode;
+        }
+
+        ok
     }
 
     pub fn is_hidden(&self) -> bool {

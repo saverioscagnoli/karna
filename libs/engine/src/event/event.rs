@@ -1,4 +1,5 @@
 use nostd::alloc::boxed::Box;
+use sdl3::gpu::PresentMode;
 use sdl3::window::FullscreenMode;
 use sdl3::window::WindowId;
 use sdl3::window::WindowState;
@@ -22,6 +23,7 @@ pub enum WindowEvent {
     SetFullscreen(FullscreenMode),
     SetHidden(bool),
     SetRelativeMouse(bool),
+    SetPresentMode(PresentMode),
     Restore,
 }
 
