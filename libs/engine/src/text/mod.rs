@@ -63,7 +63,7 @@ impl Default for TextSystem {
 }
 
 impl TextSystem {
-    pub const DEBUG_FONT_BYTES: &[u8] = include_bytes!("../../../../assets/ProggyClean.ttf");
+    pub const DEBUG_FONT_BYTES: &[u8] = include_bytes!("../../../../assets/DOS-V.ttf");
     pub const DEBUG_FONT_SIZE: f32 = 16.0;
     pub const DEFAULT_FONT_SIZE: f32 = 16.0;
 

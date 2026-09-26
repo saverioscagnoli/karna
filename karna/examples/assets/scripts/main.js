@@ -21,7 +21,7 @@ export default class Demo {
       ctx.window.width(),
       "x",
       ctx.window.height(),
-    );
+      );
   }
 
   /** @param {UpdateContext} ctx */

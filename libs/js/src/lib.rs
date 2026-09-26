@@ -280,7 +280,6 @@ impl JsScene {
         let (layer, color) = (draw.layer(), draw.color());
 
         draw.with_layer(Layer::UI).set_color(Color::RED);
-        draw.set_text_style(draw.text_style().with_size(32.0));
         draw.print(msg, 10.0, 10.0);
         draw.with_layer(layer).set_color(color);
     }
