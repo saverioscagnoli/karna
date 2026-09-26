@@ -80,6 +80,13 @@ impl WindowData {
     pub fn sync(&mut self, window: &SdlWindow) {
         self.title = window.title().into();
         self.size = window.size();
+        self.resizable = window.is_resizable();
+        self.decorated = window.is_decorated();
+        self.always_on_top = window.is_always_on_top();
+        self.opacity = window.opacity();
+        self.focusable = window.is_focusable();
+        self.grab_mouse = window.mouse_grabbed();
+        self.grab_keyboard = window.keyboard_grabbed();
         self.roll_input();
     }
 
@@ -95,6 +102,14 @@ pub struct Window<'a> {
 }
 
 impl<'a> Window<'a> {
+    #[inline]
+    fn push(&mut self, wevent: WindowEvent) {
+        self.outbox.push(AppEvent::Window {
+            window: self.data.id,
+            wevent,
+        });
+    }
+
     pub fn id(&self) -> WindowId {
         self.data.id
     }
@@ -131,10 +146,7 @@ impl<'a> Window<'a> {
         let size = size.into();
 
         self.data.size = size;
-        self.outbox.push(AppEvent::Window {
-            window: self.data.id,
-            wevent: WindowEvent::SetSize(size),
-        });
+        self.push(WindowEvent::SetSize(size));
     }
 
     pub fn mouse_position(&self) -> math::Vector2<f32> {
@@ -149,12 +161,24 @@ impl<'a> Window<'a> {
         self.data.resizable
     }
 
+    pub fn set_resizable(&mut self, resizable: bool) {
+        self.push(WindowEvent::SetResizable(resizable));
+    }
+
     pub fn is_decorated(&self) -> bool {
         self.data.decorated
     }
 
+    pub fn set_decorated(&mut self, decorated: bool) {
+        self.push(WindowEvent::SetDecorated(decorated));
+    }
+
     pub fn is_always_on_top(&self) -> bool {
         self.data.always_on_top
+    }
+
+    pub fn set_always_on_top(&mut self, on_top: bool) {
+        self.push(WindowEvent::SetAlwaysOnTop(on_top));
     }
 
     pub fn is_transparent(&self) -> bool {
@@ -165,8 +189,16 @@ impl<'a> Window<'a> {
         self.data.opacity
     }
 
+    pub fn set_opacity(&mut self, value: f32) {
+        self.push(WindowEvent::SetOpacity(value));
+    }
+
     pub fn is_focusable(&self) -> bool {
         self.data.focusable
+    }
+
+    pub fn set_focusable(&mut self, focusable: bool) {
+        self.push(WindowEvent::SetFocusable(focusable))
     }
 
     pub fn is_high_pixel_density(&self) -> bool {
@@ -177,8 +209,16 @@ impl<'a> Window<'a> {
         self.data.grab_mouse
     }
 
+    pub fn set_mouse_grabbed(&mut self, grab: bool) {
+        self.push(WindowEvent::SetMouseGrabbed(grab))
+    }
+
     pub fn keyboard_grabbed(&self) -> bool {
         self.data.grab_keyboard
+    }
+
+    pub fn set_keyboard_grabbed(&mut self, grab: bool) {
+        self.push(WindowEvent::SetKeyboardGrabbed(grab));
     }
 
     pub fn clear_color(&self) -> Color {

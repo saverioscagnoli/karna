@@ -7,6 +7,7 @@ pub mod event;
 pub mod input;
 pub mod render;
 pub mod scene;
+pub mod storage;
 pub mod text;
 pub mod time;
 pub mod window;
@@ -46,6 +47,7 @@ use crate::event::WindowEvent;
 use crate::input::Input;
 use crate::input::InputScope;
 use crate::scene::SceneId;
+use crate::storage::SharedStore;
 use crate::time::Clock;
 use crate::time::FramePacer;
 use crate::time::PaceMode;
@@ -70,6 +72,7 @@ pub struct App {
     input: Input,
     assets: AssetServer,
     assets_pool: AssetThreadPool,
+    store: SharedStore,
     should_quit: bool,
     event_outboxes: AppOutboxes,
     event_queue: Vec<AppEvent>,
@@ -107,6 +110,7 @@ impl App {
             clock: Clock::default(),
             input: Input::default(),
             assets,
+            store: SharedStore::default(),
             assets_pool: pool,
             event_queue: Vec::with_capacity(event_outboxes.total_cap()),
             event_outboxes,
@@ -297,6 +301,15 @@ impl App {
                         WindowEvent::SetFPSCalculationStrategy(s) => {
                             entry.pacer.counter.set_strategy(s)
                         }
+                        WindowEvent::SetResizable(r) => entry.sdl_window.set_resizable(r),
+                        WindowEvent::SetDecorated(d) => entry.sdl_window.set_decorated(d),
+                        WindowEvent::SetAlwaysOnTop(a) => entry.sdl_window.set_always_on_top(a),
+                        WindowEvent::SetOpacity(v) => entry.sdl_window.set_opacity(v),
+                        WindowEvent::SetFocusable(f) => entry.sdl_window.set_focusable(f),
+                        WindowEvent::SetMouseGrabbed(m) => entry.sdl_window.set_mouse_grabbed(m),
+                        WindowEvent::SetKeyboardGrabbed(k) => {
+                            entry.sdl_window.set_keyboard_grabbed(k)
+                        }
                     }
                 }
             }
@@ -310,9 +323,12 @@ impl App {
 
         for entry in self.windows.values_mut() {
             entry.state.sync_time(&self.clock, &entry.pacer);
-            entry
-                .state
-                .load_active_scenes(&mut self.event_outboxes, &self.input, &mut self.assets);
+            entry.state.load_active_scenes(
+                &mut self.event_outboxes,
+                &self.input,
+                &mut self.assets,
+                &mut self.store,
+            );
         }
 
         while !self.should_quit {
@@ -337,6 +353,7 @@ impl App {
                         &mut self.event_outboxes,
                         &self.input,
                         &mut self.assets,
+                        &mut self.store,
                     );
                 }
 
@@ -358,16 +375,20 @@ impl App {
 
                 entry.pacer.record(now_after_tick);
                 entry.state.sync_time(&self.clock, &entry.pacer);
+
                 entry.state.update_active_scenes(
                     UpdatePhase::Unrestrained,
                     &mut self.event_outboxes,
                     &self.input,
                     &mut self.assets,
+                    &mut self.store,
                 );
+
                 entry.state.draw_active_scenes(
                     &mut self.event_outboxes,
                     &self.input,
                     &mut self.assets,
+                    &self.store,
                 );
 
                 let atlas = self.assets.atlas();

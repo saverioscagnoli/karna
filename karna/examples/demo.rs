@@ -27,7 +27,15 @@ impl Scene for DemoScene {
         }
     }
 
-    fn fixed_update(&mut self, ctx: &mut UpdateContext) {}
+    fn fixed_update(&mut self, ctx: &mut UpdateContext) {
+        if ctx.input.key_pressed(Key::Up) {
+            ctx.window.set_opacity(ctx.window.opacity() + 0.1);
+        }
+
+        if ctx.input.key_pressed(Key::Down) {
+            ctx.window.set_opacity(ctx.window.opacity() - 0.1);
+        }
+    }
 
     fn update(&mut self, ctx: &mut UpdateContext) {
         self.dt_text.set(format!("dt: {}", ctx.time.delta()));
@@ -97,7 +105,6 @@ fn main() {
             WindowBuilder::new()
                 .with_title("Demo window")
                 .with_size((1280, 720))
-                .with_decorated(false)
                 .with_scene::<DemoScene>(DEMO_SCENE)
                 .with_active_scene(DEMO_SCENE),
         )

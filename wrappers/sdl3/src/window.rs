@@ -30,6 +30,7 @@ use sdl3_sys::SDL_WINDOW_TRANSPARENT;
 use sdl3_sys::SDL_Window;
 use sdl3_sys::SDL_WindowFlags;
 use sdl3_sys::SDL_WindowID;
+use traccia::debug;
 
 use crate::gpu::Device;
 use crate::render::Color;
@@ -72,6 +73,11 @@ impl Window {
     where
         T: AsRef<str>,
     {
+        debug!(
+            "Window '{}': setting title to '{}'",
+            self.id(),
+            title.as_ref()
+        );
         let c = CString::new(title.as_ref()).unwrap_or_default();
         unsafe { SDL_SetWindowTitle(self.as_ptr(), c.as_ptr()) };
     }
@@ -87,6 +93,7 @@ impl Window {
         S: Into<math::Size<u32>>,
     {
         let size = size.into().cast::<i32>();
+        debug!("Window '{}': setting size to {:?}", self.id(), size);
         unsafe { SDL_SetWindowSize(self.as_ptr(), size.w(), size.h()) };
     }
 
@@ -102,6 +109,7 @@ impl Window {
     }
 
     pub fn set_resizable(&mut self, resizable: bool) {
+        debug!("Window '{}': setting resizable to {}", self.id(), resizable);
         unsafe { SDL_SetWindowResizable(self.as_ptr(), resizable) };
     }
 
@@ -110,6 +118,7 @@ impl Window {
     }
 
     pub fn set_decorated(&mut self, decorated: bool) {
+        debug!("Window '{}': setting decorated to {}", self.id(), decorated);
         unsafe { SDL_SetWindowBordered(self.as_ptr(), decorated) };
     }
 
@@ -118,6 +127,11 @@ impl Window {
     }
 
     pub fn set_always_on_top(&mut self, always_on_top: bool) {
+        debug!(
+            "Window '{}': setting always on top to {}",
+            self.id(),
+            always_on_top
+        );
         unsafe { SDL_SetWindowAlwaysOnTop(self.as_ptr(), always_on_top) };
     }
 
@@ -130,6 +144,7 @@ impl Window {
     }
 
     pub fn set_opacity(&mut self, value: f32) {
+        debug!("Window '{}': setting opacity to {}", self.id(), value);
         unsafe { SDL_SetWindowOpacity(self.as_ptr(), value) };
     }
 
@@ -138,6 +153,7 @@ impl Window {
     }
 
     pub fn set_focusable(&mut self, focusable: bool) {
+        debug!("Window '{}': setting focusable to {}", self.id(), focusable);
         unsafe { SDL_SetWindowFocusable(self.as_ptr(), focusable) };
     }
 
@@ -150,6 +166,11 @@ impl Window {
     }
 
     pub fn set_mouse_grabbed(&mut self, grabbed: bool) {
+        debug!(
+            "Window '{}': setting mouse grabbed to {}",
+            self.id(),
+            grabbed
+        );
         unsafe { SDL_SetWindowMouseGrab(self.as_ptr(), grabbed) };
     }
 
@@ -158,6 +179,11 @@ impl Window {
     }
 
     pub fn set_keyboard_grabbed(&mut self, grabbed: bool) {
+        debug!(
+            "Window '{}': setting keyboard grabbed to {}",
+            self.id(),
+            grabbed
+        );
         unsafe { SDL_SetWindowKeyboardGrab(self.as_ptr(), grabbed) };
     }
 

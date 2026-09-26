@@ -15,6 +15,7 @@ use crate::render::Renderer;
 use crate::scene::BoxedScene;
 use crate::scene::SceneBuilder;
 use crate::scene::SceneId;
+use crate::storage::SharedStore;
 use crate::time::Clock;
 use crate::time::FramePacer;
 use crate::time::TimeData;
@@ -78,6 +79,7 @@ impl WindowState {
         outboxes: &mut AppOutboxes,
         input: &Input,
         assets: &mut AssetServer,
+        shared: &mut SharedStore,
     ) {
         let Self { ctx, scenes, .. } = self;
 
@@ -87,7 +89,9 @@ impl WindowState {
         };
 
         if slot.scene.is_none() {
-            slot.scene = Some((slot.builder)(&mut ctx.for_load(outboxes, input, assets)));
+            slot.scene = Some((slot.builder)(
+                &mut ctx.for_load(outboxes, input, assets, shared),
+            ));
         }
     }
 
@@ -97,6 +101,7 @@ impl WindowState {
         outboxes: &mut AppOutboxes,
         input: &Input,
         assets: &mut AssetServer,
+        shared: &mut SharedStore,
     ) {
         let Some(slot) = self.scenes.get_mut(&scene_id) else {
             error!("Trying to unload an invalid scene: {}", scene_id);
@@ -104,7 +109,7 @@ impl WindowState {
         };
 
         if let Some(ref mut scene) = slot.scene {
-            scene.unload(&mut self.ctx.for_load(outboxes, input, assets));
+            scene.unload(&mut self.ctx.for_load(outboxes, input, assets, shared));
         }
 
         slot.scene = None;
@@ -116,13 +121,14 @@ impl WindowState {
         outboxes: &mut AppOutboxes,
         input: &Input,
         assets: &mut AssetServer,
+        shared: &mut SharedStore,
     ) {
         if !self.scenes.contains_key(&scene_id) {
             error!("Trying to activate an invalid scene: {}", scene_id);
             return;
         }
 
-        self.load_scene(scene_id, outboxes, input, assets);
+        self.load_scene(scene_id, outboxes, input, assets, shared);
 
         if !self.active_scenes.contains(&scene_id) {
             self.active_scenes.push(scene_id);
@@ -138,9 +144,10 @@ impl WindowState {
         outboxes: &mut AppOutboxes,
         input: &Input,
         assets: &mut AssetServer,
+        shared: &mut SharedStore,
     ) {
         for id in self.active_scenes.clone() {
-            self.load_scene(id, outboxes, input, assets);
+            self.load_scene(id, outboxes, input, assets, shared);
         }
     }
 
@@ -150,6 +157,7 @@ impl WindowState {
         outboxes: &mut AppOutboxes,
         input: &Input,
         assets: &mut AssetServer,
+        shared: &mut SharedStore,
     ) {
         #[rustfmt::skip]
         let Self { ctx, scenes, active_scenes, .. } = self;
@@ -167,10 +175,10 @@ impl WindowState {
 
             match phase {
                 UpdatePhase::Fixed => {
-                    scene.fixed_update(&mut ctx.for_update(outboxes, input, assets))
+                    scene.fixed_update(&mut ctx.for_update(outboxes, input, assets, shared))
                 }
                 UpdatePhase::Unrestrained => {
-                    scene.update(&mut ctx.for_update(outboxes, input, assets))
+                    scene.update(&mut ctx.for_update(outboxes, input, assets, shared))
                 }
             }
         }
@@ -181,6 +189,7 @@ impl WindowState {
         outboxes: &mut AppOutboxes,
         input: &Input,
         assets: &mut AssetServer,
+        shared: &SharedStore,
     ) {
         #[rustfmt::skip]
         let Self { ctx, renderer, scenes, active_scenes, .. } = self;
@@ -199,7 +208,10 @@ impl WindowState {
                 continue;
             };
 
-            scene.draw(&mut ctx.for_draw(outboxes, input, assets), &mut draw);
+            scene.draw(
+                &mut ctx.for_draw(outboxes, input, assets, shared),
+                &mut draw,
+            );
         }
     }
 }

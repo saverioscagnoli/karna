@@ -9,6 +9,13 @@ pub enum WindowEvent {
     SetSize(math::Size<u32>),
     SetTargetFPS(u32),
     SetFPSCalculationStrategy(FpsCalculationStrategy),
+    SetResizable(bool),
+    SetDecorated(bool),
+    SetAlwaysOnTop(bool),
+    SetOpacity(f32),
+    SetFocusable(bool),
+    SetMouseGrabbed(bool),
+    SetKeyboardGrabbed(bool),
 }
 
 #[derive(Debug, Clone)]
