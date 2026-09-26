@@ -1,6 +1,7 @@
 #![allow(unused)]
 
 use karna::prelude::*;
+use sdl3::window;
 
 const DEMO_SCENE: SceneId = SceneId::new_str("DEMO");
 
@@ -34,6 +35,14 @@ impl Scene for DemoScene {
 
         if ctx.input.key_pressed(Key::Down) {
             ctx.window.set_opacity(ctx.window.opacity() - 0.1);
+        }
+
+        if ctx.input.key_pressed(Key::Space) {
+            if ctx.window.is_fullscreen() {
+                ctx.window.set_windowed();
+            } else {
+                ctx.window.set_fullscreen(FullscreenMode::Borderless);
+            }
         }
     }
 

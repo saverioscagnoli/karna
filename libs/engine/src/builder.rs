@@ -4,7 +4,9 @@ use nostd::alloc::vec::Vec;
 use nostd::collections::HashMap;
 use nostd::path::Path;
 use nostd::path::PathBuf;
+use sdl3::window::FullscreenMode;
 use sdl3::window::WindowFlags;
+use sdl3::window::WindowState;
 use traccia::debug;
 
 use crate::App;
@@ -18,6 +20,7 @@ pub struct WindowBuilder {
     pub title: String,
     pub size: math::Size<u32>,
     pub opacity: f32,
+    pub fullscreen: Option<FullscreenMode>,
     pub flags: WindowFlags,
     pub scene_builders: HashMap<SceneId, SceneBuilder>,
     pub active_scenes: Vec<SceneId>,
@@ -29,6 +32,7 @@ impl Default for WindowBuilder {
             title: String::from("My Window"),
             size: math::size!(800, 600),
             opacity: 1.0,
+            fullscreen: None,
             flags: WindowFlags::default(),
             scene_builders: HashMap::default(),
             active_scenes: Vec::new(),
@@ -59,6 +63,31 @@ impl WindowBuilder {
 
     pub fn with_opacity(mut self, value: f32) -> Self {
         self.opacity = value;
+        self
+    }
+
+    pub fn with_windowed(mut self) -> Self {
+        self.flags.state = WindowState::Normal;
+        self
+    }
+
+    pub fn with_maximized(mut self) -> Self {
+        self.flags.state = WindowState::Maximized;
+        self
+    }
+
+    pub fn with_minimized(mut self) -> Self {
+        self.flags.state = WindowState::Minimized;
+        self
+    }
+
+    pub fn with_fullscreen(mut self, mode: FullscreenMode) -> Self {
+        self.fullscreen = Some(mode);
+        self
+    }
+
+    pub fn with_hidden(mut self) -> Self {
+        self.flags.hidden = true;
         self
     }
 

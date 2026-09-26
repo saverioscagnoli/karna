@@ -1,5 +1,7 @@
 use nostd::alloc::boxed::Box;
+use sdl3::window::FullscreenMode;
 use sdl3::window::WindowId;
+use sdl3::window::WindowState;
 
 use crate::time::FpsCalculationStrategy;
 
@@ -16,6 +18,11 @@ pub enum WindowEvent {
     SetFocusable(bool),
     SetMouseGrabbed(bool),
     SetKeyboardGrabbed(bool),
+    SetWindowState(WindowState),
+    SetFullscreen(FullscreenMode),
+    SetHidden(bool),
+    SetRelativeMouse(bool),
+    Restore,
 }
 
 #[derive(Debug, Clone)]

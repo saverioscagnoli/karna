@@ -32,6 +32,7 @@ use sdl3::events::TextEvent;
 use sdl3::gpu::Device;
 use sdl3::shadercross::ShaderCross;
 use sdl3::window::WindowId;
+use sdl3::window::WindowState as SdlWindowState;
 use traccia::debug;
 use traccia::error;
 use traccia::info;
@@ -128,6 +129,10 @@ impl App {
 
         if b.opacity != 1.0 {
             sdl_window.set_opacity(b.opacity);
+        }
+
+        if let Some(mode) = b.fullscreen {
+            sdl_window.set_fullscreen(mode);
         }
 
         let scenes = mem::take(&mut b.scene_builders)
@@ -320,6 +325,18 @@ impl App {
                         WindowEvent::SetKeyboardGrabbed(k) => {
                             entry.sdl_window.set_keyboard_grabbed(k)
                         }
+                        WindowEvent::SetWindowState(state) => match state {
+                            SdlWindowState::Normal => entry.sdl_window.set_windowed(),
+                            SdlWindowState::Maximized => entry.sdl_window.set_maximized(),
+                            SdlWindowState::Minimized => entry.sdl_window.set_minimized(),
+                            _ => unreachable!(),
+                        },
+                        WindowEvent::SetFullscreen(mode) => entry.sdl_window.set_fullscreen(mode),
+                        WindowEvent::SetHidden(hidden) => entry.sdl_window.set_hidden(hidden),
+                        WindowEvent::SetRelativeMouse(rel) => {
+                            entry.sdl_window.set_relative_mouse(rel)
+                        }
+                        WindowEvent::Restore => entry.sdl_window.restore(),
                     }
                 }
             }

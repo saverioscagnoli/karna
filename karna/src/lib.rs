@@ -15,7 +15,9 @@ pub use engine::time::FpsCalculationStrategy;
 pub use engine::time::PaceMode;
 pub use engine::time::Time;
 pub use engine::window::Window;
+
 pub use sdl3::render::Color;
+pub use sdl3::window::FullscreenMode;
 
 #[cfg(feature = "js")]
 pub use js::JsScene;

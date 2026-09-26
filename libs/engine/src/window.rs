@@ -4,8 +4,10 @@ use nostd::alloc::boxed::Box;
 use nostd::alloc::string::String;
 use nostd::alloc::string::ToString;
 use sdl3::render::Color;
+use sdl3::window::FullscreenMode;
 use sdl3::window::WindowFlags;
 use sdl3::window::WindowId;
+use sdl3::window::WindowState;
 
 use crate::event::AppEvent;
 use crate::event::Outbox;
@@ -140,6 +142,50 @@ impl<'a> Window<'a> {
         self.data.mouse_delta
     }
 
+    pub fn is_windowed(&self) -> bool {
+        self.data.state == WindowState::Normal
+    }
+
+    pub fn set_windowed(&mut self) {
+        self.push(WindowEvent::SetWindowState(WindowState::Normal));
+    }
+
+    pub fn is_maximized(&self) -> bool {
+        self.data.state == WindowState::Maximized
+    }
+
+    pub fn set_maximized(&mut self) {
+        self.push(WindowEvent::SetWindowState(WindowState::Maximized));
+    }
+
+    pub fn is_minimized(&self) -> bool {
+        self.data.state == WindowState::Minimized
+    }
+
+    pub fn set_minimized(&mut self) {
+        self.push(WindowEvent::SetWindowState(WindowState::Minimized));
+    }
+
+    pub fn is_fullscreen(&self) -> bool {
+        self.data.state == WindowState::Fullscreen
+    }
+
+    pub fn set_fullscreen(&mut self, mode: FullscreenMode) {
+        self.push(WindowEvent::SetFullscreen(mode));
+    }
+
+    pub fn restore(&mut self) {
+        self.push(WindowEvent::Restore)
+    }
+
+    pub fn is_hidden(&self) -> bool {
+        self.data.hidden
+    }
+
+    pub fn set_hidden(&mut self, hidden: bool) {
+        self.push(WindowEvent::SetHidden(hidden));
+    }
+
     pub fn is_resizable(&self) -> bool {
         self.data.resizable
     }
@@ -162,6 +208,10 @@ impl<'a> Window<'a> {
 
     pub fn set_always_on_top(&mut self, on_top: bool) {
         self.push(WindowEvent::SetAlwaysOnTop(on_top));
+    }
+
+    pub fn is_utility(&self) -> bool {
+        self.data.utility
     }
 
     pub fn is_transparent(&self) -> bool {
@@ -188,7 +238,7 @@ impl<'a> Window<'a> {
         self.data.high_pixel_density
     }
 
-    pub fn mouse_grabbed(&self) -> bool {
+    pub fn is_mouse_grabbed(&self) -> bool {
         self.data.grab_mouse
     }
 
@@ -196,12 +246,20 @@ impl<'a> Window<'a> {
         self.push(WindowEvent::SetMouseGrabbed(grab))
     }
 
-    pub fn keyboard_grabbed(&self) -> bool {
+    pub fn is_keyboard_grabbed(&self) -> bool {
         self.data.grab_keyboard
     }
 
     pub fn set_keyboard_grabbed(&mut self, grab: bool) {
         self.push(WindowEvent::SetKeyboardGrabbed(grab));
+    }
+
+    pub fn is_relative_mouse(&self) -> bool {
+        self.data.relative_mouse
+    }
+
+    pub fn set_relative_mouse(&mut self, relative: bool) {
+        self.push(WindowEvent::SetRelativeMouse(relative))
     }
 
     pub fn clear_color(&self) -> Color {
