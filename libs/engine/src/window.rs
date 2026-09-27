@@ -4,16 +4,14 @@ use nostd::alloc::boxed::Box;
 use nostd::alloc::string::String;
 use nostd::alloc::string::ToString;
 use sdl3::gpu::PresentMode;
-use sdl3::gpu::PresentMode::Immediate;
 use sdl3::render::Color;
 use sdl3::window::FullscreenMode;
 use sdl3::window::WindowFlags;
 use sdl3::window::WindowId;
 use sdl3::window::WindowState;
 
-use crate::event::AppEvent;
-use crate::event::Outbox;
-use crate::event::WindowEvent;
+use crate::commands::Outbox;
+use crate::commands::WindowCommand;
 
 pub type SdlWindow = sdl3::window::Window;
 
@@ -190,7 +188,7 @@ impl WindowData {
 
 pub struct Window<'a> {
     pub(crate) data: &'a mut WindowData,
-    pub(crate) outbox: &'a mut Outbox<AppEvent>,
+    pub(crate) outbox: &'a mut Outbox<(WindowId, WindowCommand)>,
 }
 
 impl Deref for Window<'_> {
@@ -203,11 +201,8 @@ impl Deref for Window<'_> {
 
 impl<'a> Window<'a> {
     #[inline]
-    fn push(&mut self, wevent: WindowEvent) {
-        self.outbox.push(AppEvent::Window {
-            window: self.data.id,
-            wevent,
-        });
+    fn push(&mut self, command: WindowCommand) {
+        self.outbox.push((self.id, command));
     }
 
     pub fn set_title<T>(&mut self, title: T)
@@ -217,10 +212,7 @@ impl<'a> Window<'a> {
         let str = title.into();
 
         self.data.title = str.to_string();
-        self.outbox.push(AppEvent::Window {
-            window: self.data.id,
-            wevent: WindowEvent::SetTitle(str),
-        });
+        self.push(WindowCommand::SetTitle(str));
     }
 
     pub fn set_size<S>(&mut self, size: S)
@@ -230,25 +222,17 @@ impl<'a> Window<'a> {
         let size = size.into();
 
         self.data.size = size;
-        self.push(WindowEvent::SetSize(size));
-    }
-
-    #[inline]
-    pub fn set_present_mode(&mut self, mode: PresentMode) {
-        self.push(WindowEvent::SetPresentMode(mode));
-    }
-
-    pub fn set_vsync(&mut self, vsync: bool) {
-        if vsync {
-            self.push(WindowEvent::SetPresentMode(PresentMode::Vsync));
-        } else {
-            self.push(WindowEvent::SetPresentMode(Immediate));
-        }
+        self.push(WindowCommand::SetSize(size));
     }
 
     #[inline]
     pub fn set_opacity(&mut self, value: f32) {
-        self.push(WindowEvent::SetOpacity(value));
+        self.push(WindowCommand::SetOpacity(value));
+    }
+
+    #[inline]
+    pub fn set_present_mode(&mut self, mode: PresentMode) {
+        self.push(WindowCommand::SetPresentMode(mode));
     }
 
     #[inline]
@@ -261,66 +245,66 @@ impl<'a> Window<'a> {
 
     #[inline]
     pub fn set_windowed(&mut self) {
-        self.push(WindowEvent::SetWindowState(WindowState::Normal));
+        self.push(WindowCommand::SetState(WindowState::Normal));
     }
 
     #[inline]
     pub fn set_maximized(&mut self) {
-        self.push(WindowEvent::SetWindowState(WindowState::Maximized));
+        self.push(WindowCommand::SetState(WindowState::Maximized));
     }
 
     #[inline]
     pub fn set_minimized(&mut self) {
-        self.push(WindowEvent::SetWindowState(WindowState::Minimized));
+        self.push(WindowCommand::SetState(WindowState::Minimized));
     }
 
     #[inline]
     pub fn set_fullscreen(&mut self, mode: FullscreenMode) {
-        self.push(WindowEvent::SetFullscreen(mode));
+        self.push(WindowCommand::SetFullscreenMode(mode));
     }
 
     #[inline]
     pub fn set_hidden(&mut self, hidden: bool) {
-        self.push(WindowEvent::SetHidden(hidden));
+        self.push(WindowCommand::SetHidden(hidden));
     }
 
     #[inline]
     pub fn set_resizable(&mut self, resizable: bool) {
-        self.push(WindowEvent::SetResizable(resizable));
+        self.push(WindowCommand::SetResizable(resizable));
     }
 
     #[inline]
     pub fn set_decorated(&mut self, decorated: bool) {
-        self.push(WindowEvent::SetDecorated(decorated));
+        self.push(WindowCommand::SetDecorated(decorated));
     }
 
     #[inline]
     pub fn set_always_on_top(&mut self, on_top: bool) {
-        self.push(WindowEvent::SetAlwaysOnTop(on_top));
+        self.push(WindowCommand::SetAlwaysOnTop(on_top));
     }
 
     #[inline]
     pub fn set_focusable(&mut self, focusable: bool) {
-        self.push(WindowEvent::SetFocusable(focusable))
+        self.push(WindowCommand::SetFocusable(focusable))
     }
 
     #[inline]
     pub fn set_mouse_grabbed(&mut self, grab: bool) {
-        self.push(WindowEvent::SetMouseGrabbed(grab))
+        self.push(WindowCommand::SetMouseGrabbed(grab))
     }
 
     #[inline]
     pub fn set_keyboard_grabbed(&mut self, grab: bool) {
-        self.push(WindowEvent::SetKeyboardGrabbed(grab));
+        self.push(WindowCommand::SetKeyboardGrabbed(grab));
     }
 
     #[inline]
     pub fn set_relative_mouse(&mut self, relative: bool) {
-        self.push(WindowEvent::SetRelativeMouse(relative))
+        self.push(WindowCommand::SetRelativeMouse(relative))
     }
 
     #[inline]
     pub fn restore(&mut self) {
-        self.push(WindowEvent::Restore)
+        self.push(WindowCommand::Restore)
     }
 }

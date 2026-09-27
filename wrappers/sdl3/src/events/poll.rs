@@ -14,6 +14,7 @@ use sdl3_sys::SDL_EVENT_GAMEPAD_ADDED;
 use sdl3_sys::SDL_EVENT_GAMEPAD_AXIS_MOTION;
 use sdl3_sys::SDL_EVENT_GAMEPAD_BUTTON_DOWN;
 use sdl3_sys::SDL_EVENT_GAMEPAD_BUTTON_UP;
+use sdl3_sys::SDL_EVENT_GAMEPAD_REMAPPED;
 use sdl3_sys::SDL_EVENT_GAMEPAD_REMOVED;
 use sdl3_sys::SDL_EVENT_KEY_DOWN;
 use sdl3_sys::SDL_EVENT_KEY_UP;
@@ -52,6 +53,8 @@ use sdl3_sys::SDL_EVENT_WINDOW_SAFE_AREA_CHANGED;
 use sdl3_sys::SDL_EVENT_WINDOW_SHOWN;
 use sdl3_sys::SDL_Event;
 use sdl3_sys::SDL_EventType;
+use sdl3_sys::SDL_GamepadAxis;
+use sdl3_sys::SDL_GamepadButton;
 use sdl3_sys::SDL_KMOD_ALT;
 use sdl3_sys::SDL_KMOD_CAPS;
 use sdl3_sys::SDL_KMOD_CTRL;
@@ -75,6 +78,9 @@ use crate::events::SdlEvent;
 use crate::events::SdlWindowEvent;
 use crate::events::TextEvent;
 use crate::events::TouchEvent;
+use crate::gamepad;
+use crate::gamepad::GamepadAxis;
+use crate::gamepad::GamepadButton;
 
 const _: () = {
     assert!(Modifiers::SHIFT as u32 == SDL_KMOD_SHIFT);
@@ -250,13 +256,19 @@ fn translate(raw: &SDL_Event) -> Option<SdlEvent> {
             Some(SdlEvent::Gamepad(GamepadEvent::Removed { id: g.which }))
         }
 
+        SDL_EVENT_GAMEPAD_REMAPPED => {
+            // SAFETY: writes the `gdevice` member.
+            let g = unsafe { raw.gdevice };
+            Some(SdlEvent::Gamepad(GamepadEvent::Remapped { id: g.which }))
+        }
+
         SDL_EVENT_GAMEPAD_BUTTON_DOWN | SDL_EVENT_GAMEPAD_BUTTON_UP => {
             // SAFETY: both write the `gbutton` member.
             let g = unsafe { raw.gbutton };
 
             Some(SdlEvent::Gamepad(GamepadEvent::Button {
                 id: g.which,
-                button: g.button,
+                button: GamepadButton::from_raw(g.button as SDL_GamepadButton)?,
                 pressed: g.down,
             }))
         }
@@ -267,10 +279,8 @@ fn translate(raw: &SDL_Event) -> Option<SdlEvent> {
 
             Some(SdlEvent::Gamepad(GamepadEvent::Axis {
                 id: g.which,
-                axis: g.axis,
-                // i16 is asymmetric: -32768..32767. Divide by 32767 and clamp
-                // so a full-left stick reads exactly -1.0 rather than -1.000031.
-                value: (g.value as f32 / 32767.0).clamp(-1.0, 1.0),
+                axis: GamepadAxis::from_raw(g.axis as SDL_GamepadAxis)?,
+                value: gamepad::normalize_axis(g.value),
             }))
         }
 

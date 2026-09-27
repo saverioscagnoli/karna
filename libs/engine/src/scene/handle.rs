@@ -1,22 +1,31 @@
 use core::ops::Deref;
 
-use crate::event::AppEvent;
-use crate::event::Outbox;
+use sdl3::window::WindowId;
+
+use crate::commands::Outbox;
+use crate::commands::SceneCommand;
 use crate::render::Camera;
 use crate::render::Layer;
 use crate::render::LayerMap;
 use crate::render::Projection;
+use crate::scene::SceneId;
 
 pub struct SceneData {
+    id: SceneId,
     cameras: LayerMap<Camera>,
 }
 
 impl SceneData {
-    pub(crate) fn new(viewport: math::Size<u32>) -> Self {
+    pub(crate) fn new(id: SceneId, viewport: math::Size<u32>) -> Self {
         let default_camera = Camera::new(Projection::topleft_ortho(viewport));
         let cameras = LayerMap::new(default_camera, default_camera, default_camera);
 
-        Self { cameras }
+        Self { id, cameras }
+    }
+
+    #[inline]
+    pub fn id(&self) -> SceneId {
+        self.id
     }
 
     pub(crate) fn sync(&mut self, viewport: math::Size<u32>) {
@@ -36,7 +45,8 @@ impl SceneData {
 
 pub struct SceneHandle<'a> {
     pub(crate) data: &'a mut SceneData,
-    pub(crate) outbox: &'a mut Outbox<AppEvent>,
+    pub(crate) window_id: WindowId,
+    pub(crate) outbox: &'a mut Outbox<(WindowId, SceneCommand)>,
 }
 
 impl Deref for SceneHandle<'_> {
@@ -48,6 +58,23 @@ impl Deref for SceneHandle<'_> {
 }
 
 impl SceneHandle<'_> {
+    fn push(&mut self, command: SceneCommand) {
+        self.outbox.push((self.window_id, command));
+    }
+
+    pub fn activate(&mut self, scene: SceneId) {
+        self.push(SceneCommand::Activate(scene));
+    }
+
+    pub fn deactivate(&mut self, scene: SceneId) {
+        self.push(SceneCommand::Deactivate(scene));
+    }
+
+    pub fn change(&mut self, to: SceneId) {
+        self.push(SceneCommand::Deactivate(self.data.id));
+        self.push(SceneCommand::Activate(to));
+    }
+
     pub fn camera_mut(&mut self, layer: Layer) -> &mut Camera {
         let cameras = &mut self.data.cameras;
 

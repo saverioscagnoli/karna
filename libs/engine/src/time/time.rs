@@ -4,9 +4,8 @@ use core::time::Duration;
 use math::SdlFloat;
 use sdl3::window::WindowId;
 
-use crate::event::AppEvent;
-use crate::event::Outbox;
-use crate::event::WindowEvent;
+use crate::commands::Outbox;
+use crate::commands::TimeCommand;
 use crate::time::Clock;
 use crate::time::FpsCalculationStrategy;
 use crate::time::FramePacer;
@@ -77,7 +76,7 @@ impl TimeData {
 pub struct Time<'a> {
     pub(crate) window_id: WindowId,
     pub(crate) data: &'a TimeData,
-    pub(crate) outbox: &'a mut Outbox<AppEvent>,
+    pub(crate) outbox: &'a mut Outbox<TimeCommand>,
 }
 
 impl Deref for Time<'_> {
@@ -90,20 +89,18 @@ impl Deref for Time<'_> {
 
 impl<'a> Time<'a> {
     pub fn set_target_tps(&mut self, t: u32) {
-        self.outbox.push(AppEvent::SetTargetTPS(t));
+        self.outbox.push(TimeCommand::SetTargetTPS(t));
     }
 
     pub fn set_target_fps(&mut self, t: u32) {
-        self.outbox.push(AppEvent::Window {
-            window: self.window_id,
-            wevent: WindowEvent::SetTargetFPS(t),
-        });
+        self.outbox
+            .push(TimeCommand::SetTargetFPS(self.window_id, t));
     }
 
     pub fn set_fps_calculation_strategy(&mut self, strat: FpsCalculationStrategy) {
-        self.outbox.push(AppEvent::Window {
-            window: self.window_id,
-            wevent: WindowEvent::SetFPSCalculationStrategy(strat),
-        });
+        self.outbox.push(TimeCommand::SetFPSCalculationStrategy(
+            self.window_id,
+            strat,
+        ));
     }
 }

@@ -7,6 +7,9 @@ pub use poll::*;
 use alloc::string::String;
 use sdl3_sys::SDL_Scancode;
 
+use crate::gamepad::GamepadAxis;
+use crate::gamepad::GamepadButton;
+use crate::gamepad::GamepadId;
 use crate::window::WindowId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -226,10 +229,25 @@ pub struct Finger {
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum GamepadEvent {
-    Added { id: u32 },
-    Removed { id: u32 },
-    Button { id: u32, button: u8, pressed: bool },
-    Axis { id: u32, axis: u8, value: f32 },
+    Added {
+        id: GamepadId,
+    },
+    Removed {
+        id: GamepadId,
+    },
+    Remapped {
+        id: GamepadId,
+    },
+    Button {
+        id: GamepadId,
+        button: GamepadButton,
+        pressed: bool,
+    },
+    Axis {
+        id: GamepadId,
+        axis: GamepadAxis,
+        value: f32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

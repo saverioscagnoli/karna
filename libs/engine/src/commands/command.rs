@@ -4,34 +4,39 @@ use sdl3::window::FullscreenMode;
 use sdl3::window::WindowId;
 use sdl3::window::WindowState;
 
+use crate::scene::SceneId;
 use crate::time::FpsCalculationStrategy;
 
 #[derive(Debug, Clone)]
-pub enum WindowEvent {
+pub enum WindowCommand {
     SetTitle(Box<str>),
     SetSize(math::Size<u32>),
-    SetTargetFPS(u32),
-    SetFPSCalculationStrategy(FpsCalculationStrategy),
+    SetOpacity(f32),
+    SetPresentMode(PresentMode),
+    SetState(WindowState),
+    SetFullscreenMode(FullscreenMode),
+    SetHidden(bool),
     SetResizable(bool),
     SetDecorated(bool),
     SetAlwaysOnTop(bool),
-    SetOpacity(f32),
     SetFocusable(bool),
     SetMouseGrabbed(bool),
     SetKeyboardGrabbed(bool),
-    SetWindowState(WindowState),
-    SetFullscreen(FullscreenMode),
-    SetHidden(bool),
     SetRelativeMouse(bool),
-    SetPresentMode(PresentMode),
     Restore,
 }
 
-#[derive(Debug, Clone)]
-pub enum AppEvent {
+#[derive(Debug, Clone, Copy)]
+pub enum TimeCommand {
+    SetTargetFPS(WindowId, u32),
+    SetFPSCalculationStrategy(WindowId, FpsCalculationStrategy),
     SetTargetTPS(u32),
-    Window {
-        window: WindowId,
-        wevent: WindowEvent,
-    },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SceneCommand {
+    Load(SceneId),
+    Activate(SceneId),
+    Deactivate(SceneId),
+    Unload(SceneId),
 }

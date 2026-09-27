@@ -2,8 +2,8 @@
 
 pub mod assets;
 pub mod builder;
+pub mod commands;
 pub mod context;
-pub mod event;
 pub mod input;
 pub mod render;
 pub mod scene;
@@ -42,9 +42,10 @@ use traccia::warn;
 use crate::assets::AssetServer;
 use crate::assets::AssetThreadPool;
 use crate::builder::WindowBuilder;
-use crate::event::AppEvent;
-use crate::event::AppOutboxes;
-use crate::event::WindowEvent;
+use crate::commands::AppOutboxes;
+use crate::commands::SceneCommand;
+use crate::commands::TimeCommand;
+use crate::commands::WindowCommand;
 use crate::input::Input;
 use crate::input::InputScope;
 use crate::scene::SceneId;
@@ -75,8 +76,7 @@ pub struct App {
     assets_pool: AssetThreadPool,
     store: SharedStore,
     should_quit: bool,
-    event_outboxes: AppOutboxes,
-    event_queue: Vec<AppEvent>,
+    outboxes: AppOutboxes,
 
     shadercross: ShaderCross,
     device: Device,
@@ -102,7 +102,7 @@ impl App {
 
         let (pool, assets) = assets::spawn(root, workers, &device);
 
-        let event_outboxes = AppOutboxes::new();
+        let outboxes = AppOutboxes::new();
 
         Self {
             requested_windows: Vec::new(),
@@ -113,8 +113,7 @@ impl App {
             assets,
             store: SharedStore::default(),
             assets_pool: pool,
-            event_queue: Vec::with_capacity(event_outboxes.total_cap()),
-            event_outboxes,
+            outboxes,
             shadercross,
             device,
             _sdl,
@@ -137,7 +136,7 @@ impl App {
 
         let scenes = mem::take(&mut b.scene_builders)
             .into_iter()
-            .map(|(k, v)| (k, SceneSlot::new(v, sdl_window.pixel_size())))
+            .map(|(k, v)| (k, SceneSlot::new(k, v, sdl_window.pixel_size())))
             .collect::<HashMap<SceneId, SceneSlot>>();
 
         let state = WindowState::init(
@@ -286,58 +285,89 @@ impl App {
 
     fn drain_app_events(&mut self) {
         #[rustfmt::skip]
-        let Self { windows, clock, event_outboxes, event_queue, .. } = self;
+        let Self { windows, clock, input, assets, store, outboxes, .. } = self;
 
-        event_outboxes.drain_into(event_queue);
+        for (id, command) in outboxes.window.drain() {
+            use WindowCommand::*;
+            let Some(entry) = windows.get_mut(&id) else {
+                warn!("Received a command for a closed window: {}", id);
+                continue;
+            };
 
-        for event in event_queue.drain(..) {
-            trace!("Received App event: {:?}", event);
+            match command {
+                SetTitle(t) => entry.sdl_window.set_title(t),
+                SetSize(s) => entry.sdl_window.set_size(s),
+                SetOpacity(v) => entry.sdl_window.set_opacity(v),
+                SetPresentMode(m) => _ = entry.sdl_window.set_present_mode(m),
+                SetState(state) => {
+                    use SdlWindowState::*;
 
-            match event {
-                AppEvent::SetTargetTPS(t) => clock.set_target_tps(t),
-                AppEvent::Window { window, wevent } => {
-                    let Some(entry) = windows.get_mut(&window) else {
-                        warn!("Received app event for dropped window: {}", window);
-                        continue;
-                    };
-
-                    match wevent {
-                        WindowEvent::SetTitle(t) => entry.sdl_window.set_title(t),
-                        WindowEvent::SetSize(s) => entry.sdl_window.set_size(s),
-                        WindowEvent::SetTargetFPS(t) => entry.pacer.set_target_fps(t),
-                        WindowEvent::SetFPSCalculationStrategy(s) => {
-                            entry.pacer.counter.set_strategy(s)
-                        }
-                        WindowEvent::SetResizable(r) => entry.sdl_window.set_resizable(r),
-                        WindowEvent::SetDecorated(d) => entry.sdl_window.set_decorated(d),
-                        WindowEvent::SetAlwaysOnTop(a) => entry.sdl_window.set_always_on_top(a),
-                        WindowEvent::SetOpacity(v) => entry.sdl_window.set_opacity(v),
-                        WindowEvent::SetFocusable(f) => entry.sdl_window.set_focusable(f),
-                        WindowEvent::SetMouseGrabbed(m) => entry.sdl_window.set_mouse_grabbed(m),
-                        WindowEvent::SetKeyboardGrabbed(k) => {
-                            entry.sdl_window.set_keyboard_grabbed(k)
-                        }
-                        WindowEvent::SetWindowState(state) => match state {
-                            SdlWindowState::Normal => entry.sdl_window.set_windowed(),
-                            SdlWindowState::Maximized => entry.sdl_window.maximize(),
-                            SdlWindowState::Minimized => entry.sdl_window.minimize(),
-                            _ => unreachable!(),
-                        },
-                        WindowEvent::SetFullscreen(mode) => {
-                            entry.sdl_window.set_fullscreen(mode);
-                        }
-                        WindowEvent::SetHidden(hidden) => entry.sdl_window.set_hidden(hidden),
-                        WindowEvent::SetRelativeMouse(rel) => {
-                            entry.sdl_window.set_relative_mouse(rel)
-                        }
-                        WindowEvent::SetPresentMode(mode) => {
-                            entry.sdl_window.set_present_mode(mode);
-                        }
-                        WindowEvent::Restore => entry.sdl_window.restore(),
+                    match state {
+                        Normal => entry.sdl_window.set_windowed(),
+                        Minimized => entry.sdl_window.minimize(),
+                        Maximized => entry.sdl_window.maximize(),
+                        Fullscreen => unreachable!(),
                     }
                 }
+                SetFullscreenMode(m) => _ = entry.sdl_window.set_fullscreen(m),
+                SetHidden(h) => entry.sdl_window.set_hidden(h),
+                SetResizable(r) => entry.sdl_window.set_resizable(r),
+                SetDecorated(d) => entry.sdl_window.set_decorated(d),
+                SetAlwaysOnTop(o) => entry.sdl_window.set_always_on_top(o),
+                SetFocusable(f) => entry.sdl_window.set_focusable(f),
+                SetMouseGrabbed(m) => entry.sdl_window.set_mouse_grabbed(m),
+                SetKeyboardGrabbed(k) => entry.sdl_window.set_keyboard_grabbed(k),
+                SetRelativeMouse(r) => entry.sdl_window.set_relative_mouse(r),
+                Restore => entry.sdl_window.restore(),
             }
         }
+
+        for command in outboxes.time.drain() {
+            use TimeCommand::*;
+
+            match command {
+                SetTargetFPS(wid, t) => {
+                    if let Some(entry) = windows.get_mut(&wid) {
+                        entry.pacer.set_target_fps(t);
+                    }
+                }
+                SetFPSCalculationStrategy(wid, strat) => {
+                    if let Some(entry) = windows.get_mut(&wid) {
+                        entry.pacer.counter.set_strategy(strat);
+                    }
+                }
+                SetTargetTPS(t) => clock.set_target_tps(t),
+            }
+        }
+
+        let mut pending = outboxes.scene.take();
+
+        for (wid, command) in pending.drain(..) {
+            use SceneCommand::*;
+
+            let Some(entry) = windows.get_mut(&wid) else {
+                warn!("Received a scene command from a closed window: {}", wid);
+                continue;
+            };
+
+            match command {
+                Load(scene) => entry
+                    .state
+                    .load_scene(scene, outboxes, input, assets, store),
+
+                Activate(scene) => entry
+                    .state
+                    .activate_scene(scene, outboxes, input, assets, store),
+
+                Deactivate(scene) => entry.state.deactivate_scene(scene),
+
+                Unload(scene) => entry
+                    .state
+                    .unload_scene(scene, outboxes, input, assets, store),
+            }
+        }
+
+        outboxes.scene.restore(pending);
     }
 
     pub fn run(mut self) {
@@ -348,7 +378,7 @@ impl App {
         for entry in self.windows.values_mut() {
             entry.state.sync_time(&self.clock, &entry.pacer);
             entry.state.load_active_scenes(
-                &mut self.event_outboxes,
+                &mut self.outboxes,
                 &self.input,
                 &mut self.assets,
                 &mut self.store,
@@ -374,7 +404,7 @@ impl App {
                     entry.state.sync_time(&self.clock, &entry.pacer);
                     entry.state.update_active_scenes(
                         UpdatePhase::Fixed,
-                        &mut self.event_outboxes,
+                        &mut self.outboxes,
                         &self.input,
                         &mut self.assets,
                         &mut self.store,
@@ -402,7 +432,7 @@ impl App {
 
                 entry.state.update_active_scenes(
                     UpdatePhase::Unrestrained,
-                    &mut self.event_outboxes,
+                    &mut self.outboxes,
                     &self.input,
                     &mut self.assets,
                     &mut self.store,

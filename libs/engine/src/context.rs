@@ -1,5 +1,5 @@
 use crate::assets::AssetServer;
-use crate::event::AppOutboxes;
+use crate::commands::AppOutboxes;
 use crate::input::Input;
 use crate::scene::SceneData;
 use crate::scene::SceneHandle;
@@ -41,6 +41,7 @@ impl UserContext {
             assets,
             scene: SceneHandle {
                 data: scene,
+                window_id,
                 outbox: scene_outbox,
             },
             shared,
@@ -73,6 +74,7 @@ impl UserContext {
             assets,
             scene: SceneHandle {
                 data: scene,
+                window_id,
                 outbox: scene_outbox,
             },
             shared,

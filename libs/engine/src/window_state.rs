@@ -6,8 +6,8 @@ use traccia::error;
 use traccia::warn;
 
 use crate::assets::AssetServer;
+use crate::commands::AppOutboxes;
 use crate::context::UserContext;
-use crate::event::AppOutboxes;
 use crate::input::Input;
 use crate::render::Renderer;
 use crate::scene::BoxedScene;
@@ -28,11 +28,11 @@ pub struct SceneSlot {
 }
 
 impl SceneSlot {
-    pub fn new(builder: SceneBuilder, viewport: math::Size<u32>) -> Self {
+    pub fn new(id: SceneId, builder: SceneBuilder, viewport: math::Size<u32>) -> Self {
         Self {
             builder,
             scene: None,
-            data: SceneData::new(viewport),
+            data: SceneData::new(id, viewport),
         }
     }
 }
@@ -105,7 +105,7 @@ impl WindowState {
         };
 
         if slot.scene.is_none() {
-            slot.data = SceneData::new(ctx.window_data.pixel_size());
+            slot.data = SceneData::new(scene_id, ctx.window_data.pixel_size());
             slot.scene = Some((slot.builder)(&mut ctx.for_load(
                 outboxes,
                 input,

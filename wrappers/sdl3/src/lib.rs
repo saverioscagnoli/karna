@@ -3,6 +3,7 @@
 extern crate alloc;
 
 pub mod events;
+pub mod gamepad;
 pub mod gpu;
 pub mod image;
 pub mod render;
@@ -17,6 +18,7 @@ use core::sync::atomic::Ordering::Release;
 
 use alloc::format;
 use sdl3_sys::SDL_GetVersion;
+use sdl3_sys::SDL_INIT_GAMEPAD;
 use sdl3_sys::SDL_INIT_VIDEO;
 use sdl3_sys::SDL_Init;
 use sdl3_sys::SDL_MAJOR_VERSION;
@@ -40,7 +42,7 @@ impl SdlGuard {
         }
 
         unsafe {
-            if !SDL_Init(SDL_INIT_VIDEO) {
+            if !SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD) {
                 return Err(get_error());
             }
         }
