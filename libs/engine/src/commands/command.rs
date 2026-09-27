@@ -1,3 +1,5 @@
+use core::time::Duration;
+
 use nostd::alloc::boxed::Box;
 use sdl3::gpu::PresentMode;
 use sdl3::window::FullscreenMode;
@@ -39,4 +41,20 @@ pub enum SceneCommand {
     Activate(SceneId),
     Deactivate(SceneId),
     Unload(SceneId),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum InputCommand {
+    Rumble {
+        slot: usize,
+        low: f32,
+        high: f32,
+        duration: Duration,
+    },
+    RumbleTriggers {
+        slot: usize,
+        left: f32,
+        right: f32,
+        duration: Duration,
+    },
 }

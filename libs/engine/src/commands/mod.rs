@@ -9,6 +9,7 @@ pub struct AppOutboxes {
     pub window: Outbox<(WindowId, WindowCommand)>,
     pub time: Outbox<TimeCommand>,
     pub scene: Outbox<(WindowId, SceneCommand)>,
+    pub input: Outbox<InputCommand>,
 }
 
 impl AppOutboxes {
@@ -17,10 +18,11 @@ impl AppOutboxes {
             window: Outbox::new("window", 25),
             time: Outbox::new("time", 25),
             scene: Outbox::new("scene", 25),
+            input: Outbox::new("input", 32),
         }
     }
 
     pub fn total_cap(&self) -> usize {
-        self.window.cap() + self.time.cap() + self.scene.cap()
+        self.window.cap() + self.time.cap() + self.scene.cap() + self.input.cap()
     }
 }

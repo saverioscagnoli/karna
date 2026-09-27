@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use std::time::Duration;
+
 use karna::prelude::*;
 use sdl3::window;
 
@@ -40,6 +42,13 @@ impl Scene for DemoScene {
 
         if ctx.input.key_pressed(Key::Down) {
             ctx.window.set_opacity(ctx.window.opacity() - 0.1);
+        }
+
+        if let Some(pad) = ctx.input.pad(0) {
+            if pad.pressed(GamepadButton::North) {
+                ctx.input
+                    .rumble_motors(0, 1.0, 0.2, Duration::from_millis(300));
+            }
         }
 
         if ctx.input.key_pressed(Key::Space) {

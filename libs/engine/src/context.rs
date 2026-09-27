@@ -1,5 +1,6 @@
 use crate::assets::AssetServer;
 use crate::input::Input;
+use crate::input::InputHandle;
 use crate::monitors::Monitors;
 use crate::scene::SceneData;
 use crate::scene::SceneHandle;
@@ -13,7 +14,7 @@ use crate::window::WindowData;
 pub struct LoadContext<'a> {
     pub window: Window<'a>,
     pub time: Time<'a>,
-    pub input: &'a Input,
+    pub input: InputHandle<'a>,
     pub assets: &'a mut AssetServer,
     pub scene: SceneHandle<'a>,
     pub shared: &'a mut SharedStore,
@@ -23,7 +24,7 @@ pub struct LoadContext<'a> {
 pub struct UpdateContext<'a> {
     pub window: Window<'a>,
     pub time: Time<'a>,
-    pub input: &'a Input,
+    pub input: InputHandle<'a>,
     pub assets: &'a mut AssetServer,
     pub scene: SceneHandle<'a>,
     pub shared: &'a mut SharedStore,
@@ -66,7 +67,10 @@ impl<'a> LoadContext<'a> {
                 data: time_data,
                 outbox: &mut outboxes.time,
             },
-            input,
+            input: InputHandle {
+                data: input,
+                outbox: &mut outboxes.input,
+            },
             assets,
             scene: SceneHandle {
                 window_id,
@@ -105,7 +109,10 @@ impl<'a> UpdateContext<'a> {
                 data: time_data,
                 outbox: &mut outboxes.time,
             },
-            input,
+            input: InputHandle {
+                data: input,
+                outbox: &mut outboxes.input,
+            },
             assets,
             scene: SceneHandle {
                 window_id,

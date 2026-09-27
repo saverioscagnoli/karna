@@ -189,7 +189,7 @@ impl JsScene {
         let frame = Frame::new(
             Lent::Mut(&mut ctx.window),
             Lent::Mut(&mut ctx.time),
-            ctx.input,
+            &ctx.input,
             Lent::Mut(ctx.assets),
             None,
         );
@@ -294,7 +294,7 @@ impl Scene for JsScene {
         let frame = Frame::new(
             Lent::Mut(&mut ctx.window),
             Lent::Mut(&mut ctx.time),
-            ctx.input,
+            &ctx.input,
             Lent::Mut(ctx.assets),
             None,
         );
@@ -306,7 +306,7 @@ impl Scene for JsScene {
         let frame = Frame::new(
             Lent::Mut(&mut ctx.window),
             Lent::Mut(&mut ctx.time),
-            ctx.input,
+            &ctx.input,
             Lent::Mut(ctx.assets),
             None,
         );
@@ -317,7 +317,7 @@ impl Scene for JsScene {
         let frame = Frame::new(
             Lent::Mut(&mut ctx.window),
             Lent::Mut(&mut ctx.time),
-            ctx.input,
+            &ctx.input,
             Lent::Mut(ctx.assets),
             None,
         );

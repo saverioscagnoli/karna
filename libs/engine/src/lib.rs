@@ -25,12 +25,14 @@ use nostd::path::PathBuf;
 use nostd::time::Instant;
 use nostd::time::sleep_precise_until;
 use sdl3::SdlGuard;
+use sdl3::events::GamepadEvent;
 use sdl3::events::Key;
 use sdl3::events::KeyEvent;
 use sdl3::events::MouseEvent;
 use sdl3::events::SdlEvent;
 use sdl3::events::SdlWindowEvent;
 use sdl3::events::TextEvent;
+use sdl3::gamepad::Gamepad;
 use sdl3::gpu::Device;
 use sdl3::shadercross::ShaderCross;
 use sdl3::window::WindowId;
@@ -43,6 +45,7 @@ use traccia::warn;
 
 use crate::assets::AssetThreadPool;
 use crate::builder::WindowBuilder;
+use crate::commands::InputCommand;
 use crate::commands::SceneCommand;
 use crate::commands::TimeCommand;
 use crate::commands::WindowCommand;
@@ -155,8 +158,7 @@ impl App {
 
         if self.services.input.focused == Some(entry.sdl_window.id()) {
             self.services.input.focused = None;
-            self.services.input.keys.clear_all();
-            self.services.input.mouse.clear_all();
+            self.services.input.clear_held();
         }
 
         if self.windows.is_empty() {
@@ -239,6 +241,41 @@ impl App {
                     }
                     _ => {}
                 },
+
+                SdlEvent::Gamepad(ev) => match ev {
+                    GamepadEvent::Added { id } => match Gamepad::open(id) {
+                        Ok(g) => {
+                            let input = &mut self.services.input;
+                            info!("Added gamepad '{}' (id: {})", g.name(), id);
+                            input.connect_pad(g);
+
+                            match input.slot_of(id) {
+                                Some(slot) => info!("Gamepad {} assigned to slot {}", id, slot),
+                                None => info!("Gamepad {} has no free slot", id),
+                            }
+                        }
+                        Err(e) => error!("Failed to open gamepad '{}': {}", id, e),
+                    },
+
+                    GamepadEvent::Removed { id } => {
+                        if let Some(pad) = self.services.input.disconnect_pad(id) {
+                            info!("Removed gamepad '{}' (id: {})", pad.device.name(), id);
+                        }
+                    }
+
+                    GamepadEvent::Button {
+                        id,
+                        button,
+                        pressed,
+                    } => self.services.input.pad_button(id, button, pressed),
+
+                    GamepadEvent::Axis { id, axis, value } => {
+                        self.services.input.pad_axis(id, axis, value)
+                    }
+
+                    _ => {}
+                },
+
                 SdlEvent::Window { window, wevent } => {
                     let Some(entry) = self.windows.get_mut(&window) else {
                         warn!("Received SDL event for dropped window: {}", window);
@@ -258,8 +295,7 @@ impl App {
                         SdlWindowEvent::FocusLost => {
                             if self.services.input.focused == Some(window) {
                                 self.services.input.focused = None;
-                                self.services.input.keys.clear_all();
-                                self.services.input.mouse.clear_all();
+                                self.services.input.clear_held();
                                 debug!(
                                     "window {} ('{}') lost focus.",
                                     window,
@@ -329,6 +365,37 @@ impl App {
                     }
                 }
                 SetTargetTPS(t) => clock.set_target_tps(t),
+            }
+        }
+
+        for command in services.outboxes.input.drain() {
+            use InputCommand::*;
+
+            match command {
+                Rumble {
+                    slot,
+                    low,
+                    high,
+                    duration,
+                } => {
+                    if let Some(pad) = services.input.slot_pad_mut(slot)
+                        && let Err(e) = pad.device.rumble(low, high, duration)
+                    {
+                        debug!("Rumble failed on slot {}: {}", slot, e);
+                    }
+                }
+                RumbleTriggers {
+                    slot,
+                    left,
+                    right,
+                    duration,
+                } => {
+                    if let Some(pad) = services.input.slot_pad_mut(slot)
+                        && let Err(e) = pad.device.rumble_triggers(left, right, duration)
+                    {
+                        debug!("Trigger rumble failed on slot {}: {}", slot, e);
+                    }
+                }
             }
         }
 

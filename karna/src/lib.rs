@@ -19,6 +19,7 @@ pub use engine::time::Time;
 pub use engine::window::Window;
 
 pub use sdl3::gpu::PresentMode;
+pub use sdl3::monitor::MonitorId;
 pub use sdl3::render::Color;
 pub use sdl3::window::FullscreenMode;
 
@@ -28,8 +29,19 @@ pub use js::JsScene;
 pub use js::WindowBuilderExt;
 
 pub mod input {
+    pub use engine::input::InputHandle;
+    pub use engine::input::MAX_PLAYERS;
+    pub use engine::input::PadHandle;
+    pub use engine::input::PadView;
+    pub use engine::input::STICK_DEADZONE;
+    pub use engine::input::Stick;
+    pub use engine::input::Trigger;
     pub use sdl3::events::Key;
     pub use sdl3::events::MouseButton;
+    pub use sdl3::gamepad::GamepadAxis;
+    pub use sdl3::gamepad::GamepadButton;
+    pub use sdl3::gamepad::GamepadId;
+    pub use sdl3::gamepad::GamepadType;
 }
 
 pub use math;
