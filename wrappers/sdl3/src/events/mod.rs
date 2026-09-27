@@ -10,6 +10,7 @@ use sdl3_sys::SDL_Scancode;
 use crate::gamepad::GamepadAxis;
 use crate::gamepad::GamepadButton;
 use crate::gamepad::GamepadId;
+use crate::monitor::MonitorId;
 use crate::window::WindowId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -123,6 +124,10 @@ pub enum SdlEvent {
     Touch(TouchEvent),
     Gamepad(GamepadEvent),
     Lifecycle(Lifecycle),
+    Display {
+        display: MonitorId,
+        devent: DisplayEvent,
+    },
     DropFile {
         window: WindowId,
         path: String,
@@ -139,6 +144,17 @@ pub enum SdlEvent {
         tevent: TextEvent,
     },
 }
+
+sdl_enum!(DisplayEvent: sdl3_sys::SDL_EventType {
+    Orientation => SDL_EVENT_DISPLAY_ORIENTATION,
+    Added => SDL_EVENT_DISPLAY_ADDED,
+    Removed => SDL_EVENT_DISPLAY_REMOVED,
+    Moved => SDL_EVENT_DISPLAY_MOVED,
+    DesktopModeChanged => SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED,
+    CurrentModeChanged => SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED,
+    ContentScaleChanged => SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED,
+    UsableBoundsChanged => SDL_EVENT_DISPLAY_USABLE_BOUNDS_CHANGED,
+});
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]

@@ -2,10 +2,14 @@
 
 extern crate alloc;
 
+#[macro_use]
+mod macros;
+
 pub mod events;
 pub mod gamepad;
 pub mod gpu;
 pub mod image;
+pub mod monitor;
 pub mod render;
 #[cfg(feature = "shadercross")]
 pub mod shadercross;

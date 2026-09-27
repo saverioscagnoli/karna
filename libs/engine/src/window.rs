@@ -4,6 +4,7 @@ use nostd::alloc::boxed::Box;
 use nostd::alloc::string::String;
 use nostd::alloc::string::ToString;
 use sdl3::gpu::PresentMode;
+use sdl3::monitor::Monitor as SdlMonitor;
 use sdl3::render::Color;
 use sdl3::window::FullscreenMode;
 use sdl3::window::WindowFlags;
@@ -12,6 +13,7 @@ use sdl3::window::WindowState;
 
 use crate::commands::Outbox;
 use crate::commands::WindowCommand;
+use crate::monitors::Monitor;
 
 pub type SdlWindow = sdl3::window::Window;
 
@@ -26,6 +28,7 @@ pub struct WindowData {
     present_mode: PresentMode,
     flags: WindowFlags,
     clear_color: Color,
+    monitor: Option<Monitor>,
 }
 
 impl WindowData {
@@ -41,6 +44,7 @@ impl WindowData {
             present_mode: window.present_mode(),
             flags: window.flags(),
             clear_color: Color::BLACK,
+            monitor: SdlMonitor::for_window(window).map(Monitor::from),
         }
     }
 
@@ -62,6 +66,7 @@ impl WindowData {
         self.pixel_size = window.pixel_size();
         self.opacity = window.opacity();
         self.flags = window.flags();
+        self.monitor = SdlMonitor::for_window(window).map(Monitor::from);
         self.roll_input();
     }
 
@@ -183,6 +188,11 @@ impl WindowData {
     #[inline]
     pub fn clear_color(&self) -> Color {
         self.clear_color
+    }
+
+    #[inline]
+    pub fn monitor(&self) -> Option<Monitor> {
+        self.monitor
     }
 }
 

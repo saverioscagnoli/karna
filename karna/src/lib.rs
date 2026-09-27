@@ -6,6 +6,8 @@ pub use engine::builder::WindowBuilder;
 pub use engine::context::DrawContext;
 pub use engine::context::LoadContext;
 pub use engine::context::UpdateContext;
+pub use engine::monitors::Monitor;
+pub use engine::monitors::Monitors;
 pub use engine::render::Draw;
 pub use engine::render::Layer;
 pub use engine::scene::Scene;

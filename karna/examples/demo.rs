@@ -19,6 +19,11 @@ impl Scene for DemoScene {
     {
         let jbmono = ctx.assets.load_font("assets/jbmono.ttf");
 
+        if let Some(monitor) = ctx.window.monitor() {
+            ctx.time
+                .set_target_fps(monitor.refresh_rate().round() as u32);
+        }
+
         Self {
             jbmono,
             dt_text: Text::default().with_style(TextStyle::default()),

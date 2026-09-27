@@ -1,103 +1,14 @@
 use crate::assets::AssetServer;
-use crate::commands::AppOutboxes;
 use crate::input::Input;
+use crate::monitors::Monitors;
 use crate::scene::SceneData;
 use crate::scene::SceneHandle;
+use crate::services::Services;
 use crate::storage::SharedStore;
 use crate::time::Time;
 use crate::time::TimeData;
 use crate::window::Window;
 use crate::window::WindowData;
-
-pub struct UserContext {
-    pub window_data: WindowData,
-    pub time_data: TimeData,
-}
-
-impl UserContext {
-    pub fn for_load<'a>(
-        &'a mut self,
-        outboxes: &'a mut AppOutboxes,
-        input: &'a Input,
-        assets: &'a mut AssetServer,
-        shared: &'a mut SharedStore,
-        scene: &'a mut SceneData,
-    ) -> LoadContext<'a> {
-        #[rustfmt::skip]
-        let AppOutboxes { time, window, scene: scene_outbox } = outboxes;
-        let window_id = self.window_data.id();
-
-        LoadContext {
-            window: Window {
-                data: &mut self.window_data,
-                outbox: window,
-            },
-            time: Time {
-                window_id,
-                data: &mut self.time_data,
-                outbox: time,
-            },
-            input,
-            assets,
-            scene: SceneHandle {
-                data: scene,
-                window_id,
-                outbox: scene_outbox,
-            },
-            shared,
-        }
-    }
-
-    pub fn for_update<'a>(
-        &'a mut self,
-        outboxes: &'a mut AppOutboxes,
-        input: &'a Input,
-        assets: &'a mut AssetServer,
-        shared: &'a mut SharedStore,
-        scene: &'a mut SceneData,
-    ) -> UpdateContext<'a> {
-        #[rustfmt::skip]
-        let AppOutboxes { window, time, scene: scene_outbox } = outboxes;
-        let window_id = self.window_data.id();
-
-        UpdateContext {
-            window: Window {
-                data: &mut self.window_data,
-                outbox: window,
-            },
-            time: Time {
-                window_id,
-                data: &mut self.time_data,
-                outbox: time,
-            },
-            input,
-            assets,
-            scene: SceneHandle {
-                data: scene,
-                window_id,
-                outbox: scene_outbox,
-            },
-            shared,
-        }
-    }
-
-    pub fn for_draw<'a>(
-        &'a mut self,
-        input: &'a Input,
-        assets: &'a AssetServer,
-        shared: &'a SharedStore,
-        scene: &'a SceneData,
-    ) -> DrawContext<'a> {
-        DrawContext {
-            window: &self.window_data,
-            time: &self.time_data,
-            input,
-            assets,
-            scene,
-            shared,
-        }
-    }
-}
 
 pub struct LoadContext<'a> {
     pub window: Window<'a>,
@@ -106,6 +17,7 @@ pub struct LoadContext<'a> {
     pub assets: &'a mut AssetServer,
     pub scene: SceneHandle<'a>,
     pub shared: &'a mut SharedStore,
+    pub monitors: &'a Monitors,
 }
 
 pub struct UpdateContext<'a> {
@@ -115,6 +27,7 @@ pub struct UpdateContext<'a> {
     pub assets: &'a mut AssetServer,
     pub scene: SceneHandle<'a>,
     pub shared: &'a mut SharedStore,
+    pub monitors: &'a Monitors,
 }
 
 pub struct DrawContext<'a> {
@@ -124,4 +37,102 @@ pub struct DrawContext<'a> {
     pub assets: &'a AssetServer,
     pub scene: &'a SceneData,
     pub shared: &'a SharedStore,
+    pub monitors: &'a Monitors,
+}
+
+impl<'a> LoadContext<'a> {
+    pub(crate) fn new(
+        window_data: &'a mut WindowData,
+        time_data: &'a mut TimeData,
+        services: &'a mut Services,
+        scene: &'a mut SceneData,
+    ) -> Self {
+        let Services {
+            outboxes,
+            input,
+            assets,
+            store,
+            monitors,
+        } = services;
+        let window_id = window_data.id();
+
+        Self {
+            window: Window {
+                data: window_data,
+                outbox: &mut outboxes.window,
+            },
+            time: Time {
+                window_id,
+                data: time_data,
+                outbox: &mut outboxes.time,
+            },
+            input,
+            assets,
+            scene: SceneHandle {
+                window_id,
+                data: scene,
+                outbox: &mut outboxes.scene,
+            },
+            shared: store,
+            monitors,
+        }
+    }
+}
+
+impl<'a> UpdateContext<'a> {
+    pub(crate) fn new(
+        window_data: &'a mut WindowData,
+        time_data: &'a mut TimeData,
+        services: &'a mut Services,
+        scene: &'a mut SceneData,
+    ) -> Self {
+        let Services {
+            outboxes,
+            input,
+            assets,
+            store,
+            monitors,
+        } = services;
+        let window_id = window_data.id();
+
+        Self {
+            window: Window {
+                data: window_data,
+                outbox: &mut outboxes.window,
+            },
+            time: Time {
+                window_id,
+                data: time_data,
+                outbox: &mut outboxes.time,
+            },
+            input,
+            assets,
+            scene: SceneHandle {
+                window_id,
+                data: scene,
+                outbox: &mut outboxes.scene,
+            },
+            shared: store,
+            monitors,
+        }
+    }
+}
+
+impl<'a> DrawContext<'a> {
+    pub(crate) fn new(
+        window: &'a WindowData,
+        time: &'a TimeData,
+        services: &'a Services,
+        scene: &'a SceneData,
+    ) -> Self {
+        Self {
+            window,
+            time,
+            input: &services.input,
+            assets: &services.assets,
+            scene,
+            shared: &services.store,
+            monitors: &services.monitors,
+        }
+    }
 }

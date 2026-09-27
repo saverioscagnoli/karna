@@ -44,8 +44,8 @@ impl SceneData {
 }
 
 pub struct SceneHandle<'a> {
-    pub(crate) data: &'a mut SceneData,
     pub(crate) window_id: WindowId,
+    pub(crate) data: &'a mut SceneData,
     pub(crate) outbox: &'a mut Outbox<(WindowId, SceneCommand)>,
 }
 

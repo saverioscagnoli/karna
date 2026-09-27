@@ -4,6 +4,8 @@ use core::mem::MaybeUninit;
 use alloc::string::String;
 use sdl3_sys::SDL_EVENT_DID_ENTER_BACKGROUND;
 use sdl3_sys::SDL_EVENT_DID_ENTER_FOREGROUND;
+use sdl3_sys::SDL_EVENT_DISPLAY_FIRST;
+use sdl3_sys::SDL_EVENT_DISPLAY_LAST;
 use sdl3_sys::SDL_EVENT_DROP_FILE;
 use sdl3_sys::SDL_EVENT_DROP_TEXT;
 use sdl3_sys::SDL_EVENT_FINGER_CANCELED;
@@ -65,6 +67,7 @@ use sdl3_sys::SDL_MOUSEWHEEL_FLIPPED;
 use sdl3_sys::SDL_PollEvent;
 use traccia::trace;
 
+use crate::events::DisplayEvent;
 use crate::events::Finger;
 use crate::events::GamepadEvent;
 use crate::events::KeyEvent;
@@ -144,6 +147,15 @@ fn translate(raw: &SDL_Event) -> Option<SdlEvent> {
             Some(SdlEvent::Window {
                 window: w.windowID,
                 wevent,
+            })
+        }
+
+        SDL_EVENT_DISPLAY_FIRST..=SDL_EVENT_DISPLAY_LAST => {
+            let d = unsafe { raw.display };
+
+            Some(SdlEvent::Display {
+                display: d.displayID,
+                devent: DisplayEvent::from_raw(kind)?,
             })
         }
 
