@@ -1,3 +1,4 @@
+use core::ops::Deref;
 use core::time::Duration;
 
 use math::SdlFloat;
@@ -41,6 +42,36 @@ impl TimeData {
         self.frame = pacer.counter.average_frame_time().unwrap_or(Duration::ZERO);
         self.alpha = clock.alpha();
     }
+
+    #[inline]
+    pub fn delta(&self) -> f32 {
+        self.delta
+    }
+
+    #[inline]
+    pub fn fixed_delta(&self) -> f32 {
+        self.fixed_delta
+    }
+
+    #[inline]
+    pub fn fps(&self) -> f32 {
+        self.fps
+    }
+
+    #[inline]
+    pub fn fps_rounded(&self) -> u32 {
+        self.fps.sdl_round() as u32
+    }
+
+    #[inline]
+    pub fn frame(&self) -> Duration {
+        self.frame
+    }
+
+    #[inline]
+    pub fn alpha(&self) -> f32 {
+        self.alpha
+    }
 }
 
 pub struct Time<'a> {
@@ -49,31 +80,15 @@ pub struct Time<'a> {
     pub(crate) outbox: &'a mut Outbox<AppEvent>,
 }
 
+impl Deref for Time<'_> {
+    type Target = TimeData;
+
+    fn deref(&self) -> &Self::Target {
+        self.data
+    }
+}
+
 impl<'a> Time<'a> {
-    pub fn delta(&self) -> f32 {
-        self.data.delta
-    }
-
-    pub fn fixed_delta(&self) -> f32 {
-        self.data.fixed_delta
-    }
-
-    pub fn fps(&self) -> f32 {
-        self.data.fps
-    }
-
-    pub fn fps_rounded(&self) -> u32 {
-        self.data.fps.sdl_round() as u32
-    }
-
-    pub fn frame(&self) -> Duration {
-        self.data.frame
-    }
-
-    pub fn alpha(&self) -> f32 {
-        self.data.alpha
-    }
-
     pub fn set_target_tps(&mut self, t: u32) {
         self.outbox.push(AppEvent::SetTargetTPS(t));
     }

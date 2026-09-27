@@ -33,9 +33,9 @@ use traccia::error;
 use traccia::info;
 
 use crate::api::Api;
-use crate::host::Assets;
 use crate::host::Frame;
 use crate::host::Host;
+use crate::host::Lent;
 
 pub const TYPES: &str = include_str!("../../../assets/karna.d.ts");
 
@@ -187,10 +187,10 @@ impl JsScene {
         };
 
         let frame = Frame::new(
-            &mut ctx.window,
-            &mut ctx.time,
+            Lent::Mut(&mut ctx.window),
+            Lent::Mut(&mut ctx.time),
             ctx.input,
-            Assets::Mut(ctx.assets),
+            Lent::Mut(ctx.assets),
             None,
         );
 
@@ -292,10 +292,10 @@ impl Scene for JsScene {
 
     fn unload(&mut self, ctx: &mut LoadContext) {
         let frame = Frame::new(
-            &mut ctx.window,
-            &mut ctx.time,
+            Lent::Mut(&mut ctx.window),
+            Lent::Mut(&mut ctx.time),
             ctx.input,
-            Assets::Mut(ctx.assets),
+            Lent::Mut(ctx.assets),
             None,
         );
 
@@ -304,10 +304,10 @@ impl Scene for JsScene {
 
     fn fixed_update(&mut self, ctx: &mut UpdateContext) {
         let frame = Frame::new(
-            &mut ctx.window,
-            &mut ctx.time,
+            Lent::Mut(&mut ctx.window),
+            Lent::Mut(&mut ctx.time),
             ctx.input,
-            Assets::Mut(ctx.assets),
+            Lent::Mut(ctx.assets),
             None,
         );
         self.call(frame, "fixedUpdate", Phase::Update);
@@ -315,10 +315,10 @@ impl Scene for JsScene {
 
     fn update(&mut self, ctx: &mut UpdateContext) {
         let frame = Frame::new(
-            &mut ctx.window,
-            &mut ctx.time,
+            Lent::Mut(&mut ctx.window),
+            Lent::Mut(&mut ctx.time),
             ctx.input,
-            Assets::Mut(ctx.assets),
+            Lent::Mut(ctx.assets),
             None,
         );
 
@@ -327,10 +327,10 @@ impl Scene for JsScene {
 
     fn draw(&mut self, ctx: &mut DrawContext, draw: &mut Draw) {
         let frame = Frame::new(
-            &mut ctx.window,
-            &mut ctx.time,
+            Lent::Ref(ctx.window),
+            Lent::Ref(ctx.time),
             ctx.input,
-            Assets::Ref(ctx.assets),
+            Lent::Ref(ctx.assets),
             Some(&mut *draw),
         );
 

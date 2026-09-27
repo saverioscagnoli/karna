@@ -117,7 +117,7 @@ fn window<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error>
 
     let h = host.clone();
     set(ctx, &obj, "setTitle", move |t: String| {
-        h.window(|w| w.set_title(t))
+        h.window_mut(|w| w.set_title(t))
     })?;
 
     let h = host.clone();
@@ -128,7 +128,7 @@ fn window<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error>
 
     let h = host.clone();
     set(ctx, &obj, "setSize", move |width: u32, height: u32| {
-        h.window(|w| w.set_size((width, height)))
+        h.window_mut(|w| w.set_size((width, height)))
     })?;
 
     let h = host.clone();
@@ -167,12 +167,12 @@ fn time<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error> {
 
     let h = host.clone();
     set(ctx, &obj, "setTargetFps", move |fps: u32| {
-        h.time(|t| t.set_target_fps(fps))
+        h.time_mut(|t| t.set_target_fps(fps))
     })?;
 
     let h = host.clone();
     set(ctx, &obj, "setTargetTps", move |tps: u32| {
-        h.time(|t| t.set_target_tps(tps))
+        h.time_mut(|t| t.set_target_tps(tps))
     })?;
 
     Ok(obj)

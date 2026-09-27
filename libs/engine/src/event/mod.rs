@@ -8,6 +8,7 @@ pub use outbox::*;
 pub struct AppOutboxes {
     pub window: Outbox<AppEvent>,
     pub time: Outbox<AppEvent>,
+    pub scene: Outbox<AppEvent>,
 }
 
 impl AppOutboxes {
@@ -15,6 +16,7 @@ impl AppOutboxes {
         Self {
             window: Outbox::new("window", 25),
             time: Outbox::new("time", 25),
+            scene: Outbox::new("scene", 25),
         }
     }
 
@@ -23,9 +25,11 @@ impl AppOutboxes {
     }
 
     pub fn drain_into(&mut self, out: &mut Vec<AppEvent>) {
-        let Self { window, time } = self;
+        #[rustfmt::skip]
+        let Self { window, time, scene } = self;
 
         window.drain_into(out);
         time.drain_into(out);
+        scene.drain_into(out);
     }
 }

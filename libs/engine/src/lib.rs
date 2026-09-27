@@ -137,15 +137,7 @@ impl App {
 
         let scenes = mem::take(&mut b.scene_builders)
             .into_iter()
-            .map(|(k, v)| {
-                (
-                    k,
-                    SceneSlot {
-                        builder: v,
-                        scene: None,
-                    },
-                )
-            })
+            .map(|(k, v)| (k, SceneSlot::new(v, sdl_window.pixel_size())))
             .collect::<HashMap<SceneId, SceneSlot>>();
 
         let state = WindowState::init(
@@ -416,12 +408,9 @@ impl App {
                     &mut self.store,
                 );
 
-                entry.state.draw_active_scenes(
-                    &mut self.event_outboxes,
-                    &self.input,
-                    &mut self.assets,
-                    &self.store,
-                );
+                entry
+                    .state
+                    .draw_active_scenes(&self.input, &mut self.assets, &self.store);
 
                 let atlas = self.assets.atlas();
 

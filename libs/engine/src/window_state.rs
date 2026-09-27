@@ -2,7 +2,6 @@ use nostd::alloc::vec::Vec;
 use nostd::collections::HashMap;
 use sdl3::gpu::Device;
 use sdl3::shadercross::ShaderCross;
-use sdl3::window::Window;
 use traccia::error;
 use traccia::warn;
 
@@ -11,6 +10,7 @@ use crate::context::UserContext;
 use crate::event::AppOutboxes;
 use crate::input::Input;
 use crate::render::Renderer;
+use crate::render::SceneData;
 use crate::scene::BoxedScene;
 use crate::scene::SceneBuilder;
 use crate::scene::SceneId;
@@ -24,6 +24,17 @@ use crate::window::WindowData;
 pub struct SceneSlot {
     pub builder: SceneBuilder,
     pub scene: Option<BoxedScene>,
+    pub data: SceneData,
+}
+
+impl SceneSlot {
+    pub fn new(builder: SceneBuilder, viewport: math::Size<u32>) -> Self {
+        Self {
+            builder,
+            scene: None,
+            data: SceneData::new(viewport),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -44,7 +55,7 @@ impl WindowState {
     pub fn init(
         device: &Device,
         shadercross: &ShaderCross,
-        window: &mut Window,
+        window: &SdlWindow,
         scenes: HashMap<SceneId, SceneSlot>,
         active_scenes: Vec<SceneId>,
     ) -> Self {
@@ -70,6 +81,12 @@ impl WindowState {
     #[inline]
     pub fn sync_window(&mut self, window: &SdlWindow) {
         self.ctx.window_data.sync(window);
+
+        let viewport = window.pixel_size();
+
+        for slot in self.scenes.values_mut() {
+            slot.data.sync(viewport);
+        }
     }
 
     pub fn load_scene(
@@ -88,9 +105,14 @@ impl WindowState {
         };
 
         if slot.scene.is_none() {
-            slot.scene = Some((slot.builder)(
-                &mut ctx.for_load(outboxes, input, assets, shared),
-            ));
+            slot.data = SceneData::new(ctx.window_data.pixel_size());
+            slot.scene = Some((slot.builder)(&mut ctx.for_load(
+                outboxes,
+                input,
+                assets,
+                shared,
+                &mut slot.data,
+            )));
         }
     }
 
@@ -108,7 +130,11 @@ impl WindowState {
         };
 
         if let Some(ref mut scene) = slot.scene {
-            scene.unload(&mut self.ctx.for_load(outboxes, input, assets, shared));
+            scene.unload(
+                &mut self
+                    .ctx
+                    .for_load(outboxes, input, assets, shared, &mut slot.data),
+            );
         }
 
         slot.scene = None;
@@ -172,20 +198,17 @@ impl WindowState {
                 continue;
             };
 
+            let ctx = &mut ctx.for_update(outboxes, input, assets, shared, &mut slot.data);
+
             match phase {
-                UpdatePhase::Fixed => {
-                    scene.fixed_update(&mut ctx.for_update(outboxes, input, assets, shared))
-                }
-                UpdatePhase::Unrestrained => {
-                    scene.update(&mut ctx.for_update(outboxes, input, assets, shared))
-                }
+                UpdatePhase::Fixed => scene.fixed_update(ctx),
+                UpdatePhase::Unrestrained => scene.update(ctx),
             }
         }
     }
 
     pub fn draw_active_scenes(
         &mut self,
-        outboxes: &mut AppOutboxes,
         input: &Input,
         assets: &mut AssetServer,
         shared: &SharedStore,
@@ -194,7 +217,7 @@ impl WindowState {
         let Self { ctx, renderer, scenes, active_scenes, .. } = self;
 
         assets.text_mut().begin_frame();
-        let mut draw = renderer.draw_handle(assets);
+        renderer.begin_frame();
 
         for id in active_scenes {
             let Some(slot) = scenes.get_mut(id) else {
@@ -207,10 +230,14 @@ impl WindowState {
                 continue;
             };
 
+            let mut draw = renderer.draw_handle(assets);
+
             scene.draw(
-                &mut ctx.for_draw(outboxes, input, assets, shared),
+                &mut ctx.for_draw(input, assets, shared, &slot.data),
                 &mut draw,
             );
+
+            renderer.commit(&slot.data);
         }
     }
 }

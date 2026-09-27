@@ -30,14 +30,6 @@ pub struct WindowData {
     clear_color: Color,
 }
 
-impl Deref for WindowData {
-    type Target = WindowFlags;
-
-    fn deref(&self) -> &Self::Target {
-        &self.flags
-    }
-}
-
 impl WindowData {
     pub(crate) fn init(window: &SdlWindow) -> Self {
         Self {
@@ -55,12 +47,7 @@ impl WindowData {
     }
 
     #[inline]
-    pub fn id(&self) -> u32 {
-        self.id
-    }
-
-    #[inline]
-    pub fn update_input(&mut self, pos: math::Vector2<f32>, d: math::Vector2<f32>) {
+    pub(crate) fn update_input(&mut self, pos: math::Vector2<f32>, d: math::Vector2<f32>) {
         self.mouse_poistion = pos;
         self.mouse_delta += d;
     }
@@ -71,12 +58,128 @@ impl WindowData {
     }
 
     #[inline]
-    pub fn sync(&mut self, window: &SdlWindow) {
+    pub(crate) fn sync(&mut self, window: &SdlWindow) {
         self.title = window.title().into();
         self.size = window.size();
+        self.pixel_size = window.pixel_size();
         self.opacity = window.opacity();
         self.flags = window.flags();
         self.roll_input();
+    }
+
+    #[inline]
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+
+    #[inline]
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    #[inline]
+    pub fn size(&self) -> math::Size<u32> {
+        self.size
+    }
+
+    #[inline]
+    pub fn pixel_size(&self) -> math::Size<u32> {
+        self.pixel_size
+    }
+
+    #[inline]
+    pub fn mouse_position(&self) -> math::Vector2<f32> {
+        self.mouse_poistion
+    }
+
+    #[inline]
+    pub fn mouse_delta(&self) -> math::Vector2<f32> {
+        self.mouse_delta
+    }
+
+    #[inline]
+    pub fn present_mode(&self) -> PresentMode {
+        self.present_mode
+    }
+
+    #[inline]
+    pub fn is_windowed(&self) -> bool {
+        self.flags.state == WindowState::Normal
+    }
+
+    #[inline]
+    pub fn is_maximized(&self) -> bool {
+        self.flags.state == WindowState::Maximized
+    }
+
+    #[inline]
+    pub fn is_minimized(&self) -> bool {
+        self.flags.state == WindowState::Minimized
+    }
+
+    #[inline]
+    pub fn is_fullscreen(&self) -> bool {
+        self.flags.state == WindowState::Fullscreen
+    }
+
+    #[inline]
+    pub fn is_hidden(&self) -> bool {
+        self.flags.hidden
+    }
+
+    #[inline]
+    pub fn is_resizable(&self) -> bool {
+        self.flags.resizable
+    }
+
+    #[inline]
+    pub fn is_decorated(&self) -> bool {
+        self.flags.decorated
+    }
+
+    #[inline]
+    pub fn is_always_on_top(&self) -> bool {
+        self.flags.always_on_top
+    }
+
+    #[inline]
+    pub fn is_utility(&self) -> bool {
+        self.flags.utility
+    }
+
+    #[inline]
+    pub fn is_transparent(&self) -> bool {
+        self.flags.transparent
+    }
+
+    #[inline]
+    pub fn is_focusable(&self) -> bool {
+        self.flags.focusable
+    }
+
+    #[inline]
+    pub fn is_high_pixel_density(&self) -> bool {
+        self.flags.high_pixel_density
+    }
+
+    #[inline]
+    pub fn is_mouse_grabbed(&self) -> bool {
+        self.flags.mouse_grabbed
+    }
+
+    #[inline]
+    pub fn is_keyboard_grabbed(&self) -> bool {
+        self.flags.keyboard_grabbed
+    }
+
+    #[inline]
+    pub fn is_relatve_mouse(&self) -> bool {
+        self.flags.relative_mouse
+    }
+
+    #[inline]
+    pub fn opacity(&self) -> f32 {
+        self.opacity
     }
 
     #[inline]
@@ -90,6 +193,14 @@ pub struct Window<'a> {
     pub(crate) outbox: &'a mut Outbox<AppEvent>,
 }
 
+impl Deref for Window<'_> {
+    type Target = WindowData;
+
+    fn deref(&self) -> &Self::Target {
+        self.data
+    }
+}
+
 impl<'a> Window<'a> {
     #[inline]
     fn push(&mut self, wevent: WindowEvent) {
@@ -97,14 +208,6 @@ impl<'a> Window<'a> {
             window: self.data.id,
             wevent,
         });
-    }
-
-    pub fn id(&self) -> WindowId {
-        self.data.id
-    }
-
-    pub fn title(&self) -> &str {
-        &self.data.title
     }
 
     pub fn set_title<T>(&mut self, title: T)
@@ -120,14 +223,6 @@ impl<'a> Window<'a> {
         });
     }
 
-    pub fn size(&self) -> math::Size<u32> {
-        self.data.size
-    }
-
-    pub fn pixel_size(&self) -> math::Size<u32> {
-        self.data.pixel_size
-    }
-
     pub fn set_size<S>(&mut self, size: S)
     where
         S: Into<math::Size<u32>>,
@@ -138,18 +233,7 @@ impl<'a> Window<'a> {
         self.push(WindowEvent::SetSize(size));
     }
 
-    pub fn mouse_position(&self) -> math::Vector2<f32> {
-        self.data.mouse_poistion
-    }
-
-    pub fn mouse_delta(&self) -> math::Vector2<f32> {
-        self.data.mouse_delta
-    }
-
-    pub fn present_mode(&self) -> PresentMode {
-        self.data.present_mode
-    }
-
+    #[inline]
     pub fn set_present_mode(&mut self, mode: PresentMode) {
         self.push(WindowEvent::SetPresentMode(mode));
     }
@@ -162,134 +246,81 @@ impl<'a> Window<'a> {
         }
     }
 
-    pub fn is_windowed(&self) -> bool {
-        self.data.state == WindowState::Normal
-    }
-
-    pub fn set_windowed(&mut self) {
-        self.push(WindowEvent::SetWindowState(WindowState::Normal));
-    }
-
-    pub fn is_maximized(&self) -> bool {
-        self.data.state == WindowState::Maximized
-    }
-
-    pub fn set_maximized(&mut self) {
-        self.push(WindowEvent::SetWindowState(WindowState::Maximized));
-    }
-
-    pub fn is_minimized(&self) -> bool {
-        self.data.state == WindowState::Minimized
-    }
-
-    pub fn set_minimized(&mut self) {
-        self.push(WindowEvent::SetWindowState(WindowState::Minimized));
-    }
-
-    pub fn is_fullscreen(&self) -> bool {
-        self.data.state == WindowState::Fullscreen
-    }
-
-    pub fn set_fullscreen(&mut self, mode: FullscreenMode) {
-        self.push(WindowEvent::SetFullscreen(mode));
-    }
-
-    pub fn restore(&mut self) {
-        self.push(WindowEvent::Restore)
-    }
-
-    pub fn is_hidden(&self) -> bool {
-        self.data.hidden
-    }
-
-    pub fn set_hidden(&mut self, hidden: bool) {
-        self.push(WindowEvent::SetHidden(hidden));
-    }
-
-    pub fn is_resizable(&self) -> bool {
-        self.data.resizable
-    }
-
-    pub fn set_resizable(&mut self, resizable: bool) {
-        self.push(WindowEvent::SetResizable(resizable));
-    }
-
-    pub fn is_decorated(&self) -> bool {
-        self.data.decorated
-    }
-
-    pub fn set_decorated(&mut self, decorated: bool) {
-        self.push(WindowEvent::SetDecorated(decorated));
-    }
-
-    pub fn is_always_on_top(&self) -> bool {
-        self.data.always_on_top
-    }
-
-    pub fn set_always_on_top(&mut self, on_top: bool) {
-        self.push(WindowEvent::SetAlwaysOnTop(on_top));
-    }
-
-    pub fn is_utility(&self) -> bool {
-        self.data.utility
-    }
-
-    pub fn is_transparent(&self) -> bool {
-        self.data.transparent
-    }
-
-    pub fn opacity(&self) -> f32 {
-        self.data.opacity
-    }
-
+    #[inline]
     pub fn set_opacity(&mut self, value: f32) {
         self.push(WindowEvent::SetOpacity(value));
     }
 
-    pub fn is_focusable(&self) -> bool {
-        self.data.focusable
-    }
-
-    pub fn set_focusable(&mut self, focusable: bool) {
-        self.push(WindowEvent::SetFocusable(focusable))
-    }
-
-    pub fn is_high_pixel_density(&self) -> bool {
-        self.data.high_pixel_density
-    }
-
-    pub fn is_mouse_grabbed(&self) -> bool {
-        self.data.mouse_grabbed
-    }
-
-    pub fn set_mouse_grabbed(&mut self, grab: bool) {
-        self.push(WindowEvent::SetMouseGrabbed(grab))
-    }
-
-    pub fn is_keyboard_grabbed(&self) -> bool {
-        self.data.keyboard_grabbed
-    }
-
-    pub fn set_keyboard_grabbed(&mut self, grab: bool) {
-        self.push(WindowEvent::SetKeyboardGrabbed(grab));
-    }
-
-    pub fn is_relative_mouse(&self) -> bool {
-        self.data.relative_mouse
-    }
-
-    pub fn set_relative_mouse(&mut self, relative: bool) {
-        self.push(WindowEvent::SetRelativeMouse(relative))
-    }
-
-    pub fn clear_color(&self) -> Color {
-        self.data.clear_color
-    }
-
+    #[inline]
     pub fn set_clear_color<C>(&mut self, color: C)
     where
         C: Into<Color>,
     {
         self.data.clear_color = color.into();
+    }
+
+    #[inline]
+    pub fn set_windowed(&mut self) {
+        self.push(WindowEvent::SetWindowState(WindowState::Normal));
+    }
+
+    #[inline]
+    pub fn set_maximized(&mut self) {
+        self.push(WindowEvent::SetWindowState(WindowState::Maximized));
+    }
+
+    #[inline]
+    pub fn set_minimized(&mut self) {
+        self.push(WindowEvent::SetWindowState(WindowState::Minimized));
+    }
+
+    #[inline]
+    pub fn set_fullscreen(&mut self, mode: FullscreenMode) {
+        self.push(WindowEvent::SetFullscreen(mode));
+    }
+
+    #[inline]
+    pub fn set_hidden(&mut self, hidden: bool) {
+        self.push(WindowEvent::SetHidden(hidden));
+    }
+
+    #[inline]
+    pub fn set_resizable(&mut self, resizable: bool) {
+        self.push(WindowEvent::SetResizable(resizable));
+    }
+
+    #[inline]
+    pub fn set_decorated(&mut self, decorated: bool) {
+        self.push(WindowEvent::SetDecorated(decorated));
+    }
+
+    #[inline]
+    pub fn set_always_on_top(&mut self, on_top: bool) {
+        self.push(WindowEvent::SetAlwaysOnTop(on_top));
+    }
+
+    #[inline]
+    pub fn set_focusable(&mut self, focusable: bool) {
+        self.push(WindowEvent::SetFocusable(focusable))
+    }
+
+    #[inline]
+    pub fn set_mouse_grabbed(&mut self, grab: bool) {
+        self.push(WindowEvent::SetMouseGrabbed(grab))
+    }
+
+    #[inline]
+    pub fn set_keyboard_grabbed(&mut self, grab: bool) {
+        self.push(WindowEvent::SetKeyboardGrabbed(grab));
+    }
+
+    #[inline]
+    pub fn set_relative_mouse(&mut self, relative: bool) {
+        self.push(WindowEvent::SetRelativeMouse(relative))
+    }
+
+    #[inline]
+    pub fn restore(&mut self) {
+        self.push(WindowEvent::Restore)
     }
 }

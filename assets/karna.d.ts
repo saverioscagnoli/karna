@@ -293,17 +293,20 @@ interface Draw {
   print(text: string, x: number, y: number): void;
 }
 
-interface WindowApi {
+interface WindowView {
   title(): string;
-  setTitle(title: string): void;
   width(): number;
   height(): number;
-  setSize(width: number, height: number): void;
   mouse(): Vec2;
   mouseDelta(): Vec2;
 }
 
-interface TimeApi {
+interface WindowApi extends WindowView {
+  setTitle(title: string): void;
+  setSize(width: number, height: number): void;
+}
+
+interface TimeView {
   /** Seconds since the last frame. */
   delta(): number;
   /** Seconds per fixed update tick. */
@@ -311,6 +314,9 @@ interface TimeApi {
   /** How far between two fixed ticks this frame is, 0..1. */
   alpha(): number;
   fps(): number;
+}
+
+interface TimeApi extends TimeView {
   setTargetFps(fps: number): void;
   setTargetTps(tps: number): void;
 }
@@ -337,13 +343,16 @@ interface AssetsApi {
  * was passed to runs; don't keep it around.
  */
 interface DrawContext {
-  window: WindowApi;
-  time: TimeApi;
+  window: WindowView;
+  time: TimeView;
   input: InputApi;
 }
 
 /** Passed to `load`, `update`, `fixedUpdate` and `unload`. */
-interface UpdateContext extends DrawContext {
+interface UpdateContext {
+  window: WindowApi;
+  time: TimeApi;
+  input: InputApi;
   assets: AssetsApi;
 }
 

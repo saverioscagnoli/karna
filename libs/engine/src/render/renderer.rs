@@ -27,13 +27,13 @@ use crate::render::ImmediateVertex;
 use crate::render::Layer;
 use crate::render::LayerData;
 use crate::render::LayerMap;
-use crate::render::Projection;
+use crate::render::SceneData;
 
 const IMMEDIATE_VERT: &[u8] = include_bytes!("../../../../shaders/immediate.vert.spv");
 const IMMEDIATE_FRAG: &[u8] = include_bytes!("../../../../shaders/immediate.frag.spv");
 
 struct Batch {
-    layer: Layer,
+    camera: Camera,
     first_index: u32,
     indices: u32,
     vertex_offset: i32,
@@ -41,7 +41,6 @@ struct Batch {
 
 pub struct Renderer {
     device: Device,
-    cameras: LayerMap<Camera>,
     data: LayerMap<LayerData>,
     pipeline: GraphicsPipeline,
     sampler: Sampler,
@@ -54,8 +53,6 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(device: Device, shadercross: &ShaderCross, window: &Window) -> Self {
-        let default_camera = Camera::new(Projection::topleft_ortho(window.pixel_size()));
-        let cameras = LayerMap::new(default_camera, default_camera, default_camera);
         let data = LayerMap::new(
             LayerData::default(),
             LayerData::default(),
@@ -81,7 +78,6 @@ impl Renderer {
 
         Self {
             device,
-            cameras,
             data,
             pipeline,
             sampler,
@@ -126,18 +122,6 @@ impl Renderer {
         )
     }
 
-    pub fn camera(&self, layer: Layer) -> Option<&Camera> {
-        self.cameras.get(layer)
-    }
-
-    pub fn set_camera(&mut self, layer: Layer, camera: Camera) {
-        if self.cameras.contains(layer) {
-            self.cameras[layer] = camera;
-        } else {
-            self.cameras.insert(layer, camera);
-        }
-    }
-
     pub fn draw_handle<'a>(&'a mut self, assets: &'a AssetServer) -> Draw<'a> {
         for layer in self.data.values_mut() {
             layer.vertices.clear();
@@ -147,11 +131,13 @@ impl Renderer {
         Draw::new(&mut self.data, assets)
     }
 
-    fn collect(&mut self) {
+    pub fn begin_frame(&mut self) {
         self.vertices.clear();
         self.indices.clear();
         self.batches.clear();
+    }
 
+    pub fn commit(&mut self, scene: &SceneData) {
         let order = [Layer::WORLD]
             .into_iter()
             .chain(self.data.order().iter().copied())
@@ -165,7 +151,7 @@ impl Renderer {
             }
 
             self.batches.push(Batch {
-                layer,
+                camera: *scene.camera(layer),
                 first_index: self.indices.len() as u32,
                 indices: data.indices.len() as u32,
                 vertex_offset: self.vertices.len() as i32,
@@ -186,11 +172,7 @@ impl Renderer {
             return Ok(());
         };
 
-        for camera in self.cameras.values_mut() {
-            camera.update(frame.size());
-        }
-
-        self.collect();
+        let size = frame.size();
 
         if !self.indices.is_empty() {
             self.device
@@ -207,10 +189,9 @@ impl Renderer {
                 pass.bind_index_buffer(&self.index_buffer, IndexSize::U32, 0);
                 pass.bind_fragment_sampler(0, atlas, &self.sampler);
 
-                let fallback = self.cameras[Layer::WORLD];
-
                 for batch in &self.batches {
-                    let camera = self.cameras.get(batch.layer).unwrap_or(&fallback);
+                    let mut camera = batch.camera;
+                    camera.update(size);
 
                     pass.push_vertex_uniform(0, &camera.mvp());
                     pass.draw_indexed_instanced(

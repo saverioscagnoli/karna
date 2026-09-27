@@ -5,7 +5,9 @@ use engine::assets::AssetServer;
 use engine::input::Input;
 use engine::render::Draw;
 use engine::time::Time;
+use engine::time::TimeData;
 use engine::window::Window;
+use engine::window::WindowData;
 use quickjs::Error;
 
 /// What the engine lent the script for the hook currently running
@@ -16,38 +18,53 @@ pub(crate) struct Host {
 
 #[derive(Clone, Copy)]
 pub(crate) struct Frame {
-    window: NonNull<Window<'static>>,
-    time: NonNull<Time<'static>>,
+    window: Ptr<Window<'static>, WindowData>,
+    time: Ptr<Time<'static>, TimeData>,
     input: NonNull<Input>,
-    assets: NonNull<AssetServer>,
-    assets_mut: bool,
+    assets: Ptr<AssetServer, AssetServer>,
     draw: Option<NonNull<Draw<'static>>>,
 }
 
-pub(crate) enum Assets<'a> {
-    Mut(&'a mut AssetServer),
-    Ref(&'a AssetServer),
+pub(crate) enum Lent<'a, M, R = M> {
+    Mut(&'a mut M),
+    Ref(&'a R),
+}
+
+enum Ptr<M, R> {
+    Mut(NonNull<M>),
+    Ref(NonNull<R>),
+}
+
+impl<M, R> Clone for Ptr<M, R> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<M, R> Copy for Ptr<M, R> {}
+
+impl<M, R> Ptr<M, R> {
+    fn new<'a, N, S>(lent: Lent<'a, N, S>) -> Self {
+        match lent {
+            Lent::Mut(m) => Self::Mut(NonNull::from(m).cast()),
+            Lent::Ref(r) => Self::Ref(NonNull::from(r).cast()),
+        }
+    }
 }
 
 impl Frame {
     pub fn new(
-        window: &mut Window<'_>,
-        time: &mut Time<'_>,
+        window: Lent<'_, Window<'_>, WindowData>,
+        time: Lent<'_, Time<'_>, TimeData>,
         input: &Input,
-        assets: Assets<'_>,
+        assets: Lent<'_, AssetServer>,
         draw: Option<&mut Draw<'_>>,
     ) -> Self {
-        let (assets, assets_mut) = match assets {
-            Assets::Mut(a) => (NonNull::from(a), true),
-            Assets::Ref(a) => (NonNull::from(a), false),
-        };
-
         Self {
-            window: NonNull::from(window).cast(),
-            time: NonNull::from(time).cast(),
+            window: Ptr::new(window),
+            time: Ptr::new(time),
             input: NonNull::from(input),
-            assets,
-            assets_mut,
+            assets: Ptr::new(assets),
             draw: draw.map(|d| NonNull::from(d).cast()),
         }
     }
@@ -76,14 +93,32 @@ impl Host {
         })
     }
 
-    pub fn window<R>(&self, f: impl FnOnce(&mut Window<'_>) -> R) -> Result<R, Error> {
-        let mut window = self.frame("ctx.window")?.window;
-        Ok(f(unsafe { window.as_mut() }))
+    pub fn window<R>(&self, f: impl FnOnce(&WindowData) -> R) -> Result<R, Error> {
+        match self.frame("ctx.window")?.window {
+            Ptr::Mut(w) => Ok(f(unsafe { w.as_ref() })),
+            Ptr::Ref(w) => Ok(f(unsafe { w.as_ref() })),
+        }
     }
 
-    pub fn time<R>(&self, f: impl FnOnce(&mut Time<'_>) -> R) -> Result<R, Error> {
-        let mut time = self.frame("ctx.time")?.time;
-        Ok(f(unsafe { time.as_mut() }))
+    pub fn window_mut<R>(&self, f: impl FnOnce(&mut Window<'_>) -> R) -> Result<R, Error> {
+        match self.frame("ctx.window")?.window {
+            Ptr::Mut(mut w) => Ok(f(unsafe { w.as_mut() })),
+            Ptr::Ref(_) => Err(Error::custom("the window cannot be changed during draw()")),
+        }
+    }
+
+    pub fn time<R>(&self, f: impl FnOnce(&TimeData) -> R) -> Result<R, Error> {
+        match self.frame("ctx.time")?.time {
+            Ptr::Mut(t) => Ok(f(unsafe { t.as_ref() })),
+            Ptr::Ref(t) => Ok(f(unsafe { t.as_ref() })),
+        }
+    }
+
+    pub fn time_mut<R>(&self, f: impl FnOnce(&mut Time<'_>) -> R) -> Result<R, Error> {
+        match self.frame("ctx.time")?.time {
+            Ptr::Mut(mut t) => Ok(f(unsafe { t.as_mut() })),
+            Ptr::Ref(_) => Err(Error::custom("time cannot be changed during draw()")),
+        }
     }
 
     pub fn input<R>(&self, f: impl FnOnce(&Input) -> R) -> Result<R, Error> {
@@ -92,14 +127,10 @@ impl Host {
     }
 
     pub fn assets_mut<R>(&self, f: impl FnOnce(&mut AssetServer) -> R) -> Result<R, Error> {
-        let frame = self.frame("ctx.assets")?;
-
-        if !frame.assets_mut {
-            return Err(Error::custom("assets cannot be loaded during draw()"));
+        match self.frame("ctx.assets")?.assets {
+            Ptr::Mut(mut a) => Ok(f(unsafe { a.as_mut() })),
+            Ptr::Ref(_) => Err(Error::custom("assets cannot be loaded during draw()")),
         }
-
-        let mut assets = frame.assets;
-        Ok(f(unsafe { assets.as_mut() }))
     }
 
     pub fn draw<R>(&self, f: impl FnOnce(&mut Draw<'_>) -> R) -> Result<R, Error> {

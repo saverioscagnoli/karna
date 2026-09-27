@@ -76,6 +76,35 @@ impl Camera {
         &mut self.projection
     }
 
+    pub fn position(&self) -> math::Vector3<f32> {
+        self.position
+    }
+
+    pub fn set_position<P>(&mut self, position: P)
+    where
+        P: Into<math::Vector3<f32>>,
+    {
+        self.position = position.into();
+    }
+
+    pub fn translate<D>(&mut self, delta: D)
+    where
+        D: Into<math::Vector3<f32>>,
+    {
+        self.position = self.position + delta.into();
+    }
+
+    pub fn target(&self) -> math::Vector3<f32> {
+        self.target
+    }
+
+    pub fn set_target<T>(&mut self, target: T)
+    where
+        T: Into<math::Vector3<f32>>,
+    {
+        self.target = target.into();
+    }
+
     pub fn view_matrix(&self) -> math::Matrix4<f32> {
         match self.projection {
             Projection::Orthographic { .. } => math::Matrix4::from_translation(math::vec3!(

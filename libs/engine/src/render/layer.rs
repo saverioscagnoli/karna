@@ -83,13 +83,12 @@ impl<T> LayerMap<T> {
         }
     }
 
-    pub fn get(&self, layer: Layer) -> Option<&T> {
-        match layer {
-            Layer::WORLD => Some(&self.world),
-            Layer::UI => Some(&self.ui),
-            Layer::DEBUG => Some(&self.debug),
-            l => self.other.get(&l),
-        }
+    pub fn get(&self, layer: Layer) -> &T {
+        &self[layer]
+    }
+
+    pub fn get_mut(&mut self, layer: Layer) -> &mut T {
+        &mut self[layer]
     }
 
     pub fn contains(&self, layer: Layer) -> bool {
@@ -97,11 +96,16 @@ impl<T> LayerMap<T> {
     }
 
     pub fn insert(&mut self, layer: Layer, value: T) {
-        if !self.contains(layer) {
-            self.order.push(layer);
+        match layer {
+            Layer::WORLD => self.world = value,
+            Layer::UI => self.ui = value,
+            Layer::DEBUG => self.debug = value,
+            l => {
+                if self.other.insert(l, value).is_none() {
+                    self.order.push(l);
+                }
+            }
         }
-
-        self.other.insert(layer, value);
     }
 
     /// Every layer's value, built-ins included, in no particular order.
