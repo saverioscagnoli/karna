@@ -1,8 +1,8 @@
 use crate::assets::AssetServer;
 use crate::event::AppOutboxes;
 use crate::input::Input;
-use crate::render::SceneData;
-use crate::render::SceneHandle;
+use crate::scene::SceneData;
+use crate::scene::SceneHandle;
 use crate::storage::SharedStore;
 use crate::time::Time;
 use crate::time::TimeData;

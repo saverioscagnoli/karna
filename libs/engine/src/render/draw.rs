@@ -51,6 +51,11 @@ impl<'a> Draw<'a> {
     }
 
     #[inline]
+    pub fn set_layer(&mut self, layer: Layer) {
+        self.layer = layer;
+    }
+
+    #[inline]
     pub fn with_layer(&mut self, layer: Layer) -> &mut Self {
         if !self.data.contains(layer) {
             self.data.insert(layer, LayerData::default());

@@ -27,7 +27,7 @@ use crate::render::ImmediateVertex;
 use crate::render::Layer;
 use crate::render::LayerData;
 use crate::render::LayerMap;
-use crate::render::SceneData;
+use crate::scene::SceneData;
 
 const IMMEDIATE_VERT: &[u8] = include_bytes!("../../../../shaders/immediate.vert.spv");
 const IMMEDIATE_FRAG: &[u8] = include_bytes!("../../../../shaders/immediate.frag.spv");

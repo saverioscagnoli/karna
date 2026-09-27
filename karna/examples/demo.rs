@@ -73,6 +73,8 @@ impl Scene for DemoScene {
             .with_thickness(3.0)
             .rect_outline(0.0, 400.0, 1280.0, 32.0);
 
+        draw.set_layer(Layer::WORLD);
+
         draw.set_color(Color::WHITE);
         draw.text(&self.dt_text, 10.0, 10.0);
 

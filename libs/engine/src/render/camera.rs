@@ -80,6 +80,10 @@ impl Camera {
         self.position
     }
 
+    pub fn position_mut(&mut self) -> &mut math::Vector3<f32> {
+        &mut self.position
+    }
+
     pub fn set_position<P>(&mut self, position: P)
     where
         P: Into<math::Vector3<f32>>,
