@@ -76,6 +76,7 @@ pub struct ImageRegistry {
     pub bytes: HashMap<u64, Handle<Image>>,
     pub white_texel: Handle<Image>,
     pub placeholder: Handle<Image>,
+    pub generation: u64,
 }
 
 impl ImageRegistry {
@@ -85,14 +86,15 @@ impl ImageRegistry {
     pub const PLACEHOLDER_IMAGE_BYTES: &'static [u8] =
         include_bytes!("../../../../assets/placeholder.png");
 
-    pub fn new(device: &Device) -> Self {
+    pub fn new(device: Device) -> Self {
         Self {
-            atlas: RefCell::new(TextureAtlas::new(device.share(), 2048, 32)),
+            atlas: RefCell::new(TextureAtlas::new(device, 2048, 32)),
             slots: SlotMap::default(),
             paths: HashMap::default(),
             bytes: HashMap::default(),
             white_texel: Handle::INVALID,
             placeholder: Handle::INVALID,
+            generation: 0,
         }
     }
 
@@ -168,7 +170,8 @@ impl ImageRegistry {
                 };
 
                 info!("Baked image {:?} (page {})", image.size(), image.page());
-                self.slots[handle.cast()] = AssetSlot::Ready(image)
+                self.slots[handle.cast()] = AssetSlot::Ready(image);
+                self.generation += 1;
             }
 
             Err(e) => {

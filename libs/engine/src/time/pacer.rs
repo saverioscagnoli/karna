@@ -3,12 +3,22 @@ use core::time::Duration;
 use math::SdlFloat;
 use nostd::alloc::collections::VecDeque;
 use nostd::time::Instant;
+use sdl3::gpu::PresentMode;
 use traccia::debug;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaceMode {
     Display,
     Fixed,
+}
+
+impl PaceMode {
+    pub fn for_present_mode(m: PresentMode) -> Self {
+        match m {
+            PresentMode::Vsync => PaceMode::Display,
+            PresentMode::Mailbox | PresentMode::Immediate => PaceMode::Fixed,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -114,6 +124,11 @@ impl FramePacer {
     pub fn set_target_fps(&mut self, t: u32) {
         debug!("Set target frame rate to {}", t);
         self.target_rate = Duration::from_secs_f32(1.0 / t as f32);
+    }
+
+    pub fn set_mode(&mut self, mode: PaceMode) {
+        self.mode = mode;
+        self.next_frame = Instant::now() + self.target_rate;
     }
 
     pub fn due(&self, now: Instant) -> bool {

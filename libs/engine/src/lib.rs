@@ -5,6 +5,7 @@ pub mod builder;
 pub mod commands;
 pub mod context;
 pub mod input;
+pub mod mesh;
 pub mod monitors;
 pub mod render;
 pub mod scene;
@@ -145,7 +146,7 @@ impl App {
             sdl_window.id(),
             WindowEntry {
                 state,
-                pacer: FramePacer::new(PaceMode::Fixed),
+                pacer: FramePacer::new(PaceMode::for_present_mode(sdl_window.present_mode())),
                 sdl_window,
             },
         );
@@ -315,10 +316,10 @@ impl App {
         #[rustfmt::skip]
         let Self { windows, clock, services, .. } = self;
 
-        for (id, command) in services.outboxes.window.drain() {
+        for (wid, command) in services.outboxes.window.drain() {
             use WindowCommand::*;
-            let Some(entry) = windows.get_mut(&id) else {
-                warn!("Received a command for a closed window: {}", id);
+            let Some(entry) = windows.get_mut(&wid) else {
+                warn!("Received a command for a closed window: {}", wid);
                 continue;
             };
 
@@ -326,7 +327,11 @@ impl App {
                 SetTitle(t) => entry.sdl_window.set_title(t),
                 SetSize(s) => entry.sdl_window.set_size(s),
                 SetOpacity(v) => entry.sdl_window.set_opacity(v),
-                SetPresentMode(m) => _ = entry.sdl_window.set_present_mode(m),
+                SetPresentMode(m) => {
+                    if entry.sdl_window.set_present_mode(m) {
+                        entry.pacer.set_mode(PaceMode::for_present_mode(m));
+                    }
+                }
                 SetState(state) => {
                     use SdlWindowState::*;
 
@@ -411,11 +416,8 @@ impl App {
 
             match command {
                 Load(scene) => entry.state.load_scene(scene, services),
-
                 Activate(scene) => entry.state.activate_scene(scene, services),
-
                 Deactivate(scene) => entry.state.deactivate_scene(scene),
-
                 Unload(scene) => entry.state.unload_scene(scene, services),
             }
         }
@@ -479,12 +481,11 @@ impl App {
                     .update_active_scenes(UpdatePhase::Unrestrained, &mut self.services);
 
                 entry.state.draw_active_scenes(&mut self.services);
-
-                let atlas = self.services.assets.atlas();
+                self.services.assets.upload_geometries();
 
                 if let Err(e) = entry.state.renderer.flush(
                     &entry.sdl_window,
-                    atlas.texture(),
+                    &self.services.assets,
                     entry.state.window_data.clear_color(),
                 ) {
                     error!("Failed to render frame: {}", e);
@@ -498,19 +499,26 @@ impl App {
             }
 
             let now_after_render = Instant::now();
-            let tick = self.clock.next_tick();
 
-            let deadline = self
-                .windows
-                .values()
-                .map(|e| {
-                    e.pacer
-                        .deadline()
-                        .unwrap_or(now_after_render + e.pacer.idle_backoff())
-                })
-                .fold(tick, Instant::min);
+            let vsync_active = self.windows.values().any(|e| {
+                e.pacer.mode == PaceMode::Display
+                    && !e.sdl_window.is_minimized()
+                    && !e.sdl_window.is_hidden()
+            });
 
-            sleep_precise_until(deadline);
+            if !vsync_active {
+                let deadline = self
+                    .windows
+                    .values()
+                    .map(|e| {
+                        e.pacer
+                            .deadline()
+                            .unwrap_or(now_after_render + e.pacer.idle_backoff())
+                    })
+                    .fold(self.clock.next_tick(), Instant::min);
+
+                sleep_precise_until(deadline);
+            }
         }
 
         info!("App lifecycle ended, exiting.");

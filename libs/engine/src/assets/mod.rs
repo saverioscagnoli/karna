@@ -1,5 +1,7 @@
 mod atlas;
+mod geometry;
 mod image;
+mod material;
 mod packer;
 mod worker;
 
@@ -29,10 +31,14 @@ use sdl3::image::DecodedImage;
 use traccia::error;
 use traccia::info;
 
+use crate::assets::geometry::GeometryRegistry;
+use crate::assets::material::MaterialRegistry;
 use crate::assets::worker::worker;
 
 pub use crate::assets::image::ImageRegistry;
 pub use crate::assets::worker::AssetThreadPool;
+use crate::mesh::Geometry;
+use crate::mesh::Material;
 use crate::text::Font;
 use crate::text::TextLayout;
 use crate::text::TextSpan;
@@ -124,6 +130,8 @@ pub struct AssetServer {
     requests: AssetQueue,
     responses: Receiver<AssetResponse>,
     images: ImageRegistry,
+    geometries: GeometryRegistry,
+    materials: MaterialRegistry,
     text: RefCell<TextSystem>,
 }
 
@@ -138,7 +146,9 @@ impl AssetServer {
             root,
             requests: AssetQueue::new(requests),
             responses,
-            images: ImageRegistry::new(device),
+            images: ImageRegistry::new(device.share()),
+            geometries: GeometryRegistry::new(device.share()),
+            materials: MaterialRegistry::new(),
             text: RefCell::new(TextSystem::default()),
         };
 
@@ -171,6 +181,50 @@ impl AssetServer {
 
     pub fn bake_image(&mut self, bytes: &[u8]) -> Handle<Image> {
         self.images.bake(bytes.to_vec())
+    }
+
+    pub fn add_geometry(&mut self, geometry: Geometry) -> Handle<Geometry> {
+        self.geometries.add(geometry)
+    }
+
+    #[track_caller]
+    pub fn geometry(&self, handle: Handle<Geometry>) -> &Geometry {
+        self.geometries
+            .get(handle)
+            .unwrap_or_else(|| panic!("Geometry {:?} not found.", handle))
+    }
+
+    #[track_caller]
+    pub fn geometry_mut(&mut self, handle: Handle<Geometry>) -> &mut Geometry {
+        self.geometries
+            .get_mut(handle)
+            .unwrap_or_else(|| panic!("Geometry {:?} not found.", handle))
+    }
+
+    pub fn remove_geometry(&mut self, handle: Handle<Geometry>) -> Option<Geometry> {
+        self.geometries.remove(handle)
+    }
+
+    pub fn add_material(&mut self, material: Material) -> Handle<Material> {
+        self.materials.add(material)
+    }
+
+    #[track_caller]
+    pub fn material(&self, handle: Handle<Material>) -> &Material {
+        self.materials
+            .get(handle)
+            .unwrap_or_else(|| panic!("Material {:?} not found.", handle))
+    }
+
+    #[track_caller]
+    pub fn material_mut(&mut self, handle: Handle<Material>) -> &mut Material {
+        self.materials
+            .get_mut(handle)
+            .unwrap_or_else(|| panic!("Material {:?} not found.", handle))
+    }
+
+    pub fn remove_material(&mut self, handle: Handle<Material>) -> Option<Material> {
+        self.materials.remove(handle)
     }
 
     pub fn load_font<P>(&mut self, path: P) -> Handle<Font>
@@ -224,6 +278,18 @@ impl AssetServer {
         &self.images
     }
 
+    pub(crate) fn geometries(&self) -> &GeometryRegistry {
+        &self.geometries
+    }
+
+    pub(crate) fn materials(&self) -> &MaterialRegistry {
+        &self.materials
+    }
+
+    pub(crate) fn upload_geometries(&mut self) {
+        self.geometries.upload_dirty();
+    }
+
     pub(crate) fn text_mut(&mut self) -> &mut TextSystem {
         self.text.get_mut()
     }
@@ -239,6 +305,7 @@ impl AssetServer {
 
                     info!("Loaded image {:?} (page {})", image.size(), image.page());
                     self.images.slots[r.slot.cast()] = AssetSlot::Ready(image);
+                    self.images.generation += 1;
                 }
 
                 (AssetKind::Image, Err(e)) => {

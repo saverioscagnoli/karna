@@ -1,7 +1,24 @@
+use core::ops::Deref;
+use core::ops::DerefMut;
+
 use sdl3_sys::SDL_FColor;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Color(SDL_FColor);
+
+impl Deref for Color {
+    type Target = SDL_FColor;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Color {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 impl Color {
     #[inline]

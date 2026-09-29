@@ -1,9 +1,12 @@
 use core::ops::Deref;
 
+use nostd::collections::Handle;
 use sdl3::window::WindowId;
 
 use crate::commands::Outbox;
 use crate::commands::SceneCommand;
+use crate::mesh::Mesh;
+use crate::mesh::MeshStore;
 use crate::render::Camera;
 use crate::render::Layer;
 use crate::render::LayerMap;
@@ -13,6 +16,7 @@ use crate::scene::SceneId;
 pub struct SceneData {
     id: SceneId,
     cameras: LayerMap<Camera>,
+    meshes: MeshStore,
 }
 
 impl SceneData {
@@ -20,7 +24,11 @@ impl SceneData {
         let default_camera = Camera::new(Projection::topleft_ortho(viewport));
         let cameras = LayerMap::new(default_camera, default_camera, default_camera);
 
-        Self { id, cameras }
+        Self {
+            id,
+            cameras,
+            meshes: MeshStore::new(),
+        }
     }
 
     #[inline]
@@ -32,6 +40,21 @@ impl SceneData {
         for camera in self.cameras.values_mut() {
             camera.update(viewport);
         }
+    }
+
+    pub fn meshes(&self) -> &MeshStore {
+        &self.meshes
+    }
+
+    pub(crate) fn meshes_mut(&mut self) -> &mut MeshStore {
+        &mut self.meshes
+    }
+
+    #[track_caller]
+    pub fn mesh(&self, handle: Handle<Mesh>) -> &Mesh {
+        self.meshes
+            .get(handle)
+            .unwrap_or_else(|| panic!("Mesh {:?} not found.", handle))
     }
 
     pub fn camera(&self, layer: Layer) -> &Camera {
@@ -88,5 +111,21 @@ impl SceneHandle<'_> {
 
     pub fn set_camera(&mut self, layer: Layer, camera: Camera) {
         self.data.cameras.insert(layer, camera);
+    }
+
+    pub fn spawn(&mut self, mesh: Mesh) -> Handle<Mesh> {
+        self.data.meshes.spawn(mesh)
+    }
+
+    #[track_caller]
+    pub fn mesh_mut(&mut self, handle: Handle<Mesh>) -> &mut Mesh {
+        self.data
+            .meshes
+            .get_mut(handle)
+            .unwrap_or_else(|| panic!("Mesh {:?} not found.", handle))
+    }
+
+    pub fn despawn(&mut self, handle: Handle<Mesh>) -> Option<Mesh> {
+        self.data.meshes.despawn(handle)
     }
 }

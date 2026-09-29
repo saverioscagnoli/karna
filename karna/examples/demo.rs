@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+use std::fmt::format;
 use std::time::Duration;
 
 use karna::prelude::*;
@@ -87,10 +88,10 @@ impl Scene for DemoScene {
             .with_thickness(3.0)
             .rect_outline(0.0, 400.0, 1280.0, 32.0);
 
-        draw.set_layer(Layer::WORLD);
-
         draw.set_color(Color::WHITE);
         draw.text(&self.dt_text, 10.0, 10.0);
+
+        draw.print(format!("fps: {}", ctx.time.fps().round()), 10.0, 30.0);
 
         draw.set_color(Color::CYAN);
         draw.text(&self.jbmono_text, 10.0, 50.0);
@@ -103,6 +104,7 @@ impl Scene for DemoScene {
 
         draw.print("Debug font!\n(with a sexy new line!)", 400.0, 120.0);
 
+        draw.set_layer(Layer::WORLD);
         draw.set_color(Color::hex(0x252525));
         draw.triangle_v([900.0, 600.0], [960.0, 650.0], [1000.0, 540.0]);
 
@@ -114,6 +116,17 @@ impl Scene for DemoScene {
             [1100.0, 300.0],
             [1200.0, 200.0],
         ]);
+
+        draw.set_layer(Layer::UI);
+        draw.set_color(Color::WHITE);
+        draw.print(
+            format!(
+                "camera pos: {:?}",
+                ctx.scene.camera(Layer::WORLD).position()
+            ),
+            10.0,
+            70.0,
+        );
     }
 }
 

@@ -197,7 +197,7 @@ impl WindowState {
                 &mut draw,
             );
 
-            renderer.commit(&slot.data);
+            renderer.commit(&mut slot.data, &services.assets);
         }
     }
 }

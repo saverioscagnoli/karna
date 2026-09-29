@@ -8,6 +8,9 @@ use sdl3_sys::SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
 use sdl3_sys::SDL_GPU_BLENDFACTOR_SRC_ALPHA;
 use sdl3_sys::SDL_GPU_BLENDFACTOR_ZERO;
 use sdl3_sys::SDL_GPU_BLENDOP_ADD;
+use sdl3_sys::SDL_GPU_COMPAREOP_LESS;
+use sdl3_sys::SDL_GPU_CULLMODE_BACK;
+use sdl3_sys::SDL_GPU_CULLMODE_FRONT;
 use sdl3_sys::SDL_GPU_CULLMODE_NONE;
 use sdl3_sys::SDL_GPU_FILLMODE_FILL;
 use sdl3_sys::SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
@@ -18,12 +21,14 @@ use sdl3_sys::SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
 use sdl3_sys::SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
 use sdl3_sys::SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
 use sdl3_sys::SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
+use sdl3_sys::SDL_GPU_VERTEXELEMENTFORMAT_UINT;
 use sdl3_sys::SDL_GPU_VERTEXINPUTRATE_INSTANCE;
 use sdl3_sys::SDL_GPU_VERTEXINPUTRATE_VERTEX;
 use sdl3_sys::SDL_GPUBlendFactor;
 use sdl3_sys::SDL_GPUBlendOp;
 use sdl3_sys::SDL_GPUColorTargetBlendState;
 use sdl3_sys::SDL_GPUColorTargetDescription;
+use sdl3_sys::SDL_GPUCompareOp;
 use sdl3_sys::SDL_GPUCullMode;
 use sdl3_sys::SDL_GPUFillMode;
 use sdl3_sys::SDL_GPUFrontFace;
@@ -119,6 +124,10 @@ impl VertexAttribute {
         Self::new(location, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offset)
     }
 
+    pub const fn uint(location: u32, offset: u32) -> Self {
+        Self::new(location, SDL_GPU_VERTEXELEMENTFORMAT_UINT, offset)
+    }
+
     pub const fn ubyte4_norm(location: u32, offset: u32) -> Self {
         Self::new(location, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM, offset)
     }
@@ -192,6 +201,24 @@ impl Blend {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CullMode {
+    #[default]
+    None,
+    Front,
+    Back,
+}
+
+impl CullMode {
+    pub const fn raw(self) -> SDL_GPUCullMode {
+        match self {
+            Self::None => SDL_GPU_CULLMODE_NONE,
+            Self::Front => SDL_GPU_CULLMODE_FRONT,
+            Self::Back => SDL_GPU_CULLMODE_BACK,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct PipelineDesc<'a> {
     pub vertex: &'a Shader,
@@ -200,6 +227,9 @@ pub struct PipelineDesc<'a> {
     pub attributes: &'a [VertexAttribute],
     pub targets: &'a [SDL_GPUTextureFormat],
     pub depth_stencil: Option<SDL_GPUTextureFormat>,
+    pub depth_test: bool,
+    pub depth_write: bool,
+    pub depth_compare: SDL_GPUCompareOp,
     pub primitive: SDL_GPUPrimitiveType,
     pub blend: Blend,
     pub fill: SDL_GPUFillMode,
@@ -217,6 +247,9 @@ impl<'a> PipelineDesc<'a> {
             attributes: &[],
             targets: &[],
             depth_stencil: None,
+            depth_test: true,
+            depth_write: true,
+            depth_compare: SDL_GPU_COMPAREOP_LESS,
             primitive: SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
             blend: Blend::Alpha,
             fill: SDL_GPU_FILLMODE_FILL,
@@ -246,6 +279,21 @@ impl<'a> PipelineDesc<'a> {
         self
     }
 
+    pub fn with_depth_test(mut self, test: bool) -> Self {
+        self.depth_test = test;
+        self
+    }
+
+    pub fn with_depth_write(mut self, write: bool) -> Self {
+        self.depth_write = write;
+        self
+    }
+
+    pub fn with_depth_compare(mut self, compare: SDL_GPUCompareOp) -> Self {
+        self.depth_compare = compare;
+        self
+    }
+
     pub fn with_primitive(mut self, primitive: SDL_GPUPrimitiveType) -> Self {
         self.primitive = primitive;
         self
@@ -264,6 +312,11 @@ impl<'a> PipelineDesc<'a> {
     pub fn with_cull(mut self, cull: SDL_GPUCullMode, front_face: SDL_GPUFrontFace) -> Self {
         self.cull = cull;
         self.front_face = front_face;
+        self
+    }
+
+    pub fn with_cull_mode(mut self, cull: CullMode) -> Self {
+        self.cull = cull.raw();
         self
     }
 
@@ -318,8 +371,9 @@ impl GraphicsPipeline {
         if let Some(format) = desc.depth_stencil {
             info.target_info.has_depth_stencil_target = true;
             info.target_info.depth_stencil_format = format;
-            info.depth_stencil_state.enable_depth_test = true;
-            info.depth_stencil_state.enable_depth_write = true;
+            info.depth_stencil_state.enable_depth_test = desc.depth_test;
+            info.depth_stencil_state.enable_depth_write = desc.depth_write;
+            info.depth_stencil_state.compare_op = desc.depth_compare;
         }
 
         let ptr = unsafe { SDL_CreateGPUGraphicsPipeline(device.as_ptr(), &info) };

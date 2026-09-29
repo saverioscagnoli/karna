@@ -20,6 +20,9 @@ use sdl3_sys::SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
 use sdl3_sys::SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
 use sdl3_sys::SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
 use sdl3_sys::SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+use sdl3_sys::SDL_GPU_TEXTUREFORMAT_D16_UNORM;
+use sdl3_sys::SDL_GPU_TEXTUREFORMAT_D24_UNORM;
+use sdl3_sys::SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
 use sdl3_sys::SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 use sdl3_sys::SDL_GPU_TEXTURETYPE_2D;
 use sdl3_sys::SDL_GPU_TEXTURETYPE_2D_ARRAY;
@@ -41,6 +44,7 @@ use sdl3_sys::SDL_GPUTextureFormat;
 use sdl3_sys::SDL_GPUTextureLocation;
 use sdl3_sys::SDL_GPUTextureRegion;
 use sdl3_sys::SDL_GPUTextureSamplerBinding;
+use sdl3_sys::SDL_GPUTextureSupportsFormat;
 use sdl3_sys::SDL_GPUTextureTransferInfo;
 use sdl3_sys::SDL_GPUTextureType;
 use sdl3_sys::SDL_GPUTextureUsageFlags;
@@ -101,6 +105,8 @@ impl BitOr for TextureUsage {
     }
 }
 
+pub type TextureFormat = SDL_GPUTextureFormat;
+
 #[derive(Debug, Clone, Copy)]
 pub struct TextureDesc {
     pub kind: SDL_GPUTextureType,
@@ -133,6 +139,14 @@ impl TextureDesc {
         Self {
             kind: SDL_GPU_TEXTURETYPE_2D_ARRAY,
             layers,
+            ..Self::rgba8(width, height)
+        }
+    }
+
+    pub fn depth(width: u32, height: u32, format: SDL_GPUTextureFormat) -> Self {
+        Self {
+            format,
+            usage: TextureUsage::DEPTH_STENCIL_TARGET,
             ..Self::rgba8(width, height)
         }
     }
@@ -395,6 +409,31 @@ pub struct TextureCopy<'a> {
 }
 
 impl Device {
+    pub fn depth_format(&self) -> TextureFormat {
+        [
+            SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+            SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+        ]
+        .into_iter()
+        .find(|f| {
+            self.supports_texture_format(
+                *f,
+                SDL_GPU_TEXTURETYPE_2D,
+                TextureUsage::DEPTH_STENCIL_TARGET,
+            )
+        })
+        .unwrap_or(SDL_GPU_TEXTUREFORMAT_D16_UNORM)
+    }
+
+    pub fn supports_texture_format(
+        &self,
+        format: SDL_GPUTextureFormat,
+        kind: SDL_GPUTextureType,
+        usage: TextureUsage,
+    ) -> bool {
+        unsafe { SDL_GPUTextureSupportsFormat(self.as_ptr(), format, kind, usage.bits()) }
+    }
+
     pub fn upload_texture(&self, dst: &Texture, pixels: &[u8]) -> Result<(), SdlError> {
         self.upload_texture_region(dst, TextureRegion::full(dst), pixels)
     }

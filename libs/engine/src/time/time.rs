@@ -2,6 +2,7 @@ use core::ops::Deref;
 use core::time::Duration;
 
 use math::SdlFloat;
+use nostd::time::Instant;
 use sdl3::window::WindowId;
 
 use crate::commands::Outbox;
@@ -11,6 +12,7 @@ use crate::time::FpsCalculationStrategy;
 use crate::time::FramePacer;
 
 pub struct TimeData {
+    start: Instant,
     delta: f32,
     fixed_delta: f32,
     fps: f32,
@@ -22,6 +24,7 @@ pub struct TimeData {
 impl Default for TimeData {
     fn default() -> Self {
         Self {
+            start: Instant::now(),
             delta: 0.0,
             fixed_delta: 0.0,
             fps: 0.0,
@@ -40,6 +43,15 @@ impl TimeData {
         self.fps_calculation_strategy = pacer.counter.strategy;
         self.frame = pacer.counter.average_frame_time().unwrap_or(Duration::ZERO);
         self.alpha = clock.alpha();
+    }
+
+    pub fn elapsed(&self) -> Duration {
+        self.start.elapsed()
+    }
+
+    #[inline]
+    pub fn elapsed_secs(&self) -> f32 {
+        self.elapsed().as_secs_f32()
     }
 
     #[inline]

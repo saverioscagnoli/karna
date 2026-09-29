@@ -11,6 +11,7 @@ use sdl3_sys::SDL_BindGPUGraphicsPipeline;
 use sdl3_sys::SDL_BindGPUIndexBuffer;
 use sdl3_sys::SDL_BindGPUVertexBuffers;
 use sdl3_sys::SDL_BindGPUVertexSamplers;
+use sdl3_sys::SDL_BindGPUVertexStorageBuffers;
 use sdl3_sys::SDL_CancelGPUCommandBuffer;
 use sdl3_sys::SDL_DrawGPUIndexedPrimitives;
 use sdl3_sys::SDL_DrawGPUPrimitives;
@@ -20,10 +21,12 @@ use sdl3_sys::SDL_GPU_INDEXELEMENTSIZE_32BIT;
 use sdl3_sys::SDL_GPU_LOADOP_CLEAR;
 use sdl3_sys::SDL_GPU_LOADOP_DONT_CARE;
 use sdl3_sys::SDL_GPU_LOADOP_LOAD;
+use sdl3_sys::SDL_GPU_STOREOP_DONT_CARE;
 use sdl3_sys::SDL_GPU_STOREOP_STORE;
 use sdl3_sys::SDL_GPUBufferBinding;
 use sdl3_sys::SDL_GPUColorTargetInfo;
 use sdl3_sys::SDL_GPUCommandBuffer;
+use sdl3_sys::SDL_GPUDepthStencilTargetInfo;
 use sdl3_sys::SDL_GPUIndexElementSize;
 use sdl3_sys::SDL_GPULoadOp;
 use sdl3_sys::SDL_GPURenderPass;
@@ -126,7 +129,28 @@ impl Frame {
 
     pub fn render_pass(&mut self, load: LoadOp) -> Result<RenderPass<'_>, SdlError> {
         let target = color_target(self.swapchain, load);
-        self.begin(&[target])
+        self.begin(&[target], None)
+    }
+
+    pub fn render_pass_with_depth(
+        &mut self,
+        load: LoadOp,
+        depth: &Texture,
+        clear_depth: f32,
+    ) -> Result<RenderPass<'_>, SdlError> {
+        let target = color_target(self.swapchain, load);
+        let depth = SDL_GPUDepthStencilTargetInfo {
+            texture: depth.raw(),
+            clear_depth,
+            load_op: SDL_GPU_LOADOP_CLEAR,
+            store_op: SDL_GPU_STOREOP_DONT_CARE,
+            stencil_load_op: SDL_GPU_LOADOP_DONT_CARE,
+            stencil_store_op: SDL_GPU_STOREOP_DONT_CARE,
+            cycle: true,
+            ..Default::default()
+        };
+
+        self.begin(&[target], Some(&depth))
     }
 
     pub fn render_pass_to(
@@ -138,17 +162,17 @@ impl Frame {
             .map(|(texture, load)| color_target(texture.raw(), *load))
             .collect();
 
-        self.begin(&targets)
+        self.begin(&targets, None)
     }
 
-    fn begin(&mut self, targets: &[SDL_GPUColorTargetInfo]) -> Result<RenderPass<'_>, SdlError> {
+    fn begin(
+        &mut self,
+        targets: &[SDL_GPUColorTargetInfo],
+        depth: Option<&SDL_GPUDepthStencilTargetInfo>,
+    ) -> Result<RenderPass<'_>, SdlError> {
+        let depth = depth.map_or(ptr::null(), |d| d as *const _);
         let ptr = unsafe {
-            SDL_BeginGPURenderPass(
-                self.cmd,
-                targets.as_ptr(),
-                targets.len() as u32,
-                ptr::null(),
-            )
+            SDL_BeginGPURenderPass(self.cmd, targets.as_ptr(), targets.len() as u32, depth)
         };
 
         let raw = NonNull::new(ptr).ok_or_else(get_error)?;
@@ -223,6 +247,11 @@ impl RenderPass<'_> {
         };
 
         unsafe { SDL_BindGPUIndexBuffer(self.raw.as_ptr(), &binding, size.raw()) }
+    }
+
+    pub fn bind_vertex_storage_buffer<T>(&mut self, slot: u32, buffer: &GpuBuffer<T>) {
+        let raw = buffer.raw();
+        unsafe { SDL_BindGPUVertexStorageBuffers(self.raw.as_ptr(), slot, &raw, 1) }
     }
 
     pub fn bind_vertex_sampler(&mut self, slot: u32, texture: &Texture, sampler: &Sampler) {

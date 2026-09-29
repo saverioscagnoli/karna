@@ -8,6 +8,7 @@ use core::ptr::NonNull;
 use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::vec::Vec;
 use sdl3_sys::SDL_AcquireGPUCommandBuffer;
 use sdl3_sys::SDL_BeginGPUCopyPass;
 use sdl3_sys::SDL_CreateGPUBuffer;
@@ -358,6 +359,80 @@ impl Device {
             }
 
             dst.set_len(data.len());
+            Ok(())
+        }
+    }
+
+    pub fn upload_regions<T>(
+        &self,
+        dst: &GpuBuffer<T>,
+        regions: &[(usize, &[T])],
+    ) -> Result<(), SdlError>
+    where
+        T: Copy,
+    {
+        if regions.is_empty() {
+            return Ok(());
+        }
+
+        let mut total = 0u32;
+
+        for (offset, data) in regions {
+            if offset + data.len() > dst.len() {
+                return Err(SdlError::new("Region out of bounds"));
+            }
+
+            let bytes = u32::try_from(mem::size_of_val(*data))
+                .map_err(|_| SdlError::new("Value too large"))?;
+            total = total
+                .checked_add(bytes + 15)
+                .ok_or(SdlError::new("Value too large"))?;
+        }
+
+        let mut staging = self.staging().borrow_mut();
+
+        staging.reserve(total)?;
+
+        let mut sources = Vec::with_capacity(regions.len());
+
+        {
+            let mut mapped = staging.map(true)?;
+
+            for (_, data) in regions {
+                sources.push(mapped.write(data)?);
+            }
+        }
+
+        unsafe {
+            let cmd = SDL_AcquireGPUCommandBuffer(self.0.as_ptr());
+
+            if cmd.is_null() {
+                return Err(get_error());
+            }
+
+            let pass = SDL_BeginGPUCopyPass(cmd);
+
+            for ((offset, data), src_offset) in regions.iter().zip(sources) {
+                let source = SDL_GPUTransferBufferLocation {
+                    transfer_buffer: staging.raw(),
+                    offset: src_offset,
+                };
+
+                let destination = SDL_GPUBufferRegion {
+                    buffer: dst.raw(),
+                    offset: (offset * mem::size_of::<T>()) as u32,
+                    size: mem::size_of_val(*data) as u32,
+                };
+
+                SDL_UploadToGPUBuffer(pass, &source, &destination, false);
+            }
+
+            SDL_EndGPUCopyPass(pass);
+
+            if !SDL_SubmitGPUCommandBuffer(cmd) {
+                return Err(get_error());
+            }
+
             Ok(())
         }
     }

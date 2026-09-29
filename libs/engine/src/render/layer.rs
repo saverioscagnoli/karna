@@ -40,6 +40,12 @@ pub struct LayerData {
     pub indices: Vec<u32>,
 }
 
+impl LayerData {
+    pub fn is_empty(&self) -> bool {
+        self.indices.is_empty()
+    }
+}
+
 pub struct LayerMap<T> {
     world: T,
     ui: T,

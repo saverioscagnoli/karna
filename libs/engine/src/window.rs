@@ -91,6 +91,11 @@ impl WindowData {
     }
 
     #[inline]
+    pub fn aspect_ratio(&self) -> f32 {
+        self.size.cast::<f32>().aspect_ratio()
+    }
+
+    #[inline]
     pub fn mouse_position(&self) -> math::Vector2<f32> {
         self.mouse_poistion
     }
@@ -200,7 +205,6 @@ pub struct Window<'a> {
     pub(crate) data: &'a mut WindowData,
     pub(crate) outbox: &'a mut Outbox<(WindowId, WindowCommand)>,
 }
-
 impl Deref for Window<'_> {
     type Target = WindowData;
 
