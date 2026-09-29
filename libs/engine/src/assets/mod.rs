@@ -3,6 +3,7 @@ mod geometry;
 mod image;
 mod material;
 mod packer;
+mod sound;
 mod worker;
 
 use core::cell::Ref;
@@ -26,6 +27,7 @@ use nostd::sync::Sender;
 use nostd::sync::TrySendError;
 use nostd::sync::channel;
 use nostd::thread;
+use sdl3::audio::AudioSpec;
 use sdl3::gpu::Device;
 use sdl3::image::DecodedImage;
 use traccia::error;
@@ -33,6 +35,9 @@ use traccia::info;
 
 use crate::assets::geometry::GeometryRegistry;
 use crate::assets::material::MaterialRegistry;
+use crate::assets::sound::AudioRegistry;
+use crate::assets::sound::Sound;
+use crate::assets::sound::SoundKind;
 use crate::assets::worker::worker;
 
 pub use crate::assets::image::ImageRegistry;
@@ -47,10 +52,12 @@ use crate::text::TextSystem;
 
 pub enum AssetKind {
     Image,
+    Audio(SoundKind),
 }
 
 pub enum DecodedAsset {
     Image(DecodedImage),
+    Audio(SoundKind, AudioSpec, Vec<i16>),
 }
 
 pub enum AssetSource {
@@ -130,6 +137,7 @@ pub struct AssetServer {
     requests: AssetQueue,
     responses: Receiver<AssetResponse>,
     images: ImageRegistry,
+    audios: AudioRegistry,
     geometries: GeometryRegistry,
     materials: MaterialRegistry,
     text: RefCell<TextSystem>,
@@ -147,6 +155,7 @@ impl AssetServer {
             requests: AssetQueue::new(requests),
             responses,
             images: ImageRegistry::new(device.share()),
+            audios: AudioRegistry::default(),
             geometries: GeometryRegistry::new(device.share()),
             materials: MaterialRegistry::new(),
             text: RefCell::new(TextSystem::default()),
@@ -311,6 +320,19 @@ impl AssetServer {
                 (AssetKind::Image, Err(e)) => {
                     error!("Failed to load image: {}", e);
                 }
+
+                (AssetKind::Audio(_), Ok(DecodedAsset::Audio(kind, spec, pcm))) => {
+                    info!("Loaded sound {:?}, spec {:?}", kind, spec);
+
+                    let sound = Sound::new(kind, spec, pcm);
+                    self.audios.slots[r.slot.cast()] = AssetSlot::Ready(sound)
+                }
+
+                (AssetKind::Audio(_), Err(e)) => {
+                    error!("Failed to load audio: {}", e);
+                }
+
+                _ => unreachable!(),
             }
         }
 

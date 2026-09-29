@@ -5,10 +5,12 @@ extern crate alloc;
 #[macro_use]
 mod macros;
 
+pub mod audio;
 pub mod events;
 pub mod gamepad;
 pub mod gpu;
 pub mod image;
+pub mod mixer;
 pub mod monitor;
 pub mod render;
 #[cfg(feature = "shadercross")]
@@ -22,6 +24,7 @@ use core::sync::atomic::Ordering::Release;
 
 use alloc::format;
 use sdl3_sys::SDL_GetVersion;
+use sdl3_sys::SDL_INIT_AUDIO;
 use sdl3_sys::SDL_INIT_GAMEPAD;
 use sdl3_sys::SDL_INIT_VIDEO;
 use sdl3_sys::SDL_Init;
@@ -46,7 +49,7 @@ impl SdlGuard {
         }
 
         unsafe {
-            if !SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD) {
+            if !SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_AUDIO) {
                 return Err(get_error());
             }
         }

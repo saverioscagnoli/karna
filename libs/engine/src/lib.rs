@@ -1,6 +1,7 @@
 #![no_std]
 
 pub mod assets;
+pub mod audio;
 pub mod builder;
 pub mod commands;
 pub mod context;
@@ -35,6 +36,7 @@ use sdl3::events::SdlWindowEvent;
 use sdl3::events::TextEvent;
 use sdl3::gamepad::Gamepad;
 use sdl3::gpu::Device;
+use sdl3::mixer::MixerGuard;
 use sdl3::shadercross::ShaderCross;
 use sdl3::window::WindowId;
 use sdl3::window::WindowState as SdlWindowState;
@@ -80,6 +82,7 @@ pub struct App {
 
     shadercross: ShaderCross,
     device: Device,
+    _mixer: MixerGuard,
     _sdl: SdlGuard,
 }
 
@@ -92,7 +95,11 @@ impl App {
         log::capture();
         info!("SDL v{} initialized.", sdl3::linked_version());
 
-        let Ok(device) = sdl3::gpu::Device::init() else {
+        let Ok(_mixer) = MixerGuard::init() else {
+            panic!("Failed to initialize SDL mixer");
+        };
+
+        let Ok(device) = Device::init() else {
             panic!("failed to init gpu device");
         };
 
@@ -111,6 +118,7 @@ impl App {
             assets_pool: pool,
             shadercross,
             device,
+            _mixer,
             _sdl,
         }
     }

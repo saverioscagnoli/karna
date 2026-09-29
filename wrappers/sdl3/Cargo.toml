@@ -17,6 +17,7 @@ default = ["build-from-source"]
 build-from-source = [
     "karna-sdl3-sys/build-from-source",
     "karna-sdl3-image-sys/build-from-source",
+    "karna-sdl3-mixer-sys/build-from-source",
     "karna-sdl3-shadercross-sys?/build-from-source",
 ]
 shadercross = ["dep:karna-sdl3-shadercross-sys"]
@@ -25,6 +26,7 @@ dxc = ["shadercross", "karna-sdl3-shadercross-sys/dxc"]
 [dependencies]
 karna-sdl3-sys.workspace = true
 karna-sdl3-image-sys.workspace = true
+karna-sdl3-mixer-sys.workspace = true
 karna-sdl3-shadercross-sys = { workspace = true, optional = true }
 karna-nostd.workspace = true
 karna-math.workspace = true

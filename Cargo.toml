@@ -23,6 +23,7 @@ karna-quickjs = { version = "0.1.0", path = "wrappers/quickjs", default-features
 
 karna-sdl3-sys = { version = "0.1.0", path = "sys/sdl3-sys", default-features = false }
 karna-sdl3-image-sys = { version = "0.1.0", path = "sys/sdl3-image-sys", default-features = false }
+karna-sdl3-mixer-sys = { version = "0.1.0", path = "sys/sdl3-mixer-sys", default-features = false }
 karna-sdl3-shadercross-sys = { version = "0.1.0", path = "sys/sdl3-shadercross-sys", default-features = false }
 karna-quickjs-sys = { version = "0.1.0", path = "sys/quickjs-sys", default-features = false }
 

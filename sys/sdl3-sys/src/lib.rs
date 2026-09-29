@@ -11,6 +11,9 @@
 
 include!("bindings.rs");
 
+pub const SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK: SDL_AudioDeviceID = 0xFFFF_FFFF;
+pub const SDL_AUDIO_DEVICE_DEFAULT_RECORDING: SDL_AudioDeviceID = 0xFFFF_FFFE;
+
 extern crate alloc;
 
 use core::error;
