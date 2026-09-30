@@ -1,11 +1,13 @@
 use core::time::Duration;
 
 use nostd::alloc::boxed::Box;
+use nostd::collections::Handle;
 use sdl3::gpu::PresentMode;
 use sdl3::window::FullscreenMode;
 use sdl3::window::WindowId;
 use sdl3::window::WindowState;
 
+use crate::assets::Audio;
 use crate::scene::SceneId;
 use crate::time::FpsCalculationStrategy;
 
@@ -57,4 +59,9 @@ pub enum InputCommand {
         right: f32,
         duration: Duration,
     },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum AudioCommand {
+    Play { audio: Handle<Audio> },
 }

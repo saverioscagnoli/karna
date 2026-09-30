@@ -1,6 +1,7 @@
 #![no_std]
 
 pub use engine::App;
+pub use engine::assets::Audio;
 pub use engine::builder::AppBuilder;
 pub use engine::builder::WindowBuilder;
 pub use engine::context::DrawContext;
@@ -8,8 +9,8 @@ pub use engine::context::LoadContext;
 pub use engine::context::UpdateContext;
 pub use engine::mesh::Geometry;
 pub use engine::mesh::Material;
-pub use engine::mesh::Shading;
 pub use engine::mesh::Mesh;
+pub use engine::mesh::Shading;
 pub use engine::monitors::Monitor;
 pub use engine::monitors::Monitors;
 pub use engine::render::Camera;

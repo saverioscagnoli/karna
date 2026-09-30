@@ -27,6 +27,7 @@ use nostd::path::PathBuf;
 use nostd::time::Instant;
 use nostd::time::sleep_precise_until;
 use sdl3::SdlGuard;
+use sdl3::audio::AudioStream;
 use sdl3::events::GamepadEvent;
 use sdl3::events::Key;
 use sdl3::events::KeyEvent;
@@ -469,6 +470,8 @@ impl App {
                 self.clock.consume();
             }
 
+            self.services.drain_audio();
+
             self.services.input.change_scope(InputScope::Frame);
 
             let mut rendered = false;
@@ -487,6 +490,8 @@ impl App {
                 entry
                     .state
                     .update_active_scenes(UpdatePhase::Unrestrained, &mut self.services);
+
+                self.services.drain_audio();
 
                 entry.state.draw_active_scenes(&mut self.services);
                 self.services.assets.upload_geometries();
@@ -527,6 +532,8 @@ impl App {
 
                 sleep_precise_until(deadline);
             }
+
+            self.services.audio.flush();
         }
 
         info!("App lifecycle ended, exiting.");

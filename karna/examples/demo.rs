@@ -13,6 +13,7 @@ struct DemoScene {
     dt_text: Text,
     jbmono_text: Text,
     pcb: Handle<Image>,
+    osu: Handle<Audio>,
 }
 
 impl Scene for DemoScene {
@@ -27,12 +28,15 @@ impl Scene for DemoScene {
                 .set_target_fps(monitor.refresh_rate().round() as u32);
         }
 
+        let osu = ctx.assets.load_audio("assets/osu-hit-sound.wav");
+
         Self {
             jbmono,
             dt_text: Text::default().with_style(TextStyle::default()),
             jbmono_text: Text::new("Hello world!")
                 .with_style(TextStyle::default().with_font(jbmono)),
             pcb: ctx.assets.load_image("assets/pcb2.png"),
+            osu,
         }
     }
 
@@ -63,6 +67,9 @@ impl Scene for DemoScene {
 
     fn update(&mut self, ctx: &mut UpdateContext) {
         self.dt_text.set(format!("dt: {}", ctx.time.delta()));
+        if ctx.input.key_pressed(Key::Y) {
+            ctx.audio.play(self.osu);
+        }
     }
 
     fn draw(&mut self, ctx: &mut DrawContext, draw: &mut Draw) {

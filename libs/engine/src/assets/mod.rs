@@ -1,17 +1,14 @@
 mod atlas;
+mod audio;
 mod geometry;
 mod image;
 mod material;
 mod packer;
-mod sound;
 mod worker;
 
 use core::cell::Ref;
 use core::cell::RefCell;
 use core::sync::atomic::AtomicBool;
-
-pub use atlas::TextureAtlas;
-pub use image::Image;
 
 use nostd::alloc::collections::VecDeque;
 use nostd::alloc::ffi::CString;
@@ -33,15 +30,12 @@ use sdl3::image::DecodedImage;
 use traccia::error;
 use traccia::info;
 
+use crate::assets::audio::AudioKind;
+use crate::assets::audio::AudioRegistry;
 use crate::assets::geometry::GeometryRegistry;
 use crate::assets::material::MaterialRegistry;
-use crate::assets::sound::AudioRegistry;
-use crate::assets::sound::Sound;
-use crate::assets::sound::SoundKind;
 use crate::assets::worker::worker;
 
-pub use crate::assets::image::ImageRegistry;
-pub use crate::assets::worker::AssetThreadPool;
 use crate::mesh::Geometry;
 use crate::mesh::Material;
 use crate::text::Font;
@@ -50,14 +44,20 @@ use crate::text::TextSpan;
 use crate::text::TextStyle;
 use crate::text::TextSystem;
 
+pub use crate::assets::atlas::TextureAtlas;
+pub use crate::assets::audio::Audio;
+pub use crate::assets::image::Image;
+pub use crate::assets::image::ImageRegistry;
+pub use crate::assets::worker::AssetThreadPool;
+
 pub enum AssetKind {
     Image,
-    Audio(SoundKind),
+    Audio(AudioKind),
 }
 
 pub enum DecodedAsset {
     Image(DecodedImage),
-    Audio(SoundKind, AudioSpec, Vec<i16>),
+    Audio(AudioKind, AudioSpec, Vec<i16>),
 }
 
 pub enum AssetSource {
@@ -163,9 +163,12 @@ impl AssetServer {
 
         this.images.white_texel = this.bake_image(ImageRegistry::WHITE_TEXEL_BYTES);
         this.images.placeholder = this.bake_image(ImageRegistry::PLACEHOLDER_IMAGE_BYTES);
+        this.audios.fallback = this.bake_audio(AudioRegistry::SILENCE_BYTES);
+
         let debug_font =
             this.load_font_bytes_sized(TextSystem::DEBUG_FONT_BYTES, TextSystem::DEBUG_FONT_SIZE);
         let text = this.text.get_mut();
+
         text.debug_font = debug_font;
         text.set_default_font(debug_font);
 
@@ -190,6 +193,44 @@ impl AssetServer {
 
     pub fn bake_image(&mut self, bytes: &[u8]) -> Handle<Image> {
         self.images.bake(bytes.to_vec())
+    }
+
+    pub fn load_audio<P>(&mut self, path: P) -> Handle<Audio>
+    where
+        P: AsRef<Path>,
+    {
+        self.audios
+            .load_path(path, AudioKind::Oneshot, &mut self.requests)
+    }
+
+    pub fn load_audio_bytes(&mut self, bytes: &[u8]) -> Handle<Audio> {
+        self.audios
+            .load_bytes(bytes.to_vec(), AudioKind::Oneshot, &mut self.requests)
+    }
+
+    pub fn load_audio_stream<P>(&mut self, path: P) -> Handle<Audio>
+    where
+        P: AsRef<Path>,
+    {
+        self.audios
+            .load_path(path, AudioKind::Streaming, &mut self.requests)
+    }
+
+    pub fn load_audio_stream_bytes(&mut self, bytes: &[u8]) -> Handle<Audio> {
+        self.audios
+            .load_bytes(bytes.to_vec(), AudioKind::Streaming, &mut self.requests)
+    }
+
+    pub fn bake_audio(&mut self, bytes: &[u8]) -> Handle<Audio> {
+        self.audios.bake(bytes.to_vec(), AudioKind::Oneshot)
+    }
+
+    pub fn bake_audio_stream(&mut self, bytes: &[u8]) -> Handle<Audio> {
+        self.audios.bake(bytes.to_vec(), AudioKind::Streaming)
+    }
+
+    pub fn audio(&self, handle: Handle<Audio>) -> &Audio {
+        self.audios.get(handle)
     }
 
     pub fn add_geometry(&mut self, geometry: Geometry) -> Handle<Geometry> {
@@ -319,17 +360,19 @@ impl AssetServer {
 
                 (AssetKind::Image, Err(e)) => {
                     error!("Failed to load image: {}", e);
+                    self.images.slots[r.slot.cast()] = AssetSlot::Failed(e);
                 }
 
                 (AssetKind::Audio(_), Ok(DecodedAsset::Audio(kind, spec, pcm))) => {
                     info!("Loaded sound {:?}, spec {:?}", kind, spec);
 
-                    let sound = Sound::new(kind, spec, pcm);
+                    let sound = Audio::new(kind, spec, pcm);
                     self.audios.slots[r.slot.cast()] = AssetSlot::Ready(sound)
                 }
 
                 (AssetKind::Audio(_), Err(e)) => {
                     error!("Failed to load audio: {}", e);
+                    self.audios.slots[r.slot.cast()] = AssetSlot::Failed(e);
                 }
 
                 _ => unreachable!(),
@@ -338,8 +381,17 @@ impl AssetServer {
 
         for request in self.requests.flush() {
             error!("Asset workers are gone, cannot load more assets.");
-            self.images.slots[request.slot.cast()] =
-                AssetSlot::Failed("Asset worker stopped.".into());
+
+            match request.kind {
+                AssetKind::Image => {
+                    self.images.slots[request.slot.cast()] =
+                        AssetSlot::Failed("Asset worker stopped.".into());
+                }
+                AssetKind::Audio(_) => {
+                    self.audios.slots[request.slot.cast()] =
+                        AssetSlot::Failed("Asset worker stopped.".into());
+                }
+            }
         }
     }
 }

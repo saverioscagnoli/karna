@@ -80,11 +80,8 @@ pub struct ImageRegistry {
 }
 
 impl ImageRegistry {
-    pub const WHITE_TEXEL_BYTES: &'static [u8] =
-        include_bytes!("../../../../assets/white-texel.png");
-
-    pub const PLACEHOLDER_IMAGE_BYTES: &'static [u8] =
-        include_bytes!("../../../../assets/placeholder.png");
+    pub const WHITE_TEXEL_BYTES: &[u8] = include_bytes!("../../../../assets/white-texel.png");
+    pub const PLACEHOLDER_IMAGE_BYTES: &[u8] = include_bytes!("../../../../assets/placeholder.png");
 
     pub fn new(device: Device) -> Self {
         Self {

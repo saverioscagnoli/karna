@@ -1,4 +1,5 @@
 use crate::assets::AssetServer;
+use crate::audio::AudioHandle;
 use crate::input::Input;
 use crate::input::InputHandle;
 use crate::monitors::Monitors;
@@ -16,6 +17,7 @@ pub struct LoadContext<'a> {
     pub time: Time<'a>,
     pub input: InputHandle<'a>,
     pub assets: &'a mut AssetServer,
+    pub audio: AudioHandle<'a>,
     pub scene: SceneHandle<'a>,
     pub shared: &'a mut SharedStore,
     pub monitors: &'a Monitors,
@@ -26,6 +28,7 @@ pub struct UpdateContext<'a> {
     pub time: Time<'a>,
     pub input: InputHandle<'a>,
     pub assets: &'a mut AssetServer,
+    pub audio: AudioHandle<'a>,
     pub scene: SceneHandle<'a>,
     pub shared: &'a mut SharedStore,
     pub monitors: &'a Monitors,
@@ -48,13 +51,8 @@ impl<'a> LoadContext<'a> {
         services: &'a mut Services,
         scene: &'a mut SceneData,
     ) -> Self {
-        let Services {
-            outboxes,
-            input,
-            assets,
-            store,
-            monitors,
-        } = services;
+        #[rustfmt::skip]
+        let Services { outboxes, input, assets, audio, store, monitors } = services;
         let window_id = window_data.id();
 
         Self {
@@ -72,6 +70,10 @@ impl<'a> LoadContext<'a> {
                 outbox: &mut outboxes.input,
             },
             assets,
+            audio: AudioHandle {
+                system: audio,
+                outbox: &mut outboxes.audio,
+            },
             scene: SceneHandle {
                 window_id,
                 data: scene,
@@ -90,13 +92,8 @@ impl<'a> UpdateContext<'a> {
         services: &'a mut Services,
         scene: &'a mut SceneData,
     ) -> Self {
-        let Services {
-            outboxes,
-            input,
-            assets,
-            store,
-            monitors,
-        } = services;
+        #[rustfmt::skip]
+        let Services { outboxes, input, assets, audio, store, monitors } = services;
         let window_id = window_data.id();
 
         Self {
@@ -114,6 +111,10 @@ impl<'a> UpdateContext<'a> {
                 outbox: &mut outboxes.input,
             },
             assets,
+            audio: AudioHandle {
+                system: audio,
+                outbox: &mut outboxes.audio,
+            },
             scene: SceneHandle {
                 window_id,
                 data: scene,
