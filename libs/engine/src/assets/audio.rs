@@ -1,7 +1,7 @@
 use core::hash::Hash;
 use core::hash::Hasher;
-use core::panic;
 
+use nostd::alloc::sync::Arc;
 use nostd::alloc::vec::Vec;
 use nostd::collections::FxHasher;
 use nostd::collections::Handle;
@@ -9,6 +9,7 @@ use nostd::collections::HashMap;
 use nostd::collections::SlotMap;
 use nostd::path::Path;
 use nostd::path::PathBuf;
+use sdl3::SdlError;
 use sdl3::audio::AudioSpec;
 use sdl3::mixer;
 use traccia::error;
@@ -26,16 +27,36 @@ pub enum AudioKind {
 }
 
 #[derive(Debug, Clone)]
+pub enum AudioData {
+    Oneshot(Arc<[i16]>),
+    Streaming(Arc<[u8]>),
+}
+
+#[derive(Debug, Clone)]
 pub struct Audio {
-    pub(crate) kind: AudioKind,
     pub(crate) spec: AudioSpec,
-    pub(crate) pcm: Vec<i16>,
+    pub(crate) data: AudioData,
 }
 
 impl Audio {
-    pub(crate) fn new(kind: AudioKind, spec: AudioSpec, pcm: Vec<i16>) -> Self {
-        Self { kind, spec, pcm }
+    pub(crate) fn new(spec: AudioSpec, data: AudioData) -> Self {
+        Self { spec, data }
     }
+}
+
+pub(crate) fn decode_audio(
+    bytes: &[u8],
+    kind: AudioKind,
+) -> Result<(AudioSpec, AudioData), SdlError> {
+    let mut decoder = mixer::Decoder::from_bytes(bytes.to_vec())?;
+    let spec = decoder.spec::<i16>();
+
+    let data = match kind {
+        AudioKind::Oneshot => AudioData::Oneshot(decoder.decode_all::<i16>()?.into()),
+        AudioKind::Streaming => AudioData::Streaming(Arc::from(bytes)),
+    };
+
+    Ok((spec, data))
 }
 
 #[derive(Default)]
@@ -113,31 +134,31 @@ impl AudioRegistry {
     }
 
     pub fn bake(&mut self, bytes: Vec<u8>, kind: AudioKind) -> Handle<Audio> {
-        let Ok(mut decoder) = mixer::Decoder::from_bytes(bytes) else {
+        let Ok((spec, data)) = decode_audio(&bytes, kind) else {
             return Handle::INVALID;
         };
-
-        let Ok(pcm) = decoder.decode_all::<i16>() else {
-            return Handle::INVALID;
-        };
-
-        let spec = decoder.spec::<i16>();
 
         self.slots
-            .insert(AssetSlot::Ready(Audio { kind, spec, pcm }))
+            .insert(AssetSlot::Ready(Audio::new(spec, data)))
             .cast()
     }
 
     pub fn get(&self, handle: Handle<Audio>) -> &Audio {
-        let slot = self.slots.get(handle.cast()).unwrap_or_else(|| {
-            self.slots
-                .get(self.fallback.cast())
-                .expect("No audio fallback")
-        });
+        self.resolve(handle).unwrap_or_else(|| self.fallback())
+    }
 
-        match slot {
-            AssetSlot::Ready(audio) => audio,
-            _ => todo!("failed to get audio"),
+    pub fn resolve(&self, handle: Handle<Audio>) -> Option<&Audio> {
+        match self.slots.get(handle.cast()) {
+            Some(AssetSlot::Pending) => None,
+            Some(AssetSlot::Ready(audio)) => Some(audio),
+            _ => Some(self.fallback()),
+        }
+    }
+
+    fn fallback(&self) -> &Audio {
+        match self.slots.get(self.fallback.cast()) {
+            Some(AssetSlot::Ready(audio)) => audio,
+            _ => panic!("No audio fallback"),
         }
     }
 }

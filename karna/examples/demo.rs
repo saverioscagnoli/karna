@@ -14,6 +14,7 @@ struct DemoScene {
     jbmono_text: Text,
     pcb: Handle<Image>,
     osu: Handle<Audio>,
+    j: Handle<Audio>,
 }
 
 impl Scene for DemoScene {
@@ -22,6 +23,11 @@ impl Scene for DemoScene {
         Self: Sized,
     {
         let jbmono = ctx.assets.load_font("assets/jbmono.ttf");
+
+        let j = ctx.assets.load_audio_stream("assets/joint-reasoning.mp3");
+        let voice = ctx.audio.play(j);
+
+        ctx.audio.set_gain(voice, 0.3);
 
         if let Some(monitor) = ctx.window.monitor() {
             ctx.time
@@ -37,6 +43,7 @@ impl Scene for DemoScene {
                 .with_style(TextStyle::default().with_font(jbmono)),
             pcb: ctx.assets.load_image("assets/pcb2.png"),
             osu,
+            j,
         }
     }
 

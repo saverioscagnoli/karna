@@ -103,7 +103,7 @@ impl Default for WindowFlags {
         Self {
             state: WindowState::Normal,
             hidden: false,
-            resizable: true,
+            resizable: false,
             decorated: true,
             always_on_top: false,
             utility: false,

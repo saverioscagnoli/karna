@@ -10,9 +10,7 @@ use nostd::path::PathBuf;
 use nostd::sync::Receiver;
 use nostd::sync::Sender;
 use nostd::thread::JoinHandle;
-use sdl3::get_error;
 use sdl3::image::DecodedImage;
-use sdl3::mixer;
 use traccia::debug;
 use traccia::error;
 
@@ -23,6 +21,7 @@ use crate::assets::AssetServer;
 use crate::assets::AssetSource::Bytes;
 use crate::assets::AssetSource::Path;
 use crate::assets::DecodedAsset;
+use crate::assets::audio::decode_audio;
 
 pub struct AssetThreadPool {
     pub threads: Vec<JoinHandle<()>>,
@@ -60,15 +59,7 @@ pub fn worker(
         let decode = |bytes: &[u8]| match req.kind {
             AssetKind::Image => DecodedImage::from_bytes(bytes).map(DecodedAsset::Image),
             AssetKind::Audio(kind) => {
-                let Ok(mut decoder) = mixer::Decoder::from_bytes(bytes.to_vec()) else {
-                    return Err(get_error());
-                };
-
-                let Ok(pcm) = decoder.decode_all::<i16>() else {
-                    return Err(get_error());
-                };
-
-                Ok(DecodedAsset::Audio(kind, decoder.spec::<i16>(), pcm))
+                decode_audio(bytes, kind).map(|(spec, data)| DecodedAsset::Audio(spec, data))
             }
         };
 

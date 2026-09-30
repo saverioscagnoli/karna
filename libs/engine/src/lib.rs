@@ -533,7 +533,7 @@ impl App {
                 sleep_precise_until(deadline);
             }
 
-            self.services.audio.flush();
+            self.services.audio.flush(&self.services.assets);
         }
 
         info!("App lifecycle ended, exiting.");

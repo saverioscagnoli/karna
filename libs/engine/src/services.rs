@@ -3,7 +3,6 @@ use traccia::info;
 use crate::assets::AssetServer;
 use crate::audio::AudioSystem;
 use crate::commands::AppOutboxes;
-use crate::commands::AudioCommand;
 use crate::input::Input;
 use crate::monitors::Monitors;
 use crate::storage::SharedStore;
@@ -31,12 +30,7 @@ impl Services {
 
     pub(crate) fn drain_audio(&mut self) {
         for command in self.outboxes.audio.drain() {
-            match command {
-                AudioCommand::Play { audio } => {
-                    let audio = self.assets.audio(audio);
-                    self.audio.play(audio);
-                }
-            }
+            self.audio.apply(command, &self.assets);
         }
     }
 }

@@ -8,6 +8,8 @@ use sdl3::window::WindowId;
 use sdl3::window::WindowState;
 
 use crate::assets::Audio;
+use crate::audio::PlayOptions;
+use crate::audio::Voice;
 use crate::scene::SceneId;
 use crate::time::FpsCalculationStrategy;
 
@@ -63,5 +65,16 @@ pub enum InputCommand {
 
 #[derive(Debug, Clone, Copy)]
 pub enum AudioCommand {
-    Play { audio: Handle<Audio> },
+    Play {
+        audio: Handle<Audio>,
+        voice: Handle<Voice>,
+        options: PlayOptions,
+    },
+    Stop {
+        voice: Handle<Voice>,
+    },
+    SetGain {
+        voice: Handle<Voice>,
+        gain: f32,
+    },
 }

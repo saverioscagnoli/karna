@@ -30,8 +30,6 @@ use sdl3::image::DecodedImage;
 use traccia::error;
 use traccia::info;
 
-use crate::assets::audio::AudioKind;
-use crate::assets::audio::AudioRegistry;
 use crate::assets::geometry::GeometryRegistry;
 use crate::assets::material::MaterialRegistry;
 use crate::assets::worker::worker;
@@ -46,6 +44,9 @@ use crate::text::TextSystem;
 
 pub use crate::assets::atlas::TextureAtlas;
 pub use crate::assets::audio::Audio;
+pub use crate::assets::audio::AudioData;
+pub use crate::assets::audio::AudioKind;
+pub use crate::assets::audio::AudioRegistry;
 pub use crate::assets::image::Image;
 pub use crate::assets::image::ImageRegistry;
 pub use crate::assets::worker::AssetThreadPool;
@@ -57,7 +58,7 @@ pub enum AssetKind {
 
 pub enum DecodedAsset {
     Image(DecodedImage),
-    Audio(AudioKind, AudioSpec, Vec<i16>),
+    Audio(AudioSpec, AudioData),
 }
 
 pub enum AssetSource {
@@ -233,6 +234,10 @@ impl AssetServer {
         self.audios.get(handle)
     }
 
+    pub fn try_audio(&self, handle: Handle<Audio>) -> Option<&Audio> {
+        self.audios.resolve(handle)
+    }
+
     pub fn add_geometry(&mut self, geometry: Geometry) -> Handle<Geometry> {
         self.geometries.add(geometry)
     }
@@ -363,10 +368,10 @@ impl AssetServer {
                     self.images.slots[r.slot.cast()] = AssetSlot::Failed(e);
                 }
 
-                (AssetKind::Audio(_), Ok(DecodedAsset::Audio(kind, spec, pcm))) => {
+                (AssetKind::Audio(kind), Ok(DecodedAsset::Audio(spec, data))) => {
                     info!("Loaded sound {:?}, spec {:?}", kind, spec);
 
-                    let sound = Audio::new(kind, spec, pcm);
+                    let sound = Audio::new(spec, data);
                     self.audios.slots[r.slot.cast()] = AssetSlot::Ready(sound)
                 }
 

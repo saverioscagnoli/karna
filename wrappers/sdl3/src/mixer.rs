@@ -9,6 +9,7 @@ use core::sync::atomic::Ordering::AcqRel;
 use core::sync::atomic::Ordering::Release;
 
 use alloc::ffi::CString;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use sdl3_mixer_sys::*;
 use sdl3_sys::*;
@@ -66,7 +67,7 @@ pub fn decoders() -> Vec<&'static str> {
 }
 
 enum Source {
-    Bytes(Vec<u8>),
+    Bytes(Arc<[u8]>),
     Path(CString),
 }
 
@@ -78,8 +79,11 @@ pub struct Decoder {
 }
 
 impl Decoder {
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, SdlError> {
-        Self::open(Source::Bytes(bytes))
+    pub fn from_bytes<B>(bytes: B) -> Result<Self, SdlError>
+    where
+        B: Into<Arc<[u8]>>,
+    {
+        Self::open(Source::Bytes(bytes.into()))
     }
 
     pub fn from_path<P>(path: P) -> Result<Self, SdlError>
