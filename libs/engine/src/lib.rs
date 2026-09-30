@@ -27,7 +27,6 @@ use nostd::path::PathBuf;
 use nostd::time::Instant;
 use nostd::time::sleep_precise_until;
 use sdl3::SdlGuard;
-use sdl3::audio::AudioStream;
 use sdl3::events::GamepadEvent;
 use sdl3::events::Key;
 use sdl3::events::KeyEvent;
