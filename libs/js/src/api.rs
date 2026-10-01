@@ -12,7 +12,6 @@ use nostd::collections::Handle;
 use quickjs::Context;
 use quickjs::Error;
 use quickjs::FromJs;
-use quickjs::IntoFunction;
 use quickjs::IntoJs;
 use quickjs::Persistent;
 use quickjs::Value;
@@ -249,7 +248,7 @@ fn window<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error>
 
     let h = Rc::clone(&host);
     obj.set_fn("aspectRatio", move || {
-        h.window(|w| w.pixel_size().cast::<f32>().aspect_ratio());
+        let _ = h.window(|w| w.pixel_size().cast::<f32>().aspect_ratio());
     })?;
 
     let h = Rc::clone(&host);
@@ -258,7 +257,7 @@ fn window<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error>
         vec2(ctx, m.x, m.y)
     })?;
 
-    obj.set("mousePosition", f);
+    obj.set("mousePosition", f)?;
 
     let h = Rc::clone(&host);
     let f = ctx.function_raw("mouseDelta", 0, move |ctx, _, _| {
