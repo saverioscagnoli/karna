@@ -18,6 +18,19 @@ interface Vec2 {
   y: number;
 }
 
+interface Size {
+  width: number;
+  height: number;
+}
+
+type SizeLike = Size | [width: number, height: number];
+
+declare class KarnaSize implements Size {
+  constructor(width: number, height: number);
+  width: number;
+  height: number;
+}
+
 interface Vec3 {
   x: number;
   y: number;
@@ -26,6 +39,21 @@ interface Vec3 {
 
 /** Components are 0..1. */
 interface Color {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
+/** A color object, `[r, g, b, a?]`, or a hex string like `"#ff8800"`. */
+type ColorLike =
+  | Color
+  | { r: number; g: number; b: number; a?: number }
+  | [r: number, g: number, b: number, a?: number]
+  | string;
+
+declare class KarnaColor implements Color {
+  constructor(r: number, g: number, b: number, a?: number);
   r: number;
   g: number;
   b: number;
@@ -389,8 +417,7 @@ interface Draw {
   setLayer(layer: LayerName): void;
 
   color(): Color;
-  /** Components are 0..1; alpha defaults to 1. */
-  setColor(r: number, g: number, b: number, a?: number): void;
+  setColor(color: ColorLike): void;
 
   thickness(): number;
   setThickness(t: number): void;
@@ -423,18 +450,21 @@ interface Draw {
 // karna.window
 // ---------------------------------------------------------------------------
 
-type PresentMode = "vsync" | "mailbox" | "immediate";
+type PresentModeName = "Vsync" | "Mailbox" | "Immediate";
 
-/** Borderless, or exclusive at a display mode (refreshRate 0 = desktop's). */
 type FullscreenMode =
-  | "borderless"
-  | { width: number; height: number; refreshRate?: number };
+  | { readonly kind: "borderless" }
+  | {
+      readonly kind: "exclusive";
+      readonly width: number;
+      readonly height: number;
+      readonly refreshRate: number;
+    };
 
 interface Monitor {
   id(): number;
   position(): Vec2;
-  width(): number;
-  height(): number;
+  size(): Size;
   pixelDensity(): number;
   refreshRate(): number;
 }
@@ -445,26 +475,23 @@ interface WindowApi {
   setTitle(title: string): void;
 
   /** Size in screen coordinates. */
-  width(): number;
-  height(): number;
-  setSize(width: number, height: number): void;
-  /** Size in pixels; differs from `width`/`height` on high density displays. */
-  pixelWidth(): number;
-  pixelHeight(): number;
+  size(): Size;
+  setSize(size: SizeLike): void;
+  /** Size in pixels; differs from `size` on high density displays. */
+  pixelSize(): Size;
   aspectRatio(): number;
 
-  mouse(): Vec2;
+  mousePosition(): Vec2;
   mouseDelta(): Vec2;
 
   opacity(): number;
   setOpacity(opacity: number): void;
 
-  presentMode(): PresentMode;
-  setPresentMode(mode: PresentMode): void;
+  presentMode(): number;
+  setPresentMode(mode: number): void;
 
   clearColor(): Color;
-  /** Components are 0..1; alpha defaults to 1. */
-  setClearColor(r: number, g: number, b: number, a?: number): void;
+  setClearColor(color: ColorLike): void;
 
   isWindowed(): boolean;
   isMaximized(): boolean;
@@ -737,8 +764,16 @@ declare const karna: {
 
   readonly Key: { readonly [K in KeyName]: number };
   readonly Mouse: { readonly [B in MouseButtonName]: number };
+  readonly PresentMode: { readonly [M in PresentModeName]: number };
+  readonly FullscreenMode: {
+    readonly Borderless: FullscreenMode;
+    Exclusive(width: number, height: number, refreshRate?: number): FullscreenMode;
+  };
   readonly GamepadButton: { readonly [B in GamepadButtonName]: number };
   readonly GamepadAxis: { readonly [A in GamepadAxisName]: number };
+
+  readonly Color: typeof KarnaColor;
+  readonly Size: typeof KarnaSize;
 
   /** Builds the `window` export of the entry script. */
   readonly WindowBuilder: typeof KarnaWindowBuilder;

@@ -240,21 +240,8 @@ impl<'a> Window<'a> {
     }
 
     #[inline]
-    pub fn set_opacity(&mut self, value: f32) {
-        self.push(WindowCommand::SetOpacity(value));
-    }
-
-    #[inline]
     pub fn set_present_mode(&mut self, mode: PresentMode) {
         self.push(WindowCommand::SetPresentMode(mode));
-    }
-
-    #[inline]
-    pub fn set_clear_color<C>(&mut self, color: C)
-    where
-        C: Into<Color>,
-    {
-        self.data.clear_color = color.into();
     }
 
     #[inline]
@@ -315,6 +302,19 @@ impl<'a> Window<'a> {
     #[inline]
     pub fn set_relative_mouse(&mut self, relative: bool) {
         self.push(WindowCommand::SetRelativeMouse(relative))
+    }
+
+    #[inline]
+    pub fn set_opacity(&mut self, value: f32) {
+        self.push(WindowCommand::SetOpacity(value));
+    }
+
+    #[inline]
+    pub fn set_clear_color<C>(&mut self, color: C)
+    where
+        C: Into<Color>,
+    {
+        self.data.clear_color = color.into();
     }
 
     #[inline]

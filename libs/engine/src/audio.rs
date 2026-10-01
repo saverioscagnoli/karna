@@ -52,6 +52,7 @@ impl Voice {
         let _ = self.stream.flush();
         self.feed = Feed::Done;
     }
+
     fn pump(&mut self, scratch: &mut [i16]) -> bool {
         match &mut self.feed {
             Feed::Pcm(pcm) => {

@@ -18,6 +18,7 @@ use quickjs_sys::JS_FreeValue;
 use quickjs_sys::JS_GetOpaque;
 use quickjs_sys::JS_GetPropertyStr;
 use quickjs_sys::JS_GetRuntime;
+use quickjs_sys::JS_IsArray;
 use quickjs_sys::JS_IsBool;
 use quickjs_sys::JS_IsException;
 use quickjs_sys::JS_IsFunction;
@@ -103,6 +104,10 @@ impl<'ctx> Value<'ctx> {
 
     pub fn is_object(&self) -> bool {
         unsafe { JS_IsObject(self.raw) }
+    }
+
+    pub fn is_array(&self) -> bool {
+        unsafe { JS_IsArray(self.raw) }
     }
 
     pub fn is_function(&self) -> bool {

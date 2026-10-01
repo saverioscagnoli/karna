@@ -2,6 +2,7 @@ use core::cell::Cell;
 use core::ptr::NonNull;
 
 use engine::assets::AssetServer;
+use engine::audio::AudioHandle;
 use engine::input::Input;
 use engine::render::Draw;
 use engine::time::Time;
@@ -22,6 +23,7 @@ pub(crate) struct Frame {
     time: Ptr<Time<'static>, TimeData>,
     input: NonNull<Input>,
     assets: Ptr<AssetServer, AssetServer>,
+    audio: Option<NonNull<AudioHandle<'static>>>,
     draw: Option<NonNull<Draw<'static>>>,
 }
 
@@ -58,6 +60,7 @@ impl Frame {
         time: Lent<'_, Time<'_>, TimeData>,
         input: &Input,
         assets: Lent<'_, AssetServer>,
+        audio: Option<&mut AudioHandle<'_>>,
         draw: Option<&mut Draw<'_>>,
     ) -> Self {
         Self {
@@ -65,6 +68,7 @@ impl Frame {
             time: Ptr::new(time),
             input: NonNull::from(input),
             assets: Ptr::new(assets),
+            audio: audio.map(|a| NonNull::from(a).cast()),
             draw: draw.map(|d| NonNull::from(d).cast()),
         }
     }
@@ -133,6 +137,15 @@ impl Host {
             Ptr::Mut(mut a) => Ok(f(unsafe { a.as_mut() })),
             Ptr::Ref(_) => Err(Error::custom("karna.assets cannot load during draw()")),
         }
+    }
+
+    pub fn audio_mut<R>(&self, f: impl FnOnce(&mut AudioHandle<'_>) -> R) -> Result<R, Error> {
+        let mut audio = self
+            .frame("karna.audio")?
+            .audio
+            .ok_or_else(|| Error::custom("karna.audio cannot be used during draw()"))?;
+
+        Ok(f(unsafe { audio.as_mut() }))
     }
 
     pub fn draw<R>(&self, f: impl FnOnce(&mut Draw<'_>) -> R) -> Result<R, Error> {

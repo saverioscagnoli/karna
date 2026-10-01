@@ -19,7 +19,7 @@ export class Player {
   }
 
   draw(draw) {
-    draw.setColor(0.2, 0.8, 1);
+    draw.setColor([0.2, 0.8, 1]);
     draw.rect(this.x, this.y, this.size, this.size);
   }
 }

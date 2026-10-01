@@ -184,6 +184,7 @@ impl JsScene {
             Lent::Mut(&mut ctx.time),
             &ctx.input,
             Lent::Mut(ctx.assets),
+            Some(&mut ctx.audio),
             None,
         );
 
@@ -288,6 +289,7 @@ impl Scene for JsScene {
             Lent::Mut(&mut ctx.time),
             &ctx.input,
             Lent::Mut(ctx.assets),
+            Some(&mut ctx.audio),
             None,
         );
 
@@ -300,6 +302,7 @@ impl Scene for JsScene {
             Lent::Mut(&mut ctx.time),
             &ctx.input,
             Lent::Mut(ctx.assets),
+            Some(&mut ctx.audio),
             None,
         );
         self.call(frame, "fixedUpdate");
@@ -311,6 +314,7 @@ impl Scene for JsScene {
             Lent::Mut(&mut ctx.time),
             &ctx.input,
             Lent::Mut(ctx.assets),
+            Some(&mut ctx.audio),
             None,
         );
 
@@ -323,6 +327,7 @@ impl Scene for JsScene {
             Lent::Ref(ctx.time),
             ctx.input,
             Lent::Ref(ctx.assets),
+            None,
             Some(&mut *draw),
         );
 
