@@ -205,6 +205,7 @@ pub struct Window<'a> {
     pub(crate) data: &'a mut WindowData,
     pub(crate) outbox: &'a mut Outbox<(WindowId, WindowCommand)>,
 }
+
 impl Deref for Window<'_> {
     type Target = WindowData;
 
