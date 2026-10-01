@@ -67,6 +67,13 @@ impl Scene for MeshDemo {
 }
 
 fn main() {
+    _ = traccia::init(
+        traccia::Config::default()
+            .with_min_level(traccia::LevelFilter::Debug)
+            .with_module_filter("cosmic_text", traccia::LevelFilter::Warn)
+            .with_target(SdlTarget::default()),
+    );
+
     AppBuilder::default()
         .with_window(
             WindowBuilder::new()

@@ -88,56 +88,58 @@ impl Host {
     fn frame(&self, what: &str) -> Result<Frame, Error> {
         self.frame.get().ok_or_else(|| {
             Error::custom(nostd::alloc::format!(
-                "{what} is only usable while the scene method it was passed to runs"
+                "{what} can only be used while a scene method runs, not at the top level of a module"
             ))
         })
     }
 
     pub fn window<R>(&self, f: impl FnOnce(&WindowData) -> R) -> Result<R, Error> {
-        match self.frame("ctx.window")?.window {
+        match self.frame("karna.window")?.window {
             Ptr::Mut(w) => Ok(f(unsafe { w.as_ref() })),
             Ptr::Ref(w) => Ok(f(unsafe { w.as_ref() })),
         }
     }
 
     pub fn window_mut<R>(&self, f: impl FnOnce(&mut Window<'_>) -> R) -> Result<R, Error> {
-        match self.frame("ctx.window")?.window {
+        match self.frame("karna.window")?.window {
             Ptr::Mut(mut w) => Ok(f(unsafe { w.as_mut() })),
-            Ptr::Ref(_) => Err(Error::custom("the window cannot be changed during draw()")),
+            Ptr::Ref(_) => Err(Error::custom(
+                "karna.window cannot be changed during draw()",
+            )),
         }
     }
 
     pub fn time<R>(&self, f: impl FnOnce(&TimeData) -> R) -> Result<R, Error> {
-        match self.frame("ctx.time")?.time {
+        match self.frame("karna.time")?.time {
             Ptr::Mut(t) => Ok(f(unsafe { t.as_ref() })),
             Ptr::Ref(t) => Ok(f(unsafe { t.as_ref() })),
         }
     }
 
     pub fn time_mut<R>(&self, f: impl FnOnce(&mut Time<'_>) -> R) -> Result<R, Error> {
-        match self.frame("ctx.time")?.time {
+        match self.frame("karna.time")?.time {
             Ptr::Mut(mut t) => Ok(f(unsafe { t.as_mut() })),
-            Ptr::Ref(_) => Err(Error::custom("time cannot be changed during draw()")),
+            Ptr::Ref(_) => Err(Error::custom("karna.time cannot be changed during draw()")),
         }
     }
 
     pub fn input<R>(&self, f: impl FnOnce(&Input) -> R) -> Result<R, Error> {
-        let input = self.frame("ctx.input")?.input;
+        let input = self.frame("karna.input")?.input;
         Ok(f(unsafe { input.as_ref() }))
     }
 
     pub fn assets_mut<R>(&self, f: impl FnOnce(&mut AssetServer) -> R) -> Result<R, Error> {
-        match self.frame("ctx.assets")?.assets {
+        match self.frame("karna.assets")?.assets {
             Ptr::Mut(mut a) => Ok(f(unsafe { a.as_mut() })),
-            Ptr::Ref(_) => Err(Error::custom("assets cannot be loaded during draw()")),
+            Ptr::Ref(_) => Err(Error::custom("karna.assets cannot load during draw()")),
         }
     }
 
     pub fn draw<R>(&self, f: impl FnOnce(&mut Draw<'_>) -> R) -> Result<R, Error> {
         let mut draw = self
-            .frame("the graphics object")?
+            .frame("the draw handle")?
             .draw
-            .ok_or_else(|| Error::custom("drawing is only possible inside draw()"))?;
+            .ok_or_else(|| Error::custom("the draw handle can only be used inside draw()"))?;
 
         Ok(f(unsafe { draw.as_mut() }))
     }

@@ -20,7 +20,6 @@ use nostd::alloc::boxed::Box;
 use nostd::alloc::format;
 use nostd::alloc::rc::Rc;
 use nostd::alloc::string::String;
-use nostd::alloc::vec;
 use nostd::path::Path;
 use nostd::path::PathBuf;
 use quickjs::Context;
@@ -50,12 +49,6 @@ pub struct JsScene {
     host: Rc<Host>,
     path: PathBuf,
     error: Option<String>,
-}
-
-#[derive(Clone, Copy)]
-enum Phase {
-    Update,
-    Draw,
 }
 
 impl JsScene {
@@ -225,7 +218,7 @@ impl JsScene {
             }
         }
 
-        self.call(frame, "load", Phase::Update);
+        self.call(frame, "load");
         self
     }
 
@@ -233,37 +226,36 @@ impl JsScene {
         self.error.as_deref()
     }
 
-    fn call(&mut self, frame: Frame, name: &str, phase: Phase) {
-        if self.error.is_some() {
-            return;
+    fn call(&mut self, frame: Frame, name: &str) {
+        if let Err(e) = self.invoke(frame, name, None) {
+            self.fail(name, e);
         }
+    }
 
-        let (Some(api), Some(scene)) = (&self.api, &self.scene) else {
-            return;
+    fn invoke(
+        &self,
+        frame: Frame,
+        name: &str,
+        arg: Option<&Persistent<'static>>,
+    ) -> Result<(), Error> {
+        let (None, Some(scene)) = (&self.error, &self.scene) else {
+            return Ok(());
         };
 
         let js = &*self.js;
         let rt = unsafe { self.rt.as_ref() };
 
-        let result = self.host.enter(frame, || {
+        self.host.enter(frame, || {
             let scene = scene.get(js);
             let method = scene.get(name)?;
 
             if method.is_function() {
-                let args = match phase {
-                    Phase::Update => vec![api.ctx.get(js)],
-                    Phase::Draw => vec![api.draw_ctx.get(js), api.graphics.get(js)],
-                };
-
-                method.call_with(&scene, &args)?;
+                let arg = arg.map(|a| a.get(js));
+                method.call_with(&scene, arg.as_slice())?;
             }
 
             rt.run_jobs()
-        });
-
-        if let Err(e) = result {
-            self.fail(name, e);
-        }
+        })
     }
 
     fn fail(&mut self, what: &str, e: Error) {
@@ -299,7 +291,7 @@ impl Scene for JsScene {
             None,
         );
 
-        self.call(frame, "unload", Phase::Update);
+        self.call(frame, "unload");
     }
 
     fn fixed_update(&mut self, ctx: &mut UpdateContext) {
@@ -310,7 +302,7 @@ impl Scene for JsScene {
             Lent::Mut(ctx.assets),
             None,
         );
-        self.call(frame, "fixedUpdate", Phase::Update);
+        self.call(frame, "fixedUpdate");
     }
 
     fn update(&mut self, ctx: &mut UpdateContext) {
@@ -322,7 +314,7 @@ impl Scene for JsScene {
             None,
         );
 
-        self.call(frame, "update", Phase::Update);
+        self.call(frame, "update");
     }
 
     fn draw(&mut self, ctx: &mut DrawContext, draw: &mut Draw) {
@@ -334,7 +326,12 @@ impl Scene for JsScene {
             Some(&mut *draw),
         );
 
-        self.call(frame, "draw", Phase::Draw);
+        let graphics = self.api.as_ref().map(|api| &api.graphics);
+
+        if let Err(e) = self.invoke(frame, "draw", graphics) {
+            self.fail("draw", e);
+        }
+
         self.draw_error(draw);
     }
 }

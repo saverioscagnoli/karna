@@ -2,19 +2,61 @@
 //
 // Reference it from a script with:
 //   /// <reference path="karna.d.ts" />
-// and annotate the scene with JSDoc (`/** @implements {Scene} */`, `@param
-// {UpdateContext} ctx`) for completions. Keep in sync with
-// libs/script/src/api.rs.
+// and annotate the scene with JSDoc (`/** @implements {Scene} */`) for
+// completions. Keep in sync with libs/js/src/api.rs.
+//
+// Everything engine-side lives on the global `karna` object. It is usable
+// while a scene method (or the scene constructor) runs; drawing goes through
+// the `Draw` handle passed to `draw`.
+
+// ---------------------------------------------------------------------------
+// Basics
+// ---------------------------------------------------------------------------
 
 interface Vec2 {
   x: number;
   y: number;
 }
 
-/** An image handle from `ctx.assets.loadImage`. */
+interface Vec3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** Components are 0..1. */
+interface Color {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
+/** An image handle from `karna.assets.loadImage`. */
 interface KarnaImage {
   readonly __brand: "KarnaImage";
 }
+
+/** A sound handle from `karna.assets.loadAudio` / `loadAudioStream`. */
+interface KarnaAudio {
+  readonly __brand: "KarnaAudio";
+}
+
+/** A font handle from `karna.assets.loadFont`. */
+interface KarnaFont {
+  readonly __brand: "KarnaFont";
+}
+
+/** A playing sound, from `karna.audio.play`. */
+interface KarnaVoice {
+  readonly __brand: "KarnaVoice";
+}
+
+/** Raw file contents. */
+type Bytes = ArrayBuffer | Uint8Array;
+
+/** A scene name, as registered on the window. */
+type SceneId = string;
 
 type KeyName =
   | "A"
@@ -266,14 +308,96 @@ type KeyName =
 
 type MouseButtonName = "Left" | "Middle" | "Right" | "X1" | "X2";
 
+type GamepadButtonName =
+  | "South"
+  | "East"
+  | "West"
+  | "North"
+  | "Back"
+  | "Guide"
+  | "Start"
+  | "LeftStick"
+  | "RightStick"
+  | "LeftShoulder"
+  | "RightShoulder"
+  | "DpadUp"
+  | "DpadDown"
+  | "DpadLeft"
+  | "DpadRight"
+  | "Misc1"
+  | "RightPaddle1"
+  | "LeftPaddle1"
+  | "RightPaddle2"
+  | "LeftPaddle2"
+  | "Touchpad"
+  | "Misc2"
+  | "Misc3"
+  | "Misc4"
+  | "Misc5"
+  | "Misc6";
+
+type GamepadAxisName =
+  | "LeftX"
+  | "LeftY"
+  | "RightX"
+  | "RightY"
+  | "LeftTrigger"
+  | "RightTrigger";
+
+type GamepadKind =
+  | "unknown"
+  | "standard"
+  | "xbox360"
+  | "xboxOne"
+  | "ps3"
+  | "ps4"
+  | "ps5"
+  | "switchPro"
+  | "joyConLeft"
+  | "joyConRight"
+  | "joyConPair"
+  | "gameCube";
+
+// ---------------------------------------------------------------------------
+// Drawing
+// ---------------------------------------------------------------------------
+
 /** A layer to draw on; later layers are drawn over earlier ones. */
 type LayerName = "world" | "ui" | "debug";
 
+type TextAlign = "left" | "center" | "right" | "justified" | "end";
+
+interface TextStyle {
+  /** Defaults to the debug font. */
+  font?: KarnaFont;
+  /** Defaults to the font's own size. */
+  size?: number;
+  /** Multiple of the font size; defaults to 1.25. */
+  lineHeight?: number;
+  /** Wrap width in pixels; no wrapping when unset. */
+  wrap?: number;
+  align?: TextAlign;
+  bold?: boolean;
+  italic?: boolean;
+}
+
+/**
+ * Passed to `draw`. Only usable while that call runs; don't keep it around.
+ */
 interface Draw {
+  layer(): LayerName;
+  setLayer(layer: LayerName): void;
+
+  color(): Color;
   /** Components are 0..1; alpha defaults to 1. */
   setColor(r: number, g: number, b: number, a?: number): void;
+
+  thickness(): number;
   setThickness(t: number): void;
-  setLayer(layer: LayerName): void;
+
+  textStyle(): TextStyle;
+  /** Used by `print` from now on; unset fields take their defaults. */
+  setTextStyle(style: TextStyle): void;
 
   line(x1: number, y1: number, x2: number, y2: number): void;
   rect(x: number, y: number, w: number, h: number): void;
@@ -286,6 +410,8 @@ interface Draw {
     x3: number,
     y3: number,
   ): void;
+  /** A filled convex polygon. */
+  polygon(points: Vec2[]): void;
   circle(x: number, y: number, radius: number): void;
   circleOutline(x: number, y: number, radius: number): void;
   /** Drawn at its own size unless both `w` and `h` are given. */
@@ -293,20 +419,100 @@ interface Draw {
   print(text: string, x: number, y: number): void;
 }
 
-interface WindowView {
-  title(): string;
+// ---------------------------------------------------------------------------
+// karna.window
+// ---------------------------------------------------------------------------
+
+type PresentMode = "vsync" | "mailbox" | "immediate";
+
+/** Borderless, or exclusive at a display mode (refreshRate 0 = desktop's). */
+type FullscreenMode =
+  | "borderless"
+  | { width: number; height: number; refreshRate?: number };
+
+interface Monitor {
+  id(): number;
+  position(): Vec2;
   width(): number;
   height(): number;
+  pixelDensity(): number;
+  refreshRate(): number;
+}
+
+/** Setters throw during `draw`. */
+interface WindowApi {
+  title(): string;
+  setTitle(title: string): void;
+
+  /** Size in screen coordinates. */
+  width(): number;
+  height(): number;
+  setSize(width: number, height: number): void;
+  /** Size in pixels; differs from `width`/`height` on high density displays. */
+  pixelWidth(): number;
+  pixelHeight(): number;
+  aspectRatio(): number;
+
   mouse(): Vec2;
   mouseDelta(): Vec2;
+
+  opacity(): number;
+  setOpacity(opacity: number): void;
+
+  presentMode(): PresentMode;
+  setPresentMode(mode: PresentMode): void;
+
+  clearColor(): Color;
+  /** Components are 0..1; alpha defaults to 1. */
+  setClearColor(r: number, g: number, b: number, a?: number): void;
+
+  isWindowed(): boolean;
+  isMaximized(): boolean;
+  isMinimized(): boolean;
+  isFullscreen(): boolean;
+  setWindowed(): void;
+  setMaximized(): void;
+  setMinimized(): void;
+  /** Defaults to borderless. */
+  setFullscreen(mode?: FullscreenMode): void;
+  /** Back from maximized or minimized. */
+  restore(): void;
+
+  isHidden(): boolean;
+  setHidden(hidden: boolean): void;
+  isResizable(): boolean;
+  setResizable(resizable: boolean): void;
+  isDecorated(): boolean;
+  setDecorated(decorated: boolean): void;
+  isAlwaysOnTop(): boolean;
+  setAlwaysOnTop(onTop: boolean): void;
+  isFocusable(): boolean;
+  setFocusable(focusable: boolean): void;
+  isTransparent(): boolean;
+  isHighPixelDensity(): boolean;
+
+  isMouseGrabbed(): boolean;
+  setMouseGrabbed(grabbed: boolean): void;
+  isKeyboardGrabbed(): boolean;
+  setKeyboardGrabbed(grabbed: boolean): void;
+  /** Hides the cursor and reports only `mouseDelta`. */
+  isRelativeMouse(): boolean;
+  setRelativeMouse(relative: boolean): void;
+
+  /** The monitor the window is mostly on. */
+  monitor(): Monitor | undefined;
 }
 
-interface WindowApi extends WindowView {
-  setTitle(title: string): void;
-  setSize(width: number, height: number): void;
-}
+// ---------------------------------------------------------------------------
+// karna.time
+// ---------------------------------------------------------------------------
 
-interface TimeView {
+type FpsStrategy = "mean" | "smoothed";
+
+/** Setters throw during `draw`. */
+interface TimeApi {
+  /** Seconds since the window opened. */
+  elapsed(): number;
   /** Seconds since the last frame. */
   delta(): number;
   /** Seconds per fixed update tick. */
@@ -314,60 +520,184 @@ interface TimeView {
   /** How far between two fixed ticks this frame is, 0..1. */
   alpha(): number;
   fps(): number;
-}
 
-interface TimeApi extends TimeView {
   setTargetFps(fps: number): void;
   setTargetTps(tps: number): void;
+  setFpsStrategy(strategy: FpsStrategy): void;
+}
+
+// ---------------------------------------------------------------------------
+// karna.input
+// ---------------------------------------------------------------------------
+
+interface Pad {
+  id(): number;
+  /** Player slot, if it has one. */
+  slot(): number | undefined;
+  name(): string;
+  kind(): GamepadKind;
+
+  /** `button` is a `karna.GamepadButton`. */
+  down(button: number): boolean;
+  pressed(button: number): boolean;
+  released(button: number): boolean;
+
+  /** `axis` is a `karna.GamepadAxis`; sticks are -1..1, triggers 0..1. */
+  axis(axis: number): number;
+  leftStick(): Vec2;
+  rightStick(): Vec2;
+  leftTrigger(): number;
+  rightTrigger(): number;
+
+  /** Intensities are 0..1; throws during `draw`. */
+  rumble(intensity: number, seconds: number): void;
+  rumbleMotors(low: number, high: number, seconds: number): void;
+  rumbleTriggers(left: number, right: number, seconds: number): void;
+  stopRumble(): void;
 }
 
 interface InputApi {
+  /** `key` is a `karna.Key`. */
   keyDown(key: number): boolean;
   keyPressed(key: number): boolean;
   keyReleased(key: number): boolean;
+
+  /** `button` is a `karna.Mouse` button. */
   mouseDown(button: number): boolean;
   mousePressed(button: number): boolean;
   mouseReleased(button: number): boolean;
   wheel(): Vec2;
+
   /** Text typed since the last frame. */
   text(): string;
+  /** Text being composed by an input method, not committed yet. */
+  preedit(): string;
+  preeditCursor(): number;
+
+  /** The gamepad in a player slot. */
+  pad(slot: number): Pad | undefined;
+  pads(): Pad[];
+  /** `button` is a `karna.GamepadButton`, checked on every pad. */
+  anyPadDown(button: number): boolean;
+  anyPadPressed(button: number): boolean;
+  anyPadReleased(button: number): boolean;
 }
 
-interface AssetsApi {
-  /** Path relative to the asset root. */
-  loadImage(path: string): KarnaImage;
-}
+// ---------------------------------------------------------------------------
+// karna.assets
+// ---------------------------------------------------------------------------
 
 /**
- * Passed to `draw`. Like every context, it is only usable while the method it
- * was passed to runs; don't keep it around.
+ * Loading is asynchronous: handles are usable right away and draw a
+ * placeholder (or play silence) until the file is ready. Paths are relative
+ * to the asset root. Throws during `draw`.
  */
-interface DrawContext {
-  window: WindowView;
-  time: TimeView;
-  input: InputApi;
+interface AssetsApi {
+  loadImage(path: string): KarnaImage;
+  loadImageBytes(bytes: Bytes): KarnaImage;
+  placeholderImage(): KarnaImage;
+
+  /** Decoded fully up front; for short sounds. */
+  loadAudio(path: string): KarnaAudio;
+  loadAudioBytes(bytes: Bytes): KarnaAudio;
+  /** Decoded while playing; for music. */
+  loadAudioStream(path: string): KarnaAudio;
+  loadAudioStreamBytes(bytes: Bytes): KarnaAudio;
+
+  loadFont(path: string, size?: number): KarnaFont;
+  loadFontBytes(bytes: Bytes, size?: number): KarnaFont;
+  debugFont(): KarnaFont;
 }
 
-/** Passed to `load`, `update`, `fixedUpdate` and `unload`. */
-interface UpdateContext {
-  window: WindowApi;
-  time: TimeApi;
-  input: InputApi;
-  assets: AssetsApi;
+// ---------------------------------------------------------------------------
+// karna.audio
+// ---------------------------------------------------------------------------
+
+interface PlayOptions {
+  /** Defaults to false. */
+  loop?: boolean;
+  /** Defaults to 1. */
+  gain?: number;
 }
 
-type LoadContext = UpdateContext;
+/** Throws during `draw`. */
+interface AudioApi {
+  play(audio: KarnaAudio, options?: PlayOptions): KarnaVoice;
+  stop(voice: KarnaVoice): void;
+  setGain(voice: KarnaVoice, gain: number): void;
+}
+
+// ---------------------------------------------------------------------------
+// karna.scene
+// ---------------------------------------------------------------------------
+
+type Projection =
+  | {
+      kind: "orthographic";
+      left: number;
+      right: number;
+      bottom: number;
+      top: number;
+      near: number;
+      far: number;
+    }
+  | {
+      kind: "perspective";
+      /** Vertical field of view, in radians. */
+      fov: number;
+      aspectRatio: number;
+      near: number;
+      far: number;
+    };
+
+interface Camera {
+  projection(): Projection;
+  setProjection(projection: Projection): void;
+  position(): Vec3;
+  setPosition(x: number, y: number, z: number): void;
+  translate(dx: number, dy: number, dz: number): void;
+  target(): Vec3;
+  setTarget(x: number, y: number, z: number): void;
+}
+
+/** Changes are applied after the current frame; they throw during `draw`. */
+interface SceneApi {
+  /** This scene's id. */
+  id(): SceneId;
+  /** Runs another scene alongside the active ones. */
+  activate(scene: SceneId): void;
+  deactivate(scene: SceneId): void;
+  /** Replaces this scene with another. */
+  change(to: SceneId): void;
+  /** The camera a layer is drawn with. */
+  camera(layer: LayerName): Camera;
+}
+
+// ---------------------------------------------------------------------------
+// karna.monitors
+// ---------------------------------------------------------------------------
+
+interface MonitorsApi {
+  all(): Monitor[];
+  primary(): Monitor | undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Scenes
+// ---------------------------------------------------------------------------
 
 /**
  * What a script `export default`s: a class whose instances look like this, or
  * a plain object that does. Every method is optional.
  */
 interface Scene {
-  load?(ctx: LoadContext): void;
-  update?(ctx: UpdateContext): void;
-  fixedUpdate?(ctx: UpdateContext): void;
-  draw?(ctx: DrawContext, draw: Draw): void;
-  unload?(ctx: LoadContext): void;
+  load?(): void;
+  /** Runs at the fixed tick rate (`karna.time.setTargetTps`). */
+  fixedUpdate?(): void;
+  /** Runs once per frame. */
+  update?(): void;
+  draw?(draw: Draw): void;
+  unload?(): void;
 }
 
 /**
@@ -392,13 +722,36 @@ declare class KarnaWindowBuilder implements WindowConfig {
   withResizable(resizable?: boolean): this;
 }
 
+// ---------------------------------------------------------------------------
+// Globals
+// ---------------------------------------------------------------------------
+
 declare const karna: {
-  /** Logs its arguments, space separated, at info level. */
-  log(...args: unknown[]): void;
+  readonly window: WindowApi;
+  readonly time: TimeApi;
+  readonly input: InputApi;
+  readonly assets: AssetsApi;
+  readonly audio: AudioApi;
+  readonly scene: SceneApi;
+  readonly monitors: MonitorsApi;
 
   readonly Key: { readonly [K in KeyName]: number };
   readonly Mouse: { readonly [B in MouseButtonName]: number };
+  readonly GamepadButton: { readonly [B in GamepadButtonName]: number };
+  readonly GamepadAxis: { readonly [A in GamepadAxisName]: number };
 
   /** Builds the `window` export of the entry script. */
   readonly WindowBuilder: typeof KarnaWindowBuilder;
 };
+
+/** Arguments are joined with spaces and sent to the engine log. */
+interface Console {
+  log(...args: unknown[]): void;
+  trace(...args: unknown[]): void;
+  debug(...args: unknown[]): void;
+  info(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+}
+
+declare var console: Console;

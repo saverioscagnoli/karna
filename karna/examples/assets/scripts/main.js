@@ -1,5 +1,4 @@
 /// <reference path="../../../../assets/karna.d.ts" />
-
 import { Player } from "./player.js";
 
 const { Key, Mouse } = karna;
@@ -12,36 +11,34 @@ export default class Demo {
   /** @type {KarnaImage | undefined} */
   pcb;
 
-  /** @param {LoadContext} ctx */
-  load(ctx) {
-    ctx.time.setTargetFps(120);
-    this.pcb = ctx.assets.loadImage("assets/pcb.png");
-    karna.log(
+  load() {
+      karna.time.setTargetFps(120);
+    this.pcb = karna.assets.loadImage("assets/pcb.png");
+    console.log(
       "script loaded, window is",
-      ctx.window.width(),
+      karna.window.width(),
       "x",
-      ctx.window.height(),
+      karna.window.height(),
     );
   }
 
-  /** @param {UpdateContext} ctx */
-  update(ctx) {
-    this.player.update(ctx);
+  update() {
+      this.player.update();
 
-    if (ctx.input.mousePressed(Mouse.Left)) {
-      this.trail.push(ctx.window.mouse());
+
+    if (karna.input.mousePressed(Mouse.Left)) {
+      this.trail.push(karna.window.mouse());
       if (this.trail.length > 32) this.trail.shift();
     }
 
-    if (ctx.input.keyPressed(Key.Space)) this.trail = [];
+    if (karna.input.keyPressed(Key.Space)) this.trail = [];
   }
 
   /**
-   * @param {DrawContext} ctx
    * @param {Draw} draw
    */
-  draw(ctx, draw) {
-    if (this.pcb) draw.image(this.pcb, ctx.window.width() - 266, 10, 256, 256);
+  draw(draw) {
+    if (this.pcb) draw.image(this.pcb, karna.window.width() - 266, 10, 256, 256);
 
     this.player.draw(draw);
 
@@ -50,12 +47,12 @@ export default class Demo {
     for (const p of this.trail) draw.circle(p.x, p.y, 6);
 
     draw.setColor(1, 1, 1);
-    draw.print(`fps: ${Math.round(ctx.time.fps())}`, 10, 10);
+    draw.print(`fps: ${Math.round(karna.time.fps())}`, 10, 10);
     draw.print(
       "WASD / arrows to move, click to drop dots, space to clear",
       10,
       30,
     );
-    draw.print(`dt: ${ctx.time.delta()}`, 10, 50);
+    draw.print(`dt: ${karna.time.delta()}`, 10, 50);
   }
 }

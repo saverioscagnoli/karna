@@ -42,6 +42,7 @@ use quickjs_sys::JSValue;
 
 use crate::Context;
 use crate::Error;
+use crate::IntoFunction;
 use crate::context::take_exception;
 use crate::runtime::state;
 
@@ -194,6 +195,16 @@ impl<'ctx> Value<'ctx> {
         }
 
         Ok(())
+    }
+
+    /// Set `key` to a JS function named `key` that calls `f`.
+    pub fn set_fn<Args, F>(&self, key: &str, f: F) -> Result<(), Error>
+    where
+        F: IntoFunction<Args>,
+    {
+        // Borrowed from this value; dropping it would free the context.
+        let ctx = ManuallyDrop::new(unsafe { Context::from_ptr(self.ctx) });
+        self.set(key, ctx.function(key, f)?)
     }
 
     /// Call this value as a function with `this` set to `undefined`.

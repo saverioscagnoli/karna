@@ -1,5 +1,6 @@
 use engine::assets::Image;
 use engine::render::Layer;
+use nostd::alloc::borrow::ToOwned;
 use nostd::alloc::format;
 use nostd::alloc::rc::Rc;
 use nostd::alloc::string::String;
@@ -17,6 +18,7 @@ use sdl3::render::Color;
 use traccia::debug;
 use traccia::error;
 use traccia::info;
+use traccia::trace;
 use traccia::warn;
 
 use crate::host::Host;
@@ -24,8 +26,6 @@ use crate::host::Host;
 struct ImageRef(Handle<Image>);
 
 pub(crate) struct Api<'rt> {
-    pub ctx: Persistent<'rt>,
-    pub draw_ctx: Persistent<'rt>,
     pub graphics: Persistent<'rt>,
 }
 
@@ -40,30 +40,22 @@ karna.WindowBuilder = class WindowBuilder {
 "#;
 
 pub(crate) fn install<'rt>(ctx: &Context<'rt>, host: &Rc<Host>) -> Result<Api<'rt>, Error> {
-    let window = window(ctx, host)?;
-    let time = time(ctx, host)?;
-    let input = input(ctx, host)?;
-
-    let draw_ctx = ctx.object()?;
-    draw_ctx.set("window", window.clone())?;
-    draw_ctx.set("time", time.clone())?;
-    draw_ctx.set("input", input.clone())?;
-
-    let update_ctx = ctx.object()?;
-    update_ctx.set("window", window)?;
-    update_ctx.set("time", time)?;
-    update_ctx.set("input", input)?;
-    update_ctx.set("assets", assets(ctx, host)?)?;
-
     let karna = ctx.object()?;
-    karna.set("log", log(ctx, "log", |s| info!("{s}"))?)?;
+
     karna.set("Key", keys(ctx)?)?;
     karna.set("Mouse", mouse_buttons(ctx)?)?;
 
+    karna.set("window", window(ctx, host)?)?;
+    karna.set("time", time(ctx, host)?)?;
+    karna.set("input", input(ctx, host)?)?;
+    karna.set("assets", assets(ctx, host)?)?;
+
     let console = ctx.object()?;
+
     console.set("log", log(ctx, "log", |s| info!("{s}"))?)?;
-    console.set("info", log(ctx, "info", |s| info!("{s}"))?)?;
+    console.set("trace", log(ctx, "trace", |s| trace!("{s}"))?)?;
     console.set("debug", log(ctx, "debug", |s| debug!("{s}"))?)?;
+    console.set("info", log(ctx, "info", |s| info!("{s}"))?)?;
     console.set("warn", log(ctx, "warn", |s| warn!("{s}"))?)?;
     console.set("error", log(ctx, "error", |s| error!("{s}"))?)?;
 
@@ -74,17 +66,8 @@ pub(crate) fn install<'rt>(ctx: &Context<'rt>, host: &Rc<Host>) -> Result<Api<'r
     ctx.eval(PRELUDE, "<karna>")?;
 
     Ok(Api {
-        ctx: ctx.persist(update_ctx),
-        draw_ctx: ctx.persist(draw_ctx),
         graphics: ctx.persist(graphics(ctx, host)?),
     })
-}
-
-fn set<Args, F>(ctx: &Context<'_>, obj: &Value<'_>, name: &str, f: F) -> Result<(), Error>
-where
-    F: IntoFunction<Args>,
-{
-    obj.set(name, ctx.function(name, f)?)
 }
 
 fn vec2<'c>(ctx: &'c Context<'_>, x: f32, y: f32) -> Result<Value<'c>, Error> {
@@ -110,25 +93,23 @@ fn log<'c>(ctx: &'c Context<'_>, name: &str, sink: fn(&str)) -> Result<Value<'c>
 fn window<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error> {
     let obj = ctx.object()?;
 
-    let h = host.clone();
-    set(ctx, &obj, "title", move || {
-        h.window(|w| String::from(w.title()))
-    })?;
+    let h = Rc::clone(&host);
+    obj.set_fn("title", move || h.window(|w| w.title().to_owned()))?;
 
-    let h = host.clone();
-    set(ctx, &obj, "setTitle", move |t: String| {
+    let h = Rc::clone(&host);
+    obj.set_fn("setTitle", move |t: String| {
         h.window_mut(|w| w.set_title(t))
     })?;
 
-    let h = host.clone();
-    set(ctx, &obj, "width", move || h.window(|w| w.size().w()))?;
+    let h = Rc::clone(&host);
+    obj.set_fn("width", move || h.window(|w| w.size().w()))?;
 
-    let h = host.clone();
-    set(ctx, &obj, "height", move || h.window(|w| w.size().h()))?;
+    let h = Rc::clone(&host);
+    obj.set_fn("height", move || h.window(|w| w.size().h()))?;
 
-    let h = host.clone();
-    set(ctx, &obj, "setSize", move |width: u32, height: u32| {
-        h.window_mut(|w| w.set_size((width, height)))
+    let h = Rc::clone(&host);
+    obj.set_fn("setSize", move |width: u32, height: u32| {
+        h.window_mut(|w| w.set_size((width, height)));
     })?;
 
     let h = host.clone();
