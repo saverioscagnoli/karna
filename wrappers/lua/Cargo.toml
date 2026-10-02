@@ -1,0 +1,18 @@
+[package]
+name = "karna-lua"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "lua"
+path = "src/lib.rs"
+
+[features]
+default = ["build-from-source"]
+build-from-source = ["karna-lua-sys/build-from-source"]
+
+[dependencies]
+karna-lua-sys.workspace = true

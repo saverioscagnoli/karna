@@ -13,3 +13,6 @@
 [submodule "vendor/SDL_mixer"]
 	path = vendor/SDL_mixer
 	url = https://github.com/libsdl-org/SDL_mixer.git
+[submodule "vendor/lua"]
+	path = vendor/lua
+	url = https://github.com/lua/lua.git

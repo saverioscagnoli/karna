@@ -12,15 +12,16 @@ name = "karna"
 path = "src/lib.rs"
 
 [features]
-default = ["build-from-source", "js"]
+default = ["build-from-source", "js", "lua"]
 build-from-source = [
     "karna-engine/build-from-source",
     "karna-sdl3/build-from-source",
-    "karna-js?/build-from-source",
+    "karna-js-scripting?/build-from-source",
+    "karna-lua-scripting?/build-from-source",
 ]
 
-# JS Scripting
-js = ["dep:karna-js"]
+js = ["dep:karna-js-scripting"]
+lua = ["dep:karna-lua-scripting"]
 
 [dependencies]
 karna-engine.workspace = true
@@ -28,7 +29,8 @@ karna-math.workspace = true
 karna-utils.workspace = true
 karna-sdl3.workspace = true
 karna-nostd.workspace = true
-karna-js = { workspace = true, optional = true }
+karna-js-scripting = { workspace = true, optional = true }
+karna-lua-scripting = { workspace = true, optional = true }
 
 [dev-dependencies]
 traccia.workspace = true
@@ -36,3 +38,7 @@ traccia.workspace = true
 [[example]]
 name = "js"
 required-features = ["js"]
+
+[[example]]
+name = "lua"
+required-features = ["lua"]

@@ -1,0 +1,5 @@
+{
+  "runtime.version": "Lua 5.4",
+  "workspace.library": ["assets/karna.lua"],
+  "workspace.ignoreDir": ["vendor", "target"]
+}

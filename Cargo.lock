@@ -241,7 +241,8 @@ name = "karna"
 version = "0.1.0"
 dependencies = [
  "karna-engine",
- "karna-js",
+ "karna-js-scripting",
+ "karna-lua-scripting",
  "karna-math",
  "karna-nostd",
  "karna-sdl3",
@@ -274,7 +275,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "karna-js"
+name = "karna-js-scripting"
 version = "0.1.0"
 dependencies = [
  "karna-engine",
@@ -284,6 +285,35 @@ dependencies = [
  "karna-scripting",
  "karna-sdl3",
  "traccia",
+]
+
+[[package]]
+name = "karna-lua"
+version = "0.1.0"
+dependencies = [
+ "karna-lua-sys",
+]
+
+[[package]]
+name = "karna-lua-scripting"
+version = "0.1.0"
+dependencies = [
+ "karna-engine",
+ "karna-lua",
+ "karna-math",
+ "karna-nostd",
+ "karna-scripting",
+ "karna-sdl3",
+ "traccia",
+]
+
+[[package]]
+name = "karna-lua-sys"
+version = "0.1.0"
+dependencies = [
+ "bindgen",
+ "cc",
+ "pkg-config",
 ]
 
 [[package]]

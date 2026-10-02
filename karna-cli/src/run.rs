@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use karna::App;
-use karna::JsWindowBuilderExt;
 use karna::SceneId;
 use karna::WindowBuilder;
 use nostd::log::SdlTarget;

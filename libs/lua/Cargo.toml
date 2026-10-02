@@ -1,6 +1,5 @@
 [package]
-name = "karna-js-scripting"
-description = "JavaScript scripting for the karna engine"
+name = "karna-lua-scripting"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,22 +7,22 @@ repository.workspace = true
 authors.workspace = true
 
 [lib]
-name = "js_scripting"
+name = "lua_scripting"
 path = "src/lib.rs"
 
 [features]
 default = ["build-from-source"]
 build-from-source = [
     "karna-engine/build-from-source",
-    "karna-quickjs/build-from-source",
+    "karna-lua/build-from-source",
     "karna-sdl3/build-from-source",
 ]
 
 [dependencies]
 karna-engine.workspace = true
+karna-lua.workspace = true
 karna-math.workspace = true
-karna-quickjs.workspace = true
-karna-sdl3.workspace = true
 karna-nostd.workspace = true
 karna-scripting.workspace = true
+karna-sdl3.workspace = true
 traccia.workspace = true

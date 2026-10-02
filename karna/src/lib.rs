@@ -34,9 +34,14 @@ pub use sdl3::render::Color;
 pub use sdl3::window::FullscreenMode;
 
 #[cfg(feature = "js")]
-pub use js::JsScene;
+pub use js_scripting::JsScene;
 #[cfg(feature = "js")]
-pub use js::JsWindowBuilderExt;
+pub use js_scripting::JsWindowBuilderExt;
+
+#[cfg(feature = "lua")]
+pub use lua_scripting::LuaScene;
+#[cfg(feature = "lua")]
+pub use lua_scripting::LuaWindowBuilderExt;
 
 pub mod input {
     pub use engine::input::InputHandle;

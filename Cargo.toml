@@ -16,16 +16,19 @@ karna-math = { version = "0.1.0", path = "libs/math" }
 karna-engine = { version = "0.1.0", path = "libs/engine", default-features = false }
 karna-utils = { version = "0.1.0", path = "libs/utils" }
 karna-nostd = { version = "0.1.0", path = "libs/nostd" }
-karna-js = { version = "0.1.0", path = "libs/js", default-features = false }
+karna-js-scripting = { version = "0.1.0", path = "libs/js", default-features = false }
+karna-lua-scripting = { version = "0.1.0", path = "libs/lua", default-features = false }
 karna-scripting = { version = "0.1.0", path = "libs/scripting" }
 
 karna-sdl3 = { version = "0.1.0", path = "wrappers/sdl3", default-features = false }
 karna-quickjs = { version = "0.1.0", path = "wrappers/quickjs", default-features = false }
+karna-lua = { version = "0.1.0", path = "wrappers/lua", default-features = false }
 
 karna-sdl3-sys = { version = "0.1.0", path = "sys/sdl3-sys", default-features = false }
 karna-sdl3-image-sys = { version = "0.1.0", path = "sys/sdl3-image-sys", default-features = false }
 karna-sdl3-mixer-sys = { version = "0.1.0", path = "sys/sdl3-mixer-sys", default-features = false }
 karna-sdl3-shadercross-sys = { version = "0.1.0", path = "sys/sdl3-shadercross-sys", default-features = false }
 karna-quickjs-sys = { version = "0.1.0", path = "sys/quickjs-sys", default-features = false }
+karna-lua-sys = { version = "0.1.0", path = "sys/lua-sys", default-features = false }
 
 traccia = { version = "4.1.1", default-features = false }
