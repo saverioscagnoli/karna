@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use karna::App;
+use karna::JsWindowBuilderExt;
 use karna::SceneId;
 use karna::WindowBuilder;
-use karna::WindowBuilderExt;
 use nostd::log::SdlTarget;
 
 const MAIN: SceneId = SceneId::new_str("main");

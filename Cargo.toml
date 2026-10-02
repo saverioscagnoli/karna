@@ -17,6 +17,7 @@ karna-engine = { version = "0.1.0", path = "libs/engine", default-features = fal
 karna-utils = { version = "0.1.0", path = "libs/utils" }
 karna-nostd = { version = "0.1.0", path = "libs/nostd" }
 karna-js = { version = "0.1.0", path = "libs/js", default-features = false }
+karna-scripting = { version = "0.1.0", path = "libs/scripting" }
 
 karna-sdl3 = { version = "0.1.0", path = "wrappers/sdl3", default-features = false }
 karna-quickjs = { version = "0.1.0", path = "wrappers/quickjs", default-features = false }

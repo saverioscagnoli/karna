@@ -1,72 +1,58 @@
 #![no_std]
 
 mod api;
-mod host;
 
-use core::cell::RefCell;
 use core::mem::ManuallyDrop;
-use core::ptr::NonNull;
+use core::ptr;
+
+use nostd::alloc::format;
+use nostd::alloc::string::String;
+use nostd::alloc::string::ToString;
+use nostd::fs;
+use quickjs as qjs;
 
 use engine::builder::WindowBuilder;
-use engine::context::DrawContext;
-use engine::context::LoadContext;
-use engine::context::UpdateContext;
-use engine::render::Draw;
-use engine::render::Layer;
-use engine::scene::BoxedScene;
-use engine::scene::Scene;
 use engine::scene::SceneId;
 use nostd::alloc::boxed::Box;
-use nostd::alloc::format;
 use nostd::alloc::rc::Rc;
-use nostd::alloc::string::String;
 use nostd::path::Path;
 use nostd::path::PathBuf;
-use quickjs::Context;
-use quickjs::Error;
-use quickjs::FromJs;
-use quickjs::Persistent;
-use quickjs::Runtime;
-use sdl3::render::Color;
-use traccia::error;
+use scripting::Hook;
+use scripting::Host;
+use scripting::Lang;
+use scripting::ScriptScene;
 use traccia::info;
 
 use crate::api::Api;
-use crate::host::Frame;
-use crate::host::Host;
-use crate::host::Lent;
 
 pub const TYPES: &str = include_str!("../../../assets/karna.d.ts");
 
-pub struct JsScene {
-    // All of these borrow the runtime behind `rt`; `Drop` frees them first.
+pub struct Js {
     api: Option<Api<'static>>,
-    module: Option<Persistent<'static>>,
-    scene: Option<Persistent<'static>>,
-    js: ManuallyDrop<Context<'static>>,
-    rt: NonNull<Runtime>,
-
-    host: Rc<Host>,
-    path: PathBuf,
-    error: Option<String>,
+    module: Option<qjs::Persistent<'static>>,
+    scene: Option<qjs::Persistent<'static>>,
+    js: ManuallyDrop<qjs::Context<'static>>,
+    rt: ptr::NonNull<qjs::Runtime>,
 }
 
-impl JsScene {
-    pub fn from_path(ctx: &mut LoadContext, path: impl AsRef<Path>) -> Self {
-        Self::open(ctx.assets.root(), path).start(ctx)
+impl Lang for Js {
+    type Error = qjs::Error;
+    const ENTRY: &'static str = "main.js";
+
+    fn host_error(e: scripting::HostError) -> Self::Error {
+        qjs::Error::custom(e.to_string())
     }
 
-    pub fn open(root: &Path, path: impl AsRef<Path>) -> Self {
-        let path = root.join(path);
-
-        let rt = Box::new(Runtime::new().expect("failed to create a JS runtime"));
-        let rt = NonNull::from(Box::leak(rt));
-        let js = Context::new(unsafe { rt.as_ref() }).expect("failed to create a JS context");
+    fn open(path: &Path, host: &Rc<scripting::Host<Self>>) -> Result<Self, Self::Error> {
+        let rt = Box::new(qjs::Runtime::new()?);
+        let rt = ptr::NonNull::from(Box::leak(rt));
+        let js = qjs::Context::new(unsafe { rt.as_ref() })
+            .inspect_err(|_| unsafe { drop(Box::from_raw(rt.as_ptr())) })?;
 
         unsafe { rt.as_ref() }.set_module_loader(|name| {
-            nostd::fs::read(name)
+            fs::read(name)
                 .map(|blob| String::from_utf8_lossy(&blob).into_owned())
-                .map_err(Error::custom)
+                .map_err(qjs::Error::custom)
         });
 
         let mut this = Self {
@@ -75,49 +61,29 @@ impl JsScene {
             scene: None,
             js: ManuallyDrop::new(js),
             rt,
-            host: Rc::new(Host::default()),
-            path,
-            error: None,
         };
 
-        match api::install(&this.js, &this.host) {
-            Ok(api) => this.api = Some(api),
-            Err(e) => {
-                this.fail("installing the karna API", e);
-                return this;
-            }
-        }
+        // From here on, Drop cleans up this if ? bails out
+        this.api = Some(api::install(&this.js, host)?);
 
-        let source = match nostd::fs::read(&this.path) {
-            Ok(blob) => String::from_utf8_lossy(&blob).into_owned(),
-            Err(e) => {
-                this.fail("loading", Error::custom(e));
-                return this;
-            }
-        };
+        let source = fs::read(path)
+            .map(|blob| String::from_utf8_lossy(&blob).into_owned())
+            .map_err(qjs::Error::custom)?;
 
-        info!("Running script {}", this.path);
+        info!("Running script {path}");
 
-        let module = this
-            .js
-            .eval_module(&source, this.path.as_str())
-            .map(|module| this.js.persist(module));
+        let module = this.js.eval_module(&source, path.as_str())?;
+        this.module = Some(this.js.persist(module));
 
-        match module {
-            Ok(module) => this.module = Some(module),
-            Err(e) => this.fail("the module", e),
-        }
-
-        this
+        Ok(this)
     }
 
-    pub fn configure(&mut self, builder: WindowBuilder) -> WindowBuilder {
+    fn configure(&mut self, mut b: WindowBuilder) -> Result<WindowBuilder, Self::Error> {
         let Some(module) = &self.module else {
-            return builder;
+            return Ok(b);
         };
 
         let js = &*self.js;
-
         let fields = (|| {
             let window = module.get(js).get("window")?;
 
@@ -126,15 +92,15 @@ impl JsScene {
             }
 
             if !window.is_object() {
-                return Err(Error::Type(format!(
+                return Err(qjs::Error::Type(format!(
                     "the `window` export must be a karna.WindowBuilder, got {}",
-                    window.type_name()
+                    window.type_name(),
                 )));
             }
 
-            fn field<T: FromJs>(window: &quickjs::Value<'_>, name: &str) -> Result<T, Error> {
+            fn field<T: qjs::FromJs>(window: &qjs::Value<'_>, name: &str) -> Result<T, qjs::Error> {
                 T::from_js(&window.get(name)?).map_err(|e| match e {
-                    Error::Type(msg) => Error::Type(format!("window.{name}: {msg}")),
+                    qjs::Error::Type(msg) => qjs::Error::Type(format!("window.{name}: {msg}")),
                     e => e,
                 })
             }
@@ -147,201 +113,76 @@ impl JsScene {
             )))
         })();
 
-        let (title, width, height, resizable) = match fields {
-            Ok(Some(fields)) => fields,
-            Ok(None) => return builder,
-            Err(e) => {
-                self.fail("the window export", e);
-                return builder;
-            }
+        let Some((title, width, height, resizable)) = fields? else {
+            return Ok(b);
         };
 
-        let mut builder = builder;
-
         if let Some(title) = title {
-            builder = builder.with_title(title);
+            b = b.with_title(title);
         }
 
         if width.is_some() || height.is_some() {
-            let size = builder.size;
-            builder = builder.with_size((width.unwrap_or(size.w()), height.unwrap_or(size.h())));
+            let size = b.size;
+            b = b.with_size((width.unwrap_or(size.w()), height.unwrap_or(size.h())));
         }
 
         if let Some(resizable) = resizable {
-            builder = builder.with_resizable(resizable);
+            b = b.with_resizable(resizable);
         }
 
-        builder
+        Ok(b)
     }
 
-    pub fn start(mut self, ctx: &mut LoadContext) -> Self {
+    fn start(&mut self) -> Result<(), Self::Error> {
         let Some(module) = &self.module else {
-            return self;
-        };
-
-        let frame = Frame::new(
-            Lent::Mut(&mut ctx.window),
-            Lent::Mut(&mut ctx.time),
-            &ctx.input,
-            Lent::Mut(ctx.assets),
-            Some(&mut ctx.audio),
-            None,
-        );
-
-        let js = &*self.js;
-        let rt = unsafe { self.rt.as_ref() };
-
-        let scene = self.host.enter(frame, || {
-            let export = module.get(js).get("default")?;
-
-            // A class is instantiated; a plain object is the scene itself.
-            let scene = if export.is_function() {
-                export.construct(&[])?
-            } else if export.is_object() {
-                export
-            } else {
-                return Err(Error::custom(
-                    "the script must `export default` a scene class or object",
-                ));
-            };
-
-            let scene = js.persist(scene);
-            rt.run_jobs()?;
-
-            Ok(scene)
-        });
-
-        match scene {
-            Ok(scene) => self.scene = Some(scene),
-            Err(e) => {
-                self.fail("the module", e);
-                return self;
-            }
-        }
-
-        self.call(frame, "load");
-        self
-    }
-
-    pub fn error(&self) -> Option<&str> {
-        self.error.as_deref()
-    }
-
-    fn call(&mut self, frame: Frame, name: &str) {
-        if let Err(e) = self.invoke(frame, name, None) {
-            self.fail(name, e);
-        }
-    }
-
-    fn invoke(
-        &self,
-        frame: Frame,
-        name: &str,
-        arg: Option<&Persistent<'static>>,
-    ) -> Result<(), Error> {
-        let (None, Some(scene)) = (&self.error, &self.scene) else {
             return Ok(());
         };
 
         let js = &*self.js;
-        let rt = unsafe { self.rt.as_ref() };
+        let export = module.get(js).get("default")?;
 
-        self.host.enter(frame, || {
-            let scene = scene.get(js);
-            let method = scene.get(name)?;
-
-            if method.is_function() {
-                let arg = arg.map(|a| a.get(js));
-                method.call_with(&scene, arg.as_slice())?;
-            }
-
-            rt.run_jobs()
-        })
-    }
-
-    fn fail(&mut self, what: &str, e: Error) {
-        let msg = format!("{}: error in {what}: {e}", self.path);
-        error!("{msg}");
-        self.error = Some(msg);
-    }
-
-    fn draw_error(&self, draw: &mut Draw) {
-        let Some(msg) = &self.error else {
-            return;
+        let scene = if export.is_function() {
+            export.construct(&[])?
+        } else if export.is_object() {
+            export
+        } else {
+            return Err(qjs::Error::custom(
+                "the script must `export default` a scene class or object",
+            ));
         };
 
-        let (layer, color) = (draw.layer(), draw.color());
+        self.scene = Some(js.persist(scene));
 
-        draw.with_layer(Layer::UI).set_color(Color::RED);
-        draw.print(msg, 10.0, 10.0);
-        draw.with_layer(layer).set_color(color);
-    }
-}
-
-impl Scene for JsScene {
-    fn load(ctx: &mut LoadContext) -> Self {
-        Self::from_path(ctx, "main.js")
+        unsafe { self.rt.as_ref() }.run_jobs()
     }
 
-    fn unload(&mut self, ctx: &mut LoadContext) {
-        let frame = Frame::new(
-            Lent::Mut(&mut ctx.window),
-            Lent::Mut(&mut ctx.time),
-            &ctx.input,
-            Lent::Mut(ctx.assets),
-            Some(&mut ctx.audio),
-            None,
-        );
+    fn call(&mut self, hook: Hook) -> Result<(), Self::Error> {
+        let Some(scene) = &self.scene else {
+            return Ok(());
+        };
 
-        self.call(frame, "unload");
-    }
+        let (name, arg) = match hook {
+            Hook::Load => ("load", None),
+            Hook::Unload => ("unload", None),
+            Hook::FixedUpdate => ("fixedUpdate", None),
+            Hook::Update => ("update", None),
+            Hook::Draw => ("draw", self.api.as_ref().map(|api| &api.graphics)),
+        };
 
-    fn fixed_update(&mut self, ctx: &mut UpdateContext) {
-        let frame = Frame::new(
-            Lent::Mut(&mut ctx.window),
-            Lent::Mut(&mut ctx.time),
-            &ctx.input,
-            Lent::Mut(ctx.assets),
-            Some(&mut ctx.audio),
-            None,
-        );
-        self.call(frame, "fixedUpdate");
-    }
+        let js = &*self.js;
+        let scene = scene.get(js);
+        let method = scene.get(name)?;
 
-    fn update(&mut self, ctx: &mut UpdateContext) {
-        let frame = Frame::new(
-            Lent::Mut(&mut ctx.window),
-            Lent::Mut(&mut ctx.time),
-            &ctx.input,
-            Lent::Mut(ctx.assets),
-            Some(&mut ctx.audio),
-            None,
-        );
-
-        self.call(frame, "update");
-    }
-
-    fn draw(&mut self, ctx: &mut DrawContext, draw: &mut Draw) {
-        let frame = Frame::new(
-            Lent::Ref(ctx.window),
-            Lent::Ref(ctx.time),
-            ctx.input,
-            Lent::Ref(ctx.assets),
-            None,
-            Some(&mut *draw),
-        );
-
-        let graphics = self.api.as_ref().map(|api| &api.graphics);
-
-        if let Err(e) = self.invoke(frame, "draw", graphics) {
-            self.fail("draw", e);
+        if method.is_function() {
+            let arg = arg.map(|a| a.get(js));
+            method.call_with(&scene, arg.as_slice())?;
         }
 
-        self.draw_error(draw);
+        unsafe { self.rt.as_ref() }.run_jobs()
     }
 }
 
-impl Drop for JsScene {
+impl Drop for Js {
     fn drop(&mut self) {
         unsafe {
             self.scene = None;
@@ -353,34 +194,19 @@ impl Drop for JsScene {
     }
 }
 
-pub trait WindowBuilderExt {
+pub type JsHost = Host<Js>;
+pub type JsScene = ScriptScene<Js>;
+
+pub trait JsWindowBuilderExt {
     fn with_js_scene(self, id: SceneId, path: impl Into<PathBuf>) -> Self;
-    fn with_js_entry(self, root: impl AsRef<Path>, id: SceneId, path: impl Into<PathBuf>) -> Self;
 }
 
-impl WindowBuilderExt for WindowBuilder {
+impl JsWindowBuilderExt for WindowBuilder {
     fn with_js_scene(self, id: SceneId, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
 
         self.with_scene_fn(id, move |ctx| {
-            Box::new(JsScene::from_path(ctx, &path)) as BoxedScene
-        })
-    }
-
-    fn with_js_entry(self, root: impl AsRef<Path>, id: SceneId, path: impl Into<PathBuf>) -> Self {
-        let path = path.into();
-        let mut scene = JsScene::open(root.as_ref(), &path);
-        let builder = scene.configure(self);
-
-        let opened = RefCell::new(Some(scene));
-
-        builder.with_scene_fn(id, move |ctx| {
-            let scene = opened
-                .borrow_mut()
-                .take()
-                .unwrap_or_else(|| JsScene::open(ctx.assets.root(), &path));
-
-            Box::new(scene.start(ctx)) as BoxedScene
+            Box::new(JsScene::from_path(ctx, &path))
         })
     }
 }

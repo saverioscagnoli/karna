@@ -26,7 +26,7 @@ use traccia::info;
 use traccia::trace;
 use traccia::warn;
 
-use crate::host::Host;
+use crate::JsHost;
 
 struct ImageRef(Handle<Image>);
 struct AudioRef(Handle<Audio>);
@@ -181,7 +181,7 @@ karna.FullscreenMode = Object.freeze({
 });
 "#;
 
-pub(crate) fn install<'rt>(ctx: &Context<'rt>, host: &Rc<Host>) -> Result<Api<'rt>, Error> {
+pub(crate) fn install<'rt>(ctx: &Context<'rt>, host: &Rc<JsHost>) -> Result<Api<'rt>, Error> {
     let karna = ctx.object()?;
 
     karna.set("Key", keys(ctx)?)?;
@@ -234,7 +234,7 @@ fn log<'c>(ctx: &'c Context<'_>, name: &str, sink: fn(&str)) -> Result<Value<'c>
     })
 }
 
-fn window<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error> {
+fn window<'c>(ctx: &'c Context<'_>, host: &Rc<JsHost>) -> Result<Value<'c>, Error> {
     let obj = ctx.object()?;
 
     let h = Rc::clone(&host);
@@ -416,7 +416,7 @@ fn window<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error>
     Ok(obj)
 }
 
-fn time<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error> {
+fn time<'c>(ctx: &'c Context<'_>, host: &Rc<JsHost>) -> Result<Value<'c>, Error> {
     let obj = ctx.object()?;
 
     let h = Rc::clone(&host);
@@ -481,7 +481,7 @@ fn present_mode(i: u32) -> Result<PresentMode, Error> {
         .ok_or_else(|| Error::Type(format!("{i} is not a karna.PresentMode")))
 }
 
-fn input<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error> {
+fn input<'c>(ctx: &'c Context<'_>, host: &Rc<JsHost>) -> Result<Value<'c>, Error> {
     let obj = ctx.object()?;
 
     let h = Rc::clone(&host);
@@ -564,7 +564,7 @@ fn present_modes<'c>(ctx: &'c Context<'_>) -> Result<Value<'c>, Error> {
     Ok(obj)
 }
 
-fn assets<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error> {
+fn assets<'c>(ctx: &'c Context<'_>, host: &Rc<JsHost>) -> Result<Value<'c>, Error> {
     let obj = ctx.object()?;
 
     let h = Rc::clone(&host);
@@ -590,7 +590,7 @@ fn assets<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error>
     Ok(obj)
 }
 
-fn audio<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error> {
+fn audio<'c>(ctx: &'c Context<'_>, host: &Rc<JsHost>) -> Result<Value<'c>, Error> {
     let obj = ctx.object()?;
 
     let h = Rc::clone(&host);
@@ -615,7 +615,7 @@ fn audio<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error> 
     Ok(obj)
 }
 
-fn graphics<'c>(ctx: &'c Context<'_>, host: &Rc<Host>) -> Result<Value<'c>, Error> {
+fn graphics<'c>(ctx: &'c Context<'_>, host: &Rc<JsHost>) -> Result<Value<'c>, Error> {
     let obj = ctx.object()?;
 
     let h = Rc::clone(&host);

@@ -21,8 +21,9 @@ build-from-source = [
 
 [dependencies]
 karna-engine.workspace = true
+karna-math.workspace = true
 karna-quickjs.workspace = true
 karna-sdl3.workspace = true
 karna-nostd.workspace = true
-karna-math.workspace = true
+karna-scripting.workspace = true
 traccia.workspace = true

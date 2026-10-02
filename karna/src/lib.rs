@@ -36,7 +36,7 @@ pub use sdl3::window::FullscreenMode;
 #[cfg(feature = "js")]
 pub use js::JsScene;
 #[cfg(feature = "js")]
-pub use js::WindowBuilderExt;
+pub use js::JsWindowBuilderExt;
 
 pub mod input {
     pub use engine::input::InputHandle;
