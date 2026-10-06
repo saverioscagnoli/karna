@@ -7,6 +7,7 @@ extern crate std;
 
 pub mod collections;
 pub mod fs;
+pub mod json;
 pub mod log;
 pub mod mem;
 pub mod path;

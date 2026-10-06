@@ -202,6 +202,36 @@ impl AssetServer {
         self.images.bake(bytes.to_vec())
     }
 
+    pub fn add_spritesheet(&mut self, sheet: Spritesheet) -> Handle<Spritesheet> {
+        self.spritesheets.add(sheet)
+    }
+
+    #[track_caller]
+    pub fn spritesheet(&self, handle: Handle<Spritesheet>) -> &Spritesheet {
+        self.spritesheets
+            .get(handle)
+            .unwrap_or_else(|| panic!("Spritesheet {:?} not found", handle))
+    }
+
+    #[track_caller]
+    pub fn spritesheet_mut(&mut self, handle: Handle<Spritesheet>) -> &mut Spritesheet {
+        self.spritesheets
+            .get_mut(handle)
+            .unwrap_or_else(|| panic!("Spritesheet {:?} not found", handle))
+    }
+
+    pub fn try_spritesheet(&self, handle: Handle<Spritesheet>) -> Option<&Spritesheet> {
+        self.spritesheets.get(handle)
+    }
+
+    pub fn try_spritesheet_mut(&mut self, handle: Handle<Spritesheet>) -> Option<&mut Spritesheet> {
+        self.spritesheets.get_mut(handle)
+    }
+
+    pub fn remove_spritesheet(&mut self, handle: Handle<Spritesheet>) -> Option<Spritesheet> {
+        self.spritesheets.remove(handle)
+    }
+
     pub fn load_audio<P>(&mut self, path: P) -> Handle<Audio>
     where
         P: AsRef<Path>,

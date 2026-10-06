@@ -1,10 +1,5 @@
-use core::ops::Range;
-use core::time::Duration;
-
-use nostd::alloc::rc::Rc;
-use nostd::alloc::vec::Vec;
 use nostd::collections::Handle;
-use nostd::collections::HashMap;
+use traccia::init;
 use utils::Label;
 
 use crate::assets::Image;
@@ -47,4 +42,33 @@ pub struct Sprite {
     spritesheet: Handle<Spritesheet>,
     current: Label,
     elapsed: f32,
+}
+
+impl Sprite {
+    pub fn new(spritesheet: Handle<Spritesheet>, initial: Label) -> Self {
+        Self {
+            spritesheet,
+            current: initial,
+            elapsed: 0.0,
+        }
+    }
+
+    pub fn play(&mut self, name: Label) {
+        if name != self.current {
+            self.current = name;
+            self.elapsed = 0.0;
+        }
+    }
+
+    pub fn restart(&mut self) {
+        self.elapsed = 0.0;
+    }
+
+    pub fn update(&mut self, dt: f32) {
+        self.elapsed += dt;
+    }
+
+    pub fn current(&self) -> Label {
+        self.current
+    }
 }
