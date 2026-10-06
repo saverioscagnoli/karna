@@ -3,6 +3,7 @@ mod draw;
 mod frustum;
 mod layer;
 mod renderer;
+mod sprite;
 mod vertex;
 
 pub use camera::*;
@@ -10,4 +11,5 @@ pub use draw::*;
 pub use frustum::*;
 pub use layer::*;
 pub use renderer::*;
+pub use sprite::*;
 pub use vertex::*;

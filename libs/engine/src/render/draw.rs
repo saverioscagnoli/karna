@@ -289,7 +289,15 @@ impl<'a> Draw<'a> {
             return;
         };
 
-        self.image_region(&img, x, y, img.width() as f32, img.height() as f32);
+        self.image_uv(
+            &img,
+            img.uv_min(),
+            img.uv_max(),
+            x,
+            y,
+            img.width() as f32,
+            img.height() as f32,
+        );
     }
 
     pub fn image_v<P>(&mut self, image: Handle<Image>, pos: P)
@@ -306,7 +314,7 @@ impl<'a> Draw<'a> {
             return;
         };
 
-        self.image_region(&img, x, y, w, h);
+        self.image_uv(&img, img.uv_min(), img.uv_max(), x, y, w, h);
     }
 
     pub fn image_sized_v<P, S>(&mut self, image: Handle<Image>, pos: P, size: S)
@@ -318,6 +326,64 @@ impl<'a> Draw<'a> {
         let size = size.into();
 
         self.image_sized(image, pos.x, pos.y, size.w(), size.h());
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn image_region(
+        &mut self,
+        image: Handle<Image>,
+        sx: f32,
+        sy: f32,
+        sw: f32,
+        sh: f32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    ) {
+        let Some(img) = self.lookup(image) else {
+            return;
+        };
+
+        let (min, max) = (img.uv_min(), img.uv_max());
+        let (iw, ih) = (img.width() as f32, img.height() as f32);
+        let uv = |px: f32, py: f32| {
+            math::vec2!(
+                min.x + (max.x - min.x) * (px / iw).clamp(0.0, 1.0),
+                min.y + (max.y - min.y) * (py / ih).clamp(0.0, 1.0)
+            )
+        };
+
+        self.image_uv(&img, uv(sx, sy), uv(sx + sw, sy + sh), x, y, w, h);
+    }
+
+    pub fn image_region_v<P, Q, R, S>(
+        &mut self,
+        image: Handle<Image>,
+        src_pos: P,
+        src_size: Q,
+        pos: R,
+        size: S,
+    ) where
+        P: Into<math::Vector2<f32>>,
+        Q: Into<math::Size<f32>>,
+        R: Into<math::Vector2<f32>>,
+        S: Into<math::Size<f32>>,
+    {
+        let (src_pos, src_size) = (src_pos.into(), src_size.into());
+        let (pos, size) = (pos.into(), size.into());
+
+        self.image_region(
+            image,
+            src_pos.x,
+            src_pos.y,
+            src_size.w(),
+            src_size.h(),
+            pos.x,
+            pos.y,
+            size.w(),
+            size.h(),
+        );
     }
 
     pub fn text(&mut self, text: &Text, x: f32, y: f32) {
@@ -385,8 +451,17 @@ impl<'a> Draw<'a> {
         }
     }
 
-    fn image_region(&mut self, img: &Image, x: f32, y: f32, w: f32, h: f32) {
-        let (min, max) = (img.uv_min(), img.uv_max());
+    #[allow(clippy::too_many_arguments)]
+    fn image_uv(
+        &mut self,
+        img: &Image,
+        min: Vector2<f32>,
+        max: Vector2<f32>,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    ) {
         let uvs = [
             min,
             math::vec2!(max.x, min.y),

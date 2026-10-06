@@ -4,6 +4,7 @@ mod geometry;
 mod image;
 mod material;
 mod packer;
+mod sprite;
 mod worker;
 
 use core::cell::Ref;
@@ -32,6 +33,7 @@ use traccia::info;
 
 use crate::assets::geometry::GeometryRegistry;
 use crate::assets::material::MaterialRegistry;
+use crate::assets::sprite::SpritesheetRegistry;
 use crate::assets::worker::worker;
 
 use crate::mesh::Geometry;
@@ -49,6 +51,8 @@ pub use crate::assets::audio::AudioKind;
 pub use crate::assets::audio::AudioRegistry;
 pub use crate::assets::image::Image;
 pub use crate::assets::image::ImageRegistry;
+pub use crate::assets::sprite::SpriteAnimation;
+pub use crate::assets::sprite::Spritesheet;
 pub use crate::assets::worker::AssetThreadPool;
 
 pub enum AssetKind {
@@ -138,6 +142,7 @@ pub struct AssetServer {
     requests: AssetQueue,
     responses: Receiver<AssetResponse>,
     images: ImageRegistry,
+    spritesheets: SpritesheetRegistry,
     audios: AudioRegistry,
     geometries: GeometryRegistry,
     materials: MaterialRegistry,
@@ -156,6 +161,7 @@ impl AssetServer {
             requests: AssetQueue::new(requests),
             responses,
             images: ImageRegistry::new(device.share()),
+            spritesheets: SpritesheetRegistry::default(),
             audios: AudioRegistry::default(),
             geometries: GeometryRegistry::new(device.share()),
             materials: MaterialRegistry::new(),
