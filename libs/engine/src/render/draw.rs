@@ -9,10 +9,12 @@ use sdl3::render::Color;
 
 use crate::assets::AssetServer;
 use crate::assets::Image;
+use crate::assets::SpriteFrame;
 use crate::render::ImmediateVertex;
 use crate::render::Layer;
 use crate::render::LayerData;
 use crate::render::LayerMap;
+use crate::render::Sprite;
 use crate::text::Text;
 use crate::text::TextLayout;
 use crate::text::TextStyle;
@@ -345,16 +347,7 @@ impl<'a> Draw<'a> {
             return;
         };
 
-        let (min, max) = (img.uv_min(), img.uv_max());
-        let (iw, ih) = (img.width() as f32, img.height() as f32);
-        let uv = |px: f32, py: f32| {
-            math::vec2!(
-                min.x + (max.x - min.x) * (px / iw).clamp(0.0, 1.0),
-                min.y + (max.y - min.y) * (py / ih).clamp(0.0, 1.0)
-            )
-        };
-
-        self.image_uv(&img, uv(sx, sy), uv(sx + sw, sy + sh), x, y, w, h);
+        self.region(&img, [sx, sy, sw, sh], x, y, w, h);
     }
 
     pub fn image_region_v<P, Q, R, S>(
@@ -384,6 +377,46 @@ impl<'a> Draw<'a> {
             size.w(),
             size.h(),
         );
+    }
+
+    pub fn sprite(&mut self, sprite: &Sprite, x: f32, y: f32) {
+        let Some((img, frame, _)) = self.sprite_frame(sprite) else {
+            return;
+        };
+
+        self.sprite_region(&img, frame, x, y, 1.0, 1.0);
+    }
+
+    pub fn sprite_v<P>(&mut self, sprite: &Sprite, pos: P)
+    where
+        P: Into<math::Vector2<f32>>,
+    {
+        let pos = pos.into();
+
+        self.sprite(sprite, pos.x, pos.y);
+    }
+
+    pub fn sprite_sized(&mut self, sprite: &Sprite, x: f32, y: f32, w: f32, h: f32) {
+        let Some((img, frame, [fw, fh])) = self.sprite_frame(sprite) else {
+            return;
+        };
+
+        if fw == 0 || fh == 0 {
+            return;
+        }
+
+        self.sprite_region(&img, frame, x, y, w / fw as f32, h / fh as f32);
+    }
+
+    pub fn sprite_sized_v<P, S>(&mut self, sprite: &Sprite, pos: P, size: S)
+    where
+        P: Into<math::Vector2<f32>>,
+        S: Into<math::Size<f32>>,
+    {
+        let pos = pos.into();
+        let size = size.into();
+
+        self.sprite_sized(sprite, pos.x, pos.y, size.w(), size.h());
     }
 
     pub fn text(&mut self, text: &Text, x: f32, y: f32) {
@@ -470,6 +503,45 @@ impl<'a> Draw<'a> {
         ];
 
         self.quad(corners(x, y, w, h), uvs, img.page(), self.color_vec());
+    }
+
+    fn sprite_frame(&self, sprite: &Sprite) -> Option<(Image, SpriteFrame, [u32; 2])> {
+        let sheet = self.assets.try_spritesheet(sprite.spritesheet())?;
+        let anim = sprite.animation(sheet)?;
+        let index = sprite.frame(sheet)?;
+        let img = self.lookup(anim.image(sheet))?;
+        let frame = anim.frame(sheet, index, img.width(), img.height())?;
+        let size = anim.size(sheet, img.width(), img.height());
+
+        Some((img, frame, size))
+    }
+
+    fn sprite_region(&mut self, img: &Image, frame: SpriteFrame, x: f32, y: f32, sx: f32, sy: f32) {
+        let [rx, ry, rw, rh] = frame.rect.map(|v| v as f32);
+        let [ox, oy] = frame.offset.map(|v| v as f32);
+
+        self.region(
+            img,
+            [rx, ry, rw, rh],
+            x + ox * sx,
+            y + oy * sy,
+            rw * sx,
+            rh * sy,
+        );
+    }
+
+    fn region(&mut self, img: &Image, src: [f32; 4], x: f32, y: f32, w: f32, h: f32) {
+        let [sx, sy, sw, sh] = src;
+        let (min, max) = (img.uv_min(), img.uv_max());
+        let (iw, ih) = (img.width() as f32, img.height() as f32);
+        let uv = |px: f32, py: f32| {
+            math::vec2!(
+                min.x + (max.x - min.x) * (px / iw).clamp(0.0, 1.0),
+                min.y + (max.y - min.y) * (py / ih).clamp(0.0, 1.0)
+            )
+        };
+
+        self.image_uv(img, uv(sx, sy), uv(sx + sw, sy + sh), x, y, w, h);
     }
 
     #[inline]

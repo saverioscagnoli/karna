@@ -1,8 +1,8 @@
 use nostd::collections::Handle;
-use traccia::init;
 use utils::Label;
 
 use crate::assets::Image;
+use crate::assets::SpriteAnimation;
 use crate::assets::Spritesheet;
 use crate::render::Draw;
 
@@ -40,35 +40,60 @@ impl StaticSprite {
 #[derive(Debug, Clone, Copy)]
 pub struct Sprite {
     spritesheet: Handle<Spritesheet>,
-    current: Label,
+    current: Option<Label>,
     elapsed: f32,
 }
 
 impl Sprite {
-    pub fn new(spritesheet: Handle<Spritesheet>, initial: Label) -> Self {
+    pub fn new(spritesheet: Handle<Spritesheet>) -> Self {
         Self {
             spritesheet,
-            current: initial,
+            current: None,
             elapsed: 0.0,
         }
     }
 
+    #[inline]
+    pub fn spritesheet(&self) -> Handle<Spritesheet> {
+        self.spritesheet
+    }
+
+    #[inline]
     pub fn play(&mut self, name: Label) {
-        if name != self.current {
-            self.current = name;
+        if self.current != Some(name) {
+            self.current = Some(name);
             self.elapsed = 0.0;
         }
     }
 
+    #[inline]
     pub fn restart(&mut self) {
         self.elapsed = 0.0;
     }
 
+    #[inline]
     pub fn update(&mut self, dt: f32) {
         self.elapsed += dt;
     }
 
-    pub fn current(&self) -> Label {
+    #[inline]
+    pub fn current(&self) -> Option<Label> {
         self.current
+    }
+
+    #[inline]
+    pub fn animation(&self, sheet: &Spritesheet) -> Option<SpriteAnimation> {
+        sheet.animation(self.current)
+    }
+
+    #[inline]
+    pub fn frame(&self, sheet: &Spritesheet) -> Option<u32> {
+        self.animation(sheet)?.frame_at(self.elapsed)
+    }
+
+    #[inline]
+    pub fn is_finished(&self, sheet: &Spritesheet) -> bool {
+        self.animation(sheet)
+            .is_some_and(|a| a.finished_at(self.elapsed))
     }
 }

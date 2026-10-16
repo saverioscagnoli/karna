@@ -52,6 +52,7 @@ pub use crate::assets::audio::AudioRegistry;
 pub use crate::assets::image::Image;
 pub use crate::assets::image::ImageRegistry;
 pub use crate::assets::sprite::SpriteAnimation;
+pub use crate::assets::sprite::SpriteFrame;
 pub use crate::assets::sprite::Spritesheet;
 pub use crate::assets::worker::AssetThreadPool;
 

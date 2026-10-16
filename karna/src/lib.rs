@@ -2,6 +2,9 @@
 
 pub use engine::App;
 pub use engine::assets::Audio;
+pub use engine::assets::SpriteAnimation;
+pub use engine::assets::SpriteFrame;
+pub use engine::assets::Spritesheet;
 pub use engine::builder::AppBuilder;
 pub use engine::builder::WindowBuilder;
 pub use engine::context::DrawContext;
@@ -17,6 +20,8 @@ pub use engine::render::Camera;
 pub use engine::render::Draw;
 pub use engine::render::Layer;
 pub use engine::render::Projection;
+pub use engine::render::Sprite;
+pub use engine::render::StaticSprite;
 pub use engine::scene::Scene;
 pub use engine::scene::SceneHandle;
 pub use engine::scene::SceneId;
