@@ -4,7 +4,6 @@ use std::fmt::format;
 use std::time::Duration;
 
 use karna::prelude::*;
-use sdl3::window;
 
 const DEMO_SCENE: SceneId = SceneId::new_str("DEMO");
 
@@ -96,10 +95,10 @@ impl Scene for DemoScene {
         draw.set_color(Color::WHITE);
         draw.image(self.pcb, 600.0, 100.0);
 
-        draw.with_layer(Layer::UI)
-            .with_color(Color::WHITE)
-            .with_thickness(3.0)
-            .rect_outline(0.0, 400.0, 1280.0, 32.0);
+        draw.set_layer(Layer::UI);
+        draw.set_color(Color::WHITE);
+        draw.set_thickness(3.0);
+        draw.rect_outline(0.0, 400.0, 1280.0, 32.0);
 
         draw.set_color(Color::WHITE);
         draw.text(&self.dt_text, 10.0, 10.0);
@@ -109,10 +108,10 @@ impl Scene for DemoScene {
         draw.set_color(Color::CYAN);
         draw.text(&self.jbmono_text, 10.0, 50.0);
 
-        draw.text_style_mut().set_font(self.jbmono);
+        draw.set_text_style_font(self.jbmono);
         draw.print("AAAAAAAAAAA", 400.0, 100.0);
 
-        draw.text_style_mut().set_font(ctx.assets.debug_font());
+        draw.set_text_style_font(ctx.assets.debug_font());
         draw.set_color(Color::MAGENTA);
 
         draw.print("Debug font!\n(with a sexy new line!)", 400.0, 120.0);

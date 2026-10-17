@@ -91,11 +91,11 @@ impl<L: Lang> ScriptScene<L> {
             return;
         };
 
-        let (layer, color) = (draw.layer(), draw.color());
-
-        draw.with_layer(Layer::UI).set_color(Color::RED);
-        draw.print(msg, 10.0, 10.0);
-        draw.with_layer(layer).set_color(color);
+        draw.scoped(|d| {
+            d.set_layer(Layer::UI);
+            d.set_color(Color::RED);
+            d.print(msg, 10.0, 10.0);
+        });
     }
 }
 

@@ -6,6 +6,7 @@ use math::Vector4;
 use nostd::alloc::vec::Vec;
 use nostd::collections::Handle;
 use sdl3::render::Color;
+use traccia::warn;
 
 use crate::assets::AssetServer;
 use crate::assets::Image;
@@ -15,18 +16,120 @@ use crate::render::Layer;
 use crate::render::LayerData;
 use crate::render::LayerMap;
 use crate::render::Sprite;
+use crate::text::Font;
 use crate::text::Text;
 use crate::text::TextLayout;
 use crate::text::TextStyle;
 
+#[derive(Debug, Clone, Copy)]
+pub struct Affine2 {
+    a: f32,
+    b: f32,
+    c: f32,
+    d: f32,
+    tx: f32,
+    ty: f32,
+}
+
+impl Affine2 {
+    pub const IDENTITY: Self = Self {
+        a: 1.0,
+        b: 0.0,
+        c: 0.0,
+        d: 1.0,
+        tx: 0.0,
+        ty: 0.0,
+    };
+
+    pub fn apply(&self, p: math::Vector2<f32>) -> math::Vector2<f32> {
+        math::vec2!(
+            self.a * p.x + self.c * p.y + self.tx,
+            self.b * p.x + self.d * p.y + self.ty
+        )
+    }
+
+    pub fn translate(&mut self, x: f32, y: f32) {
+        self.tx += self.a * x + self.c * y;
+        self.ty += self.b * x + self.d * y;
+    }
+
+    pub fn rotate(&mut self, rad: f32) {
+        let (s, c) = (rad.sdl_sin(), rad.sdl_cos());
+        let (a, b, cc, d) = (self.a, self.b, self.c, self.d);
+
+        self.a = a * c + cc * s;
+        self.b = b * c + d * s;
+        self.c = cc * c - a * s;
+        self.d = d * c - b * s;
+    }
+
+    pub fn scale(&mut self, sx: f32, sy: f32) {
+        self.a *= sx;
+        self.b *= sx;
+        self.c *= sy;
+        self.d *= sy;
+    }
+
+    #[inline]
+    pub fn is_translation(&self) -> bool {
+        self.a == 1.0 && self.b == 0.0 && self.c == 0.0 && self.d == 1.0
+    }
+}
+
+#[inline]
+fn vertex(
+    t: &Affine2,
+    p: Vector2<f32>,
+    color: Vector4<f32>,
+    uv: Vector2<f32>,
+    page: u32,
+) -> ImmediateVertex {
+    let p = t.apply(p);
+    ImmediateVertex {
+        position: math::vec3!(p.x, p.y, 0.0),
+        color,
+        uv,
+        page: page as f32,
+    }
+}
+
+#[inline]
+fn color_vec(color: Color) -> Vector4<f32> {
+    let [r, g, b, a] = color.array();
+    math::vec4!(r, g, b, a)
+}
+
+#[inline]
+fn corners(x: f32, y: f32, w: f32, h: f32) -> [Vector2<f32>; 4] {
+    [
+        math::vec2!(x, y),
+        math::vec2!(x + w, y),
+        math::vec2!(x + w, y + h),
+        math::vec2!(x, y + h),
+    ]
+}
+
+/// Segment count scaled by circumference, roughly one segment per 4px.
+#[inline]
+fn segments(radius: f32) -> u32 {
+    ((TAU * radius.sdl_abs() / 4.0) as u32).clamp(12, 128)
+}
+
+#[derive(Debug, Clone, Copy)]
+struct DrawState {
+    transform: Affine2,
+    layer: Layer,
+    color: Color,
+    thickness: f32,
+    text_style: TextStyle,
+}
+
 pub struct Draw<'a> {
     data: &'a mut LayerMap<LayerData>,
     assets: &'a AssetServer,
-    layer: Layer,
-    color: Color,
     white: Image,
-    thickness: f32,
-    text_style: TextStyle,
+    state: DrawState,
+    stack: Vec<DrawState>,
 }
 
 impl<'a> Draw<'a> {
@@ -39,37 +142,68 @@ impl<'a> Draw<'a> {
         Self {
             data,
             assets,
-            layer: Layer::WORLD,
-            color: Color::WHITE,
             white,
-            thickness: 1.0,
-            text_style: TextStyle::default(),
+            state: DrawState {
+                transform: Affine2::IDENTITY,
+                layer: Layer::WORLD,
+                color: Color::WHITE,
+                thickness: 1.0,
+                text_style: TextStyle::default(),
+            },
+            stack: Vec::new(),
         }
+    }
+
+    #[inline]
+    pub fn push(&mut self) {
+        self.stack.push(self.state);
+    }
+
+    #[inline]
+    pub fn pop(&mut self) {
+        match self.stack.pop() {
+            Some(s) => self.state = s,
+            None => warn!("Draw::pop with empty stack"),
+        }
+    }
+
+    #[inline]
+    pub fn translate(&mut self, x: f32, y: f32) {
+        self.state.transform.translate(x, y);
+    }
+
+    #[inline]
+    pub fn rotate(&mut self, rad: f32) {
+        self.state.transform.rotate(rad);
+    }
+
+    #[inline]
+    pub fn scale(&mut self, sx: f32, sy: f32) {
+        self.state.transform.scale(sx, sy);
+    }
+
+    #[inline]
+    pub fn reset_transform(&mut self) {
+        self.state.transform = Affine2::IDENTITY;
     }
 
     #[inline]
     pub fn layer(&self) -> Layer {
-        self.layer
+        self.state.layer
     }
 
     #[inline]
     pub fn set_layer(&mut self, layer: Layer) {
-        self.layer = layer;
-    }
-
-    #[inline]
-    pub fn with_layer(&mut self, layer: Layer) -> &mut Self {
         if !self.data.contains(layer) {
             self.data.insert(layer, LayerData::default());
         }
 
-        self.layer = layer;
-        self
+        self.state.layer = layer;
     }
 
     #[inline]
     pub fn color(&self) -> Color {
-        self.color
+        self.state.color
     }
 
     #[inline]
@@ -77,55 +211,65 @@ impl<'a> Draw<'a> {
     where
         C: Into<Color>,
     {
-        self.color = color.into();
-    }
-
-    #[inline]
-    pub fn with_color<C>(&mut self, color: C) -> &mut Self
-    where
-        C: Into<Color>,
-    {
-        self.color = color.into();
-        self
+        self.state.color = color.into();
     }
 
     #[inline]
     pub fn thickness(&self) -> f32 {
-        self.thickness
+        self.state.thickness
     }
 
     #[inline]
     pub fn set_thickness(&mut self, t: f32) {
-        self.thickness = t;
+        self.state.thickness = t;
     }
 
     #[inline]
-    pub fn with_thickness(&mut self, t: f32) -> &mut Self {
-        self.thickness = t;
-        self
-    }
-
-    #[inline]
-    pub fn text_style(&self) -> &TextStyle {
-        &self.text_style
-    }
-
-    #[inline]
-    pub fn text_style_mut(&mut self) -> &mut TextStyle {
-        &mut self.text_style
+    pub fn text_style(&self) -> TextStyle {
+        self.state.text_style
     }
 
     #[inline]
     pub fn set_text_style(&mut self, style: TextStyle) {
-        self.text_style = style;
+        self.state.text_style = style;
     }
 
     #[inline]
-    pub fn with_text_style(&mut self, style: TextStyle) -> &mut Self {
-        self.text_style = style;
-        self
+    pub fn set_text_style_font(&mut self, font: Handle<Font>) {
+        self.state.text_style.font = Some(font);
     }
 
+    #[inline]
+    pub fn set_text_style_size(&mut self, size: f32) {
+        self.state.text_style.size = Some(size);
+    }
+
+    #[inline]
+    pub fn set_text_style_line_heigth(&mut self, h: f32) {
+        self.state.text_style.line_height = h;
+    }
+
+    #[inline]
+    pub fn set_text_style_bold(&mut self, b: bool) {
+        self.state.text_style.bold = b;
+    }
+
+    #[inline]
+    pub fn set_text_style_italic(&mut self, i: bool) {
+        self.state.text_style.italic = i;
+    }
+
+    pub fn scoped<F, R>(&mut self, f: F) -> R
+    where
+        F: FnOnce(&mut Self) -> R,
+    {
+        self.push();
+        let r = f(self);
+        self.pop();
+        r
+    }
+
+    #[inline]
     pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
         self.line_v([x1, y1], [x2, y2]);
     }
@@ -137,7 +281,7 @@ impl<'a> Draw<'a> {
     {
         let p1 = p1.into();
         let p2 = p2.into();
-        let n = (p2 - p1).normalize().perp() * (self.thickness * 0.5);
+        let n = (p2 - p1).normalize().perp() * (self.state.thickness * 0.5);
 
         self.solid_quad([p1 + n, p2 + n, p2 - n, p1 - n]);
     }
@@ -158,7 +302,7 @@ impl<'a> Draw<'a> {
     }
 
     pub fn rect_outline(&mut self, x: f32, y: f32, w: f32, h: f32) {
-        let t = self.thickness.sdl_min(w * 0.5).sdl_min(h * 0.5);
+        let t = self.state.thickness.sdl_min(w * 0.5).sdl_min(h * 0.5);
 
         self.rect(x, y, w, t);
         self.rect(x, y + h - t, w, t);
@@ -207,11 +351,12 @@ impl<'a> Draw<'a> {
 
         let (uv, page) = self.solid();
         let color = self.color_vec();
-        let d = &mut self.data[self.layer];
+        let t = self.state.transform;
+        let d = &mut self.data[self.state.layer];
         let base = d.vertices.len() as u32;
 
         d.vertices
-            .extend(points.iter().map(|p| vertex(*p, color, uv, page)));
+            .extend(points.iter().map(|p| vertex(&t, *p, color, uv, page)));
 
         for i in 1..points.len() as u32 - 1 {
             d.indices.extend_from_slice(&[base, base + i, base + i + 1]);
@@ -222,15 +367,17 @@ impl<'a> Draw<'a> {
         let n = segments(radius);
         let (uv, page) = self.solid();
         let color = self.color_vec();
-        let d = &mut self.data[self.layer];
+        let t = self.state.transform;
+        let d = &mut self.data[self.state.layer];
         let center = d.vertices.len() as u32;
 
-        d.vertices.push(vertex(math::vec2!(x, y), color, uv, page));
+        d.vertices
+            .push(vertex(&t, math::vec2!(x, y), color, uv, page));
 
         for i in 0..n {
             let p = Vector2::from_angle(i as f32 * TAU / n as f32) * radius;
             d.vertices
-                .push(vertex(math::vec2!(x + p.x, y + p.y), color, uv, page));
+                .push(vertex(&t, math::vec2!(x + p.x, y + p.y), color, uv, page));
         }
 
         for i in 0..n {
@@ -251,10 +398,11 @@ impl<'a> Draw<'a> {
 
     pub fn circle_outline(&mut self, x: f32, y: f32, radius: f32) {
         let n = segments(radius);
-        let inner = (radius - self.thickness).sdl_max(0.0);
+        let inner = (radius - self.state.thickness).sdl_max(0.0);
         let (uv, page) = self.solid();
         let color = self.color_vec();
-        let d = &mut self.data[self.layer];
+        let t = self.state.transform;
+        let d = &mut self.data[self.state.layer];
         let base = d.vertices.len() as u32;
 
         // Interleaved ring: outer, inner, outer, inner, ...
@@ -263,9 +411,9 @@ impl<'a> Draw<'a> {
             let o = dir * radius;
             let r = dir * inner;
             d.vertices
-                .push(vertex(math::vec2!(x + o.x, y + o.y), color, uv, page));
+                .push(vertex(&t, math::vec2!(x + o.x, y + o.y), color, uv, page));
             d.vertices
-                .push(vertex(math::vec2!(x + r.x, y + r.y), color, uv, page));
+                .push(vertex(&t, math::vec2!(x + r.x, y + r.y), color, uv, page));
         }
 
         for i in 0..n {
@@ -436,7 +584,9 @@ impl<'a> Draw<'a> {
     where
         S: AsRef<str>,
     {
-        let layout = self.assets.layout_str(text.as_ref(), &self.text_style);
+        let layout = self
+            .assets
+            .layout_str(text.as_ref(), &self.state.text_style);
         self.glyphs(&layout, x, y);
     }
 
@@ -461,9 +611,9 @@ impl<'a> Draw<'a> {
             };
 
             let color = if glyph.colored {
-                Color::rgba(1.0, 1.0, 1.0, self.color.a())
+                Color::rgba(1.0, 1.0, 1.0, self.state.color.a())
             } else {
-                glyph.color.unwrap_or(self.color)
+                glyph.color.unwrap_or(self.state.color)
             };
 
             let size = glyph.size.cast::<f32>();
@@ -561,7 +711,7 @@ impl<'a> Draw<'a> {
 
     #[inline]
     fn color_vec(&self) -> Vector4<f32> {
-        color_vec(self.color)
+        color_vec(self.state.color)
     }
 
     #[inline]
@@ -578,44 +728,13 @@ impl<'a> Draw<'a> {
         page: u32,
         color: Vector4<f32>,
     ) {
-        let d = &mut self.data[self.layer];
+        let t = self.state.transform;
+        let d = &mut self.data[self.state.layer];
         let b = d.vertices.len() as u32;
 
         d.vertices
-            .extend((0..4).map(|i| vertex(p[i], color, uv[i], page)));
+            .extend((0..4).map(|i| vertex(&t, p[i], color, uv[i], page)));
         d.indices
             .extend_from_slice(&[b, b + 1, b + 2, b, b + 2, b + 3]);
     }
-}
-
-#[inline]
-fn vertex(p: Vector2<f32>, color: Vector4<f32>, uv: Vector2<f32>, page: u32) -> ImmediateVertex {
-    ImmediateVertex {
-        position: math::vec3!(p.x, p.y, 0.0),
-        color,
-        uv,
-        page: page as f32,
-    }
-}
-
-#[inline]
-fn color_vec(color: Color) -> Vector4<f32> {
-    let [r, g, b, a] = color.array();
-    math::vec4!(r, g, b, a)
-}
-
-#[inline]
-fn corners(x: f32, y: f32, w: f32, h: f32) -> [Vector2<f32>; 4] {
-    [
-        math::vec2!(x, y),
-        math::vec2!(x + w, y),
-        math::vec2!(x + w, y + h),
-        math::vec2!(x, y + h),
-    ]
-}
-
-/// Segment count scaled by circumference, roughly one segment per 4px.
-#[inline]
-fn segments(radius: f32) -> u32 {
-    ((TAU * radius.sdl_abs() / 4.0) as u32).clamp(12, 128)
 }

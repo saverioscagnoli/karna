@@ -643,7 +643,7 @@ fn graphics<'c>(ctx: &'c Context<'_>, host: &Rc<JsHost>) -> Result<Value<'c>, Er
         };
 
         h.draw(|d| {
-            d.with_layer(layer);
+            d.set_layer(layer);
         })
     })?;
 

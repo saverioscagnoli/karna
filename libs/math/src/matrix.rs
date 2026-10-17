@@ -9,6 +9,7 @@ use num_traits::Num;
 use crate::SdlFloat;
 use crate::Vector;
 use crate::Vector3;
+use crate::Vector4;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -386,5 +387,89 @@ impl<T: Num + SdlFloat> Matrix4<T> {
         m[3][1] = -u.dot(eye);
         m[3][2] = -f.dot(eye);
         m
+    }
+}
+
+impl<T: Num + Copy + Neg<Output = T>> Matrix4<T> {
+    pub fn det(&self) -> T {
+        let a = &self.0;
+        let s0 = a[0][0] * a[1][1] - a[1][0] * a[0][1];
+        let s1 = a[0][0] * a[1][2] - a[1][0] * a[0][2];
+        let s2 = a[0][0] * a[1][3] - a[1][0] * a[0][3];
+        let s3 = a[0][1] * a[1][2] - a[1][1] * a[0][2];
+        let s4 = a[0][1] * a[1][3] - a[1][1] * a[0][3];
+        let s5 = a[0][2] * a[1][3] - a[1][2] * a[0][3];
+        let c5 = a[2][2] * a[3][3] - a[3][2] * a[2][3];
+        let c4 = a[2][1] * a[3][3] - a[3][1] * a[2][3];
+        let c3 = a[2][1] * a[3][2] - a[3][1] * a[2][2];
+        let c2 = a[2][0] * a[3][3] - a[3][0] * a[2][3];
+        let c1 = a[2][0] * a[3][2] - a[3][0] * a[2][2];
+        let c0 = a[2][0] * a[3][1] - a[3][0] * a[2][1];
+        s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0
+    }
+
+    /// Returns None if the matrix is singular.
+    pub fn inverse(&self) -> Option<Self> {
+        let a = &self.0;
+
+        let s0 = a[0][0] * a[1][1] - a[1][0] * a[0][1];
+        let s1 = a[0][0] * a[1][2] - a[1][0] * a[0][2];
+        let s2 = a[0][0] * a[1][3] - a[1][0] * a[0][3];
+        let s3 = a[0][1] * a[1][2] - a[1][1] * a[0][2];
+        let s4 = a[0][1] * a[1][3] - a[1][1] * a[0][3];
+        let s5 = a[0][2] * a[1][3] - a[1][2] * a[0][3];
+
+        let c5 = a[2][2] * a[3][3] - a[3][2] * a[2][3];
+        let c4 = a[2][1] * a[3][3] - a[3][1] * a[2][3];
+        let c3 = a[2][1] * a[3][2] - a[3][1] * a[2][2];
+        let c2 = a[2][0] * a[3][3] - a[3][0] * a[2][3];
+        let c1 = a[2][0] * a[3][2] - a[3][0] * a[2][2];
+        let c0 = a[2][0] * a[3][1] - a[3][0] * a[2][1];
+
+        let det = s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0;
+        if det == T::zero() {
+            return None;
+        }
+        let inv = T::one() / det;
+
+        let mut b = Self::zero();
+        b[0][0] = (a[1][1] * c5 - a[1][2] * c4 + a[1][3] * c3) * inv;
+        b[0][1] = (-a[0][1] * c5 + a[0][2] * c4 - a[0][3] * c3) * inv;
+        b[0][2] = (a[3][1] * s5 - a[3][2] * s4 + a[3][3] * s3) * inv;
+        b[0][3] = (-a[2][1] * s5 + a[2][2] * s4 - a[2][3] * s3) * inv;
+
+        b[1][0] = (-a[1][0] * c5 + a[1][2] * c2 - a[1][3] * c1) * inv;
+        b[1][1] = (a[0][0] * c5 - a[0][2] * c2 + a[0][3] * c1) * inv;
+        b[1][2] = (-a[3][0] * s5 + a[3][2] * s2 - a[3][3] * s1) * inv;
+        b[1][3] = (a[2][0] * s5 - a[2][2] * s2 + a[2][3] * s1) * inv;
+
+        b[2][0] = (a[1][0] * c4 - a[1][1] * c2 + a[1][3] * c0) * inv;
+        b[2][1] = (-a[0][0] * c4 + a[0][1] * c2 - a[0][3] * c0) * inv;
+        b[2][2] = (a[3][0] * s4 - a[3][1] * s2 + a[3][3] * s0) * inv;
+        b[2][3] = (-a[2][0] * s4 + a[2][1] * s2 - a[2][3] * s0) * inv;
+
+        b[3][0] = (-a[1][0] * c3 + a[1][1] * c1 - a[1][2] * c0) * inv;
+        b[3][1] = (a[0][0] * c3 - a[0][1] * c1 + a[0][2] * c0) * inv;
+        b[3][2] = (-a[3][0] * s3 + a[3][1] * s1 - a[3][2] * s0) * inv;
+        b[3][3] = (a[2][0] * s3 - a[2][1] * s1 + a[2][2] * s0) * inv;
+
+        Some(b)
+    }
+
+    /// Multiplies by (x, y, z, w) and returns the raw 4D result (no divide).
+    pub fn transform4(&self, v: Vector4<T>) -> Vector4<T> {
+        let mut out = Vector4::zero();
+
+        for row in 0..4 {
+            let mut sum = T::zero();
+
+            for col in 0..4 {
+                sum = sum + self[col][row] * v[col];
+            }
+
+            out[row] = sum;
+        }
+
+        out
     }
 }

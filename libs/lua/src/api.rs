@@ -605,7 +605,7 @@ fn graphics<'l>(lua: &'l lua::Lua, host: &Rc<LuaHost>) -> Result<lua::Value<'l>,
         };
 
         h.draw(|d| {
-            d.with_layer(layer);
+            d.set_layer(layer);
         })
     })?;
 
