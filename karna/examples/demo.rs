@@ -23,7 +23,6 @@ impl Scene for DemoScene {
         Self: Sized,
     {
         let jbmono = ctx.assets.load_font("assets/jbmono.ttf");
-
         let j = ctx.assets.load_audio_stream("assets/joint-reasoning.mp3");
         let voice = ctx.audio.play(j);
 

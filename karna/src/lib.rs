@@ -36,6 +36,7 @@ pub use sdl3::gpu::CullMode;
 pub use sdl3::gpu::PresentMode;
 pub use sdl3::monitor::MonitorId;
 pub use sdl3::render::Color;
+pub use sdl3::rng::Rng;
 pub use sdl3::window::FullscreenMode;
 
 #[cfg(feature = "js")]

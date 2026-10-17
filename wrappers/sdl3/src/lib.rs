@@ -13,6 +13,7 @@ pub mod image;
 pub mod mixer;
 pub mod monitor;
 pub mod render;
+pub mod rng;
 #[cfg(feature = "shadercross")]
 pub mod shadercross;
 pub mod window;
