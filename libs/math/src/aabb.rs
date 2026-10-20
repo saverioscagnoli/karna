@@ -10,7 +10,7 @@ use crate::size;
 use crate::vec2;
 
 #[derive(Default)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Aabb<const N: usize, T: Num + Copy> {
     pub min: Vector<N, T>,
     pub max: Vector<N, T>,

@@ -2,6 +2,7 @@
 
 mod aabb;
 mod cast;
+mod interp;
 mod matrix;
 mod point;
 mod quaternion;
@@ -11,6 +12,7 @@ mod vector;
 
 pub use aabb::*;
 pub use cast::*;
+pub use interp::*;
 pub use matrix::*;
 pub use point::*;
 pub use quaternion::*;

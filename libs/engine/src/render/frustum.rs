@@ -1,3 +1,4 @@
+use math::Aabb3;
 use math::Matrix4;
 use math::Vector3;
 use math::Vector4;
@@ -21,7 +22,9 @@ impl Frustum {
         Self { planes }
     }
 
-    pub fn intersects_aabb(&self, min: Vector3<f32>, max: Vector3<f32>) -> bool {
+    pub fn intersects_aabb(&self, aabb: &Aabb3<f32>) -> bool {
+        let (min, max) = (aabb.min, aabb.max);
+
         self.planes.iter().all(|p| {
             let x = if p.x >= 0.0 { max.x } else { min.x };
             let y = if p.y >= 0.0 { max.y } else { min.y };
@@ -53,26 +56,26 @@ mod tests {
         Frustum::from_matrix(&projection.matmul(&view))
     }
 
-    fn cube(center: Vector3<f32>, half: f32) -> (Vector3<f32>, Vector3<f32>) {
-        (center - Vector3::splat(half), center + Vector3::splat(half))
+    fn cube(center: Vector3<f32>, half: f32) -> Aabb3<f32> {
+        Aabb3::from_center(center, Vector3::splat(half))
     }
 
     #[test]
     fn sees_what_is_in_front() {
         let f = camera();
-        let (min, max) = cube(math::vec3!(0.0, 0.0, 0.0), 1.0);
-        assert!(f.intersects_aabb(min, max));
+        let b = cube(math::vec3!(0.0, 0.0, 0.0), 1.0);
+        assert!(f.intersects_aabb(&b));
         assert!(f.intersects_sphere(math::vec3!(0.0, 0.0, 0.0), 1.0));
     }
 
     #[test]
     fn rejects_behind_and_beyond() {
         let f = camera();
-        let (min, max) = cube(math::vec3!(0.0, 0.0, -20.0), 1.0);
-        assert!(!f.intersects_aabb(min, max));
+        let b = cube(math::vec3!(0.0, 0.0, -20.0), 1.0);
+        assert!(!f.intersects_aabb(&b));
 
-        let (min, max) = cube(math::vec3!(0.0, 0.0, 200.0), 1.0);
-        assert!(!f.intersects_aabb(min, max));
+        let b = cube(math::vec3!(0.0, 0.0, 200.0), 1.0);
+        assert!(!f.intersects_aabb(&b));
     }
 
     #[test]
@@ -85,8 +88,8 @@ mod tests {
             math::vec3!(0.0, 100.0, 0.0),
             math::vec3!(0.0, -100.0, 0.0),
         ] {
-            let (min, max) = cube(c, 1.0);
-            assert!(!f.intersects_aabb(min, max));
+            let b = cube(c, 1.0);
+            assert!(!f.intersects_aabb(&b));
             assert!(!f.intersects_sphere(c, 1.0));
         }
     }
@@ -94,8 +97,8 @@ mod tests {
     #[test]
     fn keeps_boxes_straddling_an_edge() {
         let f = camera();
-        let (min, max) = cube(math::vec3!(9.0, 0.0, 0.0), 4.0);
-        assert!(f.intersects_aabb(min, max));
+        let b = cube(math::vec3!(9.0, 0.0, 0.0), 4.0);
+        assert!(f.intersects_aabb(&b));
     }
 
     #[test]

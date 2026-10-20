@@ -36,8 +36,8 @@ use crate::mesh::Mesh;
 use crate::render::Camera;
 use crate::render::Canvas;
 use crate::render::CanvasData;
-use crate::render::DrawCommand;
 use crate::render::Draw;
+use crate::render::DrawCommand;
 use crate::render::Frustum;
 use crate::render::ImmediateVertex;
 use crate::render::Layer;
@@ -138,8 +138,8 @@ fn cell_of(v: f32) -> i32 {
 }
 
 impl PreparedMesh {
-    fn bounds(&self) -> Bounds {
-        Bounds::sphere(self.center, self.radius)
+    fn bounds(&self) -> math::Aabb3<f32> {
+        math::Aabb3::from_center(self.center, math::Vector3::splat(self.radius))
     }
 
     fn cell(&self) -> Cell {
@@ -151,35 +151,12 @@ impl PreparedMesh {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct Bounds {
-    min: math::Vector3<f32>,
-    max: math::Vector3<f32>,
-}
-
-impl Bounds {
-    fn sphere(center: math::Vector3<f32>, radius: f32) -> Self {
-        let r = math::Vector3::splat(radius);
-        Self {
-            min: center - r,
-            max: center + r,
-        }
-    }
-
-    fn merge(self, other: Self) -> Self {
-        Self {
-            min: math::Vector3::min(&self.min, &other.min),
-            max: math::Vector3::max(&self.max, &other.max),
-        }
-    }
-}
-
 struct MeshRun {
     pipeline: usize,
     geometry: Handle<Geometry>,
     first_instance: u32,
     count: u32,
-    bounds: Bounds,
+    bounds: math::Aabb3<f32>,
 }
 
 fn push_runs<'a>(
@@ -199,7 +176,7 @@ fn push_runs<'a>(
             && run.geometry == mesh.geometry
         {
             run.count += 1;
-            run.bounds = run.bounds.merge(mesh.bounds());
+            run.bounds = run.bounds.union(&mesh.bounds());
             continue;
         }
 
@@ -413,7 +390,7 @@ struct Group {
     pipeline: usize,
     geometry: Handle<Geometry>,
     cell: Cell,
-    bounds: Option<Bounds>,
+    bounds: Option<math::Aabb3<f32>>,
     start: usize,
     capacity: usize,
     handles: Vec<Handle<Mesh>>,
@@ -512,9 +489,9 @@ impl MeshSlots {
         }
     }
 
-    fn grow(&mut self, group: usize, bounds: Bounds) {
+    fn grow(&mut self, group: usize, bounds: math::Aabb3<f32>) {
         let g = &mut self.groups[group];
-        let grown = g.bounds.map_or(bounds, |b| b.merge(bounds));
+        let grown = g.bounds.map_or(bounds, |b| b.union(&bounds));
 
         if g.bounds != Some(grown) {
             g.bounds = Some(grown);
@@ -764,9 +741,7 @@ impl MeshSlots {
                     geometry: g.geometry,
                     first_instance: g.start as u32,
                     count: g.handles.len() as u32,
-                    bounds: g
-                        .bounds
-                        .unwrap_or(Bounds::sphere(math::Vector3::zero(), 0.0)),
+                    bounds: g.bounds.unwrap_or_default(),
                 });
             }
 
@@ -1347,7 +1322,7 @@ impl Renderer {
                 let mut bound = usize::MAX;
 
                 for run in runs {
-                    if !frustum.intersects_aabb(run.bounds.min, run.bounds.max) {
+                    if !frustum.intersects_aabb(&run.bounds) {
                         continue;
                     }
 

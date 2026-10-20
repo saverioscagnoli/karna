@@ -7,16 +7,11 @@
 - [x] `Aabb` (2D and 3D) with intersection and penetration
 - [x] Math test coverage
 
-## In progress
-
-- [ ] Commit the math work (`aabb.rs`, tests, `Vector` `Ord` removal, `Matrix` `PartialEq`)
-- [ ] Restore or confirm deletion of `libs/math/.gitignore`
-- [ ] Run the `canvas`, `transform` and `collision` examples and check them on screen
 
 ## Collision
 
-- [ ] Use `Aabb3` in `Frustum::intersects_aabb`
-- [ ] Replace the private `Bounds` in `renderer.rs` with `Aabb3`
+- [x] Use `Aabb3` in `Frustum::intersects_aabb`
+- [x] Replace the private `Bounds` in `renderer.rs` with `Aabb3`
 - [ ] Move-and-collide helper (resolve x and y separately)
 - [ ] Broadphase: uniform grid for 2D
 - [ ] Raycast against `Aabb`
