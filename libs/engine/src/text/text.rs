@@ -89,6 +89,7 @@ impl TextStyle {
         self.line_height = line_height;
     }
 
+    #[inline]
     pub fn with_line_height(mut self, line_height: f32) -> Self {
         self.line_height = line_height;
         self
@@ -104,6 +105,7 @@ impl TextStyle {
         self.wrap = Some(wrap)
     }
 
+    #[inline]
     pub fn with_wrap(mut self, wrap: f32) -> Self {
         self.wrap = Some(wrap);
         self

@@ -27,12 +27,16 @@ use sdl3::shadercross::ShaderSource;
 use sdl3::window::Window;
 
 use crate::assets::AssetServer;
+use crate::assets::TextureAtlas;
 use crate::mesh::Geometry;
 use crate::mesh::Material;
 use crate::mesh::MaterialKey;
 use crate::mesh::MaterialUniform;
 use crate::mesh::Mesh;
 use crate::render::Camera;
+use crate::render::Canvas;
+use crate::render::CanvasData;
+use crate::render::DrawCommand;
 use crate::render::Draw;
 use crate::render::Frustum;
 use crate::render::ImmediateVertex;
@@ -40,6 +44,8 @@ use crate::render::Layer;
 use crate::render::LayerData;
 use crate::render::LayerMap;
 use crate::render::MeshVertex;
+use crate::render::Projection;
+use crate::render::TextureSource;
 use crate::scene::SceneData;
 
 const IMMEDIATE_VERT: &[u8] = include_bytes!("../../../../shaders/immediate.vert.spv");
@@ -99,6 +105,7 @@ struct Batch {
     first_index: u32,
     indices: u32,
     vertex_offset: i32,
+    commands: Range<usize>,
     retained: usize,
     opaque: Range<usize>,
     transparent: Range<usize>,
@@ -803,10 +810,31 @@ impl RetainedMeshes {
     }
 }
 
+fn source<'t>(
+    texture: TextureSource,
+    atlas: &'t TextureAtlas,
+    assets: &'t AssetServer,
+) -> Option<&'t Texture> {
+    match texture {
+        TextureSource::Atlas => Some(atlas.texture()),
+        TextureSource::Canvas(canvas) => assets.try_canvas(canvas).map(|c| &c.color),
+    }
+}
+
+struct CanvasBatch {
+    canvas: Handle<Canvas>,
+    clear: Option<Color>,
+    first_index: u32,
+    vertex_offset: i32,
+    commands: Range<usize>,
+}
+
 pub struct Renderer {
     device: Device,
     data: LayerMap<LayerData>,
+    canvases: HashMap<Handle<Canvas>, CanvasData>,
     pipeline: GraphicsPipeline,
+    canvas_pipeline: GraphicsPipeline,
     mesh_pipelines: MeshPipelines,
     sampler: Sampler,
     color_format: TextureFormat,
@@ -824,6 +852,8 @@ pub struct Renderer {
     instances: Vec<InstanceData>,
     runs: Vec<MeshRun>,
     batches: Vec<Batch>,
+    commands: Vec<DrawCommand>,
+    canvas_batches: Vec<CanvasBatch>,
 }
 
 impl Renderer {
@@ -839,6 +869,9 @@ impl Renderer {
 
         let pipeline = Self::immediate_pipeline(&device, shadercross, color_format, depth_format)
             .expect("Failed to create immediate pipeline");
+        let canvas_pipeline =
+            Self::immediate_pipeline(&device, shadercross, Canvas::format(), depth_format)
+                .expect("Failed to create canvas pipeline");
         let mesh_pipelines =
             Self::mesh_shaders(&device, shadercross).expect("Failed to create mesh shaders");
         let sampler = Sampler::new(device.share(), SamplerDesc::nearest());
@@ -863,7 +896,9 @@ impl Renderer {
         Self {
             device,
             data,
+            canvases: HashMap::default(),
             pipeline,
+            canvas_pipeline,
             mesh_pipelines,
             sampler,
             color_format,
@@ -881,6 +916,8 @@ impl Renderer {
             instances: Vec::new(),
             runs: Vec::new(),
             batches: Vec::new(),
+            commands: Vec::new(),
+            canvas_batches: Vec::new(),
         }
     }
 
@@ -950,11 +987,15 @@ impl Renderer {
 
     pub fn draw_handle<'a>(&'a mut self, assets: &'a AssetServer) -> Draw<'a> {
         for layer in self.data.values_mut() {
-            layer.vertices.clear();
-            layer.indices.clear();
+            layer.clear();
         }
 
-        Draw::new(&mut self.data, assets)
+        for canvas in self.canvases.values_mut() {
+            canvas.data.clear();
+            canvas.clear = None;
+        }
+
+        Draw::new(&mut self.data, &mut self.canvases, assets)
     }
 
     pub fn begin_frame(&mut self) {
@@ -964,6 +1005,8 @@ impl Renderer {
         self.instances.clear();
         self.runs.clear();
         self.batches.clear();
+        self.commands.clear();
+        self.canvas_batches.clear();
 
         self.retained.retain(|r| r.used);
 
@@ -1101,18 +1144,26 @@ impl Renderer {
             let first_run = self.runs.len();
             push_runs(&self.prepared[start..], &mut self.instances, &mut self.runs);
 
-            let (indices, vertices) = if immediate {
+            let (indices, vertices, commands) = if immediate {
                 let data = &self.data[layer];
-                (data.indices.as_slice(), data.vertices.as_slice())
+                (
+                    data.indices.as_slice(),
+                    data.vertices.as_slice(),
+                    data.commands.as_slice(),
+                )
             } else {
-                (&[][..], &[][..])
+                (&[][..], &[][..], &[][..])
             };
+
+            let first_command = self.commands.len();
+            self.commands.extend_from_slice(commands);
 
             self.batches.push(Batch {
                 camera,
                 first_index: self.indices.len() as u32,
                 indices: indices.len() as u32,
                 vertex_offset: self.vertices.len() as i32,
+                commands: first_command..self.commands.len(),
                 retained,
                 opaque: meshes.opaque_runs(layer),
                 transparent: first_run..self.runs.len(),
@@ -1120,6 +1171,26 @@ impl Renderer {
 
             self.vertices.extend_from_slice(vertices);
             self.indices.extend_from_slice(indices);
+        }
+
+        for (canvas, cd) in &self.canvases {
+            if cd.data.is_empty() && cd.clear.is_none() {
+                continue;
+            }
+
+            let first_command = self.commands.len();
+            self.commands.extend_from_slice(&cd.data.commands);
+
+            self.canvas_batches.push(CanvasBatch {
+                canvas: *canvas,
+                clear: cd.clear,
+                first_index: self.indices.len() as u32,
+                vertex_offset: self.vertices.len() as i32,
+                commands: first_command..self.commands.len(),
+            });
+
+            self.vertices.extend_from_slice(&cd.data.vertices);
+            self.indices.extend_from_slice(&cd.data.indices);
         }
     }
 
@@ -1218,6 +1289,41 @@ impl Renderer {
         let geometries = assets.geometries();
         let stride = core::mem::size_of::<InstanceData>() as u32;
 
+        for batch in &self.canvas_batches {
+            let Some(canvas) = assets.try_canvas(batch.canvas) else {
+                continue;
+            };
+
+            let load = batch.clear.map_or(LoadOp::Load, LoadOp::Clear);
+            let mut pass =
+                frame.render_pass_to_with_depth(&[(&canvas.color, load)], &canvas.depth, 1.0)?;
+            let projection = Projection::topleft_ortho(canvas.size()).matrix();
+
+            pass.bind_pipeline(&self.canvas_pipeline);
+            pass.bind_vertex_buffer(0, &self.vertex_buffer, 0);
+            pass.bind_index_buffer(&self.index_buffer, IndexSize::U32, 0);
+            pass.push_vertex_uniform(0, &projection);
+
+            for cmd in &self.commands[batch.commands.clone()] {
+                if cmd.texture == TextureSource::Canvas(batch.canvas) {
+                    continue;
+                }
+
+                let Some(texture) = source(cmd.texture, &atlas, assets) else {
+                    continue;
+                };
+
+                pass.bind_fragment_sampler(0, texture, &self.sampler);
+                pass.draw_indexed_instanced(
+                    cmd.count,
+                    1,
+                    batch.first_index + cmd.first_index,
+                    batch.vertex_offset,
+                    0,
+                );
+            }
+        }
+
         if self.batches.is_empty() {
             frame.render_pass_with_depth(LoadOp::Clear(clear_color), depth, 1.0)?;
         }
@@ -1285,15 +1391,22 @@ impl Renderer {
                 pass.bind_pipeline(&self.pipeline);
                 pass.bind_vertex_buffer(0, &self.vertex_buffer, 0);
                 pass.bind_index_buffer(&self.index_buffer, IndexSize::U32, 0);
-                pass.bind_fragment_sampler(0, atlas.texture(), &self.sampler);
                 pass.push_vertex_uniform(0, &view_projection);
-                pass.draw_indexed_instanced(
-                    batch.indices,
-                    1,
-                    batch.first_index,
-                    batch.vertex_offset,
-                    0,
-                );
+
+                for cmd in &self.commands[batch.commands.clone()] {
+                    let Some(texture) = source(cmd.texture, &atlas, assets) else {
+                        continue;
+                    };
+
+                    pass.bind_fragment_sampler(0, texture, &self.sampler);
+                    pass.draw_indexed_instanced(
+                        cmd.count,
+                        1,
+                        batch.first_index + cmd.first_index,
+                        batch.vertex_offset,
+                        0,
+                    );
+                }
             }
 
             draw_runs(

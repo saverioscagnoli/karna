@@ -5,17 +5,21 @@ use math::Vector2;
 use math::Vector4;
 use nostd::alloc::vec::Vec;
 use nostd::collections::Handle;
+use nostd::collections::HashMap;
 use sdl3::render::Color;
 use traccia::warn;
 
 use crate::assets::AssetServer;
 use crate::assets::Image;
 use crate::assets::SpriteFrame;
+use crate::render::Canvas;
+use crate::render::CanvasData;
 use crate::render::ImmediateVertex;
 use crate::render::Layer;
 use crate::render::LayerData;
 use crate::render::LayerMap;
 use crate::render::Sprite;
+use crate::render::TextureSource;
 use crate::text::Font;
 use crate::text::Text;
 use crate::text::TextLayout;
@@ -119,6 +123,7 @@ fn segments(radius: f32) -> u32 {
 struct DrawState {
     transform: Affine2,
     layer: Layer,
+    target: Option<Handle<Canvas>>,
     color: Color,
     thickness: f32,
     text_style: TextStyle,
@@ -126,6 +131,7 @@ struct DrawState {
 
 pub struct Draw<'a> {
     data: &'a mut LayerMap<LayerData>,
+    canvases: &'a mut HashMap<Handle<Canvas>, CanvasData>,
     assets: &'a AssetServer,
     white: Image,
     state: DrawState,
@@ -133,7 +139,11 @@ pub struct Draw<'a> {
 }
 
 impl<'a> Draw<'a> {
-    pub(crate) fn new(data: &'a mut LayerMap<LayerData>, assets: &'a AssetServer) -> Self {
+    pub(crate) fn new(
+        data: &'a mut LayerMap<LayerData>,
+        canvases: &'a mut HashMap<Handle<Canvas>, CanvasData>,
+        assets: &'a AssetServer,
+    ) -> Self {
         let images = assets.images();
         let white = images
             .resolve(images.white_texel)
@@ -141,11 +151,13 @@ impl<'a> Draw<'a> {
 
         Self {
             data,
+            canvases,
             assets,
             white,
             state: DrawState {
                 transform: Affine2::IDENTITY,
                 layer: Layer::WORLD,
+                target: None,
                 color: Color::WHITE,
                 thickness: 1.0,
                 text_style: TextStyle::default(),
@@ -352,7 +364,8 @@ impl<'a> Draw<'a> {
         let (uv, page) = self.solid();
         let color = self.color_vec();
         let t = self.state.transform;
-        let d = &mut self.data[self.state.layer];
+        let d = self.target();
+        let start = d.indices.len();
         let base = d.vertices.len() as u32;
 
         d.vertices
@@ -361,6 +374,8 @@ impl<'a> Draw<'a> {
         for i in 1..points.len() as u32 - 1 {
             d.indices.extend_from_slice(&[base, base + i, base + i + 1]);
         }
+
+        d.record(TextureSource::Atlas, start);
     }
 
     pub fn circle(&mut self, x: f32, y: f32, radius: f32) {
@@ -368,7 +383,8 @@ impl<'a> Draw<'a> {
         let (uv, page) = self.solid();
         let color = self.color_vec();
         let t = self.state.transform;
-        let d = &mut self.data[self.state.layer];
+        let d = self.target();
+        let start = d.indices.len();
         let center = d.vertices.len() as u32;
 
         d.vertices
@@ -385,6 +401,8 @@ impl<'a> Draw<'a> {
             d.indices
                 .extend_from_slice(&[center, center + 1 + i, center + 1 + next]);
         }
+
+        d.record(TextureSource::Atlas, start);
     }
 
     pub fn circle_v<P>(&mut self, pos: P, radius: f32)
@@ -402,7 +420,8 @@ impl<'a> Draw<'a> {
         let (uv, page) = self.solid();
         let color = self.color_vec();
         let t = self.state.transform;
-        let d = &mut self.data[self.state.layer];
+        let d = self.target();
+        let start = d.indices.len();
         let base = d.vertices.len() as u32;
 
         // Interleaved ring: outer, inner, outer, inner, ...
@@ -423,6 +442,8 @@ impl<'a> Draw<'a> {
             let i1 = o1 + 1;
             d.indices.extend_from_slice(&[o0, o1, i1, o0, i1, i0]);
         }
+
+        d.record(TextureSource::Atlas, start);
     }
 
     pub fn circle_outline_v<P>(&mut self, pos: P, radius: f32)
@@ -600,6 +621,73 @@ impl<'a> Draw<'a> {
         self.print(text, pos.x, pos.y);
     }
 
+    pub fn on_canvas<F>(&mut self, canvas: Handle<Canvas>, clear: Color, f: F)
+    where
+        F: FnOnce(&mut Self),
+    {
+        self.push();
+        self.state.target = Some(canvas);
+        self.state.transform = Affine2::IDENTITY;
+        self.canvases.entry(canvas).or_default().clear = Some(clear);
+        f(self);
+        self.pop();
+    }
+
+    pub fn canvas(&mut self, canvas: Handle<Canvas>, x: f32, y: f32) {
+        let Some(c) = self.assets.try_canvas(canvas) else {
+            return;
+        };
+
+        let size = c.size().cast::<f32>();
+
+        self.canvas_sized(canvas, x, y, size.w(), size.h());
+    }
+
+    pub fn canvas_v<P>(&mut self, canvas: Handle<Canvas>, pos: P)
+    where
+        P: Into<math::Vector2<f32>>,
+    {
+        let pos = pos.into();
+
+        self.canvas(canvas, pos.x, pos.y);
+    }
+
+    pub fn canvas_sized(&mut self, canvas: Handle<Canvas>, x: f32, y: f32, w: f32, h: f32) {
+        if self.state.target == Some(canvas) {
+            warn!("Cannot draw a canvas onto itself");
+            return;
+        }
+
+        if self.assets.try_canvas(canvas).is_none() {
+            return;
+        }
+
+        let uvs = [
+            math::vec2!(0.0, 0.0),
+            math::vec2!(1.0, 0.0),
+            math::vec2!(1.0, 1.0),
+            math::vec2!(0.0, 1.0),
+        ];
+
+        self.quad(
+            corners(x, y, w, h),
+            uvs,
+            0,
+            self.color_vec(),
+            TextureSource::Canvas(canvas),
+        );
+    }
+
+    pub fn canvas_sized_v<P, S>(&mut self, canvas: Handle<Canvas>, pos: P, size: S)
+    where
+        P: Into<math::Vector2<f32>>,
+        S: Into<math::Vector2<f32>>,
+    {
+        let (pos, size) = (pos.into(), size.into());
+
+        self.canvas_sized(canvas, pos.x, pos.y, size.x, size.y);
+    }
+
     // Internals
 
     fn glyphs(&mut self, layout: &TextLayout, x: f32, y: f32) {
@@ -630,6 +718,7 @@ impl<'a> Draw<'a> {
                 uvs,
                 image.page(),
                 color_vec(color),
+                TextureSource::Atlas,
             );
         }
     }
@@ -652,7 +741,13 @@ impl<'a> Draw<'a> {
             math::vec2!(min.x, max.y),
         ];
 
-        self.quad(corners(x, y, w, h), uvs, img.page(), self.color_vec());
+        self.quad(
+            corners(x, y, w, h),
+            uvs,
+            img.page(),
+            self.color_vec(),
+            TextureSource::Atlas,
+        );
     }
 
     fn sprite_frame(&self, sprite: &Sprite) -> Option<(Image, SpriteFrame, [u32; 2])> {
@@ -717,7 +812,7 @@ impl<'a> Draw<'a> {
     #[inline]
     fn solid_quad(&mut self, p: [Vector2<f32>; 4]) {
         let (uv, page) = self.solid();
-        self.quad(p, [uv; 4], page, self.color_vec());
+        self.quad(p, [uv; 4], page, self.color_vec(), TextureSource::Atlas);
     }
 
     #[inline]
@@ -727,14 +822,25 @@ impl<'a> Draw<'a> {
         uv: [Vector2<f32>; 4],
         page: u32,
         color: Vector4<f32>,
+        texture: TextureSource,
     ) {
         let t = self.state.transform;
-        let d = &mut self.data[self.state.layer];
+        let d = self.target();
+        let start = d.indices.len();
         let b = d.vertices.len() as u32;
 
         d.vertices
             .extend((0..4).map(|i| vertex(&t, p[i], color, uv[i], page)));
         d.indices
             .extend_from_slice(&[b, b + 1, b + 2, b, b + 2, b + 3]);
+        d.record(texture, start);
+    }
+
+    #[inline]
+    fn target(&mut self) -> &mut LayerData {
+        match self.state.target {
+            Some(canvas) => &mut self.canvases.entry(canvas).or_default().data,
+            None => &mut self.data[self.state.layer],
+        }
     }
 }

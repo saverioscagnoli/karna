@@ -18,6 +18,7 @@ use nostd::alloc::string::String;
 use nostd::alloc::sync::Arc;
 use nostd::alloc::vec::Vec;
 use nostd::collections::Handle;
+use nostd::collections::SlotMap;
 use nostd::path::Path;
 use nostd::path::PathBuf;
 use nostd::sync::Receiver;
@@ -38,6 +39,7 @@ use crate::assets::worker::worker;
 
 use crate::mesh::Geometry;
 use crate::mesh::Material;
+use crate::render::Canvas;
 use crate::text::Font;
 use crate::text::TextLayout;
 use crate::text::TextSpan;
@@ -142,7 +144,9 @@ pub struct AssetServer {
     root: PathBuf,
     requests: AssetQueue,
     responses: Receiver<AssetResponse>,
+    device: Device,
     images: ImageRegistry,
+    canvases: SlotMap<Canvas>,
     spritesheets: SpritesheetRegistry,
     audios: AudioRegistry,
     geometries: GeometryRegistry,
@@ -161,7 +165,9 @@ impl AssetServer {
             root,
             requests: AssetQueue::new(requests),
             responses,
+            device: device.share(),
             images: ImageRegistry::new(device.share()),
+            canvases: SlotMap::default(),
             spritesheets: SpritesheetRegistry::default(),
             audios: AudioRegistry::default(),
             geometries: GeometryRegistry::new(device.share()),
@@ -201,6 +207,25 @@ impl AssetServer {
 
     pub fn bake_image(&mut self, bytes: &[u8]) -> Handle<Image> {
         self.images.bake(bytes.to_vec())
+    }
+
+    pub fn add_canvas(&mut self, width: u32, height: u32) -> Handle<Canvas> {
+        self.canvases
+            .insert(Canvas::new(&self.device, width, height))
+    }
+
+    pub fn canvas(&self, handle: Handle<Canvas>) -> &Canvas {
+        self.canvases
+            .get(handle)
+            .expect("Failed to get canvas: invalid handle")
+    }
+
+    pub fn try_canvas(&self, handle: Handle<Canvas>) -> Option<&Canvas> {
+        self.canvases.get(handle)
+    }
+
+    pub fn remove_canvas(&mut self, handle: Handle<Canvas>) -> Option<Canvas> {
+        self.canvases.remove(handle)
     }
 
     pub fn add_spritesheet(&mut self, sheet: Spritesheet) -> Handle<Spritesheet> {

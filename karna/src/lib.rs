@@ -17,6 +17,7 @@ pub use engine::mesh::Shading;
 pub use engine::monitors::Monitor;
 pub use engine::monitors::Monitors;
 pub use engine::render::Camera;
+pub use engine::render::Canvas;
 pub use engine::render::Draw;
 pub use engine::render::Layer;
 pub use engine::render::Projection;

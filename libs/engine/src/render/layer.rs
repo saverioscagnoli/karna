@@ -2,9 +2,11 @@ use core::ops::Index;
 use core::ops::IndexMut;
 
 use nostd::alloc::vec::Vec;
+use nostd::collections::Handle;
 use nostd::collections::HashMap;
 use utils::fnv1a;
 
+use crate::render::Canvas;
 use crate::render::ImmediateVertex;
 
 #[derive(Hash)]
@@ -33,16 +35,56 @@ impl Default for Layer {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TextureSource {
+    Atlas,
+    Canvas(Handle<Canvas>),
+}
+
 #[derive(Default)]
 #[derive(Debug, Clone)]
 pub struct LayerData {
     pub vertices: Vec<ImmediateVertex>,
     pub indices: Vec<u32>,
+    pub commands: Vec<DrawCommand>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DrawCommand {
+    pub(crate) texture: TextureSource,
+    pub(crate) first_index: u32,
+    pub(crate) count: u32,
 }
 
 impl LayerData {
     pub fn is_empty(&self) -> bool {
         self.indices.is_empty()
+    }
+
+    pub fn clear(&mut self) {
+        self.vertices.clear();
+        self.indices.clear();
+        self.commands.clear();
+    }
+
+    pub(crate) fn record(&mut self, texture: TextureSource, start: usize) {
+        let first_index = start as u32;
+        let count = (self.indices.len() - start) as u32;
+
+        if count == 0 {
+            return;
+        }
+
+        match self.commands.last_mut() {
+            Some(c) if c.texture == texture && c.first_index + c.count == first_index => {
+                c.count += count;
+            }
+            _ => self.commands.push(DrawCommand {
+                texture,
+                first_index,
+                count,
+            }),
+        }
     }
 }
 

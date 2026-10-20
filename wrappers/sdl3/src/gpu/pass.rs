@@ -165,6 +165,30 @@ impl Frame {
         self.begin(&targets, None)
     }
 
+    pub fn render_pass_to_with_depth(
+        &mut self,
+        targets: &[(&Texture, LoadOp)],
+        depth: &Texture,
+        clear_depth: f32,
+    ) -> Result<RenderPass<'_>, SdlError> {
+        let targets: Vec<_> = targets
+            .iter()
+            .map(|(texture, load)| color_target(texture.raw(), *load))
+            .collect();
+        let depth = SDL_GPUDepthStencilTargetInfo {
+            texture: depth.raw(),
+            clear_depth,
+            load_op: SDL_GPU_LOADOP_CLEAR,
+            store_op: SDL_GPU_STOREOP_DONT_CARE,
+            stencil_load_op: SDL_GPU_LOADOP_DONT_CARE,
+            stencil_store_op: SDL_GPU_STOREOP_DONT_CARE,
+            cycle: true,
+            ..Default::default()
+        };
+
+        self.begin(&targets, Some(&depth))
+    }
+
     fn begin(
         &mut self,
         targets: &[SDL_GPUColorTargetInfo],

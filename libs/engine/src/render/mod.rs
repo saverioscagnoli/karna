@@ -1,4 +1,5 @@
 mod camera;
+mod canvas;
 mod draw;
 mod frustum;
 mod layer;
@@ -7,6 +8,7 @@ mod sprite;
 mod vertex;
 
 pub use camera::*;
+pub use canvas::*;
 pub use draw::*;
 pub use frustum::*;
 pub use layer::*;
