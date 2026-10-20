@@ -699,7 +699,7 @@ impl<'a> Draw<'a> {
             };
 
             let color = if glyph.colored {
-                Color::rgba(1.0, 1.0, 1.0, self.state.color.a())
+                Color::rgba(1.0, 1.0, 1.0, self.state.color.a)
             } else {
                 glyph.color.unwrap_or(self.state.color)
             };

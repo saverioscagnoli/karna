@@ -48,7 +48,16 @@ mod tests {
     fn tuples() {
         assert_eq!(Point2 { x: 1, y: 2 }.tuple(), (1, 2));
         assert_eq!(Point3 { x: 1, y: 2, z: 3 }.tuple(), (1, 2, 3));
-        assert_eq!(Point4 { x: 1, y: 2, z: 3, w: 4 }.tuple(), (1, 2, 3, 4));
+        assert_eq!(
+            Point4 {
+                x: 1,
+                y: 2,
+                z: 3,
+                w: 4
+            }
+            .tuple(),
+            (1, 2, 3, 4)
+        );
     }
 
     #[test]
@@ -56,7 +65,11 @@ mod tests {
         assert_eq!(core::mem::size_of::<Point2<f32>>(), 8);
         assert_eq!(core::mem::size_of::<Point3<f32>>(), 12);
         assert_eq!(core::mem::size_of::<Point4<f32>>(), 16);
-        let p = Point3 { x: 1.0f32, y: 2.0, z: 3.0 };
+        let p = Point3 {
+            x: 1.0f32,
+            y: 2.0,
+            z: 3.0,
+        };
         let a: [f32; 3] = unsafe { core::mem::transmute(p) };
         assert_eq!(a, [1.0, 2.0, 3.0]);
     }

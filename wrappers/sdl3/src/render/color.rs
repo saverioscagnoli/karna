@@ -1,6 +1,7 @@
 use core::ops::Deref;
 use core::ops::DerefMut;
 
+use math::Lerp;
 use sdl3_sys::SDL_FColor;
 
 #[derive(Debug, Clone, Copy)]
@@ -106,43 +107,23 @@ impl Color {
     }
 
     #[inline]
-    pub const fn r(&self) -> f32 {
-        self.0.r
-    }
-
-    #[inline]
     pub const fn r_u8(&self) -> u8 {
-        (self.r() * 255.0) as u8
-    }
-
-    #[inline]
-    pub const fn g(&self) -> f32 {
-        self.0.r
+        (self.0.r * 255.0) as u8
     }
 
     #[inline]
     pub const fn g_u8(&self) -> u8 {
-        (self.g() * 255.0) as u8
-    }
-
-    #[inline]
-    pub const fn b(&self) -> f32 {
-        self.0.r
+        (self.0.g * 255.0) as u8
     }
 
     #[inline]
     pub const fn b_u8(&self) -> u8 {
-        (self.b() * 255.0) as u8
-    }
-
-    #[inline]
-    pub const fn a(&self) -> f32 {
-        self.0.r
+        (self.0.b * 255.0) as u8
     }
 
     #[inline]
     pub const fn a_u8(&self) -> u8 {
-        (self.a() * 255.0) as u8
+        (self.0.a * 255.0) as u8
     }
 }
 
@@ -176,5 +157,18 @@ impl From<math::Vector4<f32>> for Color {
 impl Into<math::Vector4<f32>> for Color {
     fn into(self) -> math::Vector4<f32> {
         math::vec4!(self.0.r, self.0.g, self.0.b, self.0.a)
+    }
+}
+
+impl Lerp for Color {
+    fn lerp(&self, to: &Self, t: f32) -> Self {
+        let mix = |a: f32, b: f32| (a + (b - a) * t).clamp(0.0, 1.0);
+
+        Self::rgba(
+            mix(self.0.r, to.0.r),
+            mix(self.0.g, to.0.g),
+            mix(self.0.b, to.0.b),
+            mix(self.0.a, to.0.a),
+        )
     }
 }

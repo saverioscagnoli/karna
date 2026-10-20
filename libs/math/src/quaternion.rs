@@ -608,7 +608,10 @@ mod tests {
     #[test]
     fn inverse_of_zero_is_identity() {
         let q = Quaternion::new(0.0f32, 0.0, 0.0, 0.0);
-        assert_eq!(q.inverse().as_array(), Quaternion::<f32>::identity().as_array());
+        assert_eq!(
+            q.inverse().as_array(),
+            Quaternion::<f32>::identity().as_array()
+        );
     }
 
     #[test]
@@ -616,7 +619,10 @@ mod tests {
         let a = Quaternion::from_rotation_z(0.0f32);
         let b = Quaternion::from_rotation_z(FRAC_PI_2);
         let s = a.slerp(&b, 0.25);
-        assert!(approx_quat(s, Quaternion::from_rotation_z(FRAC_PI_2 * 0.25)));
+        assert!(approx_quat(
+            s,
+            Quaternion::from_rotation_z(FRAC_PI_2 * 0.25)
+        ));
     }
 
     #[test]

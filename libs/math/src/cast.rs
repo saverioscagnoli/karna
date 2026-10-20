@@ -96,13 +96,19 @@ mod tests {
 
     #[test]
     fn size_cast() {
-        assert_eq!(Size::new(1280u32, 720).cast::<f32>(), Size::new(1280.0, 720.0));
+        assert_eq!(
+            Size::new(1280u32, 720).cast::<f32>(),
+            Size::new(1280.0, 720.0)
+        );
         assert_eq!(Size::new(2.9f32, -1.2).cast::<i32>(), Size::new(2, -1));
     }
 
     #[test]
     fn size_try_cast() {
-        assert_eq!(Size::new(10i32, 20).try_cast::<u8>(), Ok(Size::new(10u8, 20)));
+        assert_eq!(
+            Size::new(10i32, 20).try_cast::<u8>(),
+            Ok(Size::new(10u8, 20))
+        );
         assert!(Size::new(300i32, 1).try_cast::<u8>().is_err());
         assert!(Size::new(1i32, -1).try_cast::<u32>().is_err());
     }

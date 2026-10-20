@@ -262,7 +262,10 @@ mod tests {
         assert!(approx32((-1.0f32).sdl_atan2(-1.0), -3.0 * FRAC_PI_4));
         assert!(approx32((-1.0f32).sdl_atan2(1.0), -FRAC_PI_4));
         assert!(approx32(0.0f32.sdl_atan2(1.0), 0.0));
-        assert!(approx64(1.0f64.sdl_atan2(0.0), core::f64::consts::FRAC_PI_2));
+        assert!(approx64(
+            1.0f64.sdl_atan2(0.0),
+            core::f64::consts::FRAC_PI_2
+        ));
     }
 
     #[test]
