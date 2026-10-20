@@ -12,7 +12,7 @@ use crate::Vector3;
 use crate::Vector4;
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Matrix<const R: usize, const C: usize, T: Num + Copy>([[T; R]; C]);
 
 pub type Matrix2<T> = Matrix<2, 2, T>;
@@ -471,5 +471,372 @@ impl<T: Num + Copy + Neg<Output = T>> Matrix4<T> {
         }
 
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::Vector2;
+    use core::f32::consts::FRAC_PI_2;
+
+    const EPS: f32 = 1e-5;
+
+    fn approx(a: f32, b: f32) -> bool {
+        let d = if a > b { a - b } else { b - a };
+        d < EPS
+    }
+
+    fn approx_mat4(a: Matrix4<f32>, b: Matrix4<f32>) -> bool {
+        (0..4).all(|c| (0..4).all(|r| approx(a[c][r], b[c][r])))
+    }
+
+    fn approx_vec4(a: Vector4<f32>, b: Vector4<f32>) -> bool {
+        (0..4).all(|i| approx(a[i], b[i]))
+    }
+
+    fn point(x: f32, y: f32, z: f32) -> Vector4<f32> {
+        Vector4::new(x, y, z, 1.0)
+    }
+
+    #[test]
+    fn default_is_identity() {
+        assert_eq!(Matrix3::<i32>::default().as_array(), [[1, 0, 0], [0, 1, 0], [0, 0, 1]]);
+        assert_eq!(Matrix4::<i32>::identity().trace(), 4);
+    }
+
+    #[test]
+    fn identity_non_square() {
+        let m = Matrix::<2, 3, i32>::identity();
+        assert_eq!(m.as_array(), [[1, 0], [0, 1], [0, 0]]);
+    }
+
+    #[test]
+    fn splat_zero_one() {
+        assert_eq!(Matrix2::splat(7).as_array(), [[7, 7], [7, 7]]);
+        assert_eq!(Matrix2::<i32>::zero().as_array(), [[0, 0], [0, 0]]);
+        assert_eq!(Matrix2::<i32>::one().as_array(), [[1, 1], [1, 1]]);
+    }
+
+    #[test]
+    fn index_is_column_major() {
+        let mut m = Matrix2::new(1, 2, 3, 4);
+        assert_eq!(m[0], [1, 2]);
+        assert_eq!(m[1][0], 3);
+        m[1][1] = 9;
+        assert_eq!(m.as_array(), [[1, 2], [3, 9]]);
+    }
+
+    #[test]
+    fn from_cols() {
+        let m = Matrix2::from_cols([[1, 2], [3, 4]]);
+        assert_eq!(m.as_array(), Matrix2::new(1, 2, 3, 4).as_array());
+    }
+
+    #[test]
+    fn from_cols_slice() {
+        let m = Matrix::<2, 3, i32>::from_cols_slice(&[1, 2, 3, 4, 5, 6]);
+        assert_eq!(m.as_array(), [[1, 2], [3, 4], [5, 6]]);
+    }
+
+    #[test]
+    fn from_rows_slice() {
+        let m = Matrix::<2, 3, i32>::from_rows_slice(&[1, 2, 3, 4, 5, 6]);
+        assert_eq!(m.as_array(), [[1, 4], [2, 5], [3, 6]]);
+    }
+
+    #[test]
+    fn rows_slice_is_transpose_of_cols_slice() {
+        let data = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let a = Matrix3::from_rows_slice(&data);
+        let b = Matrix3::from_cols_slice(&data).transpose();
+        assert_eq!(a.as_array(), b.as_array());
+    }
+
+    #[test]
+    #[should_panic]
+    fn from_cols_slice_wrong_len_panics() {
+        Matrix2::<i32>::from_cols_slice(&[1, 2, 3]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn from_rows_slice_wrong_len_panics() {
+        Matrix2::<i32>::from_rows_slice(&[1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn transpose_non_square() {
+        let m = Matrix::<2, 3, i32>::from_rows_slice(&[1, 2, 3, 4, 5, 6]);
+        let t: Matrix<3, 2, i32> = m.transpose();
+        assert_eq!(t.as_array(), [[1, 2, 3], [4, 5, 6]]);
+    }
+
+    #[test]
+    fn transpose_twice_is_identity() {
+        let m = Matrix3::from_cols_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(m.transpose().transpose().as_array(), m.as_array());
+    }
+
+    #[test]
+    fn map() {
+        let m = Matrix2::new(1, 2, 3, 4).map(|x| x * 10);
+        assert_eq!(m.as_array(), [[10, 20], [30, 40]]);
+    }
+
+    #[test]
+    fn matmul_identity() {
+        let m = Matrix3::from_cols_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(m.matmul(&Matrix3::identity()).as_array(), m.as_array());
+        assert_eq!(Matrix3::identity().matmul(&m).as_array(), m.as_array());
+    }
+
+    #[test]
+    fn matmul_non_square() {
+        let a = Matrix::<2, 3, i32>::from_rows_slice(&[1, 2, 3, 4, 5, 6]);
+        let b = Matrix::<3, 2, i32>::from_rows_slice(&[7, 8, 9, 10, 11, 12]);
+        let c: Matrix2<i32> = a.matmul(&b);
+        assert_eq!(c.as_array(), Matrix2::from_rows_slice(&[58, 64, 139, 154]).as_array());
+    }
+
+    #[test]
+    fn matmul_is_not_commutative() {
+        let a = Matrix2::from_rows_slice(&[1, 2, 3, 4]);
+        let b = Matrix2::from_rows_slice(&[0, 1, 1, 0]);
+        assert_ne!(a.matmul(&b).as_array(), b.matmul(&a).as_array());
+    }
+
+    #[test]
+    fn mul_vec() {
+        let a = Matrix::<2, 3, i32>::from_rows_slice(&[1, 2, 3, 4, 5, 6]);
+        let v = a.mul_vec(&Vector3::new(1, 1, 1));
+        assert_eq!(v.as_array(), [6, 15]);
+    }
+
+    #[test]
+    fn mul_vec_matches_matmul() {
+        let a = Matrix3::from_cols_slice(&[2, 0, 1, 3, 1, 0, 0, 4, 5]);
+        let b = Matrix3::from_cols_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        let v = Vector3::new(1, -2, 3);
+        let lhs = a.matmul(&b).mul_vec(&v);
+        let rhs = a.mul_vec(&b.mul_vec(&v));
+        assert_eq!(lhs, rhs);
+    }
+
+    #[test]
+    fn trace() {
+        assert_eq!(Matrix3::from_cols_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9]).trace(), 15);
+    }
+
+    #[test]
+    fn as_bytes_and_ptr() {
+        let m = Matrix4::<f32>::identity();
+        assert_eq!(m.as_bytes().len(), 64);
+        assert_eq!(&m.as_bytes()[0..4], &1.0f32.to_ne_bytes());
+        assert_eq!(m.as_ptr() as *const f32, m.as_bytes().as_ptr() as *const f32);
+    }
+
+    #[test]
+    fn det2() {
+        assert_eq!(Matrix2::from_rows_slice(&[3, 8, 4, 6]).det(), -14);
+        assert_eq!(Matrix2::<i32>::identity().det(), 1);
+    }
+
+    #[test]
+    fn det3() {
+        assert_eq!(Matrix3::from_rows_slice(&[6, 1, 1, 4, -2, 5, 2, 8, 7]).det(), -306);
+        assert_eq!(Matrix3::from_rows_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9]).det(), 0);
+    }
+
+    #[test]
+    fn det4() {
+        assert_eq!(Matrix4::<i32>::identity().det(), 1);
+        assert_eq!(Matrix4::from_scale(Vector3::new(2.0f32, 3.0, 4.0)).det(), 24.0);
+        let m = Matrix4::from_rows_slice(&[1, 0, 2, -1, 3, 0, 0, 5, 2, 1, 4, -3, 1, 0, 5, 0]);
+        assert_eq!(m.det(), 30);
+    }
+
+    #[test]
+    fn det_of_product_is_product_of_dets() {
+        let a = Matrix3::from_rows_slice(&[2, 0, 1, 1, 3, 2, 1, 1, 1]);
+        let b = Matrix3::from_rows_slice(&[1, 2, 0, 0, 1, 4, 5, 6, 0]);
+        assert_eq!(a.matmul(&b).det(), a.det() * b.det());
+    }
+
+    #[test]
+    fn matrix2_from_angle() {
+        let m = Matrix2::from_angle(FRAC_PI_2);
+        let v = m.mul_vec(&Vector2::new(1.0, 0.0));
+        assert!(approx(v[0], 0.0) && approx(v[1], 1.0));
+        assert!(approx(m.det(), 1.0));
+    }
+
+    #[test]
+    fn matrix3_axis_angle_z() {
+        let m = Matrix3::from_axis_angle(&Vector3::new(0.0, 0.0, 1.0), FRAC_PI_2);
+        let v = m.mul_vec(&Vector3::new(1.0, 0.0, 0.0));
+        assert!(approx(v[0], 0.0) && approx(v[1], 1.0) && approx(v[2], 0.0));
+        assert!(approx(m.det(), 1.0));
+    }
+
+    #[test]
+    fn matrix3_2d_affine() {
+        let t = Matrix3::from_translation(5.0, 6.0);
+        let s = Matrix3::from_scale(2.0, 3.0);
+        let v = t.matmul(&s).mul_vec(&Vector3::new(1.0, 1.0, 1.0));
+        assert_eq!(v.as_array(), [7.0, 9.0, 1.0]);
+    }
+
+    #[test]
+    fn matrix3_translation_ignores_directions() {
+        let t = Matrix3::from_translation(5.0, 6.0);
+        let v = t.mul_vec(&Vector3::new(1.0, 1.0, 0.0));
+        assert_eq!(v.as_array(), [1.0, 1.0, 0.0]);
+    }
+
+    #[test]
+    fn matrix4_translation() {
+        let m = Matrix4::from_translation(Vector3::new(1.0, 2.0, 3.0));
+        assert!(approx_vec4(m.transform4(point(1.0, 1.0, 1.0)), point(2.0, 3.0, 4.0)));
+        let dir = Vector4::new(1.0, 1.0, 1.0, 0.0);
+        assert!(approx_vec4(m.transform4(dir), dir));
+    }
+
+    #[test]
+    fn matrix4_scale() {
+        let m = Matrix4::from_scale(Vector3::new(2.0, 3.0, 4.0));
+        assert!(approx_vec4(m.transform4(point(1.0, 1.0, 1.0)), point(2.0, 3.0, 4.0)));
+    }
+
+    #[test]
+    fn matrix4_rotation_z() {
+        let m = Matrix4::from_rotation_z(FRAC_PI_2);
+        assert!(approx_vec4(m.transform4(point(1.0, 0.0, 0.0)), point(0.0, 1.0, 0.0)));
+    }
+
+    #[test]
+    fn matrix4_rotation_y() {
+        let m = Matrix4::from_rotation_y(FRAC_PI_2);
+        assert!(approx_vec4(m.transform4(point(1.0, 0.0, 0.0)), point(0.0, 0.0, -1.0)));
+        assert!(approx_vec4(m.transform4(point(0.0, 0.0, 1.0)), point(1.0, 0.0, 0.0)));
+    }
+
+    #[test]
+    fn matrix4_axis_angle_matches_rotation_helpers() {
+        let a = 0.7;
+        let z = Matrix4::from_axis_angle(&Vector3::new(0.0, 0.0, 1.0), a);
+        let y = Matrix4::from_axis_angle(&Vector3::new(0.0, 1.0, 0.0), a);
+        assert!(approx_mat4(z, Matrix4::from_rotation_z(a)));
+        assert!(approx_mat4(y, Matrix4::from_rotation_y(a)));
+    }
+
+    #[test]
+    fn matrix4_axis_angle_keeps_last_row_and_column() {
+        let m = Matrix4::from_axis_angle(&Vector3::new(1.0, 2.0, 3.0).normalize(), 1.3);
+        assert_eq!([m[0][3], m[1][3], m[2][3], m[3][0], m[3][1], m[3][2], m[3][3]], [
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0
+        ]);
+    }
+
+    #[test]
+    fn inverse_of_identity() {
+        let m = Matrix4::<f32>::identity();
+        assert!(approx_mat4(m.inverse().unwrap(), m));
+    }
+
+    #[test]
+    fn inverse_round_trip() {
+        let m = Matrix4::from_translation(Vector3::new(1.0, -2.0, 3.0))
+            .matmul(&Matrix4::from_rotation_y(0.6))
+            .matmul(&Matrix4::from_scale(Vector3::new(2.0, 0.5, 3.0)));
+        let inv = m.inverse().unwrap();
+        assert!(approx_mat4(m.matmul(&inv), Matrix4::identity()));
+        assert!(approx_mat4(inv.matmul(&m), Matrix4::identity()));
+    }
+
+    #[test]
+    fn inverse_of_translation_negates() {
+        let m = Matrix4::from_translation(Vector3::new(1.0, 2.0, 3.0));
+        let expected = Matrix4::from_translation(Vector3::new(-1.0, -2.0, -3.0));
+        assert!(approx_mat4(m.inverse().unwrap(), expected));
+    }
+
+    #[test]
+    fn inverse_of_singular_is_none() {
+        assert!(Matrix4::<f32>::zero().inverse().is_none());
+        assert!(Matrix4::from_scale(Vector3::new(1.0f32, 0.0, 1.0)).inverse().is_none());
+    }
+
+    #[test]
+    fn perspective_maps_near_and_far() {
+        let (near, far) = (0.1, 100.0);
+        let m = Matrix4::perspective(FRAC_PI_2, 1.0, near, far);
+        let n = m.transform4(point(0.0, 0.0, near)).perspective_divide();
+        let f = m.transform4(point(0.0, 0.0, far)).perspective_divide();
+        assert!(approx(n[2], 0.0));
+        assert!(approx(f[2], 1.0));
+    }
+
+    #[test]
+    fn perspective_fov_edge_maps_to_one() {
+        let m = Matrix4::perspective(FRAC_PI_2, 2.0, 0.1, 100.0);
+        let top = m.transform4(point(0.0, 5.0, 5.0)).perspective_divide();
+        let right = m.transform4(point(10.0, 0.0, 5.0)).perspective_divide();
+        assert!(approx(top[1], 1.0));
+        assert!(approx(right[0], 1.0));
+    }
+
+    #[test]
+    fn orthographic_maps_box_to_clip() {
+        let m = Matrix4::orthographic(0.0, 800.0, 600.0, 0.0, 0.0, 1.0);
+        let tl = m.transform4(point(0.0, 0.0, 0.0));
+        let br = m.transform4(point(800.0, 600.0, 1.0));
+        assert!(approx_vec4(tl, Vector4::new(-1.0, 1.0, 0.0, 1.0)));
+        assert!(approx_vec4(br, Vector4::new(1.0, -1.0, 1.0, 1.0)));
+    }
+
+    #[test]
+    fn look_at_moves_eye_to_origin() {
+        let eye = Vector3::new(1.0, 2.0, 3.0);
+        let m = Matrix4::look_at(&eye, &Vector3::new(0.0, 0.0, 0.0), &Vector3::new(0.0, 1.0, 0.0));
+        assert!(approx_vec4(m.transform4(point(1.0, 2.0, 3.0)), point(0.0, 0.0, 0.0)));
+    }
+
+    #[test]
+    fn look_at_puts_target_on_forward_axis() {
+        let eye = Vector3::new(0.0, 0.0, -5.0);
+        let up = Vector3::new(0.0, 1.0, 0.0);
+        let m = Matrix4::look_at(&eye, &Vector3::new(0.0, 0.0, 0.0), &up);
+        assert!(approx_vec4(m.transform4(point(0.0, 0.0, 0.0)), point(0.0, 0.0, 5.0)));
+        let above = m.transform4(point(0.0, 1.0, -5.0));
+        assert!(approx(above[0], 0.0) && approx(above[1], 1.0) && approx(above[2], 0.0));
+    }
+
+    #[test]
+    fn look_at_is_rigid() {
+        let m = Matrix4::look_at(
+            &Vector3::new(3.0, 1.0, -2.0),
+            &Vector3::new(-1.0, 0.5, 4.0),
+            &Vector3::new(0.0, 1.0, 0.0),
+        );
+        let a = m.transform4(point(1.0, 1.0, 1.0)).xyz();
+        let b = m.transform4(point(2.0, -1.0, 3.0)).xyz();
+        let d = Vector3::new(1.0, -2.0, 2.0).length();
+        assert!(approx(a.distance(&b), d));
+    }
+
+    #[test]
+    fn transform4_matches_mul_vec() {
+        let m = Matrix4::from_rotation_y(0.4).matmul(&Matrix4::from_translation(Vector3::new(1.0, 2.0, 3.0)));
+        let v = Vector4::new(1.0, -1.0, 2.0, 1.0);
+        assert!(approx_vec4(m.transform4(v), m.mul_vec(&v)));
+    }
+
+    #[test]
+    fn equality() {
+        assert_eq!(Matrix2::new(1, 2, 3, 4), Matrix2::from_cols([[1, 2], [3, 4]]));
+        assert_ne!(Matrix2::new(1, 2, 3, 4), Matrix2::new(1, 2, 3, 5));
+        assert_eq!(Matrix3::<f32>::identity(), Matrix3::default());
     }
 }

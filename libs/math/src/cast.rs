@@ -65,3 +65,45 @@ impl<T: Num + Copy> Size<T> {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cast_from_behaves_like_as() {
+        assert_eq!(i32::cast_from(3.9f32), 3);
+        assert_eq!(i32::cast_from(-3.9f32), -3);
+        assert_eq!(u8::cast_from(300i32), 44);
+        assert_eq!(u8::cast_from(-1.0f32), 0);
+        assert_eq!(f32::cast_from(2i64), 2.0);
+        assert_eq!(f64::cast_from(0.5f32), 0.5);
+        assert_eq!(usize::cast_from(7u8), 7);
+        assert_eq!(i8::cast_from(i128::MAX), -1);
+    }
+
+    #[test]
+    fn cast_identity() {
+        assert_eq!(i32::cast_from(42i32), 42);
+        assert_eq!(f32::cast_from(1.5f32), 1.5);
+    }
+
+    #[test]
+    fn size_map() {
+        assert_eq!(Size::new(2, 3).map(|v| v * 10), Size::new(20, 30));
+        assert_eq!(Size::new(2, 3).map(|v| v as f32 + 0.5), Size::new(2.5, 3.5));
+    }
+
+    #[test]
+    fn size_cast() {
+        assert_eq!(Size::new(1280u32, 720).cast::<f32>(), Size::new(1280.0, 720.0));
+        assert_eq!(Size::new(2.9f32, -1.2).cast::<i32>(), Size::new(2, -1));
+    }
+
+    #[test]
+    fn size_try_cast() {
+        assert_eq!(Size::new(10i32, 20).try_cast::<u8>(), Ok(Size::new(10u8, 20)));
+        assert!(Size::new(300i32, 1).try_cast::<u8>().is_err());
+        assert!(Size::new(1i32, -1).try_cast::<u32>().is_err());
+    }
+}

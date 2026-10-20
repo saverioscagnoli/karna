@@ -26,7 +26,7 @@ use crate::point::Point4;
 // Type
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Hash)]
 pub struct Vector<const N: usize, T: Num + Copy>([T; N]);
 
 pub type Vector2<T> = Vector<2, T>;
@@ -384,8 +384,7 @@ impl<T: Num + Copy> Vector3<T> {
 
 impl<T: Num + SdlFloat> Vector3<T> {
     pub fn angle_between(&self, other: &Self) -> T {
-        let d = self.dot(other) / (self.length() * other.length());
-        d.sdl_clamp(-T::ONE, T::ONE).sdl_acos()
+        self.cross(other).length().sdl_atan2(self.dot(other))
     }
 }
 
@@ -827,14 +826,14 @@ mod tests {
     fn min() {
         let a = Vector3::new(1, 5, 3);
         let b = Vector3::new(4, 2, 3);
-        assert_eq!(a.min(b).as_array(), [1, 2, 3]);
+        assert_eq!(a.min(&b).as_array(), [1, 2, 3]);
     }
 
     #[test]
     fn max() {
         let a = Vector3::new(1, 5, 3);
         let b = Vector3::new(4, 2, 3);
-        assert_eq!(a.max(b).as_array(), [4, 5, 3]);
+        assert_eq!(a.max(&b).as_array(), [4, 5, 3]);
     }
 
     #[test]
@@ -1039,5 +1038,70 @@ mod tests {
             core::mem::align_of::<Vector4<f32>>(),
             core::mem::align_of::<[f32; 4]>()
         );
+    }
+
+    #[test]
+    fn clamp() {
+        let v = Vector3::new(-5, 5, 15);
+        assert_eq!(v.clamp(0, 10).as_array(), [0, 5, 10]);
+        assert_eq!(v.as_array(), [-5, 5, 15]);
+    }
+
+    #[test]
+    fn min_max_mixed_components() {
+        let a = Vector2::new(-1.0f32, 3.0);
+        let b = Vector2::new(2.0f32, -4.0);
+        assert_eq!(a.min(&b).as_array(), [-1.0, -4.0]);
+        assert_eq!(a.max(&b).as_array(), [2.0, 3.0]);
+    }
+
+    #[test]
+    fn macros() {
+        assert_eq!(crate::vec2!(1, 2).as_array(), [1, 2]);
+        assert_eq!(crate::vec3!(1, 2, 3).as_array(), [1, 2, 3]);
+        assert_eq!(crate::vec4!(1, 2, 3, 4).as_array(), [1, 2, 3, 4]);
+        assert_eq!(crate::vec2!(1, 2,).as_array(), [1, 2]);
+    }
+
+    #[test]
+    fn point_tuple_through_deref() {
+        assert_eq!(Vector2::new(1, 2).tuple(), (1, 2));
+        assert_eq!(Vector3::new(1, 2, 3).tuple(), (1, 2, 3));
+        assert_eq!(Vector4::new(1, 2, 3, 4).tuple(), (1, 2, 3, 4));
+    }
+
+    #[test]
+    fn angle_between_small_angle_is_accurate() {
+        let a = Vector3::new(1.0f32, 0.0, 0.0);
+        let b = Vector3::new(1.0f32, 1e-3, 0.0);
+        assert!(approx(a.angle_between(&b), 1e-3));
+    }
+
+    #[test]
+    fn angle_between_zero_vector_is_not_nan() {
+        let a = Vector3::new(0.0f32, 0.0, 0.0);
+        let b = Vector3::new(1.0f32, 0.0, 0.0);
+        assert!(!a.angle_between(&b).is_nan());
+    }
+
+    #[test]
+    fn lerp_endpoints_exact() {
+        let a = Vector2::new(1.0f32, 2.0);
+        let b = Vector2::new(5.0f32, -6.0);
+        assert!(approx_vec(a.lerp(&b, 0.0), a));
+        assert!(approx_vec(a.lerp(&b, 1.0), b));
+    }
+
+    #[test]
+    fn rotate_quarter_turn() {
+        let v = Vector2::new(1.0f32, 0.0).rotate(PI / 2.0);
+        assert!(approx_vec(v, Vector2::new(0.0, 1.0)));
+    }
+
+    #[test]
+    fn f64_vectors() {
+        let v = Vector3::new(3.0f64, 4.0, 0.0);
+        assert_eq!(v.length(), 5.0);
+        assert_eq!(v.normalize().as_array(), [0.6, 0.8, 0.0]);
     }
 }

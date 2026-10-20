@@ -1,5 +1,6 @@
 #![no_std]
 
+mod aabb;
 mod cast;
 mod matrix;
 mod point;
@@ -8,6 +9,7 @@ mod sdl;
 mod size;
 mod vector;
 
+pub use aabb::*;
 pub use cast::*;
 pub use matrix::*;
 pub use point::*;

@@ -186,3 +186,112 @@ impl SdlFloat for f64 {
         v as f64
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use core::f32::consts::FRAC_PI_4;
+    use core::f32::consts::PI;
+
+    fn approx32(a: f32, b: f32) -> bool {
+        (a - b).abs() < 1e-5
+    }
+
+    fn approx64(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-12
+    }
+
+    #[test]
+    fn constants() {
+        assert_eq!(<f32 as SdlFloat>::ZERO, 0.0);
+        assert_eq!(<f32 as SdlFloat>::ONE, 1.0);
+        assert_eq!(<f32 as SdlFloat>::EPSILON, f32::EPSILON);
+        assert_eq!(<f64 as SdlFloat>::ZERO, 0.0);
+        assert_eq!(<f64 as SdlFloat>::ONE, 1.0);
+        assert_eq!(<f64 as SdlFloat>::EPSILON, f64::EPSILON);
+    }
+
+    #[test]
+    fn round() {
+        assert_eq!(2.4f32.sdl_round(), 2.0);
+        assert_eq!(2.5f32.sdl_round(), 3.0);
+        assert_eq!((-2.5f32).sdl_round(), -3.0);
+        assert_eq!(2.5f64.sdl_round(), 3.0);
+        assert_eq!((-0.4f64).sdl_round(), 0.0);
+    }
+
+    #[test]
+    fn sqrt() {
+        assert_eq!(9.0f32.sdl_sqrt(), 3.0);
+        assert_eq!(2.0f64.sdl_sqrt(), core::f64::consts::SQRT_2);
+        assert!((-1.0f32).sdl_sqrt().is_nan());
+    }
+
+    #[test]
+    fn abs() {
+        assert_eq!((-3.5f32).sdl_abs(), 3.5);
+        assert_eq!(3.5f32.sdl_abs(), 3.5);
+        assert_eq!((-0.0f64).sdl_abs().to_bits(), 0.0f64.to_bits());
+    }
+
+    #[test]
+    fn trig_f32() {
+        assert!(approx32(0.0f32.sdl_sin(), 0.0));
+        assert!(approx32((PI / 2.0).sdl_sin(), 1.0));
+        assert!(approx32(0.0f32.sdl_cos(), 1.0));
+        assert!(approx32(PI.sdl_cos(), -1.0));
+        assert!(approx32(FRAC_PI_4.sdl_tan(), 1.0));
+        assert!(approx32(1.0f32.sdl_acos(), 0.0));
+        assert!(approx32((-1.0f32).sdl_acos(), PI));
+    }
+
+    #[test]
+    fn trig_f64() {
+        use core::f64::consts::PI;
+        assert!(approx64((PI / 2.0).sdl_sin(), 1.0));
+        assert!(approx64(PI.sdl_cos(), -1.0));
+        assert!(approx64((PI / 4.0).sdl_tan(), 1.0));
+        assert!(approx64(0.0f64.sdl_acos(), PI / 2.0));
+    }
+
+    #[test]
+    fn atan2_quadrants() {
+        assert!(approx32(1.0f32.sdl_atan2(1.0), FRAC_PI_4));
+        assert!(approx32(1.0f32.sdl_atan2(-1.0), 3.0 * FRAC_PI_4));
+        assert!(approx32((-1.0f32).sdl_atan2(-1.0), -3.0 * FRAC_PI_4));
+        assert!(approx32((-1.0f32).sdl_atan2(1.0), -FRAC_PI_4));
+        assert!(approx32(0.0f32.sdl_atan2(1.0), 0.0));
+        assert!(approx64(1.0f64.sdl_atan2(0.0), core::f64::consts::FRAC_PI_2));
+    }
+
+    #[test]
+    fn exp() {
+        assert_eq!(0.0f32.sdl_exp(), 1.0);
+        assert!(approx32(1.0f32.sdl_exp(), core::f32::consts::E));
+        assert!(approx64(1.0f64.sdl_exp(), core::f64::consts::E));
+    }
+
+    #[test]
+    fn from_f32() {
+        assert_eq!(f32::sdl_from_f32(1.5), 1.5);
+        assert_eq!(f64::sdl_from_f32(1.5), 1.5);
+    }
+
+    #[test]
+    fn min_max() {
+        assert_eq!(1.0f32.sdl_min(2.0), 1.0);
+        assert_eq!(2.0f32.sdl_min(1.0), 1.0);
+        assert_eq!(1.0f64.sdl_max(2.0), 2.0);
+        assert_eq!(2.0f64.sdl_max(1.0), 2.0);
+        assert_eq!((-0.5f32).sdl_max(-1.5), -0.5);
+    }
+
+    #[test]
+    fn clamp() {
+        assert_eq!(5.0f32.sdl_clamp(0.0, 1.0), 1.0);
+        assert_eq!((-5.0f32).sdl_clamp(0.0, 1.0), 0.0);
+        assert_eq!(0.5f64.sdl_clamp(0.0, 1.0), 0.5);
+        assert_eq!(1.0f32.sdl_clamp(1.0, 1.0), 1.0);
+    }
+}

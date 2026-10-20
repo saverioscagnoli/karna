@@ -531,4 +531,104 @@ mod tests {
             core::mem::size_of::<[f32; 4]>()
         );
     }
+
+    #[test]
+    fn from_vector_and_xyz() {
+        let q = Quaternion::from_vector(Vector3::new(1.0f32, 2.0, 3.0), 4.0);
+        assert_eq!(q.as_array(), [1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(q.xyz().as_array(), [1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn index_and_index_mut() {
+        let mut q = Quaternion::new(1.0f32, 2.0, 3.0, 4.0);
+        assert_eq!(q[2], 3.0);
+        q[3] = 9.0;
+        assert_eq!(q.w, 9.0);
+    }
+
+    #[test]
+    fn dot_and_length() {
+        let q = Quaternion::new(1.0f32, 2.0, 3.0, 4.0);
+        assert_eq!(q.dot(&Quaternion::identity()), 4.0);
+        assert_eq!(q.length_sq(), 30.0);
+        assert!(approx(q.length(), 30.0f32.sqrt()));
+    }
+
+    #[test]
+    fn neg_negates_all_components() {
+        let q = -Quaternion::new(1.0f32, -2.0, 3.0, -4.0);
+        assert_eq!(q.as_array(), [-1.0, 2.0, -3.0, 4.0]);
+    }
+
+    #[test]
+    fn negated_quaternion_rotates_identically() {
+        let q = Quaternion::from_axis_angle(&Vector3::new(1.0f32, 2.0, 3.0), 0.7);
+        let v = Vector3::new(0.3f32, -1.0, 2.0);
+        assert!(approx_vec(q.rotate(&v), (-q).rotate(&v)));
+    }
+
+    #[test]
+    fn mul_vector_matches_rotate() {
+        let q = Quaternion::from_rotation_y(0.9f32);
+        let v = Vector3::new(1.0f32, 2.0, 3.0);
+        assert!(approx_vec(q * v, q.rotate(&v)));
+    }
+
+    #[test]
+    fn normalize_mut_gives_unit_length() {
+        let mut q = Quaternion::new(1.0f32, 2.0, 3.0, 4.0);
+        q.normalize_mut();
+        assert!(approx(q.length(), 1.0));
+    }
+
+    #[test]
+    fn rotation_helpers_match_axis_angle() {
+        let a = 1.1f32;
+        assert!(approx_quat(
+            Quaternion::from_rotation_x(a),
+            Quaternion::from_axis_angle(&Vector3::new(1.0, 0.0, 0.0), a)
+        ));
+        assert!(approx_quat(
+            Quaternion::from_rotation_y(a),
+            Quaternion::from_axis_angle(&Vector3::new(0.0, 1.0, 0.0), a)
+        ));
+        assert!(approx_quat(
+            Quaternion::from_rotation_z(a),
+            Quaternion::from_axis_angle(&Vector3::new(0.0, 0.0, 1.0), a)
+        ));
+    }
+
+    #[test]
+    fn inverse_of_non_unit() {
+        let q = Quaternion::new(1.0f32, 2.0, 3.0, 4.0);
+        assert!(approx_quat(q * q.inverse(), Quaternion::identity()));
+    }
+
+    #[test]
+    fn inverse_of_zero_is_identity() {
+        let q = Quaternion::new(0.0f32, 0.0, 0.0, 0.0);
+        assert_eq!(q.inverse().as_array(), Quaternion::<f32>::identity().as_array());
+    }
+
+    #[test]
+    fn slerp_matches_nlerp_direction_at_quarter() {
+        let a = Quaternion::from_rotation_z(0.0f32);
+        let b = Quaternion::from_rotation_z(FRAC_PI_2);
+        let s = a.slerp(&b, 0.25);
+        assert!(approx_quat(s, Quaternion::from_rotation_z(FRAC_PI_2 * 0.25)));
+    }
+
+    #[test]
+    fn rotate_preserves_length() {
+        let q = Quaternion::from_axis_angle(&Vector3::new(0.2f32, 1.0, -0.5), 2.3);
+        let v = Vector3::new(3.0f32, -1.0, 2.0);
+        assert!(approx(q.rotate(&v).length(), v.length()));
+    }
+
+    #[test]
+    fn half_turn_about_z() {
+        let v = Quaternion::from_rotation_z(PI).rotate(&Vector3::new(1.0f32, 0.0, 0.0));
+        assert!(approx_vec(v, Vector3::new(-1.0, 0.0, 0.0)));
+    }
 }
